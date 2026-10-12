@@ -81,7 +81,8 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
         string targetLanguage,
         int? mediaId,
         MediaType mediaType,
-        string? contentHash = null)
+        string? contentHash = null,
+        bool isBilingual = false)
     {
         // Bound imports carry the resolved Movie/Episode id so output naming and
         // the queue UI treat them like library media; Source = Import still marks
@@ -96,7 +97,8 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
             MediaType = mediaType,
             Source = TranslationRequestSource.Import,
             Status = TranslationStatus.Pending,
-            ContentHash = contentHash
+            ContentHash = contentHash,
+            IsBilingual = isBilingual
         };
 
         return await EnqueueRequest(translationRequest);

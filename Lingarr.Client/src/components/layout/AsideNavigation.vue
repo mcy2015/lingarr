@@ -119,6 +119,7 @@ const menuItems: MenuItem[] = [
     { label: 'nav.library', icon: 'movie', route: 'library', children: [] },
     { label: 'nav.queue', icon: 'language', route: 'queue', children: [] },
     { label: 'nav.import', icon: 'folders', route: 'import', children: [] },
+    { label: 'nav.proofread', icon: 'checkMarkCircle', route: 'proofread', children: [] },
     {
         label: 'nav.settings',
         icon: 'setting',

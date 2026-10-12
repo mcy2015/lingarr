@@ -50,20 +50,80 @@
             "cancelled": "已取消",
             "interrupted": "已中断",
             "paused": "已暂停"
-        }
+        },
+        "runNow": "立即运行"
     },
     "nav": {
         "dashboard": "仪表盘",
         "library": "媒体库",
         "import": "导入",
         "settings": "设置",
-        "queue": "任务队列"
+        "queue": "任务队列",
+        "proofread": "校对台"
     },
     "library": {
         "tabs": {
+            "all": "全部",
+            "group": "类型过滤",
             "shows": "剧集",
             "movies": "电影"
-        }
+        },
+        "toolbar": {
+            "import": "⇪ 导入字幕",
+            "stats": "{items} 项 · {missing} 缺字幕 · {inProgress} 进行中"
+        },
+        "filter": {
+            "targetLanguage": "目标语言",
+            "state": "字幕状态",
+            "all": "全部"
+        },
+        "table": {
+            "title": "标题",
+            "tracks": "字幕轨",
+            "status": "状态",
+            "lastActivity": "最近活动",
+            "selectAll": "全选本页",
+            "select": "选择 {title}"
+        },
+        "badge": {
+            "show": "剧集",
+            "movie": "电影"
+        },
+        "meta": {
+            "show": "S{seasons} · {episodes} 集"
+        },
+        "track": {
+            "complete": "{lang}：完整",
+            "partial": "{lang}：{have}/{total} 集",
+            "none": "{lang}：无字幕"
+        },
+        "state": {
+            "none": "· 未排队",
+            "queued": "⏳ 队列中",
+            "inProgress": "◐ 翻译中",
+            "completed": "✓ 完成",
+            "completedRatio": "✓ {done}/{total} 完成",
+            "failed": "✗ 失败",
+            "failedCount": "✗ {count} 集失败"
+        },
+        "action": {
+            "seasonImport": "整季导入",
+            "import": "导入字幕",
+            "detail": "详情"
+        },
+        "detail": {
+            "include": "参与翻译",
+            "threshold": "延迟(小时)",
+            "subtitles": "字幕文件"
+        },
+        "tray": {
+            "selected": "已选 {count} 项",
+            "translate": "翻译所选",
+            "clear": "清除已选",
+            "estimate": "预计消耗 ≈ {cost} · {chars} 字符",
+            "charsOnly": "≈ {chars} 字符 · 费率未配置"
+        },
+        "empty": "没有符合当前过滤条件的媒体。"
     },
     "version": {
         "development": "开发版",
@@ -150,7 +210,11 @@
         },
         "scan": {
             "title": "扫描路径",
-            "pathTitle": "服务器路径扫描将在 B3 批次提供"
+            "pathTitle": "服务器路径扫描将在 B3 批次提供",
+            "placeholder": "服务器路径，如 /media/subtitles",
+            "scanning": "扫描中…",
+            "noneFound": "该路径下没有新的字幕文件。",
+            "failed": "路径扫描失败：{message}"
         },
         "hint": {
             "title": "导入即任务",
@@ -247,6 +311,9 @@
             "none": "保持原样",
             "simplified": "转为简体",
             "traditional": "转为繁體"
+        },
+        "bilingual": {
+            "follow": "跟随全局"
         }
     },
     "dashboard": {
@@ -765,6 +832,30 @@
             "placeholder": "选择语言…",
             "selectSourceFirst": "请先选择源语言。",
             "search": "选择或搜索语言"
+        },
+        "providers": {
+            "blurb": "多服务并存，任务级可指定；卡片显示真实用量与健康。默认服务用于自动化批次。",
+            "default": "默认",
+            "month": "本月",
+            "latency": "延迟",
+            "success": "成功",
+            "setDefault": "设为默认",
+            "idle": "暂无请求",
+            "online": "在线",
+            "degraded": "降级中",
+            "failing": "故障"
+        },
+        "glossary": {
+            "title": "术语表",
+            "count": "{count} 条",
+            "add": "添加术语",
+            "empty": "暂无术语 —— 锁定术语会在每次翻译后强制执行，其余仅作校对提示。",
+            "source": "源术语",
+            "target": "目标术语",
+            "locked": "锁定",
+            "hint": "提示",
+            "delete": "删除",
+            "saveFailed": "保存术语失败。"
         }
     },
     "translations": {
@@ -832,6 +923,46 @@
             "pausedHint": "已暂停，恢复后继续",
             "remainingHint": "预计剩余时间",
             "retries": "重试 {count} 次"
+        }
+    },
+    "proofread": {
+        "loading": "正在加载请求…",
+        "noLines": "该请求还没有可校对的持久化行。",
+        "subtitle": "{source} → {target} · 人工精校 · {count} 行",
+        "progress": "已校对 {done} / {total} 行",
+        "legend": {
+            "source": "源轨 {lang}",
+            "target": "译文轨 {lang}"
+        },
+        "keys": {
+            "navigate": "上下行",
+            "approve": "通过当前行",
+            "edit": "编辑"
+        },
+        "approve": "✓ 通过",
+        "reject": "✗ 驳回",
+        "unsaved": "● 已修改，未保存",
+        "editLabel": "编辑译文",
+        "glossaryCount": "{count} 条术语",
+        "glossaryLocked": "{source} → {target} · 已锁定",
+        "glossaryHint": "{source} → {target}",
+        "export": "导出当前快照",
+        "finish": "完成校对并写回（{done}/{total}）",
+        "mark": {
+            "approved": "已通过",
+            "pending": "待校对",
+            "rejected": "已驳回"
+        },
+        "openWorkbench": "打开校对台"
+    },
+    "topbar": {
+        "sub": {
+            "dashboard": "管线正在运行 · SignalR 实时",
+            "library": "剧集与电影合并视图",
+            "queue": "实时 · SignalR 推送",
+            "import": "拖拽上传或服务器路径 · 转码 / 转格式 / 去重后入管线",
+            "proofread": "双轨逐行校对 · J/K/Enter 键盘流",
+            "settings": "四组：服务 / 媒体与自动化 / 字幕与质量 / 系统"
         }
     }
 }

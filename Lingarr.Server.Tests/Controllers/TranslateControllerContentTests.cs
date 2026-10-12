@@ -188,7 +188,8 @@ public class TranslateControllerContentTests : IDisposable
         var queryService = new TranslationRequestQueryService(
             _context,
             hubContextMock.Object,
-            eventServiceMock.Object);
+            eventServiceMock.Object,
+            new Mock<ISubtitleService>().Object);
         var contentService = new ContentTranslationService(
             _context,
             asyncTranslationRegistry,

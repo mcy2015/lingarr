@@ -220,9 +220,17 @@ const healthDot = (provider: ITranslationServiceHealth): { cls: string; text: st
         }
     }
     if (rate >= 0.8) {
+        const latency = provider.latencyMs != null ? `${Math.round(provider.latencyMs)} ms` : '—'
         return {
             cls: 'bg-success',
-            text: provider.latencyMs != null ? `${Math.round(provider.latencyMs)} ms` : '—',
+            text:
+                provider.monthlyCost != null
+                    ? `${latency} · ${new Intl.NumberFormat(locale.value, {
+                          style: 'currency',
+                          currency: 'USD',
+                          maximumFractionDigits: 2
+                      }).format(provider.monthlyCost)}`
+                    : latency,
             title: t('overview.health.healthy', { rate: Math.round(rate * 100) })
         }
     }

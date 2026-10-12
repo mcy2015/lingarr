@@ -1,6 +1,7 @@
 import {
     DirectoryItem,
     ILanguage,
+    IScannedSubtitleFile,
     ISettings,
     ISubtitle,
     ITranslationRequest,
@@ -38,6 +39,7 @@ export interface Services {
     telemetry: ITelemetryService
     requestTemplate: IRequestTemplateService
     plugin: IPluginService
+    glossary: IGlossaryService
 }
 
 export interface IPluginService {
@@ -67,6 +69,16 @@ export interface IMediaService {
         sortBy: string,
         ascending: boolean
     ): Promise<T>
+    library<T>(params: {
+        pageNumber: number
+        searchQuery: string
+        sortBy: string
+        ascending: boolean
+        mediaType?: string | null
+        state?: string | null
+        targetLanguage?: string | null
+    }): Promise<T>
+    estimate<T>(items: { mediaType: string; id: number }[], targetLanguage: string): Promise<T>
     shows<T>(
         pageNumber: number,
         searchQuery: string,
@@ -116,6 +128,18 @@ export interface IImportSubtitlesResponse {
 }
 
 export interface IImportService {
+    scanPath(path: string): Promise<IScannedSubtitleFile[]>
+    importPaths<T>(params: {
+        paths: string[]
+        sourceLanguage: string
+        targetLanguage: string
+        translate: boolean
+        mediaType?: 'Movie' | 'Show'
+        mediaId?: number
+        season?: number
+        chineseConvert?: string
+        isBilingual?: boolean
+    }): Promise<T>
     parseFilenames(filenames: string[]): Promise<IParsedSubtitleFilename[]>
     importFiles(
         files: File[],
@@ -125,7 +149,8 @@ export interface IImportService {
         mediaType?: 'Movie' | 'Show',
         mediaId?: number,
         season?: number,
-        chineseConvert?: string
+        chineseConvert?: string,
+        isBilingual?: boolean
     ): Promise<IImportSubtitlesResponse>
 }
 
@@ -245,4 +270,19 @@ export interface ITelemetryService {
 
 export interface IRequestTemplateService {
     getDefaults<T>(): Promise<T>
+}
+
+export interface ITranslationGlossary {
+    id: number
+    sourceTerm: string
+    targetTerm: string
+    note?: string | null
+    isLocked: boolean
+}
+
+export interface IGlossaryService {
+    getAll(): Promise<ITranslationGlossary[]>
+    create<T>(entry: Partial<ITranslationGlossary>): Promise<T>
+    update<T>(id: number, entry: Partial<ITranslationGlossary>): Promise<T>
+    remove<T>(id: number): Promise<T>
 }

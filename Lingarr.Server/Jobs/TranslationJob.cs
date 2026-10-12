@@ -28,6 +28,7 @@ public class TranslationJob
     private readonly ITranslationPipeline _translationPipeline;
     private readonly ITranslationRequestService _translationRequestService;
     private readonly ITranslationRequestEventService _eventService;
+    private readonly IGlossaryService _glossaryService;
 
     public TranslationJob(
         ILogger<TranslationJob> logger,
@@ -39,7 +40,8 @@ public class TranslationJob
         IStatisticsService statisticsService,
         ITranslationPipeline translationPipeline,
         ITranslationRequestService translationRequestService,
-        ITranslationRequestEventService eventService)
+        ITranslationRequestEventService eventService,
+        IGlossaryService glossaryService)
     {
         _logger = logger;
         _settings = settings;
@@ -50,6 +52,7 @@ public class TranslationJob
         _statisticsService = statisticsService;
         _translationPipeline = translationPipeline;
         _translationRequestService = translationRequestService;
+        _glossaryService = glossaryService;
         _eventService = eventService;
     }
 
@@ -198,6 +201,17 @@ public class TranslationJob
             // the tracked entity - the job parameter is a deserialized copy
             request.ServiceType = serviceType;
             await _dbContext.SaveChangesAsync();
+
+            // Locked glossary terms are enforced deterministically after the
+            // provider run (A8): sources containing a locked term must carry
+            // its target in the translation.
+            var glossarySubstitutions = await _glossaryService.ApplyLockedTerms(translatedSubtitles);
+            if (glossarySubstitutions > 0)
+            {
+                _logger.LogInformation(
+                    "Applied locked glossary terms to {Count} lines for request {RequestId}",
+                    glossarySubstitutions, request.Id);
+            }
 
             if (settings[SettingKeys.Translation.FixOverlappingSubtitles] == "true")
             {

@@ -24,5 +24,28 @@ public interface ISubtitleImportService
         string? mediaType = null,
         int? mediaId = null,
         int? season = null,
-        string? chineseConvert = null);
+        string? chineseConvert = null,
+        bool isBilingual = false);
+
+    /// <summary>
+    /// Lists supported subtitle files under a server directory (recursive),
+    /// for the import workbench's path scan (A7). Non-existent or
+    /// non-directory paths throw; the result is capped to keep responses sane.
+    /// </summary>
+    Task<List<ScannedSubtitleFile>> ScanPath(string path);
+
+    /// <summary>
+    /// Imports subtitle files already on the server (from ScanPath) with the
+    /// same storage/binding/dedup semantics as <see cref="ImportFiles"/>.
+    /// </summary>
+    Task<List<ImportedSubtitleResult>> ImportPaths(
+        List<string> paths,
+        string sourceLanguage,
+        string targetLanguage,
+        bool translate,
+        string? mediaType = null,
+        int? mediaId = null,
+        int? season = null,
+        string? chineseConvert = null,
+        bool isBilingual = false);
 }

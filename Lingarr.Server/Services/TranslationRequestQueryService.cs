@@ -16,15 +16,18 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
     private readonly LingarrDbContext _dbContext;
     private readonly IHubContext<TranslationRequestsHub> _hubContext;
     private readonly ITranslationRequestEventService _eventService;
+    private readonly ISubtitleService _subtitleService;
 
     public TranslationRequestQueryService(
         LingarrDbContext dbContext,
         IHubContext<TranslationRequestsHub> hubContext,
-        ITranslationRequestEventService eventService)
+        ITranslationRequestEventService eventService,
+        ISubtitleService subtitleService)
     {
         _dbContext = dbContext;
         _hubContext = hubContext;
         _eventService = eventService;
+        _subtitleService = subtitleService;
     }
 
     /// <inheritdoc />
@@ -50,7 +53,7 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
             })
             .ToListAsync();
 
-        return new TranslationRequestDetail
+        var detail = new TranslationRequestDetail
         {
             Id = request.Id,
             JobId = request.JobId,
@@ -78,6 +81,40 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
             }).ToList(),
             Lines = translationRequestLines.Count > 0 ? translationRequestLines : []
         };
+
+        await AttachTimecodes(detail, request);
+        return detail;
+    }
+
+    /// <summary>
+    /// The proofreading workbench renders a timecode gutter; the timings live
+    /// only in the source subtitle file, so parse it and join by position.
+    /// A missing/unreadable file just leaves the timecodes null.
+    /// </summary>
+    private async Task AttachTimecodes(TranslationRequestDetail detail, TranslationRequest request)
+    {
+        if (string.IsNullOrEmpty(request.SubtitleToTranslate) || !File.Exists(request.SubtitleToTranslate))
+        {
+            return;
+        }
+
+        try
+        {
+            var subtitles = await _subtitleService.ReadSubtitles(request.SubtitleToTranslate);
+            var byPosition = subtitles.ToDictionary(s => s.Position);
+            foreach (var line in detail.Lines)
+            {
+                if (byPosition.TryGetValue(line.Position, out var item))
+                {
+                    line.StartTimeMs = item.StartTime;
+                    line.EndTimeMs = item.EndTime;
+                }
+            }
+        }
+        catch
+        {
+            // timecodes are a rendering nicety, never a failure
+        }
     }
 
     /// <inheritdoc />

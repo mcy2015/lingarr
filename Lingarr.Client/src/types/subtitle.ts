@@ -5,3 +5,9 @@ export interface ISubtitle {
     format: string
     caption: string
 }
+
+export interface IScannedSubtitleFile {
+    path: string
+    fileName: string
+    sizeBytes: number
+}

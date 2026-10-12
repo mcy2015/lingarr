@@ -60,12 +60,66 @@ public class SubtitleController : ControllerBase
     }
 
     /// <summary>
+    /// Lists supported subtitle files under a server directory, recursively
+    /// (A7) — feeds the import workbench's path scan.
+    /// </summary>
+    [HttpPost("scan-path")]
+    public async Task<ActionResult<List<ScannedSubtitleFile>>> ScanPath(
+        [FromBody] SubtitlePath request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Path))
+        {
+            return BadRequest(new { message = "Path is required." });
+        }
+
+        try
+        {
+            return Ok(await _subtitleImportService.ScanPath(request.Path));
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return NotFound(new { message = $"Directory '{request.Path}' does not exist on the server." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Imports subtitle files already on the server (paths from scan-path):
+    /// same storage, binding, dedup and translation semantics as the upload
+    /// import.
+    /// </summary>
+    [HttpPost("import-paths")]
+    public async Task<ActionResult<ImportSubtitlesResponse>> ImportPaths(
+        [FromBody] ImportPathsRequest request)
+    {
+        if (request.Paths.Count == 0)
+        {
+            return BadRequest(new { message = "No paths provided." });
+        }
+
+        var results = await _subtitleImportService.ImportPaths(
+            request.Paths,
+            request.SourceLanguage,
+            request.TargetLanguage,
+            request.Translate,
+            request.MediaType,
+            request.MediaId,
+            request.Season,
+            request.ChineseConvert,
+            request.IsBilingual);
+        return Ok(new ImportSubtitlesResponse { Results = results });
+    }
+
+    /// <summary>
     /// Imports uploaded subtitle files: stores them (converted to UTF-8) next to
     /// matched media when a binding is given, otherwise under the imports directory,
     /// and optionally enqueues a translation request per file. Unsupported
     /// extensions and per-file failures are reported individually.
     /// </summary>
-    /// <param name="files">Subtitle files (.srt/.ass/.ssa).</param>
+    /// <param name="files">Subtitle files (.srt/.ass/.ssa/.vtt).</param>
     /// <param name="sourceLanguage">Source language code for queued translations.</param>
     /// <param name="targetLanguage">Target language code for queued translations.</param>
     /// <param name="translate">When true, each stored file is queued for translation.</param>
@@ -82,7 +136,8 @@ public class SubtitleController : ControllerBase
         [FromForm] string? mediaType = null,
         [FromForm] int? mediaId = null,
         [FromForm] int? season = null,
-        [FromForm] string chineseConvert = "none")
+        [FromForm] string chineseConvert = "none",
+        [FromForm] bool isBilingual = false)
     {
         if (files.Count == 0)
         {
@@ -108,7 +163,7 @@ public class SubtitleController : ControllerBase
         }
 
         var results = await _subtitleImportService.ImportFiles(files, sourceLanguage, targetLanguage, translate,
-            mediaType, mediaId, season, chineseConvert);
+            mediaType, mediaId, season, chineseConvert, isBilingual);
         return Ok(new ImportSubtitlesResponse { Results = results });
     }
 }

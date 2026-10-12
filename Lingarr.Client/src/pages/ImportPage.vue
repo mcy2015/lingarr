@@ -6,7 +6,7 @@
             type="file"
             class="hidden"
             multiple
-            accept=".srt,.ass,.ssa"
+            accept=".srt,.ass,.ssa,.vtt"
             @change="onFileInput" />
 
         <!-- ═══ 自由导入 ═══ -->
@@ -27,24 +27,25 @@
                         {{ t('import.dropzone.title') }}
                     </b>
                     <span class="mono text-secondary-content mt-2 block text-[11px]">
-                        .srt · .ass · .ssa
-                        <span class="opacity-50">· .vtt（{{ t('import.planned') }}）</span>
+                        .srt · .ass · .ssa · .vtt
                     </span>
                 </button>
                 <div class="mt-2.5 flex gap-1.5">
-                    <span
-                        class="mono text-secondary-content flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap rounded border border-line bg-secondary px-2.5 py-1.5 text-[11.5px]"
-                        :title="t('import.scan.pathTitle')">
-                        config/imports
-                    </span>
+                    <input
+                        v-model="scanPath"
+                        type="text"
+                        class="mono border-line bg-secondary text-secondary-content placeholder:text-secondary-content/50 w-full min-w-0 flex-1 rounded border px-2.5 py-1.5 text-[11.5px] outline-none"
+                        :placeholder="t('import.scan.placeholder')"
+                        :aria-label="t('import.scan.pathTitle')"
+                        @keydown.enter="runScan" />
                     <button
                         type="button"
-                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2.5 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled
-                        :title="t('import.scan.pathTitle')">
-                        {{ t('import.scan.title') }}
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        :disabled="scanning || !scanPath.trim()"
+                        :title="t('import.scan.pathTitle')"
+                        @click="runScan">
+                        {{ scanning ? t('import.scan.scanning') : t('import.scan.title') }}
                     </button>
-                    <span :class="chipClass('dim')">{{ t('import.planned') }}</span>
                 </div>
                 <div class="text-secondary-content mt-2.5 rounded-md border border-line bg-secondary px-3.5 py-3 text-xs leading-relaxed">
                     <b class="text-primary-content font-semibold">{{ t('import.hint.title') }}</b>
@@ -139,10 +140,13 @@
                         class="text-secondary-content flex items-center gap-1.5"
                         :title="t('import.options.bilingualHint')">
                         {{ t('import.options.bilingual') }}
-                        <span :class="chipClass(bilingualOn ? 'ok' : 'dim')">
-                            {{ bilingualOn ? t('import.on') : t('import.off') }} ·
-                            {{ t('import.options.bilingualFollows') }}
-                        </span>
+                        <select
+                            v-model="bilingualOverride"
+                            class="mono border-line bg-tertiary text-secondary-content cursor-pointer rounded border px-1.5 py-0.5 text-[11px]">
+                            <option value="">{{ t('import.bilingual.follow') }}</option>
+                            <option value="on">{{ t('import.on') }}</option>
+                            <option value="off">{{ t('import.off') }}</option>
+                        </select>
                     </span>
                     <span class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.writeback') }}
@@ -396,6 +400,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import TabComponent from '@/components/common/TabComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import services from '@/services'
@@ -403,6 +408,7 @@ import { useSettingStore } from '@/store/setting'
 import { useToastStore } from '@/store/toast'
 import {
     IImportedSubtitleResult,
+    IImportSubtitlesResponse,
     IPagedResult,
     IParsedSubtitleFilename,
     IShow,
@@ -412,7 +418,9 @@ import {
 type RowAction = 'translate' | 'store'
 
 interface ImportRow {
-    file: File
+    file: File | null
+    serverPath?: string
+    sizeBytes?: number
     fileName: string
     action: RowAction
     parse: IParsedSubtitleFilename | null
@@ -421,10 +429,11 @@ interface ImportRow {
 }
 
 const { t } = useI18n()
+const route = useRoute()
 const settingStore = useSettingStore()
 const toastStore = useToastStore()
 
-const activeTab = ref<'free' | 'season'>('free')
+const activeTab = ref<'free' | 'season'>(route.query.tab === 'season' ? 'season' : 'free')
 // labels go through t() inside a computed so switching language re-renders
 // (setup-time evaluation would freeze the labels — the P2 i18n reactivity lesson)
 const tabs = computed<ITabOption[]>(() => [
@@ -440,9 +449,12 @@ const sourceLanguage = ref('en')
 const targetLanguage = ref('')
 const chineseConvert = ref('none')
 
-// directed season import: show + season binding
+// directed season import: show + season binding (deep-linkable via
+// /import?tab=season&show=<id> from the library matrix)
 const shows = ref<IShow[]>([])
-const selectedShowId = ref<number | undefined>(undefined)
+const selectedShowId = ref<number | undefined>(
+    route.query.show ? Number(route.query.show) || undefined : undefined
+)
 const selectedSeasonNumber = ref<number | undefined>(undefined)
 
 const seasons = computed<number[]>(() => {
@@ -477,12 +489,11 @@ if (!targetLanguage.value && languages.value.target.length > 0) {
     targetLanguage.value = languages.value.target[0].code
 }
 
-// The write-back stage decides bilingual output from this global setting —
-// imports only surface it, they cannot override it (yet).
-const bilingualOn = computed(() => {
-    const value = settingStore.getSetting('bilingual_subtitle_output')
-    return String(value).toLowerCase() === 'true'
-})
+// Import-level bilingual override (B3): '' follows the global setting.
+const bilingualOverride = ref('')
+const bilingualForImport = computed<'follow' | 'on' | 'off'>(() =>
+    bilingualOverride.value === 'on' ? 'on' : bilingualOverride.value === 'off' ? 'off' : 'follow'
+)
 
 const translateCount = computed(() => rows.value.filter((row) => row.action === 'translate').length)
 const storeCount = computed(() => rows.value.filter((row) => row.action === 'store').length)
@@ -546,13 +557,14 @@ const statusOf = (row: ImportRow): { cls: string; text: string; title?: string }
 
 // ── file intake ───────────────────────────────────────────────
 const addFiles = (incoming: File[]): void => {
-    const supported = incoming.filter((file) => /\.(srt|ass|ssa)$/i.test(file.name))
-    const known = new Set(rows.value.map((row) => row.fileName + ':' + row.file.size))
+    const supported = incoming.filter((file) => /\.(srt|ass|ssa|vtt)$/i.test(file.name))
+    const known = new Set(rows.value.map((row) => row.fileName + ':' + (row.sizeBytes ?? 0)))
     const fresh = supported.filter((file) => !known.has(file.name + ':' + file.size))
     rows.value.push(
         ...fresh.map<ImportRow>((file) => ({
             file,
             fileName: file.name,
+            sizeBytes: file.size,
             // keep the library's no-auto-queue semantics: store-only unless asked
             action: 'store',
             parse: null,
@@ -561,6 +573,43 @@ const addFiles = (incoming: File[]): void => {
         }))
     )
     void refreshMetadata()
+}
+
+const scanPath = ref('')
+const scanning = ref(false)
+
+/// Server-path scan (A7): files found on the server join the same workbench
+/// queue and import through the path-based endpoint.
+const runScan = async (): Promise<void> => {
+    const path = scanPath.value.trim()
+    if (!path || scanning.value) return
+    scanning.value = true
+    try {
+        const files = await services.import.scanPath(path)
+        const known = new Set(rows.value.map((row) => row.fileName + ':' + (row.sizeBytes ?? 0)))
+        const fresh = files.filter((file) => !known.has(file.fileName + ':' + file.sizeBytes))
+        rows.value.push(
+            ...fresh.map<ImportRow>((file) => ({
+                file: null,
+                serverPath: file.path,
+                sizeBytes: file.sizeBytes,
+                fileName: file.fileName,
+                action: 'store',
+                parse: null,
+                inspection: null,
+                result: null
+            }))
+        )
+        void refreshMetadata()
+        if (fresh.length === 0) {
+            toastStore.push({ message: t('import.scan.noneFound'), type: 'info' })
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        toastStore.push({ message: t('import.scan.failed', { message }), type: 'error' })
+    } finally {
+        scanning.value = false
+    }
 }
 
 const refreshMetadata = async (): Promise<void> => {
@@ -579,8 +628,10 @@ const refreshMetadata = async (): Promise<void> => {
 
 /// Client-side counterpart of the server's strict UTF-8 path: BOM/valid-UTF-8
 /// check plus a quick line count, so the encoding column shows real data
-/// without shipping file bytes to the parse endpoint.
+/// without shipping file bytes to the parse endpoint. Server-path rows have
+/// no local bytes and keep a null inspection.
 const inspectRow = async (row: ImportRow): Promise<void> => {
+    if (!row.file) return
     const format = row.fileName.split('.').pop()?.toUpperCase() ?? '—'
     try {
         const buffer = await row.file.arrayBuffer()
@@ -622,33 +673,62 @@ const excludeUnmatched = (): void => {
 // ── import execution ──────────────────────────────────────────
 // Per-row actions without an API change: split the batch into a
 // translate call and a store-only call, then merge results by file name.
+// Uploaded files and server-path files travel through their own endpoints.
 const runImport = async (): Promise<void> => {
     importing.value = true
     try {
         const directedBinding =
             activeTab.value === 'season' && selectedShowId.value && selectedSeasonNumber.value
-        const batches: [File[], boolean][] = [
-            [rows.value.filter((r) => r.action === 'translate').map((r) => r.file), true],
-            [rows.value.filter((r) => r.action === 'store').map((r) => r.file), false]
+        const isBilingual =
+            bilingualForImport.value === 'follow' ? undefined : bilingualForImport.value === 'on'
+
+        const batches: [ImportRow[], boolean][] = [
+            [rows.value.filter((r) => r.action === 'translate'), true],
+            [rows.value.filter((r) => r.action === 'store'), false]
         ]
         const byName = new Map(rows.value.map((row) => [row.fileName, row]))
         let succeeded = 0
         for (const [batch, translate] of batches) {
             if (batch.length === 0) continue
-            const response = await services.import.importFiles(
-                batch,
-                sourceLanguage.value,
-                targetLanguage.value,
-                translate,
-                directedBinding ? 'Show' : undefined,
-                directedBinding ? selectedShowId.value : undefined,
-                directedBinding ? selectedSeasonNumber.value : undefined,
-                chineseConvert.value
-            )
-            for (const item of response.results) {
-                const row = byName.get(item.fileName)
-                if (row) row.result = item
-                if (item.success) succeeded++
+
+            const uploads = batch.filter((r) => r.file)
+            const paths = batch.filter((r) => r.serverPath)
+            const merge = (results: IImportedSubtitleResult[]) => {
+                for (const item of results) {
+                    const row = byName.get(item.fileName)
+                    if (row) row.result = item
+                    if (item.success) succeeded++
+                }
+            }
+
+            if (uploads.length > 0) {
+                const response = await services.import.importFiles(
+                    uploads.map((r) => r.file!),
+                    sourceLanguage.value,
+                    targetLanguage.value,
+                    translate,
+                    directedBinding ? 'Show' : undefined,
+                    directedBinding ? selectedShowId.value : undefined,
+                    directedBinding ? selectedSeasonNumber.value : undefined,
+                    chineseConvert.value,
+                    isBilingual
+                )
+                merge(response.results)
+            }
+
+            if (paths.length > 0) {
+                const response = await services.import.importPaths<IImportSubtitlesResponse>({
+                    paths: paths.map((r) => r.serverPath!),
+                    sourceLanguage: sourceLanguage.value,
+                    targetLanguage: targetLanguage.value,
+                    translate,
+                    mediaType: directedBinding ? 'Show' : undefined,
+                    mediaId: directedBinding ? selectedShowId.value : undefined,
+                    season: directedBinding ? selectedSeasonNumber.value : undefined,
+                    chineseConvert: chineseConvert.value,
+                    isBilingual: isBilingual ?? false
+                })
+                merge(response.results)
             }
         }
         toastStore.push({ message: t('import.toast.success', { count: succeeded }), type: 'success' })

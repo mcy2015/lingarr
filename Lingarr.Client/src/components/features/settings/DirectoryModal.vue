@@ -1,21 +1,24 @@
 ﻿<template>
     <Teleport to="body">
         <Transition
-            enter-active-class="transition-all duration-300 ease-in-out"
-            leave-active-class="transition-all duration-300 ease-in-out"
+            enter-active-class="transition-opacity duration-300 ease-in-out"
+            leave-active-class="transition-opacity duration-300 ease-in-out"
             enter-from-class="opacity-0"
             leave-to-class="opacity-0">
             <div
                 v-if="isOpen"
                 class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-                @click="$emit('close')">
+                @click="$emit('close')"
+                @keydown.escape="$emit('close')">
                 <Transition
                     enter-active-class="transition-transform duration-300 ease-in-out"
                     leave-active-class="transition-transform duration-300 ease-in-out"
                     enter-from-class="scale-90"
                     leave-to-class="scale-90">
                     <div
-                        class="flex h-96 w-full max-w-md flex-col rounded-lg bg-black p-2"
+                        class="flex h-96 w-full max-w-md flex-col rounded-lg bg-black p-2 [overscroll-behavior:contain]"
+                        role="dialog"
+                        aria-modal="true"
                         @click.stop>
                         <div class="shell-scroll grow overflow-auto text-sm">
                             <div class="mb-2 text-secondary-content/60">

@@ -50,20 +50,80 @@
             "cancelled": "Cancelled",
             "interrupted": "Interrupted",
             "paused": "Paused"
-        }
+        },
+        "runNow": "Run now"
     },
     "nav": {
         "dashboard": "Dashboard",
         "library": "Library",
         "import": "Import",
         "settings": "Settings",
-        "queue": "Queue"
+        "queue": "Queue",
+        "proofread": "Proofreading"
     },
     "library": {
         "tabs": {
-            "shows": "TV Shows",
+            "all": "All",
+            "group": "Type filter",
+            "shows": "Shows",
             "movies": "Movies"
-        }
+        },
+        "toolbar": {
+            "import": "⇪ Import subtitles",
+            "stats": "{items} items · {missing} missing subtitles · {inProgress} in progress"
+        },
+        "filter": {
+            "targetLanguage": "Target",
+            "state": "Status",
+            "all": "All"
+        },
+        "table": {
+            "title": "Title",
+            "tracks": "Subtitle tracks",
+            "status": "Status",
+            "lastActivity": "Last activity",
+            "selectAll": "Select all on this page",
+            "select": "Select {title}"
+        },
+        "badge": {
+            "show": "Show",
+            "movie": "Movie"
+        },
+        "meta": {
+            "show": "S{seasons} · {episodes} episodes"
+        },
+        "track": {
+            "complete": "{lang}: complete",
+            "partial": "{lang}: {have}/{total} episodes",
+            "none": "{lang}: no subtitles"
+        },
+        "state": {
+            "none": "· Not queued",
+            "queued": "⏳ Queued",
+            "inProgress": "◐ Translating",
+            "completed": "✓ Completed",
+            "completedRatio": "✓ {done}/{total} completed",
+            "failed": "✗ Failed",
+            "failedCount": "✗ {count} failed"
+        },
+        "action": {
+            "seasonImport": "Import season",
+            "import": "Import",
+            "detail": "Details"
+        },
+        "detail": {
+            "include": "Include in translation",
+            "threshold": "Delay (hours)",
+            "subtitles": "Subtitle files"
+        },
+        "tray": {
+            "selected": "{count} selected",
+            "translate": "Translate selection",
+            "clear": "Clear",
+            "estimate": "Estimated ≈ {cost} · {chars} characters",
+            "charsOnly": "≈ {chars} characters · no rate configured"
+        },
+        "empty": "No media matches the current filters."
     },
     "version": {
         "development": "Development",
@@ -150,7 +210,11 @@
         },
         "scan": {
             "title": "Scan path",
-            "pathTitle": "Server-path scanning arrives with the B3 batch"
+            "pathTitle": "Server-path scanning arrives with the B3 batch",
+            "placeholder": "Server path, e.g. /media/subtitles",
+            "scanning": "Scanning…",
+            "noneFound": "No new subtitle files found at that path.",
+            "failed": "Path scan failed: {message}"
         },
         "hint": {
             "title": "Import as task",
@@ -247,6 +311,9 @@
             "none": "Keep as-is",
             "simplified": "Convert to Simplified",
             "traditional": "Convert to Traditional"
+        },
+        "bilingual": {
+            "follow": "Follow global"
         }
     },
     "dashboard": {
@@ -765,6 +832,30 @@
             "placeholder": "Select language…",
             "selectSourceFirst": "Select a source language first.",
             "search": "Select or search language"
+        },
+        "providers": {
+            "blurb": "Multiple services side by side; the default one handles automated batches. Cards show real usage and health.",
+            "default": "DEFAULT",
+            "month": "This month",
+            "latency": "Latency",
+            "success": "Success",
+            "setDefault": "Set default",
+            "idle": "idle",
+            "online": "online",
+            "degraded": "degraded",
+            "failing": "failing"
+        },
+        "glossary": {
+            "title": "Glossary",
+            "count": "{count} entries",
+            "add": "Add term",
+            "empty": "No terms yet — locked terms are enforced on every translation, others hint in proofreading.",
+            "source": "Source term",
+            "target": "Target term",
+            "locked": "Locked",
+            "hint": "advisory",
+            "delete": "Delete",
+            "saveFailed": "Saving the term failed."
         }
     },
     "translations": {
@@ -832,6 +923,46 @@
             "pausedHint": "Paused — resume to continue",
             "remainingHint": "Estimated remaining time",
             "retries": "{count} retries"
+        }
+    },
+    "proofread": {
+        "loading": "Loading request…",
+        "noLines": "This request has no persisted lines to proofread yet.",
+        "subtitle": "{source} → {target} · human refinement · {count} lines",
+        "progress": "{done} / {total} lines reviewed",
+        "legend": {
+            "source": "Source {lang}",
+            "target": "Translation {lang}"
+        },
+        "keys": {
+            "navigate": "move lines",
+            "approve": "approve line",
+            "edit": "edit"
+        },
+        "approve": "✓ Approve",
+        "reject": "✗ Reject",
+        "unsaved": "● modified, unsaved",
+        "editLabel": "Edit translation",
+        "glossaryCount": "{count} terms",
+        "glossaryLocked": "{source} → {target} · locked",
+        "glossaryHint": "{source} → {target}",
+        "export": "Export snapshot",
+        "finish": "Finish & write back ({done}/{total})",
+        "mark": {
+            "approved": "Approved",
+            "pending": "Pending review",
+            "rejected": "Rejected"
+        },
+        "openWorkbench": "Open proofreading workbench"
+    },
+    "topbar": {
+        "sub": {
+            "dashboard": "Pipeline running · live via SignalR",
+            "library": "Shows and movies in one matrix view",
+            "queue": "Live · SignalR push",
+            "import": "Drag in files or scan a server path · transcode / convert / dedupe into the pipeline",
+            "proofread": "Dual-track line review · J/K/Enter flow",
+            "settings": "Four groups: services / media & automation / subtitles & quality / system"
         }
     }
 }

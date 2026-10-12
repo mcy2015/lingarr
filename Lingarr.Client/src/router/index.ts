@@ -51,6 +51,14 @@ const routes: RouteRecordRaw[] = [
                 props: true
             },
             {
+                // :id optional — bare /proofread lands on the latest
+                // completed request (resolved by the page itself)
+                path: '/proofread/:id?',
+                component: () => import('@/pages/ProofreadPage.vue'),
+                name: 'proofread',
+                props: true
+            },
+            {
                 // legacy paths -> new IA (bookmarks kept alive)
                 path: '/shows',
                 redirect: '/library?type=show'

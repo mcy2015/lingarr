@@ -110,7 +110,8 @@ public class TranslationJobTests
                 new Mock<IAsyncTranslationRegistry>().Object,
                 NullLogger<TranslationPipeline>.Instance),
             _translationRequestService.Object,
-            _eventService.Object);
+            _eventService.Object,
+            new Mock<IGlossaryService>().Object);
     }
 
     // ===== Status gating =====

@@ -19,6 +19,7 @@ public class PipelineStatisticsTests : IDisposable
     private readonly LingarrDbContext _dbContext;
     private readonly Mock<ISettingService> _settingService = new();
     private readonly Mock<ITranslationHealthService> _healthService = new();
+    private readonly Mock<ICostService> _costService = new();
 
     public PipelineStatisticsTests()
     {
@@ -33,12 +34,15 @@ public class PipelineStatisticsTests : IDisposable
         _healthService
             .Setup(h => h.GetOnlineServiceCountAsync())
             .ReturnsAsync(2);
+        _costService
+            .Setup(c => c.GetCurrentMonthTotalCostAsync())
+            .ReturnsAsync((double?)null);
     }
 
     public void Dispose() => _dbContext.Database.EnsureDeleted();
 
     private StatisticsService CreateService() =>
-        new(_dbContext, _settingService.Object, _healthService.Object);
+        new(_dbContext, _settingService.Object, _healthService.Object, _costService.Object);
 
     private async Task SeedStatisticsAsync(int episodes, int movies, Dictionary<string, int> byLanguage)
     {
