@@ -23,11 +23,16 @@ public class SettingChangedListener
 
     public SettingChangedListener(IServiceProvider serviceProvider,
         IHubContext<SettingUpdatesHub> hubContext,
-        ILogger<SettingChangedListener> logger)
+        ILogger<SettingChangedListener> logger,
+        ISettingChangeNotifier changeNotifier)
     {
         _serviceProvider = serviceProvider;
         _hubContext = hubContext;
         _logger = logger;
+
+        // Singleton-to-singleton subscription, wired exactly once — replaces the
+        // per-scope subscriptions SettingService used to make in its constructor.
+        changeNotifier.Changed += OnSettingChanged;
     }
 
     public void OnSettingChanged(SettingService settingService, string setting)

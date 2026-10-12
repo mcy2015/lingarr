@@ -169,6 +169,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAuthService, AuthService>();
 
         builder.Services.AddScoped<ISettingService, SettingService>();
+        builder.Services.AddSingleton<ISettingChangeNotifier, SettingChangeNotifier>();
         builder.Services.AddSingleton<SettingChangedListener>();
 
         builder.Services.AddHostedService<ScheduleInitializationService>();

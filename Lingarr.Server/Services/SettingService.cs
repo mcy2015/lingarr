@@ -18,24 +18,25 @@ public class SettingService : ISettingService
 
     private readonly IMemoryCache _cache;
     private readonly MemoryCacheEntryOptions _cacheOptions;
+    private readonly ISettingChangeNotifier _changeNotifier;
 
     public SettingService(
         LingarrDbContext dbContext,
         ILogger<ISettingService> logger,
         IMemoryCache memoryCache,
-        SettingChangedListener settingChangedListener,
+        ISettingChangeNotifier changeNotifier,
         IEncryptionService encryptionService)
     {
         _dbContext = dbContext;
         _logger = logger;
         _cache = memoryCache;
         _encryptionService = encryptionService;
+        _changeNotifier = changeNotifier;
 
         _cacheOptions = new MemoryCacheEntryOptions()
             .SetAbsoluteExpiration(TimeSpan.FromHours(1))
             .SetSlidingExpiration(TimeSpan.FromMinutes(30));
 
-        SettingChanged += settingChangedListener.OnSettingChanged;
         SettingChanged += InvalidateCacheForSetting;
     }
 
@@ -46,7 +47,8 @@ public class SettingService : ISettingService
 
     public void OnSettingChange(string setting)
     {
-        SettingChanged?.Invoke(this, setting); 
+        SettingChanged?.Invoke(this, setting);
+        _changeNotifier.Notify(this, setting);
     }
 
     /// <inheritdoc />
