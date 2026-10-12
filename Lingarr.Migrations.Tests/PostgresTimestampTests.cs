@@ -62,7 +62,7 @@ public class PostgresTimestampTests
         var services = new ServiceCollection();
         services.AddFluentMigrator(connectionString, "postgresql");
 
-        MigrationConfiguration.RunMigrations(services.BuildServiceProvider());
+        MigrationConfiguration.RunMigrations(services.BuildServiceProvider(), "postgresql", connectionString);
     }
 
     private static LingarrDbContext CreateContext(string connectionString)
