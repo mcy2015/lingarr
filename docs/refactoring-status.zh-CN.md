@@ -1,9 +1,9 @@
 # Lingarr 重构计划与完成情况总览
 
-> 更新：2026-10-12 · 分支：`main`（`refactor/ia-migration` 14+1 提交已并入并推送 origin）
+> 更新：2026-10-12 · 分支：`feat/b1-overview`（B1 概览重做已完成，待合并 main）
 > 基线：main = `3858195`（feat/visual-refresh 合并，已推送 origin）
 > 配套文档：`module-analysis.zh-CN.md`（P0-P2 清单）· `redesign-proposal.zh-CN.md`（P3 设计）· `ia-gap-audit.zh-CN.md`（原型差距与接口计划）
-> 质量快照：Server.Tests **366/366** · Migrations.Tests **12/12**（真容器）· 前端 build/oxlint/vitest 11/11 · i18n en/zh-CN **579/579**
+> 质量快照：Server.Tests **378/378**（SDK 容器）· Migrations.Tests **12/12**（真容器）· 前端 build/oxlint/vitest 11/11 · i18n en/zh-CN **609/609**
 
 ---
 
@@ -23,6 +23,7 @@
 | 合并/推送 | refactor/ia-migration → main（14+1 提交）→ origin | ✅ main 已推送 | 本次合并 |
 | 实机核验+修复 | localhost:9876 六屏巡检；发现并修复导入台整页崩溃 | ✅ 修复+实测恢复 | `80fa3a3` |
 | 导入台原型复刻 | 按原型第四屏一比一重写（双面板/六列表/选项条/per-file 动作/客户端检出） | ✅ 完成+全链实测 | `5e1b39a` |
+| B1 概览重做 | A1/A2/A3 三端点 + Dashboard 按原型第一屏重写（管线/KPI/活跃/健康/feed） | ✅ 完成+实测 | `488b312` `424cfd7` |
 
 ---
 
@@ -119,7 +120,7 @@
 
 | 批次 | 内容 | 接口 | 规模预估 |
 |---|---|---|---|
-| **B1 概览重做** | 管线条带 + KPI 条 + 活跃任务轨道条 + 动态 feed + 服务健康 | A1 `translate/health` · A2 `statistics/pipeline` · A3 `translationrequest/events` | 中（3 端点 + 1 页） |
+| **B1 概览重做** | ✅ 已完成（`feat/b1-overview`）——三端点 + 概览页；成本 KPI 与 provider 月成本待 A5 填数 | A1/A2/A3 已交付 | 已完成 |
 | **B2 媒体矩阵 + 成本** | 媒体库字幕状态矩阵/状态列/最近活动 + 概览成本 KPI + 托盘消耗预估 + 队列写回列 | A4 媒体聚合投影 · A5 成本（M0025 已有 progress 基础） | 中 |
 | **B3 长尾** | 导入路径扫描/编码检测列/写回策略选项 + 术语表 CRUD+翻译注入+校对高亮 + VTT | A7 / A8 / A9 | 中大 |
 | **校对台工作台** | 一级路由双轨对照 + J/K/Enter 键盘流 + 术语高亮 + 完成写回 | 复用 Proofread API 全套 + 术语表（依赖 B3-A8 高亮部分） | 大 |
@@ -142,9 +143,9 @@
 
 | 项 | 结果 |
 |---|---|
-| Server.Tests（xUnit v3） | **366/366** ✅ |
+| Server.Tests（xUnit v3，SDK 容器运行） | **378/378** ✅（+12：health 窗口/管线聚合/事件排序） |
 | Migrations.Tests（Testcontainers MySQL/PG/SQLite） | **12/12** ✅ |
 | 前端 build（vue-tsc + vite）/ oxlint / vitest | ✅ / ✅ / 11/11 |
-| i18n | en/zh-CN 545/545 完全同步 |
-| 真机冒烟 | 自由导入 ✓ · 定向绑定 ✓ · 去重 ✓ · 简繁 ✓ · 暂停校验 ✓ · provider chip ✓ · 六屏实机巡检 ✓ · 复刻后全链 ✓（注入文件→per-file 动作→分组双调用→LibreTranslate 翻译→写回，测试数据已清理） |
+| i18n | en/zh-CN 609/609 完全同步 |
+| 真机冒烟 | 自由导入 ✓ · 定向绑定 ✓ · 去重 ✓ · 简繁 ✓ · 暂停校验 ✓ · provider chip ✓ · 六屏实机巡检 ✓ · 复刻后全链 ✓（注入文件→per-file 动作→分组双调用→LibreTranslate 翻译→写回，测试数据已清理）· B1 三端点 curl 实测 ✓ + 概览页实渲染/视觉比对 ✓ |
 | dev 环境 | Server/Client/Mysql/LibreTranslate 四容器运行中（localhost:9876 UI · 9877 API） |

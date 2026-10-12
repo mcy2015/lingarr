@@ -93,6 +93,7 @@ public class TranslateControllerLineTests
                 new Mock<ITranslationRequestService>().Object,
                 settingServiceMock.Object,
                 new LanguageCodeService(),
+                new Mock<ITranslationHealthService>().Object,
                 NullLogger<TranslateController>.Instance)
         };
     }

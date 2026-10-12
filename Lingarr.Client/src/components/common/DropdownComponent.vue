@@ -1,10 +1,15 @@
 ﻿<template>
     <div ref="clickOutside" class="relative z-10 inline-block text-left">
-        <div
-            class="inline-flex h-10 w-10 cursor-pointer items-center justify-center"
-            @click="toggleDropdown">
+        <button
+            type="button"
+            class="focus-visible:ring-accent inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
+            aria-haspopup="menu"
+            :aria-expanded="isOpen"
+            @click="toggleDropdown"
+            @keydown.escape.stop="close">
+            <span v-if="label" class="sr-only">{{ label }}</span>
             <slot name="button"></slot>
-        </div>
+        </button>
 
         <transition
             enter-active-class="transition ease-out duration-100"
@@ -29,8 +34,9 @@ import useClickOutside from '@/composables/useClickOutside'
 
 const isOpen = ref(false)
 const clickOutside: Ref<HTMLElement | undefined> = ref()
-const { width = 'medium' } = defineProps<{
+const { width = 'medium', label } = defineProps<{
     width: string
+    label?: string
 }>()
 
 const getClasses = () => {
@@ -48,11 +54,11 @@ const toggleDropdown = () => {
     isOpen.value = !isOpen.value
 }
 
-defineExpose({
-    close: () => {
-        isOpen.value = false
-    }
-})
+const close = () => {
+    isOpen.value = false
+}
+
+defineExpose({ close })
 
 useClickOutside(clickOutside, () => {
     isOpen.value = false

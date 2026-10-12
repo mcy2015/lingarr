@@ -24,6 +24,17 @@ public class StatisticsController : ControllerBase
         return Ok(stats);
     }
     
+    /// <summary>
+    /// Overview pipeline strip payload (gap-audit A2): media count, missing
+    /// subtitle tracks, Hangfire queue depth, online providers, write-backs
+    /// this month, 30-day success rate. Monthly cost is null until A5.
+    /// </summary>
+    [HttpGet("pipeline")]
+    public async Task<ActionResult<Models.Api.PipelineStatistics>> GetPipelineStatistics()
+    {
+        return Ok(await _statisticsService.GetPipelineStatistics());
+    }
+
     [HttpGet("daily/{days}")]
     public async Task<ActionResult<IEnumerable<DailyStatistics>>> GetDailyStats(int days = 30)
     {

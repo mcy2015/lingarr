@@ -12,8 +12,9 @@
         <!-- ═══ 自由导入 ═══ -->
         <div v-if="activeTab === 'free'" class="grid items-start gap-3.5 md:grid-cols-[300px_minmax(0,1fr)]">
             <div>
-                <div
-                    class="hover:bg-tertiary/40 cursor-pointer rounded-md px-5 py-8 text-center transition-colors"
+                <button
+                    type="button"
+                    class="hover:bg-tertiary/40 w-full cursor-pointer rounded-md px-5 py-8 text-center transition-colors"
                     :style="{
                         borderWidth: '1.5px',
                         borderStyle: 'dashed',
@@ -29,7 +30,7 @@
                         .srt · .ass · .ssa
                         <span class="opacity-50">· .vtt（{{ t('import.planned') }}）</span>
                     </span>
-                </div>
+                </button>
                 <div class="mt-2.5 flex gap-1.5">
                     <span
                         class="mono text-secondary-content flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap rounded border border-line bg-secondary px-2.5 py-1.5 text-[11.5px]"
@@ -100,7 +101,8 @@
                             <td :class="tdClass">
                                 <select
                                     v-model="row.action"
-                                    class="mono bg-tertiary text-secondary-content border-line cursor-pointer rounded border px-1.5 py-0.5 text-[11px]">
+                                    class="mono bg-tertiary text-secondary-content border-line cursor-pointer rounded border px-1.5 py-0.5 text-[11px]"
+                                    :aria-label="`${row.fileName} · ${t('import.table.action')}`">
                                     <option value="translate">{{ t('import.action.translate') }}</option>
                                     <option value="store">{{ t('import.action.store') }}</option>
                                 </select>
@@ -216,13 +218,15 @@
                     <span class="text-secondary-content text-xs">{{ t('import.target.change') }}</span>
                     <select
                         v-model="selectedShowId"
-                        class="border-line bg-primary text-primary-content cursor-pointer rounded-md border px-2.5 py-1 text-xs">
+                        class="border-line bg-primary text-primary-content cursor-pointer rounded-md border px-2.5 py-1 text-xs"
+                        :aria-label="t('import.target.pickShow')">
                         <option :value="undefined" disabled>{{ t('import.target.pickShow') }}</option>
                         <option v-for="show in shows" :key="show.id" :value="show.id">{{ show.title }}</option>
                     </select>
                     <select
                         v-model="selectedSeasonNumber"
                         class="border-line bg-primary text-primary-content cursor-pointer rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+                        :aria-label="t('import.target.season')"
                         :disabled="seasons.length === 0">
                         <option v-for="season in seasons" :key="season" :value="season">
                             S{{ String(season).padStart(2, '0') }}
@@ -231,8 +235,9 @@
                 </div>
             </div>
 
-            <div
-                class="hover:bg-tertiary/40 mb-3 cursor-pointer rounded-md px-5 py-5 text-center transition-colors"
+            <button
+                type="button"
+                class="hover:bg-tertiary/40 mb-3 w-full cursor-pointer rounded-md px-5 py-5 text-center transition-colors"
                 :style="{
                     borderWidth: '1.5px',
                     borderStyle: 'dashed',
@@ -247,7 +252,7 @@
                 <span class="mono text-secondary-content mt-2 block text-[11px]">
                     {{ t('import.season.dropFormats') }}
                 </span>
-            </div>
+            </button>
 
             <div class="overflow-x-auto rounded-md border border-line bg-secondary">
                 <div class="flex items-center gap-2.5 border-b border-line px-4 py-3">
@@ -307,7 +312,8 @@
                             <td :class="tdClass">
                                 <select
                                     v-model="row.action"
-                                    class="mono bg-tertiary text-secondary-content border-line cursor-pointer rounded border px-1.5 py-0.5 text-[11px]">
+                                    class="mono bg-tertiary text-secondary-content border-line cursor-pointer rounded border px-1.5 py-0.5 text-[11px]"
+                                    :aria-label="`${row.fileName} · ${t('import.table.action')}`">
                                     <option value="translate">{{ t('import.action.translateShort') }}</option>
                                     <option value="store">{{ t('import.action.storeShort') }}</option>
                                 </select>

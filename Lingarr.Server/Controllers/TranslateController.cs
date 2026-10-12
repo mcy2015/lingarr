@@ -22,6 +22,7 @@ public class TranslateController : ControllerBase
     private readonly ITranslationRequestService _translationRequestService;
     private readonly ISettingService _settings;
     private readonly LanguageCodeService _languageCodeService;
+    private readonly ITranslationHealthService _translationHealthService;
     private readonly ILogger<TranslateController> _logger;
 
     public TranslateController(
@@ -29,13 +30,26 @@ public class TranslateController : ControllerBase
         ITranslationRequestService translationRequestService,
         ISettingService settings,
         LanguageCodeService languageCodeService,
+        ITranslationHealthService translationHealthService,
         ILogger<TranslateController> logger)
     {
         _translationServiceFactory = translationServiceFactory;
         _translationRequestService = translationRequestService;
         _settings = settings;
         _languageCodeService = languageCodeService;
+        _translationHealthService = translationHealthService;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Health row per registered provider (gap-audit A1): configuration status
+    /// plus the rolling latency/success window recorded by the shared retry
+    /// loop. Cost stays null until usage/price tracking lands (A5).
+    /// </summary>
+    [HttpGet("health")]
+    public async Task<ActionResult<List<Models.Api.TranslationServiceHealth>>> GetServiceHealth()
+    {
+        return Ok(await _translationHealthService.GetServiceHealthAsync());
     }
 
     /// <summary>

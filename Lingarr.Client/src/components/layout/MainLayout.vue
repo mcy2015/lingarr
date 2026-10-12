@@ -1,18 +1,29 @@
 <template>
     <div
-        :class="[`${instanceStore.getTheme}`, 'bg-primary text-primary-content flex min-h-screen']">
+        :class="[`${instanceStore.getTheme}`, 'bg-primary text-primary-content flex h-dvh overflow-hidden']">
+        <a
+            href="#main-content"
+            class="bg-secondary text-primary-content sr-only fixed top-2 left-2 z-[70] rounded-md px-4 py-2 text-sm font-semibold focus:not-sr-only">
+            {{ t('common.skipToContent') }}
+        </a>
         <AsideNavigation />
 
-        <div class="flex w-full flex-col">
+        <div class="flex h-full w-full min-w-0 flex-col">
             <!-- Header -->
             <header class="border-line bg-secondary px-4 py-2.5 sm:px-6 lg:px-8">
                 <div class="flex w-full items-center justify-between space-x-2 md:justify-end">
                     <div class="md:hidden">
-                        <Icon name="menu" class="block h-5 w-5 cursor-pointer" @click="isOpen = !isOpen" />
+                        <button
+                            type="button"
+                            class="focus-visible:ring-accent cursor-pointer rounded-md focus-visible:ring-2 focus-visible:outline-none"
+                            :aria-label="t('common.menu')"
+                            @click="isOpen = !isOpen">
+                            <Icon name="menu" class="block h-5 w-5" />
+                        </button>
                     </div>
                     <div class="flex items-center justify-between">
                         <LanguageDropdown />
-                        <DropdownComponent ref="themeDropdownEl" width="medium">
+                        <DropdownComponent ref="themeDropdownEl" width="medium" :label="t('common.theme')">
                             <template #button>
                                 <Icon name="theme" class="h-5 w-5" />
                             </template>
@@ -36,7 +47,7 @@
                 </div>
             </header>
             <!-- Main Content -->
-            <main class="flex-1">
+            <main id="main-content" class="min-h-0 flex-1 overflow-y-auto">
                 <router-view v-slot="{ Component }">
                     <transition name="fade" mode="out-in">
                         <component :is="Component" />
@@ -51,6 +62,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSignalR } from '@/composables/useSignalR'
 import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
 import { useSettingStore } from '@/store/setting'
@@ -67,6 +79,7 @@ const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()
 const translationRequestStore = useTranslationRequestStore()
 const signalR = useSignalR()
+const { t } = useI18n()
 const themeDropdownEl = ref<InstanceType<typeof DropdownComponent>>()
 const settingHubConnection = ref<Hub>()
 const requestHubConnection = ref<Hub>()

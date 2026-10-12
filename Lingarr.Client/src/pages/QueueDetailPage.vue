@@ -4,6 +4,7 @@
             <ButtonComponent
                 variant="ghost"
                 size="xs"
+                :aria-label="t('common.back')"
                 @click="router.push({ name: 'queue' })">
                 <Icon name="arrowLeft" class="ml-1 h-3.5 w-3.5" />
             </ButtonComponent>

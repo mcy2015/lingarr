@@ -239,6 +239,7 @@ public class TranslateControllerContentTests : IDisposable
             _translationRequestService,
             _settingServiceMock.Object,
             new LanguageCodeService(),
+            new Mock<ITranslationHealthService>().Object,
             NullLogger<TranslateController>.Instance);
     }
 

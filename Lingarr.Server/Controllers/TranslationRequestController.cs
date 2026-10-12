@@ -16,13 +16,29 @@ public class TranslationRequestController : ControllerBase
 {
     private readonly ITranslationRequestService _translationRequestService;
     private readonly ISubtitleConversionService _subtitleConversionService;
+    private readonly ITranslationRequestEventService _eventService;
 
     public TranslationRequestController(
         ITranslationRequestService translationRequestService,
-        ISubtitleConversionService subtitleConversionService)
+        ISubtitleConversionService subtitleConversionService,
+        ITranslationRequestEventService eventService)
     {
         _translationRequestService = translationRequestService;
         _subtitleConversionService = subtitleConversionService;
+        _eventService = eventService;
+    }
+
+    /// <summary>
+    /// Returns the most recent status-transition events across all requests,
+    /// newest first, for the overview activity feed.
+    /// </summary>
+    /// <param name="take">Maximum number of events to return (1-100, default 20).</param>
+    [HttpGet("events")]
+    public async Task<ActionResult<IEnumerable<TranslationRequestEventSummary>>> GetRecentEvents(
+        [FromQuery] int take = 20)
+    {
+        var effectiveTake = Math.Clamp(take, 1, 100);
+        return Ok(await _eventService.GetRecentEvents(effectiveTake));
     }
 
     /// <summary>

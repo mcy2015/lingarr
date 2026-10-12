@@ -7,12 +7,19 @@
             @click="isOpen = false"></div>
         <!-- Aside -->
         <aside
-            :class="isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
-            class="border-line bg-secondary fixed top-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r transition-transform duration-300 ease-in-out md:sticky">
-            <Icon
-                name="times"
-                class="absolute top-1 right-1 block h-6 w-6 cursor-pointer md:hidden"
-                @click="isOpen = false" />
+            :class="
+                isOpen
+                    ? 'translate-x-0'
+                    : 'invisible -translate-x-full md:visible md:translate-x-0'
+            "
+            class="border-line bg-secondary fixed top-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r transition-[transform,visibility] duration-300 ease-in-out md:sticky">
+            <button
+                type="button"
+                class="focus-visible:ring-accent absolute top-1 right-1 cursor-pointer rounded-md p-1 focus-visible:ring-2 focus-visible:outline-none md:hidden"
+                :aria-label="t('common.close')"
+                @click="isOpen = false">
+                <Icon name="times" class="block h-6 w-6" />
+            </button>
             <div class="flex h-16 items-center border-b border-line px-5">
                 <h1 class="text-lg font-bold tracking-wide">LINGARR<span class="text-accent">_</span></h1>
             </div>
@@ -49,7 +56,9 @@
                     v-if="instanceStore.getPoster"
                     :src="`/api/image/${instanceStore.getPoster}`"
                     class="mask-gradient h-full w-full object-cover"
-                    alt="poster" />
+                    alt=""
+                    loading="lazy"
+                    decoding="async" />
                 <div
                     v-if="instanceStore.getVersion.currentVersion.length"
                     class="absolute right-0 bottom-0 flex w-full justify-center p-4">
