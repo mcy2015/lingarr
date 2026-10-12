@@ -17,6 +17,8 @@
     <PackageReference Include="DeepL.net" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="GTranslate" />
+    <PackageReference Include="System.Text.Encoding.CodePages" />
+    <PackageReference Include="Ude.NetStandard" />
     <PackageReference Include="Hangfire" />
     <PackageReference Include="Hangfire.MemoryStorage" />
     <PackageReference Include="Hangfire.MySqlStorage" />

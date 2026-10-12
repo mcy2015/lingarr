@@ -182,6 +182,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IRadarrService, RadarrService>();
         builder.Services.AddScoped<ISonarrService, SonarrService>();
         builder.Services.AddScoped<ISubtitleService, SubtitleService>();
+        builder.Services.AddSingleton<ISubtitleEncodingService, SubtitleEncodingService>();
         builder.Services.AddScoped<ISubtitleConversionService, SubtitleConversionService>();
         builder.Services.AddSingleton<IAsyncTranslationRegistry, AsyncTranslationRegistry>();
         builder.Services.AddSingleton<IJobQueue, JobQueue>();
