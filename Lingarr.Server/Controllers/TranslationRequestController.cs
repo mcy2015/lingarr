@@ -13,11 +13,14 @@ namespace Lingarr.Server.Controllers;
 public class TranslationRequestController : ControllerBase
 {
     private readonly ITranslationRequestService _translationRequestService;
+    private readonly ISubtitleConversionService _subtitleConversionService;
 
     public TranslationRequestController(
-        ITranslationRequestService translationRequestService)
+        ITranslationRequestService translationRequestService,
+        ISubtitleConversionService subtitleConversionService)
     {
         _translationRequestService = translationRequestService;
+        _subtitleConversionService = subtitleConversionService;
     }
 
     /// <summary>
@@ -172,6 +175,37 @@ public class TranslationRequestController : ControllerBase
     /// <response code="400">If no configured translation service can proofread</response>
     /// <response code="404">If the request was not found, is not Completed, or has no translated subtitle</response>
     /// <returns>ActionResult containing the proofread result message</returns>
+    /// <summary>
+    /// Converts the output subtitle of a completed translation request between
+    /// monolingual and bilingual form. Rebuilds the file from persisted lines
+    /// without invoking any translation service.
+    /// </summary>
+    /// <param name="convertRequest">The translation request id and target form</param>
+    /// <response code="200">The conversion succeeded or was skipped (already in target form)</response>
+    /// <response code="400">The conversion failed; the result carries the reason</response>
+    /// <returns>ActionResult describing the conversion outcome</returns>
+    [HttpPost("convert")]
+    public async Task<ActionResult<SubtitleConversionResult>> ConvertTranslationRequest(
+        [FromBody] SubtitleConversionRequest convertRequest)
+    {
+        var result = await _subtitleConversionService.ConvertAsync(convertRequest.Id, convertRequest.Bilingual);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Converts every completed translation output to the requested form.
+    /// Requests already in the target form are skipped.
+    /// </summary>
+    /// <param name="batchRequest">The target form for all completed translations</param>
+    /// <response code="200">Per-request conversion outcomes</response>
+    /// <returns>ActionResult containing one result per translation request</returns>
+    [HttpPost("convert/all")]
+    public async Task<ActionResult<List<SubtitleConversionResult>>> ConvertAllTranslationRequests(
+        [FromBody] SubtitleBatchConversionRequest batchRequest)
+    {
+        return Ok(await _subtitleConversionService.ConvertAllAsync(batchRequest.Bilingual));
+    }
+
     [HttpPost("proofread")]
     public async Task<ActionResult<string>> ProofreadTranslationRequest(
         [FromBody] TranslationRequest proofreadRequest)

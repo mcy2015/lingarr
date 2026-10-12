@@ -99,6 +99,7 @@ public class TranslationRequestService : ITranslationRequestService
             TargetLanguage = request.TargetLanguage,
             SubtitleToTranslate = request.SubtitleToTranslate,
             TranslatedSubtitle = request.TranslatedSubtitle,
+            IsBilingual = request.IsBilingual,
             MediaType = request.MediaType,
             Status = request.Status,
             CompletedAt = request.CompletedAt,
@@ -562,7 +563,8 @@ public class TranslationRequestService : ITranslationRequestService
         await _subtitleService.WriteSubtitles(
             translationRequest.TranslatedSubtitle,
             translatedSubtitles,
-            stripSubtitleFormatting);
+            stripSubtitleFormatting,
+            translationRequest.IsBilingual);
 
         return $"Line {applyRequest.Position} of translation request with id {applyRequest.Id} has been updated";
     }

@@ -93,6 +93,7 @@ public class TranslationJob
                 SettingKeys.Translation.FixOverlappingSubtitles,
                 SettingKeys.Translation.StripSubtitleFormatting,
                 SettingKeys.Translation.PreserveLineBreaks,
+                SettingKeys.Translation.BilingualSubtitleOutput,
                 SettingKeys.Translation.AddTranslatorInfo,
 
                 SettingKeys.SubtitleValidation.ValidateSubtitles,
@@ -115,6 +116,7 @@ public class TranslationJob
             var serviceType = serviceNames[0];
             var stripSubtitleFormatting = settings[SettingKeys.Translation.StripSubtitleFormatting] == "true";
             var preserveLineBreaks = settings[SettingKeys.Translation.PreserveLineBreaks] == "true";
+            var bilingualOutput = settings[SettingKeys.Translation.BilingualSubtitleOutput] == "true";
             var addTranslatorInfo = settings[SettingKeys.Translation.AddTranslatorInfo] == "true";
             var validateSubtitles = settings[SettingKeys.SubtitleValidation.ValidateSubtitles] != "false";
             var removeLanguageTag = settings[SettingKeys.Translation.RemoveLanguageTag] != "false";
@@ -282,7 +284,7 @@ public class TranslationJob
                 subtitleTag = settings[SettingKeys.Translation.SubtitleTag];
             }
 
-            await WriteSubtitles(request, translatedSubtitles, stripSubtitleFormatting, subtitleTag, removeLanguageTag);
+            await WriteSubtitles(request, translatedSubtitles, stripSubtitleFormatting, subtitleTag, removeLanguageTag, bilingualOutput);
             await HandleCompletion(jobName, request, cancellationToken);
         }
         catch (OperationCanceledException)
@@ -311,7 +313,8 @@ public class TranslationJob
         List<SubtitleItem> translatedSubtitles,
         bool stripSubtitleFormatting,
         string subtitleTag,
-        bool removeLanguageTag)
+        bool removeLanguageTag,
+        bool bilingual)
     {
         try
         {
@@ -322,8 +325,9 @@ public class TranslationJob
                 targetLanguage,
                 subtitleTag);
 
-            await _subtitleService.WriteSubtitles(outputPath, translatedSubtitles, stripSubtitleFormatting);
+            await _subtitleService.WriteSubtitles(outputPath, translatedSubtitles, stripSubtitleFormatting, bilingual);
             translationRequest.TranslatedSubtitle = outputPath;
+            translationRequest.IsBilingual = bilingual;
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation("TranslateJob completed and created subtitle: |Green|{filePath}|/Green|",

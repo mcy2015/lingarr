@@ -12,6 +12,7 @@ public class TranslationRequestDetail
     public required string TargetLanguage { get; set; }
     public string? SubtitleToTranslate { get; set; }
     public string? TranslatedSubtitle { get; set; }
+    public bool IsBilingual { get; set; }
     public required MediaType MediaType { get; set; }
     public required TranslationStatus Status { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
