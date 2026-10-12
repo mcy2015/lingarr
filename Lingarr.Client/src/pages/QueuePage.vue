@@ -192,6 +192,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
     Hub,
     ITranslationRequest,
@@ -200,6 +201,7 @@ import {
 } from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
 import services from '@/services'
+import { useUiStore } from '@/store/ui'
 import { useSignalR } from '@/composables/useSignalR'
 import { useSelection } from '@/composables/useSelection'
 import { usePagedList } from '@/composables/usePagedList'
@@ -217,6 +219,8 @@ const signalR = useSignalR()
 const hubConnection = ref<Hub>()
 const translationRequestStore = useTranslationRequestStore()
 const { t } = useI18n()
+const router = useRouter()
+const uiStore = useUiStore()
 
 // computed so tab labels re-resolve when the locale changes
 const statusTabs = computed(() => [
@@ -307,6 +311,12 @@ async function handleAction(translationRequest: ITranslationRequest, action: TRA
             console.error('unknown translation request action: ' + action)
     }
 }
+
+// topbar CTA (prototype): new task — translation starts in the library
+onMounted(() => {
+    uiStore.registerCta(t('topbar.cta.newTask'), () => router.push({ name: 'library' }))
+})
+onUnmounted(() => uiStore.clearCta())
 
 onMounted(async () => {
     await translationRequestStore.fetchProofreadStatus()

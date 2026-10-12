@@ -141,11 +141,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
+import { useUiStore } from '@/store/ui'
+import { useToastStore } from '@/store/toast'
 import { useProofreadKeyboard } from '@/composables/useProofreadKeyboard'
 import {
     IPagedResult,
@@ -161,6 +163,8 @@ const props = defineProps<{ id?: string }>()
 const { t } = useI18n()
 const router = useRouter()
 const translationRequestStore = useTranslationRequestStore()
+const uiStore = useUiStore()
+const toastStore = useToastStore()
 
 const loading = ref(true)
 const detail = ref<ITranslationRequestDetail | null>(null)
@@ -190,6 +194,17 @@ function setLineRef(position: number, el: unknown): void {
 function setEditRef(el: unknown): void {
     editInput.value = el instanceof HTMLInputElement ? el : null
 }
+
+// topbar CTA (prototype): 暂存 — every line edit already persisted
+onMounted(() => {
+    uiStore.registerCta(t('topbar.cta.stash'), () => {
+        toastStore.push({ message: t('proofread.stashed'), type: 'success' })
+    })
+})
+onUnmounted(() => {
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
+})
 
 onMounted(async () => {
     let requestId = Number(props.id)

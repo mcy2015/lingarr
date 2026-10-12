@@ -9,8 +9,9 @@
         <AsideNavigation />
 
         <div class="flex h-full w-full min-w-0 flex-col">
-            <!-- Header: page title + subtitle (prototype topbar) -->
-            <header class="border-line bg-secondary flex items-baseline gap-3.5 px-4 py-3.5 sm:px-6 lg:px-8">
+            <!-- Header (prototype .topbar): h1 + sub on one baseline,
+                 ⌘K search and the screen's own CTA on the right. -->
+            <header class="border-line bg-secondary flex flex-none items-baseline gap-3.5 px-5 pt-4 pb-3 sm:px-6 lg:px-[26px]">
                 <button
                     type="button"
                     class="focus-visible:ring-accent mr-1 cursor-pointer self-center rounded-md focus-visible:ring-2 focus-visible:outline-none md:hidden"
@@ -18,24 +19,32 @@
                     @click="isOpen = !isOpen">
                     <Icon name="menu" class="block h-5 w-5" />
                 </button>
-                <div class="min-w-0">
-                    <h1 class="truncate text-[19px] font-bold tracking-tight">{{ pageTitle }}</h1>
-                    <span class="text-secondary-content hidden text-[12.5px] sm:block">
-                        {{ pageSub }}
-                    </span>
-                </div>
-                <div class="ml-auto flex items-center justify-between">
-                    <ButtonComponent
-                        v-if="showImportCta"
-                        size="sm"
-                        class="mr-2"
-                        @click="router.push({ name: 'import' })">
-                        {{ t('library.toolbar.import') }}
-                    </ButtonComponent>
+                <h1 class="truncate text-[19px] leading-tight font-bold tracking-[-0.01em]">
+                    {{ pageTitle }}
+                </h1>
+                <span class="text-secondary-content hidden truncate text-[12.5px] md:inline">
+                    {{ pageSub }}
+                </span>
+                <div class="ml-auto flex flex-none items-center gap-2 self-center">
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary hidden cursor-pointer items-center gap-1.5 rounded border px-2.5 py-1 text-[12.5px] whitespace-nowrap transition-colors sm:inline-flex"
+                        :title="t('topbar.searchHint')"
+                        @click="globalSearch">
+                        <Icon name="search" class="h-3.5 w-3.5" aria-hidden="true" />
+                        {{ t('topbar.search') }}
+                    </button>
+                    <button
+                        v-if="uiStore.cta"
+                        type="button"
+                        class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded border border-accent px-2.5 py-1 text-[12.5px] font-semibold whitespace-nowrap transition-colors"
+                        @click="uiStore.cta.handler?.()">
+                        {{ uiStore.cta.label }}
+                    </button>
                     <LanguageDropdown />
                     <DropdownComponent ref="themeDropdownEl" width="medium" :label="t('common.theme')">
                         <template #button>
-                            <Icon name="theme" class="h-5 w-5" />
+                            <Icon name="theme" class="h-4 w-4" />
                         </template>
                         <template #content>
                             <div
@@ -78,9 +87,9 @@ import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import { useInstanceStore } from '@/store/instance'
 import useTranslationRequestStore from '@/store/translationRequest'
+import { useUiStore } from '@/store/ui'
 
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'
-import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import DropdownComponent from '@/components/common/DropdownComponent.vue'
 import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
 import ToastNotification from '@/components/common/ToastNotification.vue'
@@ -89,6 +98,7 @@ import Icon from '@/components/icons/Icon.vue'
 const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()
 const translationRequestStore = useTranslationRequestStore()
+const uiStore = useUiStore()
 const signalR = useSignalR()
 const router = useRouter()
 const route = useRoute()
@@ -105,10 +115,11 @@ const onActiveTranslations = (activeTranslations: IActiveTranslation[]) => {
     translationRequestStore.setActiveTranslations(activeTranslations)
 }
 
-/// Prototype topbar: page title + one-line context per screen.
-const pageMeta: Record<string, { title: string; sub: string; cta?: boolean }> = {
-    dashboard: { title: t('nav.dashboard'), sub: t('topbar.sub.dashboard'), cta: true },
-    library: { title: t('nav.library'), sub: t('topbar.sub.library'), cta: true },
+/// Prototype topbar: page title + one-line context per screen. Pages may
+/// override the sub (live counts) through the ui store.
+const pageMeta: Record<string, { title: string; sub: string }> = {
+    dashboard: { title: t('nav.dashboard'), sub: t('topbar.sub.dashboard') },
+    library: { title: t('nav.library'), sub: t('topbar.sub.library') },
     queue: { title: t('nav.queue'), sub: t('topbar.sub.queue') },
     'queue-detail': { title: t('nav.queue'), sub: t('topbar.sub.queue') },
     import: { title: t('nav.import'), sub: t('topbar.sub.import') },
@@ -125,8 +136,22 @@ const currentMeta = computed(() => {
     )
 })
 const pageTitle = computed(() => currentMeta.value.title)
-const pageSub = computed(() => currentMeta.value.sub)
-const showImportCta = computed(() => currentMeta.value.cta === true)
+const pageSub = computed(() => uiStore.subOverride || currentMeta.value.sub)
+
+/// ⌘K / the search button: land on the library and focus its search box.
+const globalSearch = (): void => {
+    if (route.name !== 'library') {
+        void router.push({ name: 'library' })
+    }
+    uiStore.focusSearch()
+}
+
+const onGlobalKeydown = (event: KeyboardEvent): void => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        globalSearch()
+    }
+}
 
 const setTheme = (theme: ITheme) => {
     instanceStore.storeTheme(theme)
@@ -139,6 +164,7 @@ const isOpen = computed({
 })
 
 onMounted(async () => {
+    window.addEventListener('keydown', onGlobalKeydown)
     await settingStore.applySettingsOnLoad()
     await instanceStore.applyVersionOnLoad()
     await translationRequestStore.fetchActiveTranslations()
@@ -156,6 +182,9 @@ onMounted(async () => {
 })
 
 onUnmounted(async () => {
+    window.removeEventListener('keydown', onGlobalKeydown)
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
     settingHubConnection.value?.off('SettingUpdate', onSettingUpdate)
     requestHubConnection.value?.off('ActiveTranslations', onActiveTranslations)
 })

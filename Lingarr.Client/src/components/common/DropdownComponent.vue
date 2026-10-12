@@ -2,7 +2,7 @@
     <div ref="clickOutside" class="relative z-10 inline-block text-left">
         <button
             type="button"
-            class="focus-visible:ring-accent inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
+            class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border transition-colors focus-visible:ring-2 focus-visible:outline-none"
             aria-haspopup="menu"
             :aria-expanded="isOpen"
             @click="toggleDropdown"

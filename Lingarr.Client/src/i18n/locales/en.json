@@ -121,7 +121,8 @@
             "translate": "Translate selection",
             "clear": "Clear",
             "estimate": "Estimated ≈ {cost} · {chars} characters",
-            "charsOnly": "≈ {chars} characters · no rate configured"
+            "charsOnly": "≈ {chars} characters · no rate configured",
+            "needSelection": "Select media first."
         },
         "empty": "No media matches the current filters."
     },
@@ -953,7 +954,8 @@
             "pending": "Pending review",
             "rejected": "Rejected"
         },
-        "openWorkbench": "Open proofreading workbench"
+        "openWorkbench": "Open proofreading workbench",
+        "stashed": "All edits are saved as you go."
     },
     "topbar": {
         "sub": {
@@ -962,7 +964,16 @@
             "queue": "Live · SignalR push",
             "import": "Drag in files or scan a server path · transcode / convert / dedupe into the pipeline",
             "proofread": "Dual-track line review · J/K/Enter flow",
-            "settings": "Four groups: services / media & automation / subtitles & quality / system"
+            "settings": "Four groups: services / media & automation / subtitles & quality / system",
+            "libraryLive": "{count} items · shows and movies in one view"
+        },
+        "search": "⌘K 搜索",
+        "searchHint": "Search the library (⌘K)",
+        "cta": {
+            "translateSelected": "Translate selected ▸",
+            "newTask": "＋ New task",
+            "process": "Start processing ▸",
+            "stash": "Stash ⌘S"
         }
     }
 }

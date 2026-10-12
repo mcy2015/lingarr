@@ -398,7 +398,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import TabComponent from '@/components/common/TabComponent.vue'
@@ -406,6 +406,7 @@ import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import services from '@/services'
 import { useSettingStore } from '@/store/setting'
 import { useToastStore } from '@/store/toast'
+import { useUiStore } from '@/store/ui'
 import {
     IImportedSubtitleResult,
     IImportSubtitlesResponse,
@@ -432,6 +433,19 @@ const { t } = useI18n()
 const route = useRoute()
 const settingStore = useSettingStore()
 const toastStore = useToastStore()
+const uiStore = useUiStore()
+
+// topbar CTA (prototype): 开始处理 runs the workbench import
+onMounted(() => {
+    uiStore.registerCta(t('topbar.cta.process'), () => {
+        if (rows.value.length === 0) {
+            toastStore.push({ message: t('library.tray.needSelection'), type: 'info' })
+            return
+        }
+        void runImport()
+    })
+})
+onUnmounted(() => uiStore.clearCta())
 
 const activeTab = ref<'free' | 'season'>(route.query.tab === 'season' ? 'season' : 'free')
 // labels go through t() inside a computed so switching language re-renders

@@ -110,5 +110,5 @@ useClickOutside(
     excludeClickOutside
 )
 
-defineExpose({ close })
+defineExpose({ close, open: () => (isOpen.value = true) })
 </script>

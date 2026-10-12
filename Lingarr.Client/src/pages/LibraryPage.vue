@@ -197,7 +197,7 @@
             <span class="text-[12.5px]">
                 {{ t('library.tray.selected', { count: selection.size }) }}
             </span>
-            <ContextMenu @select="translateSelection">
+            <ContextMenu ref="trayMenu" @select="translateSelection">
                 <button
                     type="button"
                     class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-3 py-1 text-xs font-semibold transition-colors">
@@ -231,7 +231,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
@@ -243,6 +243,8 @@ import SeasonTable from '@/components/features/show/SeasonTable.vue'
 import services from '@/services'
 import { useSettingStore } from '@/store/setting'
 import { useTranslateStore } from '@/store/translate'
+import { useUiStore } from '@/store/ui'
+import { useToastStore } from '@/store/toast'
 import {
     ILanguage,
     IMediaLibraryItem,
@@ -261,6 +263,13 @@ const route = useRoute()
 const router = useRouter()
 const settingStore = useSettingStore()
 const translateStore = useTranslateStore()
+const uiStore = useUiStore()
+const toastStore = useToastStore()
+const trayMenu = ref<InstanceType<typeof ContextMenu> | null>(null)
+
+const toastTip = (): void => {
+    toastStore.push({ message: t('library.tray.needSelection'), type: 'info' })
+}
 
 const configured = computed(() => {
     const sonarr = settingStore.getSetting(SETTINGS.SONARR_SETTINGS_COMPLETED)
@@ -344,11 +353,39 @@ async function fetchLibrary(): Promise<void> {
         })
         items.value = page.items
         totalCount.value = page.totalCount
+        uiStore.setSubOverride(t('topbar.sub.libraryLive', { count: totalCount.value }))
         pruneSelection()
     } finally {
         loading.value = false
     }
 }
+
+// Topbar CTA (prototype): 翻译所选 opens the tray's language menu —
+// selecting nothing gets a hint instead.
+onMounted(() => {
+    uiStore.registerCta(t('topbar.cta.translateSelected'), () => {
+        if (selection.size === 0) {
+            toastTip()
+            return
+        }
+        trayMenu.value?.open()
+    })
+})
+
+onUnmounted(() => {
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
+})
+
+// ⌘K from anywhere: focus this screen's search box
+watch(
+    () => uiStore.searchFocusTick,
+    () => {
+        if (typeof document !== 'undefined') {
+            document.querySelector<HTMLInputElement>('main input[type="search"]')?.focus()
+        }
+    }
+)
 
 onMounted(async () => {
     void fetchLibrary()

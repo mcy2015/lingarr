@@ -119,8 +119,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import TranslationProgress from '@/components/common/TranslationProgress.vue'
 import services from '@/services'
+import { useUiStore } from '@/store/ui'
 import { useSignalR } from '@/composables/useSignalR'
 import {
     IPagedResult,
@@ -136,6 +138,8 @@ const REFRESH_INTERVAL_MS = 30_000
 
 const { t, locale } = useI18n()
 const signalR = useSignalR()
+const router = useRouter()
+const uiStore = useUiStore()
 
 const pipeline = ref<IPipelineStatistics | null>(null)
 const counts = ref<Record<string, number>>({})
@@ -309,6 +313,12 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined
 let hubConnection: Awaited<ReturnType<typeof signalR.connect>> | undefined
 
 onMounted(async () => {
+// topbar CTA (prototype): global import entry
+onMounted(() => {
+    uiStore.registerCta(t('library.toolbar.import'), () => router.push({ name: 'import' }))
+})
+onUnmounted(() => uiStore.clearCta())
+
     await fetchOverview()
     refreshTimer = setInterval(fetchOverview, REFRESH_INTERVAL_MS)
 

@@ -121,7 +121,8 @@
             "translate": "翻译所选",
             "clear": "清除已选",
             "estimate": "预计消耗 ≈ {cost} · {chars} 字符",
-            "charsOnly": "≈ {chars} 字符 · 费率未配置"
+            "charsOnly": "≈ {chars} 字符 · 费率未配置",
+            "needSelection": "请先选择媒体。"
         },
         "empty": "没有符合当前过滤条件的媒体。"
     },
@@ -953,7 +954,8 @@
             "pending": "待校对",
             "rejected": "已驳回"
         },
-        "openWorkbench": "打开校对台"
+        "openWorkbench": "打开校对台",
+        "stashed": "所有修改均已即时保存。"
     },
     "topbar": {
         "sub": {
@@ -962,7 +964,16 @@
             "queue": "实时 · SignalR 推送",
             "import": "拖拽上传或服务器路径 · 转码 / 转格式 / 去重后入管线",
             "proofread": "双轨逐行校对 · J/K/Enter 键盘流",
-            "settings": "四组：服务 / 媒体与自动化 / 字幕与质量 / 系统"
+            "settings": "四组：服务 / 媒体与自动化 / 字幕与质量 / 系统",
+            "libraryLive": "{count} 项 · 剧集与电影合并视图"
+        },
+        "search": "⌘K 搜索",
+        "searchHint": "搜索媒体库（⌘K）",
+        "cta": {
+            "translateSelected": "翻译所选 ▸",
+            "newTask": "＋ 新建任务",
+            "process": "开始处理 ▸",
+            "stash": "暂存 ⌘S"
         }
     }
 }
