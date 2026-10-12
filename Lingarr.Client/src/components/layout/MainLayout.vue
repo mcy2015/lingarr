@@ -121,15 +121,15 @@ const onActiveTranslations = (activeTranslations: IActiveTranslation[]) => {
 /// Prototype topbar: page title + one-line context per screen. Pages may
 /// override the sub (live counts) through the ui store.
 const pageMeta: Record<string, { title: string; sub: string }> = {
-    dashboard: { title: t('nav.dashboard'), sub: t('topbar.sub.dashboard') },
+    dashboard: { title: t('nav.dashboard'), sub: '' },
     library: { title: t('nav.library'), sub: t('topbar.sub.library') },
-    queue: { title: t('nav.queue'), sub: t('topbar.sub.queue') },
-    'queue-detail': { title: t('nav.queue'), sub: t('topbar.sub.queue') },
-    import: { title: t('nav.import'), sub: t('topbar.sub.import') },
+    queue: { title: t('nav.queue'), sub: '' },
+    'queue-detail': { title: t('nav.queue'), sub: '' },
+    import: { title: t('nav.import'), sub: '' },
     proofread: { title: t('nav.proofread'), sub: t('topbar.sub.proofread') },
-    settings: { title: t('nav.settings'), sub: t('topbar.sub.settings') },
-    'media-detail-show': { title: t('nav.library'), sub: t('topbar.sub.mediaDetail') },
-    'media-detail-movie': { title: t('nav.library'), sub: t('topbar.sub.mediaDetail') }
+    settings: { title: t('nav.settings'), sub: '' },
+    'media-detail-show': { title: t('nav.library'), sub: '' },
+    'media-detail-movie': { title: t('nav.library'), sub: '' }
 }
 const currentMeta = computed(() => {
     const name = String(route.name ?? '')
@@ -141,7 +141,14 @@ const currentMeta = computed(() => {
     )
 })
 const pageTitle = computed(() => currentMeta.value.title)
-const pageSub = computed(() => uiStore.subOverride || currentMeta.value.sub)
+const pageSub = computed(() => {
+    if (uiStore.subOverride) return uiStore.subOverride
+    if (String(route.name ?? '').startsWith('settings')) {
+        const version = instanceStore.getVersion?.currentVersion
+        return version ? `v${version}` : ''
+    }
+    return currentMeta.value.sub
+})
 
 /// ⌘K / the search button: land on the library and focus its search box.
 const globalSearch = (): void => {

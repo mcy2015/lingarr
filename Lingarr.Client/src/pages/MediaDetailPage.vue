@@ -189,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
@@ -266,7 +266,24 @@ const lastActivityLabel = computed(() =>
 )
 
 onMounted(load)
-onUnmounted(() => uiStore.clearCta())
+onUnmounted(() => {
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
+})
+
+// live topbar sub mirrors the page header line
+watch([item, activeSeason], ([value]) => {
+    if (!value) return
+    uiStore.setSubOverride(
+        value.mediaType === 'Show'
+            ? t('topbar.sub.mediaDetailLive', {
+                  title: value.title,
+                  seasons: value.seasonCount,
+                  episodes: value.episodeCount
+              })
+            : t('mediaDetail.movieMeta')
+    )
+}, { immediate: true })
 
 async function load(): Promise<void> {
     const mediaType = isShow.value ? 'Show' : 'Movie'

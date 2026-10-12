@@ -959,14 +959,16 @@
     },
     "topbar": {
         "sub": {
-            "dashboard": "Pipeline running · live via SignalR",
             "library": "Shows and movies in one matrix view",
-            "queue": "Live · SignalR push",
-            "import": "Drag in files or scan a server path · transcode / convert / dedupe into the pipeline",
             "proofread": "Dual-track line review · J/K/Enter flow",
-            "settings": "Four groups: services / media & automation / subtitles & quality / system",
             "libraryLive": "{count} items · shows and movies in one view",
-            "mediaDetail": "per-episode tracks & translation history"
+            "dashboardLive": "{state} · updated {seconds}s ago",
+            "pipelineRunning": "Pipeline running",
+            "pipelineIdle": "Pipeline idle",
+            "queueLive": "{count} tasks · live via SignalR",
+            "importLive": "{files} files in the workbench · {translate} to translate",
+            "proofreadLive": "{title} · {done}/{total} lines reviewed",
+            "mediaDetailLive": "{title} · {seasons} seasons · {episodes} episodes"
         },
         "search": "⌘K 搜索",
         "searchHint": "Search the library (⌘K)",

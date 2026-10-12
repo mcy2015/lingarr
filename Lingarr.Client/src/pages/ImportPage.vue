@@ -445,7 +445,11 @@ onMounted(() => {
         void runImport()
     })
 })
-onUnmounted(() => uiStore.clearCta())
+onUnmounted(() => {
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
+})
+
 
 const activeTab = ref<'free' | 'season'>(route.query.tab === 'season' ? 'season' : 'free')
 // labels go through t() inside a computed so switching language re-renders
@@ -510,6 +514,11 @@ const bilingualForImport = computed<'follow' | 'on' | 'off'>(() =>
 )
 
 const translateCount = computed(() => rows.value.filter((row) => row.action === 'translate').length)
+
+// live topbar sub: workbench queue counts
+watch([() => rows.value.length, translateCount], ([files, translate]) => {
+    uiStore.setSubOverride(t('topbar.sub.importLive', { files, translate }))
+}, { immediate: true })
 const storeCount = computed(() => rows.value.filter((row) => row.action === 'store').length)
 const matchedCount = computed(() => rows.value.filter((row) => row.parse?.episode != null).length)
 const totalLines = computed(() =>

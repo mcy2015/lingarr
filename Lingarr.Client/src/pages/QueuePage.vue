@@ -190,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
@@ -316,7 +316,20 @@ async function handleAction(translationRequest: ITranslationRequest, action: TRA
 onMounted(() => {
     uiStore.registerCta(t('topbar.cta.newTask'), () => router.push({ name: 'library' }))
 })
-onUnmounted(() => uiStore.clearCta())
+onUnmounted(() => {
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
+})
+
+// live topbar sub: total tasks across the status tabs
+watch(
+    () => translationRequestStore.getStatusCounts,
+    (counts) => {
+        const total = Object.values(counts ?? {}).reduce((sum: number, n) => sum + Number(n ?? 0), 0)
+        uiStore.setSubOverride(t('topbar.sub.queueLive', { count: total }))
+    },
+    { immediate: true, deep: true }
+)
 
 onMounted(async () => {
     await translationRequestStore.fetchProofreadStatus()

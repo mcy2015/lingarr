@@ -959,14 +959,16 @@
     },
     "topbar": {
         "sub": {
-            "dashboard": "管线正在运行 · SignalR 实时",
             "library": "剧集与电影合并视图",
-            "queue": "实时 · SignalR 推送",
-            "import": "拖拽上传或服务器路径 · 转码 / 转格式 / 去重后入管线",
             "proofread": "双轨逐行校对 · J/K/Enter 键盘流",
-            "settings": "四组：服务 / 媒体与自动化 / 字幕与质量 / 系统",
             "libraryLive": "{count} 项 · 剧集与电影合并视图",
-            "mediaDetail": "逐集字幕轨与翻译历史"
+            "dashboardLive": "{state} · 数据 {seconds} 秒前更新",
+            "pipelineRunning": "管线运行中",
+            "pipelineIdle": "管线空闲",
+            "queueLive": "{count} 个任务 · SignalR 实时",
+            "importLive": "处理队列 {files} 个文件 · 翻译 {translate}",
+            "proofreadLive": "{title} · 已校对 {done}/{total} 行",
+            "mediaDetailLive": "{title} · {seasons} 季 · {episodes} 集"
         },
         "search": "⌘K 搜索",
         "searchHint": "搜索媒体库（⌘K）",

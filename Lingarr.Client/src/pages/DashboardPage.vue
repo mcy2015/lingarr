@@ -305,6 +305,18 @@ const remainingEta = (item: ITranslationRequest): string => {
     return '—'
 }
 
+// live topbar sub: pipeline state + seconds since the last refresh
+const lastFetchAt = ref(Date.now())
+const subTimer = ref<ReturnType<typeof setInterval> | undefined>(undefined)
+const updateSub = (): void => {
+    const running = inProgressCount.value > 0
+    uiStore.setSubOverride(
+        t('topbar.sub.dashboardLive', {
+            state: running ? t('topbar.sub.pipelineRunning') : t('topbar.sub.pipelineIdle'),
+            seconds: Math.max(0, Math.round((Date.now() - lastFetchAt.value) / 1000))
+        })
+    )
+}
 const fetchOverview = async (): Promise<void> => {
     const [pipelineResult, countsResult, activeResult, healthResult, eventsResult] = await Promise.allSettled([
         services.statistics.getPipelineStatistics(),
@@ -324,17 +336,26 @@ const fetchOverview = async (): Promise<void> => {
     if (activeResult.status === 'fulfilled') activeItems.value = activeResult.value.items
     if (healthResult.status === 'fulfilled') health.value = healthResult.value
     if (eventsResult.status === 'fulfilled') events.value = eventsResult.value
+    lastFetchAt.value = Date.now()
+    updateSub()
 }
 
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 let hubConnection: Awaited<ReturnType<typeof signalR.connect>> | undefined
 
-onMounted(async () => {
 // topbar CTA (prototype): global import entry
 onMounted(() => {
     uiStore.registerCta(t('library.toolbar.import'), () => router.push({ name: 'import' }))
+    updateSub()
+    subTimer.value = setInterval(updateSub, 1000)
 })
-onUnmounted(() => uiStore.clearCta())
+onUnmounted(() => {
+    clearInterval(subTimer.value)
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
+})
+
+onMounted(async () => {
 
     await fetchOverview()
     refreshTimer = setInterval(fetchOverview, REFRESH_INTERVAL_MS)

@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import services from '@/services'
@@ -205,6 +205,16 @@ onUnmounted(() => {
     uiStore.clearCta()
     uiStore.setSubOverride('')
 })
+
+// live topbar sub: title + reviewed progress (updates as Enter approves)
+watch([approvedCount, () => lines.value.length, () => detail.value?.title], ([done, total, title]) => {
+    if (!title) return
+    uiStore.setSubOverride(t('topbar.sub.proofreadLive', {
+        title: String(title),
+        done: Number(done),
+        total: Number(total)
+    }))
+}, { immediate: true })
 
 onMounted(async () => {
     let requestId = Number(props.id)
