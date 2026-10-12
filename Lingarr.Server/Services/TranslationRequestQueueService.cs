@@ -138,7 +138,8 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
             MediaType = translationRequest.MediaType,
             Source = translationRequest.Source,
             Status = TranslationStatus.Pending,
-            JobType = TranslationJobType.Translation
+            JobType = TranslationJobType.Translation,
+            ContentHash = translationRequest.ContentHash
         };
 
         _dbContext.TranslationRequests.Add(translationRequestCopy);
