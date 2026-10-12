@@ -1,5 +1,5 @@
 ﻿using Lingarr.Core.Entities;
-using Lingarr.Server.Attributes;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
@@ -8,7 +8,7 @@ using Lingarr.Server.Models.TranslationRequests;
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class TranslationRequestController : ControllerBase
 {

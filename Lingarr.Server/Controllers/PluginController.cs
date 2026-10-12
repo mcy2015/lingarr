@@ -1,6 +1,6 @@
 ﻿using Lingarr.Contracts.Models;
 using Lingarr.Contracts.Plugins;
-using Lingarr.Server.Attributes;
+using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
 using Lingarr.Server.Models.Api;
@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class PluginController : ControllerBase
 {

@@ -1,7 +1,7 @@
 ﻿using System.Security.Claims;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
-using Lingarr.Server.Attributes;
+
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models.Auth;
 using Microsoft.AspNetCore.Authentication;
@@ -13,21 +13,19 @@ using Microsoft.EntityFrameworkCore;
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ISettingService _settingService;
     private readonly ILogger<AuthController> _logger;
-    private readonly LingarrDbContext _context;
 
-    public AuthController(IAuthService authService, ISettingService settingService, ILogger<AuthController> logger, LingarrDbContext context)
+    public AuthController(IAuthService authService, ISettingService settingService, ILogger<AuthController> logger)
     {
         _authService = authService;
         _settingService = settingService;
         _logger = logger;
-        _context = context;
     }
 
     /// <summary>
@@ -48,8 +46,7 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
-        user.LastLoginAt = DateTimeOffset.UtcNow;
-        await _context.SaveChangesAsync();
+        await _authService.RecordLoginAsync(user);
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -165,7 +162,7 @@ public class AuthController : ControllerBase
     /// Logout the current user
     /// </summary>
     [HttpPost("logout")]
-    [LingarrAuthorize]
+    [Authorize("LingarrAccess")]
     public async Task<ActionResult> Logout()
     {
         await HttpContext.SignOutAsync("Cookies");
@@ -198,7 +195,7 @@ public class AuthController : ControllerBase
     /// Generate a new API key (only during onboarding or if not already exists)
     /// </summary>
     [HttpPost("apikey/generate")]
-    [LingarrAuthorize]
+    [Authorize("LingarrAccess")]
     public async Task<ActionResult<ApiKeyResponse>> GenerateNewApiKey()
     {
         var apiKey = _authService.GenerateApiKey();
@@ -224,10 +221,10 @@ public class AuthController : ControllerBase
     /// Get all users
     /// </summary>
     [HttpGet("users")]
-    [LingarrAuthorize]
+    [Authorize("LingarrAccess")]
     public async Task<ActionResult> GetAllUsers()
     {
-        var users = await _context.Users.ToListAsync();
+        var users = await _authService.GetAllUsers();
         var userDtos = users.Select(u => new
         {
             u.Id,
@@ -242,10 +239,10 @@ public class AuthController : ControllerBase
     /// Update a user
     /// </summary>
     [HttpPut("users/{id}")]
-    [LingarrAuthorize]
+    [Authorize("LingarrAccess")]
     public async Task<ActionResult> UpdateUser(int id, [FromBody] UpdateUserRequest request)
     {
-        var user = await _context.Users.FindAsync(id);
+        var user = await _authService.GetUserById(id);
         if (user == null)
         {
             return NotFound(new { message = "User not found" });
@@ -258,8 +255,7 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Username must be at least 2 characters long" });
             }
 
-            var existingUser = await _authService.GetUserByUsername(request.Username);
-            if (existingUser != null && existingUser.Id != id)
+            if (await _authService.IsUsernameTaken(request.Username, id))
             {
                 return BadRequest(new { message = "Username already exists" });
             }
@@ -277,7 +273,7 @@ public class AuthController : ControllerBase
             user.PasswordHash = _authService.HashPassword(request.Password);
         }
 
-        await _context.SaveChangesAsync();
+        await _authService.SaveUserAsync(user);
 
         _logger.LogInformation("User {Username} updated", user.Username);
 
@@ -288,23 +284,23 @@ public class AuthController : ControllerBase
     /// Delete a user
     /// </summary>
     [HttpDelete("users/{id}")]
-    [LingarrAuthorize]
+    [Authorize("LingarrAccess")]
     public async Task<ActionResult> DeleteUser(int id)
     {
-        var user = await _context.Users.FindAsync(id);
+        var user = await _authService.GetUserById(id);
         if (user == null)
         {
             return NotFound(new { message = "User not found" });
         }
 
-        var userCount = await _context.Users.CountAsync();
-        if (userCount <= 1)
+        try
+        {
+            await _authService.DeleteUserAsync(user);
+        }
+        catch (InvalidOperationException)
         {
             return BadRequest(new { message = "Cannot delete the last user" });
         }
-
-        _context.Users.Remove(user);
-        await _context.SaveChangesAsync();
 
         _logger.LogInformation("User {Username} deleted", user.Username);
 

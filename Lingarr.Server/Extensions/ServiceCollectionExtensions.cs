@@ -19,6 +19,7 @@ using Lingarr.Server.Interfaces.Services.Integration;
 using Lingarr.Server.Interfaces.Services.Subtitle;
 using Lingarr.Server.Interfaces.Services.Sync;
 using Lingarr.Server.Interfaces.Services.Translation;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Listener;
 using Lingarr.Server.Providers;
@@ -135,14 +136,21 @@ public static class ServiceCollectionExtensions
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return Task.CompletedTask;
             };
-        });
+        })
+        .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, _ => { });
         
         builder.Services.AddAuthorization(options =>
         {
-            options.AddPolicy("LingarrHubAccess", policy =>
-                policy.Requirements.Add(new LingarrHubAccessRequirement()));
+            options.AddPolicy("LingarrAccess", policy =>
+            {
+                policy.AddAuthenticationSchemes(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    ApiKeyAuthenticationHandler.SchemeName);
+                policy.Requirements.Add(new LingarrAccessRequirement());
+            });
         });
-        builder.Services.AddSingleton<IAuthorizationHandler, LingarrHubAccessHandler>();
+        builder.Services.AddSingleton<IAuthorizationHandler, LingarrAccessHandler>();
+        builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, LingarrAuthorizationResponseHandler>();
     }
 
     private static void ConfigureProviders(this WebApplicationBuilder builder)

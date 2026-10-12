@@ -1,12 +1,12 @@
 ﻿using Lingarr.Core.Entities;
-using Lingarr.Server.Attributes;
+using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class SettingController : ControllerBase
 {

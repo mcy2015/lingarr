@@ -5,20 +5,19 @@ using Microsoft.AspNetCore.Authorization;
 namespace Lingarr.Server.Authorization;
 
 /// <summary>
-/// Requirement protecting SignalR hub endpoints. Mirrors the semantics of
-/// <c>LingarrAuthorizeAttribute</c> (onboarding gate, auth-disabled bypass,
-/// cookie or API-key authentication) so hubs are not left unauthenticated
-/// while controllers use the MVC filter.
+/// The single access requirement for all API controllers and SignalR hubs.
+/// Replaces the service-locating LingarrAuthorizeAttribute with the framework
+/// authorization pipeline (cookie + API-key schemes).
 /// </summary>
-public class LingarrHubAccessRequirement : IAuthorizationRequirement
+public class LingarrAccessRequirement : IAuthorizationRequirement
 {
 }
 
-public class LingarrHubAccessHandler : IAuthorizationHandler
+public class LingarrAccessHandler : IAuthorizationHandler
 {
     public async Task HandleAsync(AuthorizationHandlerContext context)
     {
-        var requirement = context.Requirements.OfType<LingarrHubAccessRequirement>().FirstOrDefault();
+        var requirement = context.Requirements.OfType<LingarrAccessRequirement>().FirstOrDefault();
         if (requirement == null)
         {
             return; // not our requirement — other handlers decide
@@ -27,7 +26,7 @@ public class LingarrHubAccessHandler : IAuthorizationHandler
         var httpContext = context.Resource as HttpContext;
         if (httpContext == null)
         {
-            context.Fail(new AuthorizationFailureReason(this, "SignalR authorization requires an HTTP context."));
+            context.Fail(new AuthorizationFailureReason(this, "Authentication required."));
             return;
         }
 
@@ -41,7 +40,7 @@ public class LingarrHubAccessHandler : IAuthorizationHandler
             return;
         }
 
-        // Authentication can be deliberately disabled — hubs are open then.
+        // Authentication can be deliberately disabled — everything is open then.
         var authEnabled = await settingService.GetSetting(SettingKeys.Authentication.AuthEnabled);
         if (authEnabled == "false")
         {
@@ -49,15 +48,15 @@ public class LingarrHubAccessHandler : IAuthorizationHandler
             return;
         }
 
-        // Cookie-authenticated browser clients.
+        // Cookie sessions and API-key principals (either scheme) are accepted.
         if (httpContext.User.Identity?.IsAuthenticated ?? false)
         {
             context.Succeed(requirement);
             return;
         }
 
-        // API-key clients (e.g. non-browser transports that can send headers).
-        if (httpContext.Request.Headers.TryGetValue("X-Api-Key", out var apiKeyHeader))
+        // Fallback for transports where the API-key scheme did not run.
+        if (httpContext.Request.Headers.TryGetValue(ApiKeyAuthenticationHandler.HeaderName, out var apiKeyHeader))
         {
             var apiKey = apiKeyHeader.FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(apiKey))

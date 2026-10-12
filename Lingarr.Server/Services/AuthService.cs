@@ -128,4 +128,48 @@ public class AuthService : IAuthService
     {
         return await _context.Users.AnyAsync();
     }
+
+    /// <inheritdoc />
+    public async Task<List<User>> GetAllUsers()
+    {
+        return await _context.Users.ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<User?> GetUserById(int id)
+    {
+        return await _context.Users.FindAsync(id);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsUsernameTaken(string username, int? excludeUserId = null)
+    {
+        return await _context.Users.AnyAsync(u => u.Username == username && (excludeUserId == null || u.Id != excludeUserId));
+    }
+
+    /// <inheritdoc />
+    public async Task SaveUserAsync(User user)
+    {
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteUserAsync(User user)
+    {
+        var userCount = await _context.Users.CountAsync();
+        if (userCount <= 1)
+        {
+            throw new InvalidOperationException("Cannot delete the last user");
+        }
+
+        _context.Users.Remove(user);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task RecordLoginAsync(User user)
+    {
+        user.LastLoginAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
+    }
 }

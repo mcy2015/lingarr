@@ -1,14 +1,14 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Lingarr.Core;
 using Lingarr.Core.Models;
-using Lingarr.Server.Attributes;
+using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class VersionController : ControllerBase
 {

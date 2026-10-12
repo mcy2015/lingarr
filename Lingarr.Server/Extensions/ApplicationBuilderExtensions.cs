@@ -48,11 +48,11 @@ public static class ApplicationBuilderExtensions
     private static void MapHubs(this WebApplication app)
     {
         app.MapHub<TranslationRequestsHub>("/signalr/TranslationRequests")
-            .RequireAuthorization("LingarrHubAccess");
+            .RequireAuthorization("LingarrAccess");
         app.MapHub<SettingUpdatesHub>("/signalr/SettingUpdates")
-            .RequireAuthorization("LingarrHubAccess");
+            .RequireAuthorization("LingarrAccess");
         app.MapHub<JobProgressHub>("/signalr/JobProgress")
-            .RequireAuthorization("LingarrHubAccess");
+            .RequireAuthorization("LingarrAccess");
     }
 
     private static Task ApplyMigrations(this WebApplication app)
