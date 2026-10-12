@@ -50,7 +50,8 @@
             "cancelled": "已取消",
             "interrupted": "已中断",
             "paused": "已暂停"
-        }
+        },
+        "runNow": "立即运行"
     },
     "nav": {
         "dashboard": "仪表盘",
@@ -831,6 +832,30 @@
             "placeholder": "选择语言…",
             "selectSourceFirst": "请先选择源语言。",
             "search": "选择或搜索语言"
+        },
+        "providers": {
+            "blurb": "多服务并存，任务级可指定；卡片显示真实用量与健康。默认服务用于自动化批次。",
+            "default": "默认",
+            "month": "本月",
+            "latency": "延迟",
+            "success": "成功",
+            "setDefault": "设为默认",
+            "idle": "暂无请求",
+            "online": "在线",
+            "degraded": "降级中",
+            "failing": "故障"
+        },
+        "glossary": {
+            "title": "术语表",
+            "count": "{count} 条",
+            "add": "添加术语",
+            "empty": "暂无术语 —— 锁定术语会在每次翻译后强制执行，其余仅作校对提示。",
+            "source": "源术语",
+            "target": "目标术语",
+            "locked": "锁定",
+            "hint": "提示",
+            "delete": "删除",
+            "saveFailed": "保存术语失败。"
         }
     },
     "translations": {

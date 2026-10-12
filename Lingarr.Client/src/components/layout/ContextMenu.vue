@@ -1,29 +1,36 @@
 <template>
-    <div class="relative items-center transition duration-300 ease-in-out select-none">
+    <div class="relative select-none">
         <!-- Context -->
         <TooltipComponent ref="tooltip" alignment="left">
-            <div ref="clickOutside" @click="toggle">
+            <button
+                :ref="clickOutside"
+                type="button"
+                class="focus-visible:ring-accent w-full cursor-pointer rounded-md focus-visible:ring-2 focus-visible:outline-none"
+                aria-haspopup="menu"
+                :aria-expanded="isOpen"
+                @click="toggle">
                 <slot></slot>
-            </div>
+            </button>
         </TooltipComponent>
         <!-- Menu -->
         <div
             v-show="isOpen"
             ref="excludeClickOutside"
-            class="border-line bg-primary absolute top-8 right-0 z-10 w-56 rounded-md border bg-clip-border shadow-lg">
-            <div class="px-3 py-1" role="menu" aria-orientation="vertical">
-                <span class="text-xs" role="menuitem">{{ t('common.translateTo') }}</span>
-                <div
-                    v-for="language in languages"
-                    :key="language.code"
-                    class="mb-1 flex text-sm"
-                    role="menuitem"
-                    @click="selectOption(language)">
-                    <span class="h-full w-full cursor-pointer py-2 hover:brightness-150">
-                        {{ language.name }}
-                    </span>
-                </div>
+            class="border-line bg-primary absolute top-8 right-0 z-10 w-56 rounded-md border shadow-lg"
+            role="menu"
+            aria-orientation="vertical">
+            <div class="text-secondary-content px-3 py-1 text-xs" aria-hidden="true">
+                {{ t('common.translateTo') }}
             </div>
+            <button
+                v-for="language in languages"
+                :key="language.code"
+                type="button"
+                role="menuitem"
+                class="hover:bg-tertiary text-secondary-content mb-1 flex w-full cursor-pointer px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none"
+                @click="selectOption(language)">
+                {{ language.name }}
+            </button>
         </div>
     </div>
 </template>
@@ -70,6 +77,10 @@ const toggle = () => {
     isOpen.value = !isOpen.value
 }
 
+const close = () => {
+    isOpen.value = false
+}
+
 const selectOption = async (target: ILanguage) => {
     if (media && subtitle && mediaType) {
         const requestId = await translateStore.translateSubtitle(
@@ -86,7 +97,7 @@ const selectOption = async (target: ILanguage) => {
             tooltip.value?.showTooltip()
         }
     } else {
-        isOpen.value = false
+        close()
         emit('select', target)
     }
 }
@@ -98,4 +109,6 @@ useClickOutside(
     },
     excludeClickOutside
 )
+
+defineExpose({ close })
 </script>

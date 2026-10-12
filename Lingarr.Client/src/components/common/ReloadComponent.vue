@@ -1,10 +1,15 @@
-﻿<template>
-    <div :title="t('common.refresh')" @click="reload">
+<template>
+    <button
+        type="button"
+        class="focus-visible:ring-accent cursor-pointer rounded-md focus-visible:ring-2 focus-visible:outline-none"
+        :aria-label="t('common.refresh')"
+        :title="t('common.refresh')"
+        @click="reload">
         <Icon
             name="reload"
-            class="h-6 w-6 cursor-pointer transition-all duration-300 ease-in-out"
+            class="h-6 w-6 transition-transform duration-300 ease-in-out"
             :class="{ 'animate-spin': reloading }" />
-    </div>
+    </button>
 </template>
 
 <script setup lang="ts">

@@ -50,7 +50,8 @@
             "cancelled": "Cancelled",
             "interrupted": "Interrupted",
             "paused": "Paused"
-        }
+        },
+        "runNow": "Run now"
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -831,6 +832,30 @@
             "placeholder": "Select language…",
             "selectSourceFirst": "Select a source language first.",
             "search": "Select or search language"
+        },
+        "providers": {
+            "blurb": "Multiple services side by side; the default one handles automated batches. Cards show real usage and health.",
+            "default": "DEFAULT",
+            "month": "This month",
+            "latency": "Latency",
+            "success": "Success",
+            "setDefault": "Set default",
+            "idle": "idle",
+            "online": "online",
+            "degraded": "degraded",
+            "failing": "failing"
+        },
+        "glossary": {
+            "title": "Glossary",
+            "count": "{count} entries",
+            "add": "Add term",
+            "empty": "No terms yet — locked terms are enforced on every translation, others hint in proofreading.",
+            "source": "Source term",
+            "target": "Target term",
+            "locked": "Locked",
+            "hint": "advisory",
+            "delete": "Delete",
+            "saveFailed": "Saving the term failed."
         }
     },
     "translations": {
