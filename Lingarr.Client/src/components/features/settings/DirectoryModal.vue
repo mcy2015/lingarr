@@ -18,7 +18,7 @@
                         class="flex h-96 w-full max-w-md flex-col rounded-lg bg-black p-2"
                         @click.stop>
                         <div class="shell-scroll grow overflow-auto text-sm">
-                            <div class="mb-2 text-gray-400">
+                            <div class="mb-2 text-secondary-content/60">
                                 <div v-if="currentPath.length > 0" class="flex items-center p-1">
                                     <button class="mr-2" @click="navigateUp">
                                         <svg
@@ -61,13 +61,13 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="select-none space-y-1 text-gray-400">
+                            <div class="space-y-1 text-secondary-content/60 select-none">
                                 <div
                                     v-for="dir in directoryContents"
                                     :key="dir.fullPath"
                                     class="flex cursor-pointer items-center rounded-md p-1 transition duration-300"
                                     :class="{
-                                        'bg-gray-900': highlightedDirectory === dir,
+                                        'bg-tertiary': highlightedDirectory === dir,
                                         'hover:brightness-150': highlightedDirectory !== dir
                                     }"
                                     @click="highlightDirectory(dir)"
@@ -90,9 +90,9 @@
                         </div>
                         <div class="flex justify-end pt-2">
                             <div
-                                class="inline-flex cursor-pointer items-center rounded-md border border-gray-600 px-4 py-1 text-gray-400 transition duration-300 hover:border-gray-500 hover:text-gray-400"
+                                class="inline-flex cursor-pointer items-center rounded-md border border-line px-4 py-1 text-secondary-content/60 transition duration-300 hover:border-line hover:text-secondary-content/60"
                                 @click="selectDirectory">
-                                Select
+                                {{ t('services.directory.select') }}
                             </div>
                         </div>
                     </div>
@@ -104,8 +104,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { DirectoryItem } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import { DirectoryItem } from '@/types'
 import services from '@/services'
+
+const { t } = useI18n()
 
 const props = defineProps<{
     isOpen: boolean

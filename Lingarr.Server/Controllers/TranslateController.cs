@@ -1,9 +1,9 @@
 ﻿using Lingarr.Contracts.Models;
 using Lingarr.Core.Configuration;
-using Lingarr.Server.Attributes;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Models;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
@@ -14,7 +14,7 @@ using Lingarr.Server.Services.Translation;
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class TranslateController : ControllerBase
 {
@@ -63,15 +63,8 @@ public class TranslateController : ControllerBase
     [HttpPost("bulk")]
     public async Task<ActionResult> BulkTranslate([FromBody] BulkTranslateRequest request)
     {
-        try
-        {
-            await _translationRequestService.CreateBulkRequest(request);
-            return Ok();
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { Error = ex.Message });
-        }
+        await _translationRequestService.CreateBulkRequest(request);
+        return Ok();
     }
 
     /// <summary>
@@ -106,19 +99,12 @@ public class TranslateController : ControllerBase
     /// <param name="cancellationToken">Token to cancel the translation operation</param>
     /// <returns>Translated subtitle content</returns>
     [HttpPost("content")]
-    public async Task<ActionResult<BatchTranslatedLine[]>> TranslateContent(
+    public async Task<ActionResult<BatchSubtitleLine[]>> TranslateContent(
         [FromBody] TranslateAbleSubtitleContent translateAbleSubtitleContent,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var results = await _translationRequestService.TranslateContentAsync(translateAbleSubtitleContent, cancellationToken);
-            return Ok(results);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { Error = ex.Message });
-        }
+        var results = await _translationRequestService.TranslateContentAsync(translateAbleSubtitleContent, cancellationToken);
+        return Ok(results);
     }
 
     /// <summary>

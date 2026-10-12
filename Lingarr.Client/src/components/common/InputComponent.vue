@@ -30,22 +30,21 @@
                 type="button"
                 class="absolute inset-y-0 right-0 flex cursor-pointer items-center pr-3"
                 @click="togglePassword">
-                <EyeOnIcon v-if="showPassword" class="h-5 w-5" />
-                <EyeOffIcon v-else class="h-5 w-5" />
+                <Icon v-if="showPassword" name="eyeOn" class="h-5 w-5" />
+                <Icon v-else name="eyeOff" class="h-5 w-5" />
             </button>
         </div>
-        <p v-if="validationType && isInvalid" class="mt-1 text-sm text-red-600" v-html="error" />
+        <p v-if="validationType && isInvalid" class="mt-1 text-sm text-danger" v-html="error" />
     </component>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { InputType, INPUT_TYPE, InputValidationType } from '@/ts'
+import { InputType, INPUT_TYPE, InputValidationType } from '@/types'
 import useValidation from '@/composables/useValidation'
 import useDebounce from '@/composables/useDebounce'
 import ValidationIcon from '@/components/common/ValidationIcon.vue'
-import EyeOnIcon from '@/components/icons/EyeOnIcon.vue'
-import EyeOffIcon from '@/components/icons/EyeOffIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const props = withDefaults(
     defineProps<{
@@ -77,15 +76,15 @@ const { isValid, isInvalid, error, validate } = useValidation(props)
 const showPassword = ref(false)
 const inputClasses = computed(() => [
     '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
-    'w-full rounded-md border bg-transparent outline-hidden transition-colors duration-200 ',
+    'w-full rounded-md border bg-transparent outline-hidden transition-colors duration-200 focus:border-accent ',
     {
         'px-6 py-3 text-lg': props.size === 'lg',
         'px-4 py-2': props.size === 'md',
         'px-2 py-0.5 leading-3 text-sm': props.size === 'sm'
     },
-    { 'border-green-500': props.validationType && isValid.value },
-    { 'border-red-500': props.validationType && isInvalid.value },
-    { 'border-accent': !props.validationType || (!isValid.value && !isInvalid.value) },
+    { 'border-success': props.validationType && isValid.value },
+    { 'border-danger': props.validationType && isInvalid.value },
+    { 'border-line': !props.validationType || (!isValid.value && !isInvalid.value) },
     { 'pr-10': props.type === 'password' }
 ])
 

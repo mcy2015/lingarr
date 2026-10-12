@@ -2,7 +2,7 @@
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 using Microsoft.EntityFrameworkCore;
 
@@ -85,7 +85,7 @@ public class StatisticsService : IStatisticsService
         TranslationRequest request,
         string serviceType,
         string? modelName,
-        BatchTranslatedLine[] translatedLines)
+        BatchSubtitleLine[] translatedLines)
     {
         var lineCount = translatedLines.Length;
         var charCount = translatedLines.Sum(s => s.Line.Length);

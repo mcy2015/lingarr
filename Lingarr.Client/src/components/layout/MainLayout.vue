@@ -1,19 +1,20 @@
 <template>
     <div
-        :class="[`${instanceStore.getTheme}`, 'flex min-h-screen bg-primary text-primary-content']">
+        :class="[`${instanceStore.getTheme}`, 'bg-primary text-primary-content flex min-h-screen']">
         <AsideNavigation />
 
-        <div class="flex w-full flex-col drop-shadow-xl">
+        <div class="flex w-full flex-col">
             <!-- Header -->
-            <header class="bg-secondary px-4 py-2 shadow-lg sm:px-6 lg:px-8">
+            <header class="border-line bg-secondary px-4 py-2.5 sm:px-6 lg:px-8">
                 <div class="flex w-full items-center justify-between space-x-2 md:justify-end">
                     <div class="md:hidden">
-                        <MenuIcon class="block h-5 w-5 cursor-pointer" @click="isOpen = !isOpen" />
+                        <Icon name="menu" class="block h-5 w-5 cursor-pointer" @click="isOpen = !isOpen" />
                     </div>
                     <div class="flex items-center justify-between">
-                        <DropdownComponent width="medium">
+                        <LanguageDropdown />
+                        <DropdownComponent ref="themeDropdownEl" width="medium">
                             <template #button>
-                                <ThemeIcon class="h-5 w-5" />
+                                <Icon name="theme" class="h-5 w-5" />
                             </template>
                             <template #content>
                                 <div
@@ -24,7 +25,7 @@
                                     <button
                                         v-for="theme in Object.values(THEMES)"
                                         :key="theme"
-                                        class="hover:bg-secondary-focus block w-full cursor-pointer px-4 py-2 text-left text-sm capitalize text-secondary-content"
+                                        class="hover:bg-tertiary text-secondary-content block w-full cursor-pointer px-4 py-2 text-left text-sm capitalize"
                                         @click="setTheme(theme)">
                                         {{ theme }}
                                     </button>
@@ -43,27 +44,30 @@
                 </router-view>
             </main>
         </div>
+
+        <ToastNotification />
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useSignalR } from '@/composables/useSignalR'
-import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/ts'
+import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import { useInstanceStore } from '@/store/instance'
 import useTranslationRequestStore from '@/store/translationRequest'
 
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'
 import DropdownComponent from '@/components/common/DropdownComponent.vue'
-import ThemeIcon from '@/components/icons/ThemeIcon.vue'
-import MenuIcon from '@/components/icons/MenuIcon.vue'
+import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
+import ToastNotification from '@/components/common/ToastNotification.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()
 const translationRequestStore = useTranslationRequestStore()
 const signalR = useSignalR()
-const themeDropdown = ref(false)
+const themeDropdownEl = ref<InstanceType<typeof DropdownComponent>>()
 const settingHubConnection = ref<Hub>()
 const requestHubConnection = ref<Hub>()
 
@@ -77,7 +81,7 @@ const onActiveTranslations = (activeTranslations: IActiveTranslation[]) => {
 
 const setTheme = (theme: ITheme) => {
     instanceStore.storeTheme(theme)
-    themeDropdown.value = false
+    themeDropdownEl.value?.close()
 }
 
 const isOpen = computed({

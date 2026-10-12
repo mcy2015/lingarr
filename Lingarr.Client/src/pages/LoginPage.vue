@@ -1,45 +1,50 @@
 <template>
     <div class="flex min-h-screen items-center justify-center px-4">
         <div class="w-full max-w-sm">
-            <CardComponent title="Sign in to Lingarr">
+            <CardComponent :title="t('login.title')">
                 <template #content>
                     <div
                         v-if="error"
-                        class="mb-6 rounded-md border border-red-700/50 bg-red-900/20 p-4">
-                        <p class="text-sm text-red-400">{{ error }}</p>
+                        class="mb-6 rounded-md border border-danger/40 bg-danger/15 p-4">
+                        <p class="text-sm text-danger">{{ error }}</p>
                     </div>
 
                     <form class="space-y-6" @submit.prevent="handleLogin">
                         <div>
-                            <label for="username" class="mb-1 block text-sm">Username</label>
+                            <label for="username" class="mb-1 block text-sm">
+                                {{ t('login.username') }}
+                            </label>
                             <input
                                 id="username"
                                 v-model="username"
                                 type="text"
                                 autocomplete="username"
-                                placeholder="Enter your username"
-                                class="outline-hidden w-full rounded-md border border-accent bg-transparent px-4 py-2 transition-colors duration-200"
+                                :placeholder="t('login.usernamePlaceholder')"
+                                class="border-line w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
                                 required />
                         </div>
 
                         <div>
-                            <label for="password" class="mb-1 block text-sm">Password</label>
+                            <label for="password" class="mb-1 block text-sm">
+                                {{ t('login.password') }}
+                            </label>
                             <input
                                 id="password"
                                 v-model="password"
                                 type="password"
                                 autocomplete="current-password"
-                                placeholder="Enter your password"
-                                class="outline-hidden w-full rounded-md border border-accent bg-transparent px-4 py-2 transition-colors duration-200"
+                                :placeholder="t('login.passwordPlaceholder')"
+                                class="border-line w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
                                 required />
                         </div>
 
                         <div class="flex w-full items-center justify-end">
-                            <ButtonComponent type="submit" :disabled="loading" variant="secondary">
-                                <LoaderCircleIcon
+                            <ButtonComponent type="submit" :disabled="loading" variant="primary">
+                                <Icon
                                     v-if="loading"
+                                    name="loaderCircle"
                                     class="mr-2 h-4 w-4 animate-spin" />
-                                {{ loading ? 'Signing in...' : 'Sign In' }}
+                                {{ loading ? t('login.signingIn') : t('login.signIn') }}
                             </ButtonComponent>
                         </div>
                     </form>
@@ -51,12 +56,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import services from '@/services'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const loading = ref(false)
 const error = ref('')
@@ -66,7 +73,7 @@ const password = ref('')
 
 const handleLogin = async () => {
     if (!username.value || !password.value) {
-        error.value = 'Please enter your username and password'
+        error.value = t('login.errors.missingCredentials')
         return
     }
 
@@ -82,7 +89,7 @@ const handleLogin = async () => {
         router.replace({ name: 'dashboard' })
     } catch (err: any) {
         console.error('Login error:', err)
-        error.value = err?.data?.message || 'Invalid username or password'
+        error.value = err?.data?.message || t('login.errors.invalidCredentials')
     } finally {
         loading.value = false
     }

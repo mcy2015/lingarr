@@ -1,19 +1,21 @@
-﻿<template>
-    <CardComponent title="Subtitle Validation">
+<template>
+    <CardComponent :title="t('settings.validation.title')">
         <template #description>
-            Configure validation rules for subtitles. These rules will be applied when processing
-            subtitle files. If a validation fails, the translation will be canceled.
+            {{ t('settings.validation.description') }}
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
-                <SaveNotification ref="saveNotification" />
 
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Enable validation:</span>
+                    <span class="font-semibold">{{ t('settings.validation.enable') }}</span>
                 </div>
                 <ToggleButton v-model="validationEnabled">
-                    <span class="text-sm font-medium text-primary-content">
-                        {{ validationEnabled == 'true' ? 'Enabled' : 'Disabled' }}
+                    <span class="text-primary-content text-sm font-medium">
+                        {{
+                            validationEnabled == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
 
@@ -21,30 +23,30 @@
                     v-if="validationEnabled == 'true'"
                     v-model="minDurationMs"
                     :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
-                    label="The minimum time duration in milliseconds that a subtitle must be displayed:"
+                    :label="t('settings.validation.minDuration')"
                     @update:validation="(val) => (isValid.minDurationMs = val)">
                     <div class="flex flex-wrap gap-2">
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="minDurationMs = '100'">
                             0.2s
                         </button>
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="minDurationMs = '500'">
                             0.5s
                         </button>
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="minDurationMs = '1000'">
                             1s
                         </button>
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="minDurationMs = '1500'">
                             1.5s
                         </button>
@@ -55,51 +57,51 @@
                     v-if="validationEnabled == 'true'"
                     v-model="maxDurationSecs"
                     :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
-                    label="The maximum time duration in seconds that a subtitle can be displayed:"
+                    :label="t('settings.validation.maxDuration')"
                     @update:validation="(val) => (isValid.maxDurationSecs = val)" />
 
                 <InputComponent
                     v-if="validationEnabled == 'true'"
                     v-model="minSubtitleLength"
                     :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
-                    label="The minimum number of characters that a subtitle must contain:"
+                    :label="t('settings.validation.minLength')"
                     @update:validation="(val) => (isValid.minSubtitleLength = val)" />
 
                 <InputComponent
                     v-if="validationEnabled == 'true'"
                     v-model="maxSubtitleLength"
                     :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
-                    label="The maximum number of characters that a subtitle can contain:"
+                    :label="t('settings.validation.maxLength')"
                     @update:validation="(val) => (isValid.maxSubtitleLength = val)" />
 
                 <InputComponent
                     v-if="validationEnabled == 'true'"
                     v-model="maxFileSizeBytes"
                     :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
-                    label="The maximum size of a subtitle file in bytes:"
+                    :label="t('settings.validation.maxSize')"
                     @update:validation="(val) => (isValid.maxFileSizeBytes = val)">
                     <div class="flex flex-wrap gap-2">
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="maxFileSizeBytes = (512 * 1024).toString()">
                             0.5 KB
                         </button>
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="maxFileSizeBytes = (1024 * 1024).toString()">
                             1 MB
                         </button>
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="maxFileSizeBytes = (1.5 * 1024 * 1024).toString()">
                             1.5 MB
                         </button>
                         <button
                             type="button"
-                            class="cursor-pointer rounded border border-accent px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-white"
+                            class="border-line hover:bg-accent cursor-pointer rounded border px-2 py-1 text-xs transition-colors hover:text-primary-content"
                             @click="maxFileSizeBytes = (2 * 1024 * 1024).toString()">
                             2 MB
                         </button>
@@ -111,17 +113,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-import { INPUT_VALIDATION_TYPE, SETTINGS } from '@/ts'
+import { reactive, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { INPUT_VALIDATION_TYPE, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 
 import CardComponent from '@/components/common/CardComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
 
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const settingsStore = useSettingStore()
+const { t } = useI18n()
 
 const isValid = reactive({
     maxDurationSecs: true,
@@ -135,7 +139,7 @@ const validationEnabled = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.SUBTITLE_VALIDATION_ENABLED) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.SUBTITLE_VALIDATION_ENABLED, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -148,7 +152,7 @@ const maxDurationSecs = computed({
             isValid.maxDurationSecs
         )
         if (isValid.maxDurationSecs) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -162,7 +166,7 @@ const minDurationMs = computed({
             isValid.minDurationMs
         )
         if (isValid.minDurationMs) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -176,7 +180,7 @@ const minSubtitleLength = computed({
             isValid.minSubtitleLength
         )
         if (isValid.minSubtitleLength) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -190,7 +194,7 @@ const maxSubtitleLength = computed({
             isValid.maxSubtitleLength
         )
         if (isValid.maxSubtitleLength) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -204,7 +208,7 @@ const maxFileSizeBytes = computed({
             isValid.maxFileSizeBytes
         )
         if (isValid.maxFileSizeBytes) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })

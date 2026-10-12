@@ -8,8 +8,6 @@ public static class MigrationConfiguration
 {
     private const string VersionTableName = "version_info";
     private static readonly long[] InitialMigrationVersions = [1, 2];
-    private static string? _connectionString;
-    private static string? _dbConnection;
 
     /// <summary>
     /// Configures FluentMigrator services for the specified database provider.
@@ -22,9 +20,6 @@ public static class MigrationConfiguration
         string connectionString,
         string dbConnection)
     {
-        _connectionString = connectionString;
-        _dbConnection = dbConnection;
-
         services.AddFluentMigratorCore()
             .ConfigureRunner(migrationRunnerBuilder =>
             {
@@ -55,13 +50,15 @@ public static class MigrationConfiguration
     /// Runs all pending migrations, handling transition from EF Core migrations.
     /// </summary>
     /// <param name="serviceProvider">The service provider containing the migration runner.</param>
-    public static void RunMigrations(IServiceProvider serviceProvider)
+    /// <param name="dbConnection">The database type: "mysql", "postgres", or "sqlite".</param>
+    /// <param name="connectionString">The database connection string.</param>
+    public static void RunMigrations(IServiceProvider serviceProvider, string dbConnection, string connectionString)
     {
         using var scope = serviceProvider.CreateScope();
         var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
 
         // Check if this is an existing database and handle transition
-        HandleDatabaseTransition();
+        HandleDatabaseTransition(dbConnection, connectionString);
 
         // Run any pending migrations
         runner.MigrateUp();
@@ -70,40 +67,40 @@ public static class MigrationConfiguration
     /// <summary>
     /// Handles the transition from EF Core migrations by marking initial migrations as applied.
     /// </summary>
-    private static void HandleDatabaseTransition()
+    private static void HandleDatabaseTransition(string dbConnection, string connectionString)
     {
-        if (string.IsNullOrEmpty(_connectionString) || string.IsNullOrEmpty(_dbConnection))
+        if (string.IsNullOrEmpty(connectionString) || string.IsNullOrEmpty(dbConnection))
         {
             return;
         }
 
         try
         {
-            using var connection = CreateConnection(_dbConnection, _connectionString);
+            using var connection = CreateConnection(dbConnection, connectionString);
             connection.Open();
 
-            if (!TableExists(connection, _dbConnection, "settings"))
+            if (!TableExists(connection, dbConnection, "settings"))
             {
                 return;
             }
-            if (TableExists(connection, _dbConnection, VersionTableName))
+            if (TableExists(connection, dbConnection, VersionTableName))
             {
-                if (MigrationRecordExists(connection, _dbConnection, 1))
+                if (MigrationRecordExists(connection, dbConnection, 1))
                 {
                     return;
                 }
             }
             else
             {
-                CreateVersionInfoTable(connection, _dbConnection);
+                CreateVersionInfoTable(connection, dbConnection);
             }
 
             foreach (var version in InitialMigrationVersions)
             {
-                InsertVersionRecord(connection, _dbConnection, version);
+                InsertVersionRecord(connection, dbConnection, version);
             }
 
-            DropEfCoreMigrationsHistory(connection, _dbConnection);
+            DropEfCoreMigrationsHistory(connection, dbConnection);
         }
         catch (Exception ex)
         {

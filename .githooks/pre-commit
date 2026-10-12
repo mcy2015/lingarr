@@ -1,8 +1,22 @@
 #!/bin/sh
+# Lightweight pre-commit checks. CI remains the authoritative gate — this hook
+# skips (with a notice) when the tools are not available locally, instead of
+# failing on machines without dotnet or the dev containers.
+#
+# One-time activation: git config core.hooksPath .githooks
+
 set -e
 
-echo "Running frontend lint..."
-docker exec Lingarr.Client npm run lint
+if command -v dotnet >/dev/null 2>&1; then
+    echo "Building backend..."
+    dotnet build Lingarr.slnx --nologo -v q
+else
+    echo "dotnet not found - skipping backend build (CI will verify)."
+fi
 
-echo "Running backend tests..."
-dotnet test Lingarr.slnx --verbosity quiet
+if command -v npm >/dev/null 2>&1 && [ -d Lingarr.Client/node_modules ]; then
+    echo "Linting client..."
+    (cd Lingarr.Client && npm run lint --silent)
+else
+    echo "npm or node_modules unavailable - skipping client lint (CI will verify)."
+fi

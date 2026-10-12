@@ -6,8 +6,8 @@
             :data="chartData"
             :options="chartOptions"
             class="h-full w-full" />
-        <div v-else class="flex h-full w-full items-center justify-center text-primary-content">
-            No data available
+        <div v-else class="text-primary-content flex h-full w-full items-center justify-center">
+            {{ t('dashboard.noData') }}
         </div>
     </div>
 </template>
@@ -28,7 +28,8 @@ import {
     Legend
 } from 'chart.js/auto'
 import { Bar } from 'vue-chartjs'
-import { DailyStatistic } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import { DailyStatistic } from '@/types'
 import { formatDayLabel } from '@/utils/date'
 import { useInstanceStore } from '@/store/instance'
 
@@ -47,6 +48,8 @@ const props = defineProps<{
     dailyStats: DailyStatistic[]
 }>()
 
+const { t } = useI18n()
+
 const getCssVariable = (variableName: string): string => {
     return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim()
 }
@@ -63,7 +66,7 @@ const colors = computed(() => {
         },
         card: {
             background: getCssVariable('--primary'),
-            border: getCssVariable('--accent')
+            border: getCssVariable('--line')
         }
     }
 })
@@ -94,7 +97,7 @@ const chartData = computed<ChartData<'bar'> | undefined>(() => {
 
     const datasets: ChartDataset<'bar' | 'line'>[] = [
         {
-            label: 'Daily Translations',
+            label: t('dashboard.dailyTranslations'),
             data: translationCounts.value,
             backgroundColor: colors.value.bar.background,
             borderColor: colors.value.bar.border,
@@ -104,7 +107,7 @@ const chartData = computed<ChartData<'bar'> | undefined>(() => {
             order: 2
         },
         {
-            label: '7-Day Average',
+            label: t('dashboard.sevenDayAverage'),
             data: movingAverage.value,
             borderColor: colors.value.line.border,
             borderWidth: 2,
@@ -134,10 +137,10 @@ const chartOptions: ChartOptions<'bar'> = {
         y: {
             beginAtZero: true,
             grid: {
-                color: '#466e8c20'
+                color: getCssVariable('--line')
             },
             ticks: {
-                color: '#c0c8d2',
+                color: getCssVariable('--primary-content'),
                 font: {
                     size: 11
                 },
@@ -153,7 +156,7 @@ const chartOptions: ChartOptions<'bar'> = {
                 display: false
             },
             ticks: {
-                color: '#c0c8d2',
+                color: getCssVariable('--primary-content'),
                 font: {
                     size: 11
                 },
@@ -171,7 +174,7 @@ const chartOptions: ChartOptions<'bar'> = {
         legend: {
             position: 'top' as const,
             labels: {
-                color: '#c0c8d2',
+                color: getCssVariable('--primary-content'),
                 font: {
                     size: 12
                 },
@@ -185,8 +188,8 @@ const chartOptions: ChartOptions<'bar'> = {
             borderColor: colors.value.card.border,
             borderWidth: 1,
             padding: 12,
-            titleColor: '#c0c8d2',
-            bodyColor: '#c0c8d2',
+            titleColor: getCssVariable('--primary-content'),
+            bodyColor: getCssVariable('--primary-content'),
             titleFont: {
                 size: 13
             },
@@ -200,9 +203,9 @@ const chartOptions: ChartOptions<'bar'> = {
                 },
                 label(context) {
                     if (context.datasetIndex === 1) {
-                        return `Average: ${context.parsed.y} translations`
+                        return t('dashboard.tooltip.average', { count: context.parsed.y })
                     }
-                    return `${context.parsed.y} translations`
+                    return t('dashboard.tooltip.count', { count: context.parsed.y })
                 }
             }
         }

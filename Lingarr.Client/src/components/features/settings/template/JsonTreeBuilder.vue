@@ -1,5 +1,5 @@
 <template>
-    <div class="border-accent/30 bg-primary/50 rounded-md border p-3">
+    <div class="border-line bg-primary/50 rounded-md border p-3">
         <div v-if="parseError" class="mb-3">
             <StatusMessage :message="parseError" type="error" />
         </div>
@@ -15,13 +15,11 @@
                 @update="onTreeChange"
                 @delete="removeRoot(index)" />
             <ButtonComponent variant="ghost" size="xs" class="mt-2" @click="addRootProperty">
-                <PlusIcon class="mr-1 h-3 w-3" />
-                Add Property
+                <Icon name="plus" class="mr-1 h-3 w-3" />
+                {{ t('services.template.addProperty') }}
             </ButtonComponent>
         </div>
-        <div
-            class="border-accent/20 mt-3 flex flex-wrap gap-3 border-t pt-3"
-            @mousedown.prevent>
+        <div class="border-line mt-3 flex flex-wrap gap-3 border-t pt-3" @mousedown.prevent>
             <PlaceholderButton
                 v-for="item in placeholders"
                 :key="item.placeholder"
@@ -36,12 +34,13 @@
 
 <script setup lang="ts">
 import { nextTick } from 'vue'
-import { IPlaceholder } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import { IPlaceholder } from '@/types'
 import { useJsonTree } from '@/composables/useJsonTree'
 import JsonTreeNode from './JsonTreeNode.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import PlaceholderButton from '@/components/common/PlaceholderButton.vue'
-import PlusIcon from '@/components/icons/PlusIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import StatusMessage from '@/components/common/StatusMessage.vue'
 
 const props = defineProps<{
@@ -49,19 +48,14 @@ const props = defineProps<{
     placeholders: IPlaceholder[]
 }>()
 
+const { t } = useI18n()
+
 const emit = defineEmits<{
     'update:modelValue': [value: string]
 }>()
 
-const {
-    tree,
-    parseError,
-    nextId,
-    onTreeChange,
-    addRootProperty,
-    removeRoot,
-    watchModelValue
-} = useJsonTree(emit)
+const { tree, parseError, nextId, onTreeChange, addRootProperty, removeRoot, watchModelValue } =
+    useJsonTree(emit)
 
 watchModelValue(() => props.modelValue)
 

@@ -1,9 +1,27 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-    darkMode: 'class',
     content: ['./index.html', './src/**/*.{ts,vue}'],
     theme: {
         extend: {
+            fontFamily: {
+                sans: [
+                    'Archivo Variable',
+                    'PingFang SC',
+                    'Hiragino Sans GB',
+                    'Microsoft YaHei',
+                    'Noto Sans SC',
+                    'system-ui',
+                    'sans-serif'
+                ],
+                mono: [
+                    'JetBrains Mono Variable',
+                    'JetBrains Mono',
+                    'ui-monospace',
+                    'SFMono-Regular',
+                    'Menlo',
+                    'monospace'
+                ]
+            },
             colors: {
                 primary: 'var(--primary)',
                 'primary-content': 'var(--primary-content)',
@@ -12,7 +30,18 @@ export default {
                 tertiary: 'var(--tertiary)',
                 'tertiary-content': 'var(--tertiary-content)',
                 accent: 'var(--accent)',
-                'accent-content': 'var(--accent-content)'
+                'accent-content': 'var(--accent-content)',
+                line: 'var(--line)',
+                success: 'var(--success)',
+                'success-content': 'var(--success-content)',
+                warning: 'var(--warning)',
+                'warning-content': 'var(--warning-content)',
+                danger: 'var(--danger)',
+                'danger-content': 'var(--danger-content)',
+                info: 'var(--info)',
+                'info-content': 'var(--info-content)',
+                'track-a': 'var(--track-a)',
+                'track-b': 'var(--track-b)'
             },
             keyframes: {
                 loading: {

@@ -1,66 +1,67 @@
 ﻿<template>
     <div class="w-full">
         <!-- Search and Filters -->
-        <div class="flex flex-wrap items-center justify-between gap-2 bg-tertiary p-4">
-            <SearchComponent v-model="filter" />
-            <div
-                class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:justify-between md:space-x-2">
+        <ListToolbar
+            v-model:filter="filter"
+            :sort-options="[
+                {
+                    label: t('translations.list.sortByAdded'),
+                    value: 'CreatedAt'
+                },
+                {
+                    label: t('translations.list.sortByCompleted'),
+                    value: 'CompletedAt'
+                },
+                {
+                    label: t('translations.list.sortByTitle'),
+                    value: 'Title'
+                }
+            ]"
+            @reload="translationRequestStore.fetch()">
+            <template #actions>
                 <button
                     v-if="isSelectMode"
-                    class="hover:text-primary-content/50 cursor-pointer rounded-md border border-accent px-2 py-1 text-primary-content transition-colors"
+                    class="hover:text-primary-content/50 border-line text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="handleDelete">
-                    Delete ({{ translationRequestStore.selectedRequests.length }})
+                    {{ t('translations.list.deleteWithCount', { count: selectedCount }) }}
                 </button>
                 <button
-                    class="hover:text-primary-content/50 cursor-pointer rounded-md border border-accent px-2 py-1 text-primary-content transition-colors"
-                    @click="toggleSelectMode">
-                    {{ isSelectMode ? 'Cancel' : 'Select' }}
+                    v-if="!isSelectMode"
+                    class="hover:text-primary-content/50 border-line text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
+                    @click="handleBatchConvert">
+                    {{ t('translations.list.batchConvert') }}
                 </button>
-                <div class="flex flex-wrap items-center gap-2">
-                    <SortControls
-                        v-model="filter"
-                        :options="[
-                            {
-                                label: 'Sort by Added',
-                                value: 'CreatedAt'
-                            },
-                            {
-                                label: 'Sort by Completed',
-                                value: 'CompletedAt'
-                            },
-                            {
-                                label: 'Sort by Title',
-                                value: 'Title'
-                            }
-                        ]" />
-                    <ReloadComponent @toggle:update="translationRequestStore.fetch()" />
-                </div>
-            </div>
-        </div>
+                <button
+                    class="hover:text-primary-content/50 border-line text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
+                    @click="toggleSelectMode">
+                    {{
+                        isSelectMode ? t('translations.list.cancel') : t('translations.list.select')
+                    }}
+                </button>
+            </template>
+        </ListToolbar>
 
         <div class="w-full px-4">
-            <div class="hidden border-b border-accent font-bold md:grid md:grid-cols-12">
-                <div class="col-span-4 px-4 py-2">Title</div>
-                <div class="col-span-1 px-4 py-2">Source</div>
-                <div class="col-span-1 px-4 py-2">Target</div>
-                <div class="col-span-1 px-4 py-2">Status</div>
+            <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
+                <div class="col-span-4 px-4 py-2">{{ t('translations.columns.title') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.source') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.target') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.status') }}</div>
                 <div class="px-4 py-2" :class="isSelectMode ? 'col-span-2' : 'col-span-3'">
-                    Progress
+                    {{ t('translations.columns.progress') }}
                 </div>
-                <div class="col-span-1 px-4 py-2">Completed</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.completed') }}</div>
                 <div class="col-span-1"></div>
                 <div
                     v-if="isSelectMode"
                     class="col-span-1 flex items-center justify-center px-4 py-2">
-                    <CheckboxComponent
-                        :model-value="translationRequestStore.selectAll"
-                        @change="translationRequestStore.toggleSelectAll()" />
+                    <CheckboxComponent :model-value="selectAll" @change="toggleSelectAll()" />
                 </div>
             </div>
             <div
                 v-for="item in translationRequests.items"
                 :key="item.id"
-                class="border-accent hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:py-0">
+                class="border-line hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:py-0">
                 <div class="flex w-full items-center gap-2 md:col-span-4 md:w-auto md:px-4 md:py-2">
                     <span
                         v-if="item.mediaType === MEDIA_TYPE.EPISODE"
@@ -78,23 +79,32 @@
                             :on-action="(action) => handleAction(item, action)" />
                         <CheckboxComponent
                             v-if="isSelectMode"
-                            :model-value="
-                                translationRequestStore.selectedRequests.some(
-                                    (request) => request.id === item.id
-                                )
-                            "
-                            @change="translationRequestStore.toggleSelect(item)" />
+                            :model-value="isSelected(item)"
+                            @change="toggleSelect(item)" />
                     </span>
                 </div>
                 <div class="flex items-center md:col-span-1 md:px-4 md:py-2">
-                    <BadgeComponent classes="text-primary-content border-accent bg-secondary">
+                    <BadgeComponent classes="font-mono text-secondary-content border-line bg-tertiary">
                         {{ item.sourceLanguage.toUpperCase() }}
                     </BadgeComponent>
                 </div>
                 <div class="flex items-center gap-2 md:col-span-1 md:px-4 md:py-2">
                     <span class="text-primary-content/50 md:hidden">→</span>
-                    <BadgeComponent classes="text-primary-content border-accent bg-secondary">
+                    <BadgeComponent classes="font-mono text-secondary-content border-line bg-tertiary">
                         {{ item.targetLanguage.toUpperCase() }}
+                    </BadgeComponent>
+                    <BadgeComponent
+                        v-if="item.status === TRANSLATION_STATUS.COMPLETED"
+                        :classes="
+                            item.isBilingual
+                                ? 'text-success-content border-success/40 bg-success/50'
+                                : 'text-primary-content/70 border-line bg-secondary'
+                        ">
+                        {{
+                            item.isBilingual
+                                ? t('translations.bilingual')
+                                : t('translations.monolingual')
+                        }}
                     </BadgeComponent>
                 </div>
                 <div class="flex items-center md:col-span-1 md:px-4 md:py-2">
@@ -122,7 +132,7 @@
                         :completed-at="item.completedAt" />
                     <span
                         class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                        Completed
+                        {{ t('translations.columns.completed') }}
                     </span>
                 </div>
                 <div
@@ -137,12 +147,8 @@
                     v-if="isSelectMode"
                     class="hidden items-center justify-center py-2 md:col-span-1 md:flex md:px-4">
                     <CheckboxComponent
-                        :model-value="
-                            translationRequestStore.selectedRequests.some(
-                                (request) => request.id === item.id
-                            )
-                        "
-                        @change="translationRequestStore.toggleSelect(item)" />
+                        :model-value="isSelected(item)"
+                        @change="toggleSelect(item)" />
                 </div>
             </div>
         </div>
@@ -155,23 +161,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, ComputedRef, computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
     Hub,
-    IFilter,
-    IPagedResult,
     ITranslationRequest,
     MEDIA_TYPE,
     TRANSLATION_ACTIONS,
     TRANSLATION_STATUS
-} from '@/ts'
+} from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
+import services from '@/services'
 import { useSignalR } from '@/composables/useSignalR'
-import useDebounce from '@/composables/useDebounce'
+import { useSelection } from '@/composables/useSelection'
+import { usePagedList } from '@/composables/usePagedList'
 import PaginationComponent from '@/components/common/PaginationComponent.vue'
-import SortControls from '@/components/common/SortControls.vue'
-import SearchComponent from '@/components/common/SearchComponent.vue'
-import ReloadComponent from '@/components/common/ReloadComponent.vue'
+import ListToolbar from '@/components/common/ListToolbar.vue'
 import TranslationStatus from '@/components/common/TranslationStatus.vue'
 import TranslationProgress from '@/components/common/TranslationProgress.vue'
 import TranslationAction from '@/components/common/TranslationAction.vue'
@@ -182,17 +187,24 @@ import CheckboxComponent from '@/components/common/CheckboxComponent.vue'
 const signalR = useSignalR()
 const hubConnection = ref<Hub>()
 const translationRequestStore = useTranslationRequestStore()
+const { t } = useI18n()
 
-const translationRequests: ComputedRef<IPagedResult<ITranslationRequest>> = computed(
-    () => translationRequestStore.getTranslationRequests
-)
-
-const filter: ComputedRef<IFilter> = computed({
-    get: () => translationRequestStore.filter,
-    set: useDebounce((value: IFilter) => {
-        translationRequestStore.setFilter(value)
-    }, 300)
+const { items: translationRequests, filter } = usePagedList<ITranslationRequest>({
+    items: () => translationRequestStore.getTranslationRequests,
+    filter: () => translationRequestStore.getFilter,
+    setFilter: (value) => translationRequestStore.setFilter(value),
+    fetch: () => translationRequestStore.fetch()
 })
+
+const {
+    selectedIds,
+    selectedCount,
+    selectAll,
+    isSelected,
+    toggleSelect,
+    toggleSelectAll,
+    clearSelection
+} = useSelection<ITranslationRequest>(() => translationRequests.value.items)
 
 async function handleAction(translationRequest: ITranslationRequest, action: TRANSLATION_ACTIONS) {
     switch (action) {
@@ -212,7 +224,6 @@ async function handleAction(translationRequest: ITranslationRequest, action: TRA
 }
 
 onMounted(async () => {
-    await translationRequestStore.fetch()
     await translationRequestStore.fetchProofreadStatus()
     hubConnection.value = await signalR.connect(
         'TranslationRequests',
@@ -232,15 +243,28 @@ const isSelectMode = ref(false)
 const toggleSelectMode = () => {
     isSelectMode.value = !isSelectMode.value
     if (!isSelectMode.value) {
-        translationRequestStore.clearSelection()
+        clearSelection()
     }
 }
 
 const handleDelete = async () => {
-    for (const request of translationRequestStore.getSelectedRequests) {
+    const selected = translationRequests.value.items.filter((request) =>
+        selectedIds.value.has(request.id)
+    )
+    for (const request of selected) {
         await translationRequestStore.remove(request)
     }
-    translationRequestStore.clearSelection()
+    clearSelection()
+    translationRequestStore.fetch()
+}
+
+const handleBatchConvert = async () => {
+    if (!window.confirm(t('translations.list.batchConvertConfirm'))) return
+    try {
+        await services.translationRequest.convertAll(true)
+    } catch (error) {
+        console.error('Batch conversion failed:', error)
+    }
     translationRequestStore.fetch()
 }
 </script>

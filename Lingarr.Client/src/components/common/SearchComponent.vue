@@ -3,22 +3,26 @@
         <input
             :value="modelValue.searchQuery"
             type="text"
-            placeholder="Search media..."
-            class="placeholder-primary/60 outline-hidden block w-full rounded-md border border-accent bg-primary px-8 py-1 text-sm text-primary-content"
+            :placeholder="t('common.searchMedia')"
+            class="placeholder-primary/60 border-line bg-primary text-primary-content block w-full rounded-md border px-8 py-1 text-sm outline-hidden"
             @input="search" />
-        <SearchIcon
-            class="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 transform text-accent-content" />
-        <TimesIcon
+        <Icon
+            name="search"
+            class="text-secondary-content/60 absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 transform" />
+        <Icon
             v-if="modelValue.searchQuery"
-            class="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 transform cursor-pointer text-accent-content"
+            name="times"
+            class="text-secondary-content/60 absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 transform cursor-pointer"
             @click="clear" />
     </div>
 </template>
 
 <script lang="ts" setup>
-import { IFilter } from '@/ts'
-import SearchIcon from '@/components/icons/SearchIcon.vue'
-import TimesIcon from '@/components/icons/TimesIcon.vue'
+import { IFilter } from '@/types'
+import { useI18n } from 'vue-i18n'
+import Icon from '@/components/icons/Icon.vue'
+
+const { t } = useI18n()
 
 const emit = defineEmits(['update:modelValue'])
 const { modelValue } = defineProps<{

@@ -152,7 +152,8 @@ public class ProofreadJob
             await _subtitleService.WriteSubtitles(
                 request.TranslatedSubtitle,
                 translatedSubtitles,
-                stripSubtitleFormatting);
+                stripSubtitleFormatting,
+                request.IsBilingual);
 
             _logger.LogInformation("ProofreadJob completed and rewrote subtitle: |Green|{filePath}|/Green|",
                 request.TranslatedSubtitle);

@@ -7,7 +7,7 @@ import {
     ENCRYPTED_SETTINGS,
     PLUGIN_SETTING_TYPE,
     SETTINGS
-} from '@/ts'
+} from '@/types'
 import services from '@/services'
 import { useInstanceStore } from '@/store/instance'
 

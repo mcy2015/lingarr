@@ -1,9 +1,9 @@
 ﻿<template>
-    <div class="rounded-lg bg-primary p-4 shadow-sm">
-        <h3 class="text-primary-content/70 text-sm font-medium">
+    <div class="rounded-md border border-line bg-secondary p-4">
+        <h3 class="text-secondary-content/70 text-sm font-medium">
             {{ title }}
         </h3>
-        <p class="mt-2 text-2xl font-bold text-primary-content">
+        <p class="text-primary-content mt-2 font-mono text-2xl font-bold tabular-nums">
             {{ formatNumber(value) }}
         </p>
     </div>

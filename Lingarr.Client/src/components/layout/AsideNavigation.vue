@@ -3,34 +3,39 @@
         <!-- Backdrop -->
         <div
             v-if="isOpen"
-            class="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
+            class="bg-opacity-50 fixed inset-0 z-40 bg-black md:hidden"
             @click="isOpen = false"></div>
         <!-- Aside -->
         <aside
             :class="isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
-            class="fixed left-0 top-0 z-50 flex h-full w-64 flex-col overflow-hidden border-r border-accent bg-secondary transition-transform duration-300 ease-in-out md:sticky">
-            <TimesIcon
-                class="absolute right-1 top-1 block h-6 w-6 cursor-pointer md:hidden"
+            class="border-line bg-secondary fixed top-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r transition-transform duration-300 ease-in-out md:sticky">
+            <Icon
+                name="times"
+                class="absolute top-1 right-1 block h-6 w-6 cursor-pointer md:hidden"
                 @click="isOpen = false" />
-            <div class="flex h-16 items-center justify-center">
-                <h1 class="text-xl font-bold">Lingarr</h1>
+            <div class="flex h-16 items-center border-b border-line px-5">
+                <h1 class="text-lg font-bold tracking-wide">LINGARR<span class="text-accent">_</span></h1>
             </div>
             <!-- Navigation -->
-            <nav class="grow overflow-y-auto p-6">
-                <ul class="space-y-4">
+            <nav class="grow overflow-y-auto px-3 py-4">
+                <ul class="space-y-1">
                     <li v-for="(item, index) in menuItems" :key="index">
                         <router-link
                             :to="{ name: item.route }"
-                            class="flex w-full items-center justify-start hover:brightness-150"
-                            :class="{ 'brightness-150': isActive(item) }"
+                            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors"
+                            :class="
+                                isActive(item)
+                                    ? 'bg-tertiary text-primary-content shadow-[inset_2px_0_0_0_var(--accent)]'
+                                    : 'text-secondary-content/70 hover:bg-tertiary/50 hover:text-primary-content'
+                            "
                             @click="isOpen = false">
-                            <component :is="item.icon" class="mr-2 h-4 w-4" />
+                            <Icon :name="item.icon" class="h-4 w-4 flex-none" />
                             <div class="relative">
-                                {{ item.label }}
+                                {{ t(item.label) }}
 
-                                <span
+                                    <span
                                     v-if="item.route == 'translations' && activeRequests > 0"
-                                    class="absolute -right-4 -top-1 inline-flex items-center justify-center rounded-full bg-accent px-1 py-0.5 text-xs font-bold leading-none text-secondary-content">
+                                    class="bg-accent text-accent-content absolute -top-1 -right-5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 font-mono text-xs leading-none font-bold">
                                     {{ activeRequests }}
                                 </span>
                             </div>
@@ -43,28 +48,28 @@
                 <img
                     v-if="instanceStore.getPoster"
                     :src="`/api/image/${instanceStore.getPoster}`"
-                    class="h-full w-full object-cover mask-gradient"
+                    class="mask-gradient h-full w-full object-cover"
                     alt="poster" />
                 <div
                     v-if="instanceStore.getVersion.currentVersion.length"
-                    class="absolute bottom-0 right-0 flex w-full justify-center p-4">
+                    class="absolute right-0 bottom-0 flex w-full justify-center p-4">
                     <BadgeComponent
                         v-if="instanceStore.getVersion.isDevelopment"
-                        classes="text-white border-amber-200 bg-amber-500/50">
-                        {{ 'Development' }}
+                        classes="text-warning-content border-warning/40 bg-warning/50">
+                        {{ t('version.development') }}
                     </BadgeComponent>
                     <BadgeComponent
                         v-else-if="instanceStore.getVersion.newVersion"
-                        classes="text-white border-green-200 bg-green-500/50">
+                        classes="text-success-content border-success/40 bg-success/50">
                         {{
-                            'Update {version} is available'.format({
+                            t('version.updateAvailable', {
                                 version: instanceStore.getVersion.latestVersion
                             })
                         }}
                     </BadgeComponent>
                     <BadgeComponent v-else>
                         {{
-                            'Version: {version}'.format({
+                            t('version.current', {
                                 version: instanceStore.getVersion.currentVersion
                             })
                         }}
@@ -78,21 +83,18 @@
 <script setup lang="ts">
 import { computed, ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useInstanceStore } from '@/store/instance'
 import { useTranslationRequestStore } from '@/store/translationRequest'
-import { MenuItem } from '@/ts'
-import HomeIcon from '@/components/icons/HomeIcon.vue'
-import MovieIcon from '@/components/icons/MovieIcon.vue'
-import ShowIcon from '@/components/icons/ShowIcon.vue'
-import SettingIcon from '@/components/icons/SettingIcon.vue'
-import TimesIcon from '@/components/icons/TimesIcon.vue'
+import { MenuItem } from '@/types'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
-import LanguageIcon from '@/components/icons/LanguageIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const translationRequestStore = useTranslationRequestStore()
 const instanceStore = useInstanceStore()
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
 const activeRequests: ComputedRef<number> = computed(
     () => translationRequestStore.getActiveTranslationCount
@@ -104,13 +106,14 @@ const isOpen = computed({
 })
 
 const menuItems: MenuItem[] = [
-    { label: 'Dashboard', icon: HomeIcon, route: 'dashboard', children: [] },
-    { label: 'Movies', icon: MovieIcon, route: 'movies', children: [] },
-    { label: 'TV Shows', icon: ShowIcon, route: 'shows', children: [] },
-    { label: 'Translations', icon: LanguageIcon, route: 'translations', children: [] },
+    { label: 'nav.dashboard', icon: 'home', route: 'dashboard', children: [] },
+    { label: 'nav.movies', icon: 'movie', route: 'movies', children: [] },
+    { label: 'nav.shows', icon: 'show', route: 'shows', children: [] },
+    { label: 'nav.translations', icon: 'language', route: 'translations', children: [] },
+    { label: 'nav.import', icon: 'folders', route: 'import', children: [] },
     {
-        label: 'Settings',
-        icon: SettingIcon,
+        label: 'nav.settings',
+        icon: 'setting',
         route: 'integration-settings',
         children:
             router

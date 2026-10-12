@@ -16,7 +16,7 @@
             <div
                 v-if="isOpen"
                 :class="getClasses()"
-                class="absolute right-0 mt-2 origin-top-right rounded-md border border-accent bg-secondary shadow-lg">
+                class="absolute right-0 mt-2 origin-top-right rounded-md border border-line bg-secondary shadow-lg">
                 <slot name="content"></slot>
             </div>
         </transition>
@@ -47,6 +47,12 @@ const getClasses = () => {
 const toggleDropdown = () => {
     isOpen.value = !isOpen.value
 }
+
+defineExpose({
+    close: () => {
+        isOpen.value = false
+    }
+})
 
 useClickOutside(clickOutside, () => {
     isOpen.value = false

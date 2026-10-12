@@ -1,6 +1,6 @@
 ﻿<template>
     <select
-        class="block w-full rounded-md border border-accent bg-primary px-2 py-1 text-sm text-primary-content focus:border-accent focus:ring-2 focus:ring-accent md:w-auto"
+        class="border-line bg-primary text-primary-content focus:border-line focus:ring-accent block w-full rounded-md border px-2 py-1 text-sm focus:ring-2 md:w-auto"
         :value="modelValue.sortBy"
         @change="sortBy">
         <option
@@ -13,16 +13,18 @@
     <button
         class="ml-auto flex cursor-pointer items-center justify-end space-x-2 md:ml-0 md:justify-center"
         @click="orderBy">
-        <span class="md:hidden">Order by</span>
-        <CaretUpIcon v-if="modelValue.isAscending" class="h-6 w-6" />
-        <CaretDownIcon v-else class="h-6 w-6" />
+        <span class="md:hidden">{{ t('common.orderBy') }}</span>
+        <Icon v-if="modelValue.isAscending" name="caretUp" class="h-6 w-6" />
+        <Icon v-else name="caretDown" class="h-6 w-6" />
     </button>
 </template>
 
 <script lang="ts" setup>
-import { IOptions, IFilter } from '@/ts'
-import CaretUpIcon from '@/components/icons/CaretUpIcon.vue'
-import CaretDownIcon from '@/components/icons/CaretDownIcon.vue'
+import { IOptions, IFilter } from '@/types'
+import { useI18n } from 'vue-i18n'
+import Icon from '@/components/icons/Icon.vue'
+
+const { t } = useI18n()
 
 const emit = defineEmits(['update:modelValue'])
 const { modelValue, options } = defineProps<{

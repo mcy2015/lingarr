@@ -20,6 +20,7 @@ public class MistralService : BaseLanguageService, ITranslationService, IBatchTr
     private string? _apiKey;
     private string? _requestTemplate;
     private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IRequestTemplateService _requestTemplateService;
     private bool _initialized;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -27,20 +28,17 @@ public class MistralService : BaseLanguageService, ITranslationService, IBatchTr
     /// <inheritdoc />
     public override string? ModelName => _model;
 
-    // retry settings
-    private int _maxRetries;
-    private TimeSpan _retryDelay;
-    private int _retryDelayMultiplier;
-
     public MistralService(
         ISettingService settings,
         HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         ILogger<MistralService> logger,
         LanguageCodeService languageCodeService,
         IRequestTemplateService requestTemplateService)
         : base(settings, logger, languageCodeService)
     {
         _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _requestTemplateService = requestTemplateService;
     }
 
@@ -100,16 +98,7 @@ public class MistralService : BaseLanguageService, ITranslationService, IBatchTr
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
 
-            _maxRetries = int.TryParse(settings[SettingKeys.Translation.MaxRetries], out var maxRetries)
-                ? maxRetries
-                : 5;
-            var retryDelaySeconds = int.TryParse(settings[SettingKeys.Translation.RetryDelay], out var delaySeconds)
-                ? delaySeconds
-                : 1;
-            _retryDelay = TimeSpan.FromSeconds(retryDelaySeconds);
-            _retryDelayMultiplier = int.TryParse(settings[SettingKeys.Translation.RetryDelayMultiplier], out var multiplier)
-                ? multiplier
-                : 2;
+            ApplyResilienceSettings(settings);
 
             _initialized = true;
         }
@@ -130,44 +119,13 @@ public class MistralService : BaseLanguageService, ITranslationService, IBatchTr
     {
         await InitializeAsync(sourceLanguage, targetLanguage);
 
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                var replacements = GetReplacements(_model!, text, contextLinesBefore, contextLinesAfter);
-                return await CompleteWithMistralApi(replacements, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for text: {Text}", ex.StatusCode, text);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "Mistral", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during Mistral translation");
-                throw new TranslationException("Failed to translate using Mistral", ex);
-            }
-        }
-
-        throw new TranslationException("Translation failed after maximum retry attempts.");
+        var replacements = GetReplacements(_model!, text, contextLinesBefore, contextLinesAfter);
+        return await ExecuteWithRetryAsync(
+            "Mistral",
+            "Failed to translate using Mistral",
+            token => CompleteWithMistralApi(replacements, token),
+            cancellationToken,
+            text);
     }
 
     /// <inheritdoc />
@@ -180,44 +138,13 @@ public class MistralService : BaseLanguageService, ITranslationService, IBatchTr
     {
         await InitializeAsync(sourceLanguage, targetLanguage);
 
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                var replacements = GetProofreadReplacements(_model!, sourceText, translatedText);
-                return await CompleteWithMistralApi(replacements, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for text: {Text}", ex.StatusCode, translatedText);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "Mistral", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during Mistral proofread");
-                throw new TranslationException("Failed to proofread using Mistral", ex);
-            }
-        }
-
-        throw new TranslationException("Proofread failed after maximum retry attempts.");
+        var replacements = GetProofreadReplacements(_model!, sourceText, translatedText);
+        return await ExecuteWithRetryAsync(
+            "Mistral",
+            "Failed to proofread using Mistral",
+            token => CompleteWithMistralApi(replacements, token),
+            cancellationToken,
+            translatedText);
     }
 
     private async Task<string> CompleteWithMistralApi(
@@ -274,43 +201,11 @@ public class MistralService : BaseLanguageService, ITranslationService, IBatchTr
     {
         await InitializeAsync(sourceLanguage, targetLanguage);
 
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                return await TranslateBatchWithMistralApi(subtitleBatch, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for batch translation", ex.StatusCode);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "Mistral", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during batch translation attempt {Attempt}", attempt);
-                throw new TranslationException("Unexpected error occurred during batch translation.", ex);
-            }
-        }
-
-        throw new TranslationException("Batch translation failed after maximum retry attempts.");
+        return await ExecuteWithRetryAsync(
+            "Mistral",
+            "Unexpected error occurred during batch translation.",
+            token => TranslateBatchWithMistralApi(subtitleBatch, token),
+            cancellationToken);
     }
 
     private async Task<Dictionary<int, string>> TranslateBatchWithMistralApi(
@@ -439,7 +334,7 @@ public class MistralService : BaseLanguageService, ITranslationService, IBatchTr
 
         try
         {
-            var client = new HttpClient();
+            using var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             client.DefaultRequestHeaders.Add("Accept", "application/json");
 

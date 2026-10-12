@@ -3,7 +3,7 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Models.TranslationRequests;
 
@@ -24,6 +24,20 @@ public interface ITranslationRequestService
     /// <param name="translateAbleSubtitle">Details of the subtitle to be translated, including source and target languages</param>
     /// <returns>The ID of the created translation request</returns>
     Task<int> CreateRequest(TranslateAbleSubtitle translateAbleSubtitle);
+
+    /// <summary>
+    /// Creates a translation request for a manually imported subtitle file and
+    /// enqueues it for processing. Unbound imports (null mediaId) get the neutral
+    /// Movie bucket; bound imports carry the resolved Movie/Episode id.
+    /// </summary>
+    Task<int> CreateImportRequest(
+        string subtitlePath,
+        string title,
+        string sourceLanguage,
+        string targetLanguage,
+        int? mediaId,
+        MediaType mediaType,
+        string? contentHash = null);
 
     /// <summary>
     /// Creates translation requests for multiple media items, handling subtitle discovery
@@ -60,9 +74,9 @@ public interface ITranslationRequestService
     /// <param name="pageNumber">Page number for pagination (1-based)</param>
     /// <param name="pageSize">Number of items per page</param>
     /// <returns>
-    /// A PagedResult containing the requested translation requests and pagination information
+    /// A PagedResult containing list-row summaries of the requested translation requests and pagination information
     /// </returns>
-    Task<PagedResult<TranslationRequest>> GetTranslationRequests(
+    Task<PagedResult<TranslationRequestSummary>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending,
@@ -185,7 +199,7 @@ public interface ITranslationRequestService
     /// <param name="translateAbleContent">The translation to translate</param>
     /// <param name="parentCancellationToken">Token to cancel the translation operation</param>
     /// <returns>The translated lines</returns>
-    Task<BatchTranslatedLine[]> TranslateContentAsync(
+    Task<BatchSubtitleLine[]> TranslateContentAsync(
         TranslateAbleSubtitleContent translateAbleContent,
         CancellationToken parentCancellationToken);
 }

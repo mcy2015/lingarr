@@ -17,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import { ITabOption } from '@/ts'
+import { ITabOption } from '@/types'
 
 defineProps<{
     modelValue: string

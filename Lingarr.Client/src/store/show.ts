@@ -1,6 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import services from '@/services'
-import { IFilter, IUseShowStore, IPagedResult, IShow, MEDIA_TYPE, MediaType } from '@/ts'
+import { IFilter, IUseShowStore, IPagedResult, IShow, MEDIA_TYPE, MediaType } from '@/types'
 
 export const useShowStore = defineStore('show', {
     state: (): IUseShowStore => ({
@@ -16,8 +16,6 @@ export const useShowStore = defineStore('show', {
             isAscending: true,
             pageNumber: 1
         },
-        selectedShows: [],
-        selectAll: false,
         includeSummary: { included: 0, total: 0 }
     }),
     getters: {
@@ -74,28 +72,6 @@ export const useShowStore = defineStore('show', {
         },
         async updateThreshold(type: MediaType, id: number, hours: string) {
             await services.media.threshold(type, id, hours)
-        },
-        clearSelection() {
-            this.selectedShows = []
-            this.selectAll = false
-        },
-        toggleSelectAll() {
-            if (this.selectAll) {
-                this.selectedShows = []
-                this.selectAll = false
-            } else {
-                this.selectedShows = [...this.shows.items]
-                this.selectAll = true
-            }
-        },
-        toggleSelect(show: IShow) {
-            const index = this.selectedShows.findIndex((s) => s.id === show.id)
-            if (index === -1) {
-                this.selectedShows.push(show)
-            } else {
-                this.selectedShows.splice(index, 1)
-            }
-            this.selectAll = this.selectedShows.length === this.shows.items.length
         }
     }
 })

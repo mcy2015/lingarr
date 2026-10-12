@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { IUseInstanceStore, ITheme, THEMES, IMovie, IShow, IVersion } from '@/ts'
+import { IUseInstanceStore, ITheme, THEMES, IMovie, IShow, IVersion } from '@/types'
 import { useLocalStorage } from '@/composables/useLocalStorage'
 import services from '@/services'
 

@@ -34,6 +34,8 @@ public sealed class PluginRegistry : IPluginRegistry
             }
 
             var isBuiltIn = !loadedSourceFiles.TryGetValue(manifest.Provider, out var sourceFile);
+            // "Built-in" is a precedence rule, not a location test: an external
+            // DLL claiming the same provider overrides the compiled-in manifest.
 
             var entry = new RegisteredPlugin
             {

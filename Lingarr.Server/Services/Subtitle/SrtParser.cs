@@ -14,24 +14,18 @@ public class SrtParser : ISubtitleParser
     /// <inheritdoc />
     public List<SubtitleItem> ParseStream(Stream subtitleStream, Encoding encoding)
     {
-        try
-        {
-            ValidateStream(subtitleStream);
-            using var reader = new StreamReader(subtitleStream, encoding, true);
-            var subtitles = ParseSubtitles(reader).ToList();
-            
-            if (subtitles.Count == 0)
-            {
-                throw new FormatException("No valid subtitles found in the stream");
-            }
+        // Errors propagate to callers (jobs mark the request failed); a
+        // corrupt file must not silently parse as "zero subtitles".
+        ValidateStream(subtitleStream);
+        using var reader = new StreamReader(subtitleStream, encoding, true);
+        var subtitles = ParseSubtitles(reader).ToList();
 
-            return subtitles;
-        }
-        catch (Exception ex)
+        if (subtitles.Count == 0)
         {
-            Console.WriteLine($"Error parsing subtitle file: {ex.Message}");
-            return new List<SubtitleItem>();
+            throw new FormatException("No valid subtitles found in the stream");
         }
+
+        return subtitles;
     }
 
     /// <summary>

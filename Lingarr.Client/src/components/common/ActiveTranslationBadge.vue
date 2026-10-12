@@ -2,22 +2,25 @@
     <div v-if="activeTranslations.length > 0" class="flex items-center gap-1">
         <BadgeComponent
             v-if="inProgressCount > 0"
-            classes="border-accent bg-tertiary text-primary-content"
-            :title="`${inProgressCount} translation${inProgressCount === 1 ? '' : 's'} in progress`">
-            <template v-if="inProgressCount > 1">{{ inProgressCount }}&nbsp;</template>running
+            classes="border-line bg-tertiary text-primary-content"
+            :title="t('common.activeTranslations.inProgressTitle', inProgressCount)">
+            <template v-if="inProgressCount > 1">{{ inProgressCount }}&nbsp;</template>
+            {{ t('common.activeTranslations.running') }}
         </BadgeComponent>
         <BadgeComponent
             v-if="pendingCount > 0"
-            classes="border-accent bg-secondary text-primary-content"
-            :title="`${pendingCount} translation${pendingCount === 1 ? '' : 's'} pending`">
-            <template v-if="pendingCount > 1">{{ pendingCount }}&nbsp;</template>pending
+            classes="border-line bg-secondary text-primary-content"
+            :title="t('common.activeTranslations.pendingTitle', pendingCount)">
+            <template v-if="pendingCount > 1">{{ pendingCount }}&nbsp;</template>
+            {{ t('common.activeTranslations.pending') }}
         </BadgeComponent>
     </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ComputedRef } from 'vue'
-import { IActiveTranslation, IShow, MEDIA_TYPE, MediaType, TRANSLATION_STATUS } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import { IActiveTranslation, IShow, MEDIA_TYPE, MediaType, TRANSLATION_STATUS } from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
 
@@ -28,12 +31,15 @@ const props = defineProps<{
 }>()
 
 const translationRequestStore = useTranslationRequestStore()
+const { t } = useI18n()
 
 const activeTranslations: ComputedRef<IActiveTranslation[]> = computed(() => {
     if (props.show) {
         const show = props.show
         const seasonIds = new Set(show.seasons.map((season) => season.id))
-        const episodeIds = new Set(show.seasons.flatMap((season) => season.episodes.map((episode) => episode.id)))
+        const episodeIds = new Set(
+            show.seasons.flatMap((season) => season.episodes.map((episode) => episode.id))
+        )
         return translationRequestStore.activeTranslations.filter((activeTranslation) => {
             if (activeTranslation.mediaId === null) {
                 return false
@@ -52,22 +58,26 @@ const activeTranslations: ComputedRef<IActiveTranslation[]> = computed(() => {
     }
     if (props.mediaId !== undefined && props.mediaType !== undefined) {
         return translationRequestStore.activeTranslations.filter((activeTranslation) => {
-             return activeTranslation.mediaType === props.mediaType && activeTranslation.mediaId === props.mediaId
-            }
-        )
+            return (
+                activeTranslation.mediaType === props.mediaType &&
+                activeTranslation.mediaId === props.mediaId
+            )
+        })
     }
     return []
 })
 
 const inProgressCount: ComputedRef<number> = computed(
-    () => activeTranslations.value.filter((activeTranslation) => {
-        return activeTranslation.status === TRANSLATION_STATUS.INPROGRESS
-    }).length
+    () =>
+        activeTranslations.value.filter((activeTranslation) => {
+            return activeTranslation.status === TRANSLATION_STATUS.INPROGRESS
+        }).length
 )
 
 const pendingCount: ComputedRef<number> = computed(
-    () => activeTranslations.value.filter((activeTranslation) => {
-        return activeTranslation.status === TRANSLATION_STATUS.PENDING
-    }).length
+    () =>
+        activeTranslations.value.filter((activeTranslation) => {
+            return activeTranslation.status === TRANSLATION_STATUS.PENDING
+        }).length
 )
 </script>

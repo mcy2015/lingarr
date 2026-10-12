@@ -48,7 +48,7 @@ public class AuthService : IAuthService
                 iterationCount: 100000,
                 numBytesRequested: 256 / 8));
 
-            return hashToVerify == storedHash;
+            return FixedTimeEquals(hashToVerify, storedHash);
         }
         catch
         {
@@ -89,7 +89,20 @@ public class AuthService : IAuthService
             return false;
         }
 
-        return apiKey == storedApiKey;
+        return FixedTimeEquals(apiKey, storedApiKey);
+    }
+
+    /// <summary>
+    /// Compares two strings in constant time to prevent timing attacks
+    /// (e.g. against the shared API key). The length check is unavoidable
+    /// but does not reveal content.
+    /// </summary>
+    private static bool FixedTimeEquals(string a, string b)
+    {
+        var bytesA = System.Text.Encoding.UTF8.GetBytes(a);
+        var bytesB = System.Text.Encoding.UTF8.GetBytes(b);
+        return bytesA.Length == bytesB.Length
+               && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(bytesA, bytesB);
     }
 
     public string HashPassword(string password)
@@ -114,5 +127,49 @@ public class AuthService : IAuthService
     public async Task<bool> HasAnyUsers()
     {
         return await _context.Users.AnyAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<User>> GetAllUsers()
+    {
+        return await _context.Users.ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<User?> GetUserById(int id)
+    {
+        return await _context.Users.FindAsync(id);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsUsernameTaken(string username, int? excludeUserId = null)
+    {
+        return await _context.Users.AnyAsync(u => u.Username == username && (excludeUserId == null || u.Id != excludeUserId));
+    }
+
+    /// <inheritdoc />
+    public async Task SaveUserAsync(User user)
+    {
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteUserAsync(User user)
+    {
+        var userCount = await _context.Users.CountAsync();
+        if (userCount <= 1)
+        {
+            throw new InvalidOperationException("Cannot delete the last user");
+        }
+
+        _context.Users.Remove(user);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task RecordLoginAsync(User user)
+    {
+        user.LastLoginAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
     }
 }

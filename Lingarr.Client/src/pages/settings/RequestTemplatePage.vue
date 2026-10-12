@@ -6,7 +6,7 @@
                     variant="ghost"
                     size="xs"
                     @click="router.push({ name: 'services-settings' })">
-                    <ArrowLeft class="ml-1 h-3.5 w-3.5" />
+                    <Icon name="arrowLeft" class="ml-1 h-3.5 w-3.5" />
                 </ButtonComponent>
             </div>
             <TabComponent
@@ -31,12 +31,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { IPluginSummary, SETTINGS } from '@/ts'
+import { IPluginSummary, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import services from '@/services'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import TabComponent from '@/components/common/TabComponent.vue'
-import ArrowLeft from '@/components/icons/ArrowLeft.vue'
+import Icon from '@/components/icons/Icon.vue'
 import RequestTemplate from '@/components/features/settings/template/RequestTemplate.vue'
 import TranslationPrompt from '@/components/features/settings/TranslationPrompt.vue'
 import ProofreadPrompt from '@/components/features/settings/ProofreadPrompt.vue'

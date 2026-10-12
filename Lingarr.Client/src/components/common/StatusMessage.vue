@@ -2,9 +2,9 @@
     <div v-if="message" class="rounded-md border p-4" :class="[borderClass, bgClass]">
         <div class="flex items-start">
             <div v-if="showIcon" class="shrink-0">
-                <CheckMarkCircleIcon v-if="type === 'success'" class="h-5 w-5" :class="iconClass" />
-                <TimesCircleIcon v-else-if="type === 'error'" class="h-5 w-5" :class="iconClass" />
-                <ExclamationIcon v-else class="h-5 w-5" :class="iconClass" />
+                <Icon v-if="type === 'success'" name="checkMarkCircle" class="h-5 w-5" :class="iconClass" />
+                <Icon v-else-if="type === 'error'" name="timesCircle" class="h-5 w-5" :class="iconClass" />
+                <Icon v-else name="exclamation" class="h-5 w-5" :class="iconClass" />
             </div>
             <div :class="{ 'ml-3': showIcon }">
                 <p class="text-sm" :class="textClass">{{ message }}</p>
@@ -15,9 +15,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import CheckMarkCircleIcon from '@/components/icons/CheckMarkCircleIcon.vue'
-import TimesCircleIcon from '@/components/icons/TimesCircleIcon.vue'
-import ExclamationIcon from '@/components/icons/ExclamationIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 type MessageType = 'success' | 'error' | 'warning' | 'info'
 
@@ -36,60 +34,60 @@ const props = withDefaults(
 const borderClass = computed(() => {
     switch (props.type) {
         case 'success':
-            return 'border-green-700/50'
+            return 'border-success/40'
         case 'error':
-            return 'border-red-700/50'
+            return 'border-danger/40'
         case 'warning':
-            return 'border-yellow-700/50'
+            return 'border-warning/40'
         case 'info':
-            return 'border-blue-700/50'
+            return 'border-info/40'
         default:
-            return 'border-gray-700/50'
+            return 'border-line'
     }
 })
 
 const bgClass = computed(() => {
     switch (props.type) {
         case 'success':
-            return 'bg-green-900/20'
+            return 'bg-success/15'
         case 'error':
-            return 'bg-red-900/20'
+            return 'bg-danger/15'
         case 'warning':
-            return 'bg-yellow-900/20'
+            return 'bg-warning/15'
         case 'info':
-            return 'bg-blue-900/20'
+            return 'bg-info/15'
         default:
-            return 'bg-gray-900/20'
+            return 'bg-tertiary/50'
     }
 })
 
 const textClass = computed(() => {
     switch (props.type) {
         case 'success':
-            return 'text-green-400'
+            return 'text-success'
         case 'error':
-            return 'text-red-400'
+            return 'text-danger'
         case 'warning':
-            return 'text-yellow-400'
+            return 'text-warning'
         case 'info':
-            return 'text-blue-400'
+            return 'text-info'
         default:
-            return 'text-gray-400'
+            return 'text-secondary-content/60'
     }
 })
 
 const iconClass = computed(() => {
     switch (props.type) {
         case 'success':
-            return 'text-green-400'
+            return 'text-success'
         case 'error':
-            return 'text-red-400'
+            return 'text-danger'
         case 'warning':
-            return 'text-yellow-400'
+            return 'text-warning'
         case 'info':
-            return 'text-blue-400'
+            return 'text-info'
         default:
-            return 'text-gray-400'
+            return 'text-secondary-content/60'
     }
 })
 </script>

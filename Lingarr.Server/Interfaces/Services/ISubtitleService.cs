@@ -33,7 +33,7 @@ public interface ISubtitleService
     /// <param name="filePath">The path where the subtitle file will be written.</param>
     /// <param name="subtitles">The list of SubtitleItem objects to be written to the file.</param>
     /// <param name="stripSubtitleFormatting">Boolean used for indicating that styles need to be stripped from the subtitle</param>
-    Task WriteSubtitles(string filePath, List<SubtitleItem> subtitles, bool stripSubtitleFormatting);
+    Task WriteSubtitles(string filePath, List<SubtitleItem> subtitles, bool stripSubtitleFormatting, bool bilingual = false);
 
     /// <summary>
     /// Creates a new file path for a subtitle file with a specified target language.

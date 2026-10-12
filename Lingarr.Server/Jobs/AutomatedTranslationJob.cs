@@ -6,7 +6,6 @@ using Lingarr.Core.Interfaces;
 using Lingarr.Server.Filters;
 using Lingarr.Server.Interfaces.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.OpenApi.Extensions;
 
 namespace Lingarr.Server.Jobs;
@@ -18,28 +17,28 @@ public class AutomatedTranslationJob
     private readonly IMediaSubtitleProcessor _mediaSubtitleProcessor;
     private readonly ISettingService _settingService;
     private readonly IScheduleService _scheduleService;
-    private readonly IMemoryCache _memoryCache;
     private int _maxTranslationsPerRun = 10;
     private TimeSpan _defaultMovieAgeThreshold;
     private TimeSpan _defaultShowAgeThreshold;
 
-    private const string MovieProcessingIndexKey = "Automation:MovieProcessingIndex";
-    private const string ShowProcessingIndexKey = "Automation:ShowProcessingIndex";
+    // Rotation cursors persisted as settings rows (Provider == null, so the
+    // plugin-orphan cleanup leaves them alone). Previously IMemoryCache:
+    // process-local state that silently reset the cycle on every restart.
+    private const string MovieProcessingIndexKey = "automation_movie_processing_index";
+    private const string ShowProcessingIndexKey = "automation_show_processing_index";
 
     public AutomatedTranslationJob(
         LingarrDbContext dbContext,
         ILogger<AutomatedTranslationJob> logger,
         IMediaSubtitleProcessor mediaSubtitleProcessor,
         IScheduleService scheduleService,
-        ISettingService settingService,
-        IMemoryCache memoryCache)
+        ISettingService settingService)
     {
         _dbContext = dbContext;
         _logger = logger;
         _settingService = settingService;
         _scheduleService = scheduleService;
         _mediaSubtitleProcessor = mediaSubtitleProcessor;
-        _memoryCache = memoryCache;
     }
 
     [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
@@ -159,7 +158,7 @@ public class AutomatedTranslationJob
         
         // Instead of a random selection based on updatedAt, we will use a cycle so that all shows are processed.
         // Hopefully, this will prevent some shows from not being processed at all.
-        var currentIndex = GetProcessingIndex(MovieProcessingIndexKey);
+        var currentIndex = await GetProcessingIndex(MovieProcessingIndexKey);
         if (currentIndex >= movies.Count)
         {
             currentIndex = 0;
@@ -216,7 +215,7 @@ public class AutomatedTranslationJob
         }
 
         var newIndex = index % movies.Count;
-        SetProcessingIndex(MovieProcessingIndexKey, newIndex);
+        await SetProcessingIndex(MovieProcessingIndexKey, newIndex);
 
         return translationsInitiated;
     }
@@ -247,7 +246,7 @@ public class AutomatedTranslationJob
 
         // Instead of a random selection based on updatedAt, we will use a cycle so that all shows are processed.
         // Hopefully, this will prevent some shows from not being processed at all.
-        var currentIndex = GetProcessingIndex(ShowProcessingIndexKey);
+        var currentIndex = await GetProcessingIndex(ShowProcessingIndexKey);
         if (currentIndex >= episodes.Count)
         {
             currentIndex = 0;
@@ -308,27 +307,19 @@ public class AutomatedTranslationJob
         }
 
         var newIndex = episodeIndex % episodes.Count;
-        SetProcessingIndex(ShowProcessingIndexKey, newIndex);
+        await SetProcessingIndex(ShowProcessingIndexKey, newIndex);
 
         return translationsInitiated;
     }
 
-    private int GetProcessingIndex(string key)
+    private async Task<int> GetProcessingIndex(string key)
     {
-        if (!_memoryCache.TryGetValue(key, out int currentIndex))
-        {
-            currentIndex = 0;
-        }
-        return currentIndex;
+        var raw = await _settingService.GetSetting(key);
+        return int.TryParse(raw, out var index) ? index : 0;
     }
-    
-    private void SetProcessingIndex(string key, int value)
+
+    private Task SetProcessingIndex(string key, int value)
     {
-        var cacheOptions = new MemoryCacheEntryOptions
-        {
-            Priority = CacheItemPriority.NeverRemove
-        };
-        
-        _memoryCache.Set(key, value, cacheOptions);
+        return _settingService.SetSetting(key, value.ToString());
     }
 }

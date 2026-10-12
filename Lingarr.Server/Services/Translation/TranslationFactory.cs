@@ -2,6 +2,7 @@
 using Lingarr.Contracts.Translation;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
+using Microsoft.Extensions.Hosting;
 
 namespace Lingarr.Server.Services.Translation;
 
@@ -9,12 +10,17 @@ public class TranslationFactory : ITranslationServiceFactory
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<TranslationFactory> _logger;
+    private readonly string _staticsPath;
 
     public TranslationFactory(IServiceProvider serviceProvider,
-        ILogger<TranslationFactory> logger)
+        ILogger<TranslationFactory> logger,
+        IHostEnvironment environment)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        // Resolve relative to the content root so non-container runs work
+        // (in Docker the content root is /app, so the path is unchanged).
+        _staticsPath = Path.Combine(environment.ContentRootPath, "Statics");
     }
 
     /// <inheritdoc />
@@ -32,7 +38,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "google" => new GTranslatorService<GoogleTranslator>(
                 _serviceProvider,
                 _serviceProvider.GetRequiredService<IHttpClientFactory>(),
-                "/app/Statics/google_languages.json",
+                $"{_staticsPath}/google_languages.json",
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<ILogger<GoogleTranslator>>(),
                 languageCodeService
@@ -41,7 +47,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "bing" => new GTranslatorService<BingTranslator>(
                 _serviceProvider,
                 _serviceProvider.GetRequiredService<IHttpClientFactory>(),
-                "/app/Statics/bing_languages.json",
+                $"{_staticsPath}/bing_languages.json",
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<ILogger<BingTranslator>>(),
                 languageCodeService
@@ -50,7 +56,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "microsoft" => new GTranslatorService<MicrosoftTranslator>(
                 _serviceProvider,
                 _serviceProvider.GetRequiredService<IHttpClientFactory>(),
-                "/app/Statics/microsoft_languages.json",
+                $"{_staticsPath}/microsoft_languages.json",
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<ILogger<MicrosoftTranslator>>(),
                 languageCodeService
@@ -59,7 +65,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "yandex" => new GTranslatorService<YandexTranslator>(
                 _serviceProvider,
                 _serviceProvider.GetRequiredService<IHttpClientFactory>(),
-                "/app/Statics/yandex_languages.json",
+                $"{_staticsPath}/yandex_languages.json",
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<ILogger<YandexTranslator>>(),
                 languageCodeService
@@ -75,7 +81,9 @@ public class TranslationFactory : ITranslationServiceFactory
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<ILogger<OpenAiService>>(),
                 languageCodeService,
-                _serviceProvider.GetRequiredService<IRequestTemplateService>()
+                _serviceProvider.GetRequiredService<IRequestTemplateService>(),
+                _serviceProvider.GetRequiredService<HttpClient>(),
+                _serviceProvider.GetRequiredService<IHttpClientFactory>()
             ),
 
             "anthropic" => new AnthropicService(
@@ -105,6 +113,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "mistral" => new MistralService(
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<HttpClient>(),
+                _serviceProvider.GetRequiredService<IHttpClientFactory>(),
                 _serviceProvider.GetRequiredService<ILogger<MistralService>>(),
                 languageCodeService,
                 _serviceProvider.GetRequiredService<IRequestTemplateService>()
@@ -113,6 +122,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "xai" => new XAiService(
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<HttpClient>(),
+                _serviceProvider.GetRequiredService<IHttpClientFactory>(),
                 _serviceProvider.GetRequiredService<ILogger<XAiService>>(),
                 languageCodeService,
                 _serviceProvider.GetRequiredService<IRequestTemplateService>()

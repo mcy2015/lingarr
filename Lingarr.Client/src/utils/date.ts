@@ -1,5 +1,10 @@
+import i18n from '@/i18n'
+
 const timeZone =
     document.querySelector('meta[name="lingarr-timezone"]')?.getAttribute('content') || undefined
+
+/** Resolves the active UI locale so dates follow the selected language. */
+const uiLocale = () => i18n.global.locale.value
 
 /**
  * Formats a date string into a more readable format.
@@ -14,7 +19,7 @@ export const formatDate = (dateString: string | Date) => {
         timeZone
     }
 
-    return new Date(dateString).toLocaleDateString(undefined, options)
+    return new Date(dateString).toLocaleDateString(uiLocale(), options)
 }
 
 /**
@@ -32,7 +37,7 @@ export const formatDateTime = (dateString: string | Date) => {
         timeZone
     }
 
-    return new Date(dateString).toLocaleString(undefined, options)
+    return new Date(dateString).toLocaleString(uiLocale(), options)
 }
 
 /**
@@ -49,7 +54,7 @@ export const formatTime = (dateString: string | Date) => {
         timeZone
     }
 
-    return new Date(dateString).toLocaleTimeString(undefined, options)
+    return new Date(dateString).toLocaleTimeString(uiLocale(), options)
 }
 
 /**
@@ -64,5 +69,5 @@ export const formatDayLabel = (dateString: string) => {
         day: 'numeric'
     }
 
-    return new Date(`${dateString}T00:00:00`).toLocaleDateString(undefined, options)
+    return new Date(`${dateString}T00:00:00`).toLocaleDateString(uiLocale(), options)
 }

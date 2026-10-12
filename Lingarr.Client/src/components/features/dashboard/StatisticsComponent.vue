@@ -1,34 +1,34 @@
 ﻿<template>
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CardComponent title="Media Overview" class="lg:col-span-2">
+        <CardComponent :title="t('dashboard.mediaOverview')" class="lg:col-span-2">
             <template #content>
                 <template v-if="loading">
                     <div class="flex h-64 items-center justify-center">
-                        <LoaderCircleIcon class="h-8 w-8 animate-spin" />
+                        <Icon name="loaderCircle" class="h-8 w-8 animate-spin" />
                     </div>
                 </template>
 
                 <template v-else-if="error">
-                    <div class="flex h-64 items-center justify-center text-red-500">
+                    <div class="flex h-64 items-center justify-center text-danger">
                         {{ error }}
                     </div>
                 </template>
 
                 <template v-else-if="!statistics">
-                    <div class="flex h-64 items-center justify-center text-primary-content">
-                        No statistics available
+                    <div class="text-primary-content flex h-64 items-center justify-center">
+                        {{ t('dashboard.noStatistics') }}
                     </div>
                 </template>
 
                 <template v-else>
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <StatCard
-                            title="Movies"
+                            :title="t('dashboard.statCard.movies')"
                             :total="statistics.totalMovies"
                             :translated="getTranslationCount(MEDIA_TYPE.MOVIE)" />
 
                         <StatCard
-                            title="TV Shows"
+                            :title="t('dashboard.statCard.tvShows')"
                             :total="statistics.totalEpisodes"
                             :translated="getTranslationCount(MEDIA_TYPE.EPISODE)" />
                     </div>
@@ -36,36 +36,36 @@
             </template>
         </CardComponent>
 
-        <CardComponent title="Translation Activity">
+        <CardComponent :title="t('dashboard.translationActivity')">
             <template #content>
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                     <MetricCard
-                        title="Lines Translated"
+                        :title="t('dashboard.metricCard.linesTranslated')"
                         :value="statistics?.totalLinesTranslated ?? 0" />
 
                     <MetricCard
-                        title="Files Processed"
+                        :title="t('dashboard.metricCard.filesProcessed')"
                         :value="statistics?.totalFilesTranslated ?? 0" />
 
                     <MetricCard
-                        title="Characters Translated"
+                        :title="t('dashboard.metricCard.charactersTranslated')"
                         :value="statistics?.totalCharactersTranslated ?? 0"
                         class="xl:col-span-2" />
                 </div>
 
                 <div v-if="translationServices.length" class="mt-4">
-                    <h3 class="mb-4 text-sm font-medium text-primary-content">
-                        Translation Services
+                    <h3 class="text-primary-content mb-4 text-sm font-medium">
+                        {{ t('dashboard.translationServices') }}
                     </h3>
                     <div class="grid grid-cols-2 gap-2 xl:grid-cols-3">
                         <div
                             v-for="[service, count] in translationServices"
                             :key="service"
-                            class="rounded-sm bg-primary p-2">
+                            class="bg-primary rounded-sm p-2">
                             <h4 class="text-primary-content/70 text-xs font-medium">
                                 {{ formatServiceName(service) }}
                             </h4>
-                            <p class="text-lg font-bold text-primary-content">
+                            <p class="text-primary-content text-lg font-bold">
                                 {{ formatNumber(count) }}
                             </p>
                         </div>
@@ -74,31 +74,31 @@
             </template>
         </CardComponent>
 
-        <CardComponent title="Language Statistics">
+        <CardComponent :title="t('dashboard.languageStatistics')">
             <template #content>
                 <div class="h-80">
                     <LanguageChart v-if="dailyStats?.length" :daily-stats="dailyStats" />
                     <div v-else-if="loading" class="flex h-full w-full items-center justify-center">
-                        <LoaderCircleIcon class="h-8 w-8 animate-spin" />
+                        <Icon name="loaderCircle" class="h-8 w-8 animate-spin" />
                     </div>
                     <div v-else class="flex h-full w-full items-center justify-center text-xs">
-                        No statistics available.
+                        {{ t('dashboard.noStatistics') }}
                     </div>
                 </div>
 
                 <div v-if="subtitleLanguages.length" class="mt-4">
-                    <h3 class="mb-2 text-sm font-medium text-primary-content">
-                        Available Subtitles
+                    <h3 class="text-primary-content mb-2 text-sm font-medium">
+                        {{ t('dashboard.availableSubtitles') }}
                     </h3>
                     <div class="grid grid-cols-3 gap-2 md:grid-cols-4 xl:grid-cols-6">
                         <div
                             v-for="[language, count] in subtitleLanguages"
                             :key="language"
-                            class="rounded-sm bg-primary p-2">
+                            class="bg-primary rounded-sm p-2">
                             <h4 class="text-primary-content/70 text-xs font-medium">
                                 {{ language.toUpperCase() }}
                             </h4>
-                            <p class="text-lg font-bold text-primary-content">
+                            <p class="text-primary-content text-lg font-bold">
                                 {{ formatNumber(count) }}
                             </p>
                         </div>
@@ -112,7 +112,7 @@
                         :disabled="loading || resetting"
                         :loading="resetting"
                         @click="handleResetStatistics">
-                        Reset statistics
+                        {{ t('dashboard.resetStatistics') }}
                     </ButtonComponent>
                 </div>
             </template>
@@ -122,14 +122,17 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { DailyStatistic, MEDIA_TYPE, Statistics } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import { DailyStatistic, MEDIA_TYPE, Statistics } from '@/types'
 import services from '@/services'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import LanguageChart from './LanguageChart.vue'
 import StatCard from './StatCard.vue'
 import MetricCard from './MetricCard.vue'
+
+const { t } = useI18n()
 
 const loading = ref(true)
 const resetting = ref(false)
@@ -166,7 +169,7 @@ const fetchStatistics = async () => {
         statistics.value = await services.statistics.getStatistics()
     } catch (err: unknown) {
         if (err instanceof Error) {
-            error.value = err?.message || 'Failed to fetch statistics'
+            error.value = err?.message || t('dashboard.errors.fetchFailed')
         }
         console.error('Error fetching statistics:', err)
     } finally {
@@ -186,7 +189,7 @@ const fetchDailyStats = async () => {
 }
 
 const handleResetStatistics = async () => {
-    if (!confirm('Are you sure you want to reset all statistics? This action cannot be undone.')) {
+    if (!confirm(t('dashboard.resetConfirm'))) {
         return
     }
 
@@ -198,7 +201,7 @@ const handleResetStatistics = async () => {
         await fetchStatistics()
     } catch (err: unknown) {
         if (err instanceof Error) {
-            error.value = err?.message || 'Failed to reset statistics'
+            error.value = err?.message || t('dashboard.errors.resetFailed')
         }
         console.error('Error resetting statistics:', err)
     } finally {

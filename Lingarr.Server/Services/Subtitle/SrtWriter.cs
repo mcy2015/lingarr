@@ -14,8 +14,9 @@ public class SrtWriter : ISubtitleWriter
     /// </summary>
     /// <param name="subtitleItem">The SubtitleItem to convert</param>
     /// <param name="subtitleEntryNumber">The subtitle number for the entry (increments sequentially from 1)</param>
+    /// <param name="bilingual">Whether to append the original line below the translation</param>
     /// <returns>A list of strings to write as an SRT subtitle entry</returns>
-    private IEnumerable<string> SubtitleItemToSubtitleEntry(SubtitleItem subtitleItem, int subtitleEntryNumber)
+    private IEnumerable<string> SubtitleItemToSubtitleEntry(SubtitleItem subtitleItem, int subtitleEntryNumber, bool bilingual)
     {
         // take the start and end timestamps and format it as a timecode line
         string FormatTimeCodeLine()
@@ -30,14 +31,36 @@ public class SrtWriter : ISubtitleWriter
         lines.Add(FormatTimeCodeLine());
         lines.AddRange(subtitleItem.TranslatedLines);
 
+        if (bilingual && subtitleItem.TranslatedLines.Any(l => !string.IsNullOrEmpty(l)))
+        {
+            var original = GetBilingualOriginalLine(subtitleItem);
+            if (!string.IsNullOrWhiteSpace(original))
+            {
+                lines.Add(original);
+            }
+        }
+
         return lines;
+    }
+
+    /// <summary>
+    /// Builds the original-text line appended below the translation for bilingual output.
+    /// The original is used in plain-text form and merged into a single line.
+    /// </summary>
+    private static string GetBilingualOriginalLine(SubtitleItem subtitleItem)
+    {
+        var source = subtitleItem.PlaintextLines.Count > 0
+            ? subtitleItem.PlaintextLines
+            : subtitleItem.Lines;
+        return string.Join(" ", source);
     }
     
     /// <inheritdoc />
     public async Task WriteStreamAsync(
         Stream stream, 
         IEnumerable<SubtitleItem> subtitleItems, 
-        bool stripSubtitleFormatting)
+        bool stripSubtitleFormatting,
+        bool bilingual = false)
     {
         try
         {
@@ -61,7 +84,7 @@ public class SrtWriter : ISubtitleWriter
                 // Create a subtitle entry
                 IEnumerable<string>
                     lines = SubtitleItemToSubtitleEntry(subtitleItem,
-                        subtitleItem.Position); // add one because subtitle entry numbers start at 1 instead of 0
+                        subtitleItem.Position, bilingual); // add one because subtitle entry numbers start at 1 instead of 0
                 foreach (string line in lines)
                 {
                     await writer.WriteLineAsync(line);
@@ -72,9 +95,9 @@ public class SrtWriter : ISubtitleWriter
 
             await writer.FlushAsync();
         }
-        catch (IOException ex)
+        catch (IOException)
         {
-            Console.Error.WriteLine($"Error writing to stream: {ex.Message}");
+            // Propagate: callers (SubtitleService/jobs) own failure handling and logging.
             throw;
         }
     }

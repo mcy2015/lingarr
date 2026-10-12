@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { IFilter, IMovie, IPagedResult, IUseMovieStore, MediaType } from '@/ts'
+import { IFilter, IMovie, IPagedResult, IUseMovieStore, MediaType } from '@/types'
 import services from '@/services'
 
 export const useMovieStore = defineStore('movie', {
@@ -16,8 +16,6 @@ export const useMovieStore = defineStore('movie', {
             isAscending: true,
             pageNumber: 1
         },
-        selectedMovies: [],
-        selectAll: false,
         includeSummary: { included: 0, total: 0 }
     }),
     getters: {
@@ -61,28 +59,6 @@ export const useMovieStore = defineStore('movie', {
         },
         async updateThreshold(type: MediaType, id: number, hours: string) {
             await services.media.threshold(type, id, hours)
-        },
-        clearSelection() {
-            this.selectedMovies = []
-            this.selectAll = false
-        },
-        toggleSelectAll() {
-            if (this.selectAll) {
-                this.selectedMovies = []
-                this.selectAll = false
-            } else {
-                this.selectedMovies = [...this.movies.items]
-                this.selectAll = true
-            }
-        },
-        toggleSelect(movie: IMovie) {
-            const index = this.selectedMovies.findIndex((m) => m.id === movie.id)
-            if (index === -1) {
-                this.selectedMovies.push(movie)
-            } else {
-                this.selectedMovies.splice(index, 1)
-            }
-            this.selectAll = this.selectedMovies.length === this.movies.items.length
         }
     }
 })

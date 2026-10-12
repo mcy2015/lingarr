@@ -1,5 +1,5 @@
 using Hangfire;
-using Lingarr.Server.Attributes;
+using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Jobs;
 using Lingarr.Server.Models.Webhooks;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class WebhookController : ControllerBase
 {

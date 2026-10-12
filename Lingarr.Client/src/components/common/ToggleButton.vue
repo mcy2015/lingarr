@@ -8,7 +8,7 @@
             role="switch"
             :aria-checked="isActive"
             :class="[
-                'relative inline-flex shrink-0 cursor-pointer items-center border border-accent transition-colors duration-200 ease-in-out',
+                'relative inline-flex shrink-0 cursor-pointer items-center border border-line transition-colors duration-200 ease-in-out',
                 isActive ? 'bg-accent/30' : '',
                 size === 'small'
                     ? 'h-[1.17rem] w-[2.08rem] rounded-sm p-0.5'

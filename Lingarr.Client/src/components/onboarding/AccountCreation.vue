@@ -1,49 +1,54 @@
 <template>
     <div class="space-y-6">
         <div>
-            <h2 class="mb-4 text-xl font-semibold text-white">Create an account</h2>
-            <p class="mb-6 text-sm text-gray-400">
-                Enter your credentials to create the administrator account.
+            <h2 class="text-primary-content mb-4 text-xl font-semibold">
+                {{ t('onboarding.account.title') }}
+            </h2>
+            <p class="text-secondary-content/60 mb-6 text-sm">
+                {{ t('onboarding.account.description') }}
             </p>
         </div>
 
         <InputComponent
             id="username"
             v-model="username"
-            label="Username"
-            placeholder="Enter your username"
+            :label="t('onboarding.account.username')"
+            :placeholder="t('onboarding.account.usernamePlaceholder')"
             :validation-type="INPUT_VALIDATION_TYPE.STRING"
             :min-length="2"
-            error-message="Username must be at least 2 characters long"
+            :error-message="t('onboarding.account.usernameError')"
             @update:validation="(valid: boolean) => updateValidation('username', valid)" />
 
         <InputComponent
             id="password"
             v-model="password"
-            label="Password"
+            :label="t('onboarding.account.password')"
             :validation-type="INPUT_VALIDATION_TYPE.STRING"
             :type="INPUT_TYPE.PASSWORD"
-            placeholder="Enter your password"
-            :min-length="4"
-            error-message="Password must be at least 4 characters long and match"
+            :placeholder="t('onboarding.account.passwordPlaceholder')"
+            :min-length="8"
+            :error-message="t('onboarding.account.passwordError')"
             @update:validation="(valid: boolean) => updateValidation('password', valid)" />
 
         <InputComponent
             id="confirmPassword"
             v-model="confirmPassword"
-            label="Confirm Password"
+            :label="t('onboarding.account.confirmPassword')"
             :validation-type="INPUT_VALIDATION_TYPE.STRING"
             :type="INPUT_TYPE.PASSWORD"
-            placeholder="Confirm your password"
-            :min-length="4"
-            error-message="Password must be at least 4 characters long and match"
+            :placeholder="t('onboarding.account.confirmPasswordPlaceholder')"
+            :min-length="8"
+            :error-message="t('onboarding.account.passwordError')"
             @update:validation="(valid: boolean) => updateValidation('confirmPassword', valid)" />
     </div>
 </template>
 
 <script setup lang="ts">
 import InputComponent from '@/components/common/InputComponent.vue'
-import { INPUT_TYPE, INPUT_VALIDATION_TYPE } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import { INPUT_TYPE, INPUT_VALIDATION_TYPE } from '@/types'
+
+const { t } = useI18n()
 
 const username = defineModel<string>('username', { default: '' })
 const password = defineModel<string>('password', { default: '' })

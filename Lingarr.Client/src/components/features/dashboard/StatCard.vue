@@ -1,30 +1,34 @@
 ﻿<template>
-    <div class="rounded-lg bg-primary p-4 shadow-sm">
+    <div class="rounded-md border border-line bg-secondary p-4">
         <div class="flex justify-between">
             <div>
-                <h3 class="text-primary-content/70 text-sm font-medium">
+                <h3 class="text-secondary-content/70 text-sm font-medium">
                     {{ title }}
                 </h3>
-                <p class="mt-2 text-2xl font-bold text-primary-content">
+                <p class="text-primary-content mt-2 font-mono text-2xl font-bold tabular-nums">
                     {{ formatNumber(total) }}
                 </p>
             </div>
             <div class="text-right">
-                <h3 class="text-primary-content/70 text-sm font-medium">Translated</h3>
-                <p class="mt-2 text-xl font-bold text-accent">
+                <h3 class="text-secondary-content/70 text-sm font-medium">
+                    {{ t('dashboard.statCard.translated') }}
+                </h3>
+                <p class="text-accent mt-2 font-mono text-xl font-bold tabular-nums">
                     {{ formatNumber(translated) }}
                 </p>
             </div>
         </div>
-        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
+        <div class="bg-tertiary mt-3 h-1.5 w-full overflow-hidden rounded-sm">
             <div
-                class="h-full rounded-full bg-accent transition-all duration-500"
+                class="bg-accent h-full rounded-sm transition-all duration-500"
                 :style="{ width: `${calculatePercentage(translated, total)}%` }"></div>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 interface Props {
     title: string
     total: number
@@ -35,6 +39,8 @@ withDefaults(defineProps<Props>(), {
     total: 0,
     translated: 0
 })
+
+const { t } = useI18n()
 
 const formatNumber = (num: number): string => {
     return new Intl.NumberFormat().format(num)

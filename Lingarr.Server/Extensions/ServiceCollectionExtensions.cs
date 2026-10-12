@@ -11,6 +11,7 @@ using Lingarr.Core;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Logging;
+using Lingarr.Server.Authorization;
 using Lingarr.Server.Filters;
 using Lingarr.Server.Interfaces.Providers;
 using Lingarr.Server.Interfaces.Services;
@@ -18,6 +19,8 @@ using Lingarr.Server.Interfaces.Services.Integration;
 using Lingarr.Server.Interfaces.Services.Subtitle;
 using Lingarr.Server.Interfaces.Services.Sync;
 using Lingarr.Server.Interfaces.Services.Translation;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Listener;
 using Lingarr.Server.Providers;
 using Lingarr.Server.Services;
@@ -95,9 +98,9 @@ public static class ServiceCollectionExtensions
     private static void AddLogProviders(ILoggingBuilder logging)
     {
         logging.AddProvider(new CustomLogFormatter(Options.Create(new CustomLogFormatterOptions())));
-        #if !DEBUG
+        // Backs the /api/logs viewer. Bounded ring buffer (1000 entries) — safe to
+        // enable in Debug too, so the dev log page isn't silently empty.
         logging.AddProvider(new InMemoryLoggerProvider());
-        #endif
     }
 
     private static void ConfigureDatabase(this WebApplicationBuilder builder)
@@ -133,9 +136,21 @@ public static class ServiceCollectionExtensions
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return Task.CompletedTask;
             };
-        });
+        })
+        .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, _ => { });
         
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy("LingarrAccess", policy =>
+            {
+                policy.AddAuthenticationSchemes(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    ApiKeyAuthenticationHandler.SchemeName);
+                policy.Requirements.Add(new LingarrAccessRequirement());
+            });
+        });
+        builder.Services.AddSingleton<IAuthorizationHandler, LingarrAccessHandler>();
+        builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, LingarrAuthorizationResponseHandler>();
     }
 
     private static void ConfigureProviders(this WebApplicationBuilder builder)
@@ -147,12 +162,14 @@ public static class ServiceCollectionExtensions
     {
         // Register auth
         builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(
-            Environment.GetEnvironmentVariable("ENCRYPTION_KEYS")?.ToLower() ?? "/app/config/keys"
+            Environment.GetEnvironmentVariable("ENCRYPTION_KEYS")?.ToLower()
+            ?? Path.Combine(builder.Environment.ContentRootPath, "config", "keys")
             ));
         builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
         builder.Services.AddScoped<IAuthService, AuthService>();
 
         builder.Services.AddScoped<ISettingService, SettingService>();
+        builder.Services.AddSingleton<ISettingChangeNotifier, SettingChangeNotifier>();
         builder.Services.AddSingleton<SettingChangedListener>();
 
         builder.Services.AddHostedService<ScheduleInitializationService>();
@@ -165,6 +182,15 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IRadarrService, RadarrService>();
         builder.Services.AddScoped<ISonarrService, SonarrService>();
         builder.Services.AddScoped<ISubtitleService, SubtitleService>();
+        builder.Services.AddScoped<ISubtitleImportService, SubtitleImportService>();
+        builder.Services.AddSingleton<ISubtitleEncodingService, SubtitleEncodingService>();
+        builder.Services.AddScoped<ISubtitleConversionService, SubtitleConversionService>();
+        builder.Services.AddSingleton<IAsyncTranslationRegistry, AsyncTranslationRegistry>();
+        builder.Services.AddSingleton<IJobQueue, JobQueue>();
+        builder.Services.AddScoped<ITranslationRequestQueryService, TranslationRequestQueryService>();
+        builder.Services.AddScoped<ITranslationRequestQueueService, TranslationRequestQueueService>();
+        builder.Services.AddScoped<IProofreadRequestService, ProofreadRequestService>();
+        builder.Services.AddScoped<IContentTranslationService, ContentTranslationService>();
         builder.Services.AddScoped<ITranslationRequestService, TranslationRequestService>();
         builder.Services.AddScoped<ITranslationRequestEventService, TranslationRequestEventService>();
         builder.Services.AddScoped<IMediaSubtitleProcessor, MediaSubtitleProcessor>();
@@ -172,12 +198,13 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IMappingService, MappingService>();
 
         // Register subtitle services
-        builder.Services.AddScoped<ISubtitleParser, SrtParser>();
-        builder.Services.AddScoped<ISubtitleWriter, SrtWriter>();
-        builder.Services.AddScoped<ISubtitleWriter, SsaWriter>();
+        // Note: SrtParser/SsaParser/SrtWriter/SsaWriter are instantiated directly
+        // by SubtitleService per file extension — no DI consumers exist, so no
+        // (conflicting) registrations are needed.
         
         // Register translate services
         builder.Services.AddScoped<ITranslationServiceFactory, TranslationFactory>();
+        builder.Services.AddScoped<Interfaces.Services.Translation.ITranslationPipeline, Lingarr.Server.Services.Translation.TranslationPipeline>();
         builder.Services.AddSingleton<LanguageCodeService>();
         builder.Services.AddSingleton<IRequestTemplateService, RequestTemplateService>();
 
@@ -255,17 +282,18 @@ public static class ServiceCollectionExtensions
                 .UseRecommendedSerializerSettings();
 
             var dbConnection = DatabaseConfiguration.GetDbConnection();
+            var connectionString = DatabaseConfiguration.GetConnectionString(dbConnection);
             switch (dbConnection)
             {
                 case "mysql":
-                    ConfigureMySqlStorage(configuration, tablePrefix);
+                    ConfigureMySqlStorage(configuration, connectionString, tablePrefix);
                     break;
                 case "postgres":
                 case "postgresql":
-                    ConfigurePostgresStorage(configuration, tablePrefix);
+                    ConfigurePostgresStorage(configuration, connectionString);
                     break;
                 case "sqlite":
-                    ConfigureSqLiteStorage(configuration);
+                    ConfigureSqLiteStorage(configuration, builder.Environment.ContentRootPath);
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -277,24 +305,15 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Configures Hangfire to use MySQL storage.
+    /// Configures Hangfire to use MySQL storage. Connection string comes from
+    /// <see cref="DatabaseConfiguration"/> — the single source of truth (the two
+    /// previously diverged defaults drifted apart).
     /// </summary>
     /// <param name="configuration">Hangfire global configuration</param>
+    /// <param name="connectionString">Connection string from DatabaseConfiguration</param>
     /// <param name="tablePrefix">Prefix for Hangfire tables in MySQL</param>
-    private static void ConfigureMySqlStorage(IGlobalConfiguration configuration, string tablePrefix)
+    private static void ConfigureMySqlStorage(IGlobalConfiguration configuration, string connectionString, string tablePrefix)
     {
-        var variables = new Dictionary<string, string>
-        {
-            { "DB_HOST", Environment.GetEnvironmentVariable("DB_HOST") ?? "Lingarr.Mysql" },
-            { "DB_PORT", Environment.GetEnvironmentVariable("DB_PORT") ?? "3306" },
-            { "DB_DATABASE", Environment.GetEnvironmentVariable("DB_DATABASE") ?? "Lingarr" },
-            { "DB_USERNAME", Environment.GetEnvironmentVariable("DB_USERNAME") ?? "Lingarr" },
-            { "DB_PASSWORD", Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "Secret1234" }
-        };
-
-        var connectionString =
-            $"Server={variables["DB_HOST"]};Port={variables["DB_PORT"]};Database={variables["DB_DATABASE"]};Uid={variables["DB_USERNAME"]};Pwd={variables["DB_PASSWORD"]};Allow User Variables=True";
-
         configuration.UseStorage(new MySqlStorage(connectionString, new MySqlStorageOptions
         {
             TablesPrefix = tablePrefix
@@ -305,21 +324,9 @@ public static class ServiceCollectionExtensions
     /// Configures Hangfire to use PostgreSQL storage.
     /// </summary>
     /// <param name="configuration">Hangfire global configuration</param>
-    /// <param name="tablePrefix">Prefix for Hangfire tables in PostgreSQL</param>
-    private static void ConfigurePostgresStorage(IGlobalConfiguration configuration, string tablePrefix)
+    /// <param name="connectionString">Connection string from DatabaseConfiguration</param>
+    private static void ConfigurePostgresStorage(IGlobalConfiguration configuration, string connectionString)
     {
-        var variables = new Dictionary<string, string>
-        {
-            { "DB_HOST", Environment.GetEnvironmentVariable("DB_HOST") ?? "Lingarr.Postgres" },
-            { "DB_PORT", Environment.GetEnvironmentVariable("DB_PORT") ?? "5432" },
-            { "DB_DATABASE", Environment.GetEnvironmentVariable("DB_DATABASE") ?? "Lingarr" },
-            { "DB_USERNAME", Environment.GetEnvironmentVariable("DB_USERNAME") ?? "Lingarr" },
-            { "DB_PASSWORD", Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "Secret1234" }
-        };
-
-        var connectionString =
-            $"Host={variables["DB_HOST"]};Port={variables["DB_PORT"]};Database={variables["DB_DATABASE"]};Username={variables["DB_USERNAME"]};Password={variables["DB_PASSWORD"]}";
-
         configuration.UsePostgreSqlStorage(
             options => options.UseNpgsqlConnection(connectionString),
             new PostgreSqlStorageOptions
@@ -332,9 +339,10 @@ public static class ServiceCollectionExtensions
     /// Configures Hangfire to use SQLite storage.
     /// </summary>
     /// <param name="configuration">Hangfire global configuration</param>
-    private static void ConfigureSqLiteStorage(IGlobalConfiguration configuration)
+    private static void ConfigureSqLiteStorage(IGlobalConfiguration configuration, string contentRootPath)
     {
-        var sqliteDbPath = Environment.GetEnvironmentVariable("DB_HANGFIRE_SQLITE_PATH") ?? "/app/config/Hangfire.db";
+        var sqliteDbPath = Environment.GetEnvironmentVariable("DB_HANGFIRE_SQLITE_PATH")
+            ?? Path.Combine(contentRootPath, "config", "Hangfire.db");
         var jobTimeoutMinutes = int.TryParse(Environment.GetEnvironmentVariable("JOB_TIMEOUT_MINUTES"), out var timeout) && timeout > 0
             ? timeout
             : 30;

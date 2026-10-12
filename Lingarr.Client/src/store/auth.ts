@@ -1,6 +1,7 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { IUser, IAuthStore } from '@/ts'
+import { IUser, IAuthStore } from '@/types'
 import services from '@/services'
+import i18n from '@/i18n'
 
 export const useAuthStore = defineStore('auth', {
     state: (): IAuthStore => ({
@@ -10,47 +11,11 @@ export const useAuthStore = defineStore('auth', {
         success: '',
         isCreating: false,
         editingUserId: null,
-        deletingUserId: null,
-        editUsername: '',
-        editPassword: '',
-        editConfirmPassword: '',
-        isUsernameValid: false,
-        isPasswordValid: true,
-        isConfirmPasswordValid: true
+        deletingUserId: null
     }),
     getters: {
         getUsers: (state): IUser[] => state.users,
-        isCreatingUser: (state): boolean => state.isCreating,
-        canSave: (state): boolean => {
-            if (!state.isUsernameValid) {
-                return false
-            }
-
-            // new users, password is required
-            if (state.isCreating) {
-                if (
-                    !state.editPassword ||
-                    !state.isPasswordValid ||
-                    !state.isConfirmPasswordValid
-                ) {
-                    return false
-                }
-                if (state.editPassword !== state.editConfirmPassword) {
-                    return false
-                }
-            }
-
-            // existing users, password is optional
-            if (state.editPassword || state.editConfirmPassword) {
-                if (!state.isPasswordValid || !state.isConfirmPasswordValid) {
-                    return false
-                }
-                if (state.editPassword !== state.editConfirmPassword) {
-                    return false
-                }
-            }
-            return true
-        }
+        isCreatingUser: (state): boolean => state.isCreating
     },
     actions: {
         async loadUsers(): Promise<void> {
@@ -59,32 +24,23 @@ export const useAuthStore = defineStore('auth', {
             this.loading = false
         },
 
-        createOrEditUser(user?: IUser): void {
-            this.isCreating = user === undefined
-            this.editingUserId = user?.id ?? null
-            this.editUsername = user?.username ?? ''
-            this.isUsernameValid = user !== undefined
-            this.isPasswordValid = user !== undefined
-            this.isConfirmPasswordValid = user !== undefined
-            this.editPassword = ''
-            this.editConfirmPassword = ''
+        startCreate(): void {
+            this.isCreating = true
+            this.editingUserId = null
+        },
+
+        startEdit(user: IUser): void {
+            this.isCreating = false
+            this.editingUserId = user.id
         },
 
         cancelEdit(): void {
             this.isCreating = false
             this.editingUserId = null
-            this.editUsername = ''
-            this.editPassword = ''
-            this.editConfirmPassword = ''
-            this.isUsernameValid = false
-            this.isPasswordValid = true
-            this.isConfirmPasswordValid = true
             this.error = ''
         },
 
-        async saveUser(): Promise<void> {
-            if (!this.canSave) return
-
+        async saveUser(payload: { username: string; password: string }): Promise<void> {
             this.loading = true
             this.error = ''
             this.success = ''
@@ -92,18 +48,12 @@ export const useAuthStore = defineStore('auth', {
             try {
                 if (this.isCreating) {
                     // Creating a new user
-                    await services.auth.signup({
-                        username: this.editUsername,
-                        password: this.editPassword
-                    })
-                    this.success = 'User created successfully'
+                    await services.auth.signup(payload)
+                    this.success = i18n.global.t('toast.user.created')
                 } else {
                     // Updating a user
-                    await services.auth.updateUser(this.editingUserId!, {
-                        username: this.editUsername,
-                        password: this.editPassword
-                    })
-                    this.success = 'User updated successfully'
+                    await services.auth.updateUser(this.editingUserId!, payload)
+                    this.success = i18n.global.t('toast.user.updated')
                 }
 
                 setTimeout(() => {
@@ -116,7 +66,9 @@ export const useAuthStore = defineStore('auth', {
                 console.error('Error saving user:', err)
                 this.error =
                     err?.data?.message ||
-                    (this.isCreating ? 'Failed to create user' : 'Failed to update user')
+                    (this.isCreating
+                        ? i18n.global.t('toast.user.createFailed')
+                        : i18n.global.t('toast.user.updateFailed'))
             } finally {
                 this.loading = false
             }
@@ -130,7 +82,7 @@ export const useAuthStore = defineStore('auth', {
             try {
                 await services.auth.deleteUser(user.id)
 
-                this.success = 'User deleted successfully'
+                this.success = i18n.global.t('toast.user.deleted')
                 setTimeout(() => {
                     this.success = ''
                 }, 3000)
@@ -138,22 +90,10 @@ export const useAuthStore = defineStore('auth', {
                 await this.loadUsers()
             } catch (err: any) {
                 console.error('Error deleting user:', err)
-                this.error = err?.data?.message || 'Failed to delete user'
+                this.error = err?.data?.message || i18n.global.t('toast.user.deleteFailed')
             } finally {
                 this.deletingUserId = null
             }
-        },
-
-        setUsernameValidation(valid: boolean): void {
-            this.isUsernameValid = valid
-        },
-
-        setPasswordValidation(valid: boolean): void {
-            this.isPasswordValid = valid
-        },
-
-        setConfirmPasswordValidation(valid: boolean): void {
-            this.isConfirmPasswordValid = valid
         }
     }
 })

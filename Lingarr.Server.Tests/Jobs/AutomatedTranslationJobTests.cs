@@ -97,8 +97,7 @@ public class AutomatedTranslationJobTests
             NullLogger<AutomatedTranslationJob>.Instance,
             processor,
             new NoOpScheduleService(),
-            new NoOpSettingService(),
-            new MemoryCache(new MemoryCacheOptions()));
+            new NoOpSettingService());
     }
 
     private static void ConfigureJobForMovies(AutomatedTranslationJob job)

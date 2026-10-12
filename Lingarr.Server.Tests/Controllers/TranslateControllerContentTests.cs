@@ -17,9 +17,9 @@ using Lingarr.Server.Hubs;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
 using Lingarr.Server.Models;
-using Lingarr.Server.Models.Batch.Response;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Services;
+using Lingarr.Server.Services.Translation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.Sqlite;
@@ -159,7 +159,7 @@ public class TranslateControllerContentTests : IDisposable
                 It.IsAny<TranslationRequest>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
-                It.IsAny<BatchTranslatedLine[]>()))
+                It.IsAny<BatchSubtitleLine[]>()))
             .ReturnsAsync(0);
 
         var mediaServiceMock = new Mock<IMediaService>();
@@ -183,18 +183,55 @@ public class TranslateControllerContentTests : IDisposable
             .Setup(hubContext => hubContext.Clients)
             .Returns(hubClientsMock.Object);
 
-        _translationRequestService = new TranslationRequestService(
+        var asyncTranslationRegistry = new AsyncTranslationRegistry();
+        var eventServiceMock = new Mock<ITranslationRequestEventService>();
+        var queryService = new TranslationRequestQueryService(
             _context,
-            new Mock<IBackgroundJobClient>().Object,
             hubContextMock.Object,
-            _translationServiceFactoryMock.Object,
+            eventServiceMock.Object);
+        var contentService = new ContentTranslationService(
+            _context,
+            asyncTranslationRegistry,
+            queryService,
+            mediaServiceMock.Object,
+            new TranslationPipeline(
+                _settingServiceMock.Object,
+                _translationServiceFactoryMock.Object,
+                _progressServiceMock.Object,
+                NullLogger<TranslationPipeline>.Instance),
+            eventServiceMock.Object,
             _progressServiceMock.Object,
             _statisticsServiceMock.Object,
-            mediaServiceMock.Object,
+            NullLogger<ContentTranslationService>.Instance);
+        var jobQueue = new JobQueue(new Mock<IBackgroundJobClient>().Object);
+        var queueService = new TranslationRequestQueueService(
+            _context,
+            jobQueue,
+            asyncTranslationRegistry,
+            queryService,
+            contentService,
+            eventServiceMock.Object,
+            _progressServiceMock.Object,
             _settingServiceMock.Object,
             new Mock<ISubtitleService>().Object,
-            new Mock<ITranslationRequestEventService>().Object,
-            NullLogger<TranslationRequestService>.Instance);
+            NullLogger<TranslationRequestQueueService>.Instance);
+        var proofreadService = new ProofreadRequestService(
+            _context,
+            jobQueue,
+            queueService,
+            queryService,
+            eventServiceMock.Object,
+            _progressServiceMock.Object,
+            _settingServiceMock.Object,
+            new Mock<ISubtitleService>().Object,
+            _translationServiceFactoryMock.Object,
+            NullLogger<ProofreadRequestService>.Instance);
+
+        _translationRequestService = new TranslationRequestService(
+            queryService,
+            queueService,
+            proofreadService,
+            contentService);
 
         _controller = new TranslateController(
             _translationServiceFactoryMock.Object,
@@ -221,10 +258,10 @@ public class TranslateControllerContentTests : IDisposable
             .ToList()
     };
 
-    private static BatchTranslatedLine[] AssertOk(ActionResult<BatchTranslatedLine[]> response)
+    private static BatchSubtitleLine[] AssertOk(ActionResult<BatchSubtitleLine[]> response)
     {
         var okResult = Assert.IsType<OkObjectResult>(response.Result);
-        return Assert.IsType<BatchTranslatedLine[]>(okResult.Value);
+        return Assert.IsType<BatchSubtitleLine[]>(okResult.Value);
     }
 
     private void VerifyNoBatchCall() => _batchTranslationServiceMock.Verify(
@@ -267,7 +304,7 @@ public class TranslateControllerContentTests : IDisposable
             It.IsAny<TranslationRequest>(),
             "openai",
             "test-model",
-            It.Is<BatchTranslatedLine[]>(lines => lines.Length == 2)), Times.Once);
+            It.Is<BatchSubtitleLine[]>(lines => lines.Length == 2)), Times.Once);
         _progressServiceMock.Verify(
             progressService => progressService.Emit(It.IsAny<TranslationRequest>(), 100),
             Times.AtLeastOnce);
@@ -458,7 +495,7 @@ public class TranslateControllerContentTests : IDisposable
             It.IsAny<TranslationRequest>(),
             "openai",
             "failing-model",
-            It.IsAny<BatchTranslatedLine[]>()), Times.Once);
+            It.IsAny<BatchSubtitleLine[]>()), Times.Once);
     }
 
     [Fact]
@@ -582,23 +619,21 @@ public class TranslateControllerContentTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateContent_NoUsableServices_ReturnsServerError()
+    public async Task TranslateContent_NoUsableServices_PropagatesForGlobalHandler()
     {
         _translationServiceFactoryMock
             .Setup(factory => factory.CreateTranslationServices(It.IsAny<IReadOnlyList<string>>()))
             .Returns(new List<TranslationServiceEntry>());
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<TranslationException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            CancellationToken.None);
+            CancellationToken.None));
 
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
         Assert.Empty(await _context.TranslationRequests.ToListAsync());
     }
 
     [Fact]
-    public async Task TranslateContent_BatchServiceFails_ReturnsServerErrorAndMarksRequestFailed()
+    public async Task TranslateContent_BatchServiceFails_PropagatesAndMarksRequestFailed()
     {
         _batchTranslationServiceMock
             .Setup(batchService => batchService.TranslateBatchAsync(
@@ -608,12 +643,9 @@ public class TranslateControllerContentTests : IDisposable
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("provider is down"));
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<TranslationException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            CancellationToken.None);
-
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
+            CancellationToken.None));
 
         var translationRequest = await _context.TranslationRequests.SingleAsync();
         Assert.Equal(TranslationStatus.Failed, translationRequest.Status);
@@ -622,7 +654,7 @@ public class TranslateControllerContentTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateContent_CancelledToken_ReturnsServerErrorAndMarksRequestCancelled()
+    public async Task TranslateContent_CancelledToken_PropagatesAndMarksRequestCancelled()
     {
         using var cancellationTokenSource = new CancellationTokenSource();
         _batchTranslationServiceMock
@@ -638,12 +670,9 @@ public class TranslateControllerContentTests : IDisposable
                 return new Dictionary<int, string>();
             });
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<OperationCanceledException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            cancellationTokenSource.Token);
-
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
+            cancellationTokenSource.Token));
 
         var translationRequest = await _context.TranslationRequests.SingleAsync();
         Assert.Equal(TranslationStatus.Cancelled, translationRequest.Status);
@@ -651,7 +680,7 @@ public class TranslateControllerContentTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateContent_UnsupportedLanguagePair_ReturnsServerErrorAndMarksRequestFailed()
+    public async Task TranslateContent_UnsupportedLanguagePair_PropagatesAndMarksRequestFailed()
     {
         _translationServiceMock
             .Setup(translationService => translationService.GetLanguagePair(
@@ -660,12 +689,9 @@ public class TranslateControllerContentTests : IDisposable
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((LanguagePair?)null);
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<TranslationException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            CancellationToken.None);
-
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
+            CancellationToken.None));
 
         var translationRequest = await _context.TranslationRequests.SingleAsync();
         Assert.Equal(TranslationStatus.Failed, translationRequest.Status);

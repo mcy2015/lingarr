@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr'
-import { EventCallbacks, Hub, SignalRState, SignalRStore } from '@/ts/composables/signalR'
+import { EventCallbacks, Hub, SignalRState, SignalRStore } from '@/types/composables/signalR'
 import { resolveUrl } from '@/utils/baseUrl'
 
 let signalRInstance: SignalRStore | null = null

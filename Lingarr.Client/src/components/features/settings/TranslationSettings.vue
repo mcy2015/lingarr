@@ -1,49 +1,50 @@
-﻿<template>
-    <CardComponent title="Translation Request">
+<template>
+    <CardComponent :title="t('settings.translation.title')">
         <template #description>
-            Modify translation request settings by changing retry options or batch size if available in the service.
+            {{ t('settings.translation.description') }}
         </template>
         <template #content>
-            <SaveNotification ref="saveNotification" />
 
             <template
                 v-if="
-                [
-                    SERVICE_TYPE.ANTHROPIC,
-                    SERVICE_TYPE.DEEPSEEK,
-                    SERVICE_TYPE.GEMINI,
-                    SERVICE_TYPE.LOCALAI,
-                    SERVICE_TYPE.MISTRAL,
-                    SERVICE_TYPE.OPENAI,
-                    SERVICE_TYPE.XAI
-                ].includes(
-                    serviceType as
-                        | 'openai'
-                        | 'anthropic'
-                        | 'localai'
-                        | 'gemini'
-                        | 'deepseek'
-                        | 'mistral'
-                        | 'xai'
-                )
-            ">
+                    [
+                        SERVICE_TYPE.ANTHROPIC,
+                        SERVICE_TYPE.DEEPSEEK,
+                        SERVICE_TYPE.GEMINI,
+                        SERVICE_TYPE.LOCALAI,
+                        SERVICE_TYPE.MISTRAL,
+                        SERVICE_TYPE.OPENAI,
+                        SERVICE_TYPE.XAI
+                    ].includes(
+                        serviceType as
+                            | 'openai'
+                            | 'anthropic'
+                            | 'localai'
+                            | 'gemini'
+                            | 'deepseek'
+                            | 'mistral'
+                            | 'xai'
+                    )
+                ">
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Use batch translation</span>
-                    Process multiple subtitle lines together in batches to improve translation
-                    efficiency and context awareness. Note that single-line translations with context
-                    are still more reliable and of higher quality.
+                    <span class="font-semibold">{{ t('settings.translation.useBatch') }}</span>
+                    {{ t('settings.translation.useBatchDescription') }}
                 </div>
                 <ToggleButton v-model="useBatchTranslation">
-                    <span class="text-sm font-medium text-primary-content">
-                        {{ useBatchTranslation == 'true' ? 'Enabled' : 'Disabled' }}
+                    <span class="text-primary-content text-sm font-medium">
+                        {{
+                            useBatchTranslation == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
             </template>
 
             <template v-if="useBatchTranslation == 'true'">
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Batch size:</span>
-                    Amount of subtitle lines in a single batch.
+                    <span class="font-semibold">{{ t('settings.translation.batchSize') }}</span>
+                    {{ t('settings.translation.batchSizeDescription') }}
                 </div>
                 <InputComponent
                     v-model="maxBatchSize"
@@ -52,9 +53,8 @@
             </template>
 
             <div class="flex flex-col space-x-2">
-                <span class="font-semibold">Request timeout:</span>
-                Maximum time in minutes to wait for a single request to the translation service.
-                Increase this if you run a slow local AI on minimal hardware for example.
+                <span class="font-semibold">{{ t('settings.translation.requestTimeout') }}</span>
+                {{ t('settings.translation.requestTimeoutDescription') }}
             </div>
             <InputComponent
                 v-model="requestTimeout"
@@ -62,8 +62,8 @@
                 @update:validation="(val) => (isValid.requestTimeout = val)" />
 
             <div class="flex flex-col space-x-2">
-                <span class="font-semibold">Max translation retries:</span>
-                Maximum number of retries per line or batch.
+                <span class="font-semibold">{{ t('settings.translation.maxRetries') }}</span>
+                {{ t('settings.translation.maxRetriesDescription') }}
             </div>
             <InputComponent
                 v-model="maxRetries"
@@ -71,8 +71,8 @@
                 @update:validation="(val) => (isValid.maxRetries = val)" />
 
             <div class="flex flex-col space-x-2">
-                <span class="font-semibold">Delay between retries:</span>
-                Initial delay before retrying, in seconds.
+                <span class="font-semibold">{{ t('settings.translation.retryDelay') }}</span>
+                {{ t('settings.translation.retryDelayDescription') }}
             </div>
             <InputComponent
                 v-model="retryDelay"
@@ -80,8 +80,10 @@
                 @update:validation="(val) => (isValid.retryDelay = val)" />
 
             <div class="flex flex-col space-x-2">
-                <span class="font-semibold">Retry delay multiplier:</span>
-                Factor by which the delay increases after each retry.
+                <span class="font-semibold">
+                    {{ t('settings.translation.retryDelayMultiplier') }}
+                </span>
+                {{ t('settings.translation.retryDelayMultiplierDescription') }}
             </div>
             <InputComponent
                 v-model="retryDelayMultiplier"
@@ -92,16 +94,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue'
+import { computed, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
-import { INPUT_VALIDATION_TYPE, SERVICE_TYPE, SETTINGS } from '@/ts'
+import { INPUT_VALIDATION_TYPE, SERVICE_TYPE, SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import InputComponent from '@/components/common/InputComponent.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const settingsStore = useSettingStore()
+const { t } = useI18n()
 const isValid = reactive({
     maxBatchSize: true,
     requestTimeout: true,
@@ -124,7 +128,7 @@ const useBatchTranslation = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.USE_BATCH_TRANSLATION) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.USE_BATCH_TRANSLATION, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -132,7 +136,7 @@ const maxBatchSize = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.MAX_BATCH_SIZE) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.MAX_BATCH_SIZE, newValue, isValid.maxBatchSize)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -140,7 +144,7 @@ const requestTimeout = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.REQUEST_TIMEOUT) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.REQUEST_TIMEOUT, newValue, isValid.requestTimeout)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -148,7 +152,7 @@ const maxRetries = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.MAX_RETRIES) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.MAX_RETRIES, newValue, isValid.maxRetries)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -156,7 +160,7 @@ const retryDelay = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.RETRY_DELAY) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.RETRY_DELAY, newValue, isValid.retryDelay)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -168,7 +172,7 @@ const retryDelayMultiplier = computed({
             newValue,
             isValid.retryDelayMultiplier
         )
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>

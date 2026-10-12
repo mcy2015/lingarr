@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { isValidCron } from 'cron-validator'
+import i18n from '@/i18n'
 
 type ValidationProps = {
     validationType?: 'number' | 'string' | 'url' | 'cron'
@@ -20,7 +21,7 @@ export default function useValidation(props: ValidationProps) {
                 isValid.value = !isNaN(Number(value))
                 error.value = isValid.value
                     ? ''
-                    : props.errorMessage || 'Please enter a valid number'
+                    : props.errorMessage || i18n.global.t('toast.validation.invalidNumber')
                 break
             case 'string':
                 const min = props.minLength ?? 0
@@ -29,12 +30,17 @@ export default function useValidation(props: ValidationProps) {
                 error.value = isValid.value
                     ? ''
                     : props.errorMessage?.format({ minLength: min, maxLength: max }) ||
-                      `Length must be between ${min} and ${max === Infinity ? '∞' : max}`
+                      i18n.global.t('toast.validation.lengthBetween', {
+                          min,
+                          max: max === Infinity ? '∞' : max
+                      })
                 break
             case 'url':
                 const urlPattern = /^(http:\/\/|https:\/\/)[\w-]+(\.[\w-]+)*(:\d+)?(\/.*)?$/
                 isValid.value = urlPattern.test(value)
-                error.value = isValid.value ? '' : props.errorMessage || 'Invalid URL'
+                error.value = isValid.value
+                    ? ''
+                    : props.errorMessage || i18n.global.t('toast.validation.invalidUrl')
                 break
             case 'cron':
                 isValid.value = isValidCron(value.trim(), {
@@ -44,8 +50,7 @@ export default function useValidation(props: ValidationProps) {
                 })
                 error.value = isValid.value
                     ? ''
-                    : props.errorMessage ||
-                      'Invalid cron expression, use <a href="https://crontab.guru/" target="_blank">https://crontab.guru<a> or other tools to generate a valid expression'
+                    : props.errorMessage || i18n.global.t('toast.validation.invalidCron')
                 break
             default:
                 isValid.value = true

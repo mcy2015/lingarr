@@ -1,15 +1,14 @@
-﻿<template>
-    <CardComponent title="Integrations">
-        <template #description>Configure the settings for Radarr and Sonarr integrations.</template>
+<template>
+    <CardComponent :title="t('services.integration.title')">
+        <template #description>{{ t('services.integration.description') }}</template>
         <template #content>
-            <SaveNotification ref="saveNotification" />
             <div class="flex flex-col space-y-2">
-                <span class="font-semibold">Radarr Settings:</span>
+                <span class="font-semibold">{{ t('services.integration.radarrSettings') }}</span>
                 <InputComponent
                     v-model="radarrUrl"
                     :validation-type="INPUT_VALIDATION_TYPE.URL"
-                    label="Address"
-                    error-message="Please enter a valid URL (e.g., http://localhost:7878 or https://example.com)"
+                    :label="t('services.integration.address')"
+                    :error-message="t('services.integration.radarrUrlError')"
                     @update:validation="(val) => (isValid.radarrUrl = val)" />
                 <InputComponent
                     v-model="radarrApiKey"
@@ -17,24 +16,24 @@
                     :max-length="32"
                     :validation-type="INPUT_VALIDATION_TYPE.STRING"
                     :type="INPUT_TYPE.PASSWORD"
-                    label="API key"
-                    error-message="API Key must be {minLength} characters"
+                    :label="t('services.integration.apiKey')"
+                    :error-message="t('services.integration.apiKeyLengthError', { minLength: 32 })"
                     @update:validation="(val) => (isValid.radarrApiKey = val)" />
                 <div class="flex items-center space-x-2">
                     <ToggleButton v-model="radarrDefaultInclude">
-                        <span class="text-sm font-medium text-primary-content">
-                            Include new imports by default
+                        <span class="text-primary-content text-sm font-medium">
+                            {{ t('services.integration.includeByDefault') }}
                         </span>
                     </ToggleButton>
                 </div>
             </div>
             <div class="flex flex-col space-y-2">
-                <span class="font-semibold">Sonarr Settings:</span>
+                <span class="font-semibold">{{ t('services.integration.sonarrSettings') }}</span>
                 <InputComponent
                     v-model="sonarrUrl"
                     :validation-type="INPUT_VALIDATION_TYPE.URL"
-                    label="Address"
-                    error-message="Please enter a valid URL (e.g., http://localhost:8989 or https://example.com)"
+                    :label="t('services.integration.address')"
+                    :error-message="t('services.integration.sonarrUrlError')"
                     @update:validation="(val) => (isValid.sonarrUrl = val)" />
                 <InputComponent
                     v-model="sonarrApiKey"
@@ -42,30 +41,33 @@
                     :max-length="32"
                     :validation-type="INPUT_VALIDATION_TYPE.STRING"
                     :type="INPUT_TYPE.PASSWORD"
-                    label="API key"
-                    error-message="API Key must be {minLength} characters"
+                    :label="t('services.integration.apiKey')"
+                    :error-message="t('services.integration.apiKeyLengthError', { minLength: 32 })"
                     @update:validation="(val) => (isValid.sonarrApiKey = val)" />
                 <div class="flex items-center space-x-2">
                     <ToggleButton v-model="sonarrDefaultInclude">
-                        <span class="text-sm font-medium text-primary-content">
-                            Include new imports by default
+                        <span class="text-primary-content text-sm font-medium">
+                            {{ t('services.integration.includeByDefault') }}
                         </span>
                     </ToggleButton>
                 </div>
             </div>
             <div>
-                No media visible? Try reindexing by starting a sync task
-                <router-link to="/settings/tasks" class="underline">here</router-link>
+                {{ t('services.integration.noMediaHint') }}
+                <router-link to="/settings/tasks" class="underline">
+                    {{ t('services.integration.here') }}
+                </router-link>
             </div>
         </template>
     </CardComponent>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue'
+import { computed, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
-import SaveNotification from '@/components/common/SaveNotification.vue'
-import { INPUT_TYPE, INPUT_VALIDATION_TYPE, SETTINGS, ENCRYPTED_SETTINGS } from '@/ts'
+import { useToastStore } from '@/store/toast'
+import { INPUT_TYPE, INPUT_VALIDATION_TYPE, SETTINGS, ENCRYPTED_SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
@@ -76,24 +78,35 @@ const isValid = reactive({
     sonarrUrl: false,
     sonarrApiKey: false
 })
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const { t } = useI18n()
+const toastStore = useToastStore()
 const settingsStore = useSettingStore()
 
 const radarrApiKey = computed({
-    get: (): string | null => settingsStore.getEncryptedSetting(ENCRYPTED_SETTINGS.RADARR_API_KEY) ?? null,
+    get: (): string | null =>
+        settingsStore.getEncryptedSetting(ENCRYPTED_SETTINGS.RADARR_API_KEY) ?? null,
     set: (newValue: string): void => {
-        settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.RADARR_API_KEY, newValue, isValid.radarrApiKey)
+        settingsStore.updateEncryptedSetting(
+            ENCRYPTED_SETTINGS.RADARR_API_KEY,
+            newValue,
+            isValid.radarrApiKey
+        )
         if (isValid.radarrApiKey) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
 const sonarrApiKey = computed({
-    get: (): string | null => settingsStore.getEncryptedSetting(ENCRYPTED_SETTINGS.SONARR_API_KEY) ?? null,
+    get: (): string | null =>
+        settingsStore.getEncryptedSetting(ENCRYPTED_SETTINGS.SONARR_API_KEY) ?? null,
     set: (newValue: string): void => {
-        settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.SONARR_API_KEY, newValue, isValid.sonarrApiKey)
+        settingsStore.updateEncryptedSetting(
+            ENCRYPTED_SETTINGS.SONARR_API_KEY,
+            newValue,
+            isValid.sonarrApiKey
+        )
         if (isValid.sonarrApiKey) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -102,7 +115,7 @@ const radarrUrl = computed({
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.RADARR_URL, newValue, isValid.radarrUrl)
         if (isValid.radarrUrl) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -111,22 +124,22 @@ const sonarrUrl = computed({
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.SONARR_URL, newValue, isValid.sonarrUrl)
         if (isValid.sonarrUrl) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
 const radarrDefaultInclude = computed({
-    get: (): string => (settingsStore.getSetting(SETTINGS.RADARR_DEFAULT_INCLUDE) as string),
+    get: (): string => settingsStore.getSetting(SETTINGS.RADARR_DEFAULT_INCLUDE) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.RADARR_DEFAULT_INCLUDE, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 const sonarrDefaultInclude = computed({
-    get: (): string => (settingsStore.getSetting(SETTINGS.SONARR_DEFAULT_INCLUDE) as string),
+    get: (): string => settingsStore.getSetting(SETTINGS.SONARR_DEFAULT_INCLUDE) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.SONARR_DEFAULT_INCLUDE, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>

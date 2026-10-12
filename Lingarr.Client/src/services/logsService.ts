@@ -1,4 +1,4 @@
-import { ILogsService } from '@/ts'
+import { ILogsService } from '@/types'
 import { resolveUrl } from '@/utils/baseUrl'
 
 const service = (resource = '/api/logs'): ILogsService => ({

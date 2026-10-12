@@ -1,13 +1,13 @@
 <template>
     <div class="flex min-h-screen items-center justify-center px-4">
         <div class="w-full max-w-3xl">
-            <CardComponent title="Welcome to Lingarr">
-                <template #description>Let's set up your authentication preferences</template>
+            <CardComponent :title="t('onboarding.welcomeTitle')">
+                <template #description>{{ t('onboarding.setupDescription') }}</template>
                 <template #content>
                     <div
                         v-if="error"
-                        class="mb-6 rounded-md border border-red-700/50 bg-red-900/20 p-4">
-                        <p class="text-sm text-red-400">{{ error }}</p>
+                        class="mb-6 rounded-md border border-danger/40 bg-danger/15 p-4">
+                        <p class="text-sm text-danger">{{ error }}</p>
                     </div>
 
                     <ProgressionComponent
@@ -41,7 +41,7 @@
                             variant="primary"
                             :disabled="loading"
                             @click="goToPreviousStep">
-                            Back
+                            {{ t('onboarding.back') }}
                         </ButtonComponent>
 
                         <div v-if="stepType === 'telemetry'" class="flex gap-3">
@@ -49,13 +49,13 @@
                                 variant="ghost"
                                 :disabled="loading"
                                 @click="skipTelemetry">
-                                Skip
+                                {{ t('onboarding.skip') }}
                             </ButtonComponent>
                             <ButtonComponent
                                 variant="accent"
                                 :disabled="loading"
                                 @click="enableTelemetry">
-                                Enable
+                                {{ t('onboarding.enable') }}
                             </ButtonComponent>
                         </div>
 
@@ -67,7 +67,7 @@
                             :disabled="loading || !canProceed"
                             :loading="loading"
                             @click="goToNextStep">
-                            Continue
+                            {{ t('onboarding.continue') }}
                         </ButtonComponent>
 
                         <ButtonComponent
@@ -76,7 +76,9 @@
                             :loading="loading"
                             :disabled="loading"
                             @click="completeSetup">
-                            {{ loading ? 'Completing...' : 'Go to Dashboard' }}
+                            {{
+                                loading ? t('onboarding.completing') : t('onboarding.goToDashboard')
+                            }}
                         </ButtonComponent>
                     </div>
                 </template>
@@ -88,9 +90,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useOnboardingStore } from '@/store/onboarding'
 import { useSettingStore } from '@/store/setting'
-import { SETTINGS } from '@/ts'
+import { SETTINGS } from '@/types'
 import services from '@/services'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
@@ -101,6 +104,7 @@ import TelemetryComponent from '@/components/onboarding/TelemetryComponent.vue'
 import CompletionStep from '@/components/onboarding/CompletionStep.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const onboardingStore = useOnboardingStore()
 const settingStore = useSettingStore()
 
@@ -149,7 +153,7 @@ const handleValidationUpdate = (field: string, valid: boolean) => {
 
 const goToNextStep = () => {
     if (!canProceed.value) {
-        error.value = 'Please fill in all required fields correctly'
+        error.value = t('onboarding.errors.requiredFields')
         return
     }
 
@@ -203,7 +207,7 @@ const completeSetup = async () => {
         router.replace({ name: 'dashboard' })
     } catch (err: any) {
         console.error('Onboarding error:', err)
-        error.value = err?.data?.message || 'An error occurred during setup. Please try again.'
+        error.value = err?.data?.message || t('onboarding.errors.setupFailed')
     } finally {
         loading.value = false
     }

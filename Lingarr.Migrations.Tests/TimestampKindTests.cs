@@ -189,6 +189,6 @@ public class TimestampKindTests
         var services = new ServiceCollection();
         services.AddFluentMigrator(connectionString, provider);
 
-        MigrationConfiguration.RunMigrations(services.BuildServiceProvider());
+        MigrationConfiguration.RunMigrations(services.BuildServiceProvider(), provider, connectionString);
     }
 }

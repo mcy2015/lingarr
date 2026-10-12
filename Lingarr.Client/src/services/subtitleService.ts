@@ -1,14 +1,12 @@
-import { AxiosError, AxiosResponse, AxiosStatic } from 'axios'
-import { ISubtitleService } from '@/ts'
+import { AxiosStatic } from 'axios'
+import { ISubtitleService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/subtitle'): ISubtitleService => ({
     collect<T>(path: string): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(
+        return http
+            .post(
                 `${resource}/all`,
-                {
-                    path: path
-                },
+                { path: path },
                 {
                     headers: {
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -17,13 +15,7 @@ const service = (http: AxiosStatic, resource = '/api/subtitle'): ISubtitleServic
                     }
                 }
             )
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+            .then((response) => response.data)
     }
 })
 

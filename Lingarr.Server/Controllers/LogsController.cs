@@ -1,12 +1,12 @@
 ﻿using System.Text.Json;
-using Lingarr.Server.Attributes;
+using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Providers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lingarr.Server.Controllers;
 
 [ApiController]
-[LingarrAuthorize]
+[Authorize("LingarrAccess")]
 [Route("api/[controller]")]
 public class LogsController : ControllerBase
 {

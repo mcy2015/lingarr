@@ -1,19 +1,19 @@
 <template>
     <div class="space-y-6">
         <div>
-            <h2 class="mb-4 text-xl font-semibold text-white">Help Improve Lingarr</h2>
-            <p class="mb-6 text-sm text-gray-400">
-                Share anonymous usage statistics to help us improve Lingarr.
+            <h2 class="mb-4 text-xl font-semibold text-primary-content">
+                {{ t('onboarding.telemetry.title') }}
+            </h2>
+            <p class="mb-6 text-sm text-secondary-content/60">
+                {{ t('onboarding.telemetry.description') }}
             </p>
         </div>
 
-        <StatusMessage
-            type="success"
-            message="No personal information, file names, or subtitle content is ever collected." />
+        <StatusMessage type="success" :message="t('onboarding.telemetry.privacyNote')" />
 
         <div class="flex flex-col space-y-4">
-            <span class="text-sm">Example of telemetry data:</span>
-            <div class="rounded-md bg-primary p-4">
+            <span class="text-sm">{{ t('onboarding.telemetry.exampleLabel') }}</span>
+            <div class="bg-primary rounded-md p-4">
                 <pre class="overflow-x-auto rounded-md p-4 text-xs">{{
                     JSON.stringify(previewData, null, 2)
                 }}</pre>
@@ -24,7 +24,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import StatusMessage from '@/components/common/StatusMessage.vue'
+
+const { t } = useI18n()
 
 const previewData = ref({
     version: '1.0.3',

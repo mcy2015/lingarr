@@ -1,97 +1,137 @@
-﻿<template>
-    <CardComponent title="Subtitle">
+<template>
+    <CardComponent :title="t('settings.subtitle.title')">
         <template #description>
-            Configure how subtitles are cleaned, and timed to prevent overlaps and remove unwanted
-            formatting.
+            {{ t('settings.subtitle.description') }}
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
-                <SaveNotification ref="saveNotification" />
                 <div class="flex flex-col space-x-2">
                     <span class="font-semibold">
-                        Skip translation if subtitles with caption tags exist:
+                        {{ t('settings.subtitle.ignoreCaptions') }}
                     </span>
-                    Skip translation if a target subtitle with captions such as Hearing Impaired or
-                    Forced already exists.
+                    {{ t('settings.subtitle.ignoreCaptionsDescription') }}
                 </div>
                 <ToggleButton v-model="ignoreCaptions">
                     <span class="text-primary-content text-sm font-medium">
-                        {{ ignoreCaptions == 'true' ? 'Enabled' : 'Disabled' }}
+                        {{
+                            ignoreCaptions == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
 
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Fix overlapping subtitles:</span>
-                    Automatically resolves overlapping subtitles by trimming the end time of the
-                    earlier subtitle. This won't work on subtitles that are out of sync.
-                    And in most cases it also caused subtitles to go out of sync.
+                    <span class="font-semibold">{{ t('settings.subtitle.fixOverlapping') }}</span>
+                    {{ t('settings.subtitle.fixOverlappingDescription') }}
                 </div>
                 <ToggleButton v-model="fixOverlappingSubtitles">
                     <span class="text-primary-content text-sm font-medium">
-                        {{ fixOverlappingSubtitles == 'true' ? 'Enabled' : 'Disabled' }}
+                        {{
+                            fixOverlappingSubtitles == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
 
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Strip subtitle formatting:</span>
-                    Enable this option to remove all formatting tags (e.g., italics, bold, color,
-                    position) from (SRT) subtitles, resulting in plain text subtitles.
+                    <span class="font-semibold">{{ t('settings.subtitle.stripFormatting') }}</span>
+                    {{ t('settings.subtitle.stripFormattingDescription') }}
                 </div>
                 <ToggleButton v-model="stripSubtitleFormatting">
                     <span class="text-primary-content text-sm font-medium">
-                        {{ stripSubtitleFormatting == 'true' ? 'Enabled' : 'Disabled' }}
+                        {{
+                            stripSubtitleFormatting == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
 
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Preserve line breaks:</span>
-                    Keep multi-line subtitles split across lines after translation instead of
-                    merging them into a single line. AI services translate the whole subtitle in one
-                    call; classic services (DeepL, Google, Libre, etc.) translate each line
-                    separately.
+                    <span class="font-semibold">
+                        {{ t('settings.subtitle.preserveLineBreaks') }}
+                    </span>
+                    {{ t('settings.subtitle.preserveLineBreaksDescription') }}
                 </div>
                 <ToggleButton v-model="preserveLineBreaks">
                     <span class="text-primary-content text-sm font-medium">
-                        {{ preserveLineBreaks == 'true' ? 'Enabled' : 'Disabled' }}
+                        {{
+                            preserveLineBreaks == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
 
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Add translator info</span>
-                    Add translator info at the beginning of subtitles.
+                    <span class="font-semibold">
+                        {{ t('settings.subtitle.bilingualOutput') }}
+                    </span>
+                    {{ t('settings.subtitle.bilingualOutputDescription') }}
+                </div>
+                <ToggleButton v-model="bilingualOutput">
+                    <span class="text-primary-content text-sm font-medium">
+                        {{
+                            bilingualOutput == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
+                    </span>
+                </ToggleButton>
+
+                <div class="flex flex-col space-x-2">
+                    <span class="font-semibold">
+                        {{ t('settings.subtitle.addTranslatorInfo') }}
+                    </span>
+                    {{ t('settings.subtitle.addTranslatorInfoDescription') }}
                 </div>
                 <ToggleButton v-model="addTranslatorInfo">
                     <span class="text-primary-content text-sm font-medium">
-                        {{ addTranslatorInfo == 'true' ? 'Enabled' : 'Disabled' }}
+                        {{
+                            addTranslatorInfo == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
 
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Remove language tag</span>
-                    Remove language tags (e.g., ".en.") from file names.
+                    <span class="font-semibold">
+                        {{ t('settings.subtitle.removeLanguageTag') }}
+                    </span>
+                    {{ t('settings.subtitle.removeLanguageTagDescription') }}
                 </div>
                 <ToggleButton v-model="removeLanguageTag">
                     <span class="text-primary-content text-sm font-medium">
-                        {{ removeLanguageTag == 'true' ? 'Enabled' : 'Disabled' }}
+                        {{
+                            removeLanguageTag == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
                     </span>
                 </ToggleButton>
 
                 <div class="flex flex-col space-y-4">
                     <div class="flex flex-col space-x-2">
-                        <span class="font-semibold">Use subtitle tagging</span>
-                        Appends a custom segment to the subtitle filename however. This is not a
-                        recognised subtitle standard and may cause issues with other apps.
+                        <span class="font-semibold">{{ t('settings.subtitle.useTagging') }}</span>
+                        {{ t('settings.subtitle.useTaggingDescription') }}
                     </div>
                     <ToggleButton v-model="useSubtitleTagging">
                         <span class="text-primary-content text-sm font-medium">
-                            {{ useSubtitleTagging == 'true' ? 'Enabled' : 'Disabled' }}
+                            {{
+                                useSubtitleTagging == 'true'
+                                    ? t('settings.status.enabled')
+                                    : t('settings.status.disabled')
+                            }}
                         </span>
                     </ToggleButton>
                     <InputComponent
                         v-if="useSubtitleTagging == 'true'"
                         v-model="subtitleTag"
                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
-                        label="Subtitle tag"
+                        :label="t('settings.subtitle.tagLabel')"
                         @update:validation="(val) => (isValid.subtitleTag = val)" />
                 </div>
             </div>
@@ -100,17 +140,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
-import { INPUT_VALIDATION_TYPE, SETTINGS } from '@/ts'
+import { computed, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { INPUT_VALIDATION_TYPE, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 
 import CardComponent from '@/components/common/CardComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
 
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const settingsStore = useSettingStore()
+const { t } = useI18n()
 const isValid = reactive({
     subtitleTag: true
 })
@@ -119,7 +161,7 @@ const ignoreCaptions = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.IGNORE_CAPTIONS) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.IGNORE_CAPTIONS, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -127,7 +169,7 @@ const fixOverlappingSubtitles = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.FIX_OVERLAPPING_SUBTITLES) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.FIX_OVERLAPPING_SUBTITLES, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -135,7 +177,7 @@ const stripSubtitleFormatting = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.STRIP_SUBTITLE_FORMATTING) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.STRIP_SUBTITLE_FORMATTING, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -143,7 +185,15 @@ const preserveLineBreaks = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.PRESERVE_LINE_BREAKS) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.PRESERVE_LINE_BREAKS, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
+    }
+})
+
+const bilingualOutput = computed({
+    get: (): string => settingsStore.getSetting(SETTINGS.BILINGUAL_SUBTITLE_OUTPUT) as string,
+    set: (newValue: string): void => {
+        settingsStore.updateSetting(SETTINGS.BILINGUAL_SUBTITLE_OUTPUT, newValue, true)
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -151,7 +201,7 @@ const addTranslatorInfo = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.ADD_TRANSLATOR_INFO) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.ADD_TRANSLATOR_INFO, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -159,7 +209,7 @@ const removeLanguageTag = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.REMOVE_LANGUAGE_TAG) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.REMOVE_LANGUAGE_TAG, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -167,7 +217,7 @@ const useSubtitleTagging = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.USE_SUBTITLE_TAGGING) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.USE_SUBTITLE_TAGGING, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -175,7 +225,7 @@ const subtitleTag = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.SUBTITLE_TAG) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.SUBTITLE_TAG, newValue, isValid.subtitleTag)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>

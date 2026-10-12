@@ -1,16 +1,21 @@
 <template>
     <div class="mb-8 flex items-center justify-center space-x-2 md:space-x-4">
         <div v-for="step in totalSteps" :key="step" class="flex items-center">
-            <div v-if="step > 1" class="h-0.5 w-8 bg-gray-700 md:w-12"></div>
+            <div
+                v-if="step > 1"
+                class="h-0.5 w-8 md:w-12"
+                :class="currentStep >= step ? 'bg-accent/60' : 'bg-tertiary'"></div>
             <div class="flex items-center">
                 <div
                     class="flex h-10 w-10 items-center justify-center rounded-full"
                     :class="
-                        currentStep >= step ? 'bg-primary text-white' : 'bg-gray-700 text-gray-400'
+                        currentStep >= step
+                            ? 'bg-accent text-accent-content'
+                            : 'bg-tertiary text-secondary-content/60'
                     ">
                     {{ step }}
                 </div>
-                <span v-if="steps[step - 1]" class="ml-2 hidden text-sm text-gray-400 sm:inline">
+                <span v-if="steps[step - 1]" class="ml-2 hidden text-sm text-secondary-content/60 sm:inline">
                     {{ steps[step - 1] }}
                 </span>
             </div>
@@ -20,6 +25,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const { currentStep, totalSteps, enableAuth } = defineProps<{
     currentStep: number
@@ -28,14 +36,14 @@ const { currentStep, totalSteps, enableAuth } = defineProps<{
 }>()
 
 const steps = computed(() => {
-    const labels = ['Choose']
+    const labels = [t('onboarding.steps.choose')]
 
     if (enableAuth === 'true') {
-        labels.push('Account')
+        labels.push(t('onboarding.steps.account'))
     }
 
-    labels.push('Telemetry')
-    labels.push('Complete')
+    labels.push(t('onboarding.steps.telemetry'))
+    labels.push(t('onboarding.steps.complete'))
 
     return labels
 })

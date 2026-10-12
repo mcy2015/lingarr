@@ -19,7 +19,7 @@ public class MigrationTests
         services.AddFluentMigrator(connectionString, dbType);
 
         var serviceProvider = services.BuildServiceProvider();
-        MigrationConfiguration.RunMigrations(serviceProvider);
+        MigrationConfiguration.RunMigrations(serviceProvider, dbType, connectionString);
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class MigrationTests
             services.AddFluentMigrator(connectionString, "sqlite");
 
             var serviceProvider = services.BuildServiceProvider();
-            MigrationConfiguration.RunMigrations(serviceProvider);
+            MigrationConfiguration.RunMigrations(serviceProvider, "sqlite", connectionString);
 
             using var scope = serviceProvider.CreateScope();
             scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(7);
@@ -80,7 +80,7 @@ public class MigrationTests
             services.AddFluentMigrator(connectionString, "sqlite");
 
             var serviceProvider = services.BuildServiceProvider();
-            MigrationConfiguration.RunMigrations(serviceProvider);
+            MigrationConfiguration.RunMigrations(serviceProvider, "sqlite", connectionString);
 
             using var scope = serviceProvider.CreateScope();
             var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();

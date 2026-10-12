@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
-import { NODE_TYPE, TreeNode, NodeType } from '@/ts'
+import { NODE_TYPE, TreeNode, NodeType } from '@/types'
+import i18n from '@/i18n'
 
 export function useJsonTree(emit: (event: 'update:modelValue', value: string) => void) {
     const tree = ref<TreeNode[]>([])
@@ -42,9 +43,8 @@ export function useJsonTree(emit: (event: 'update:modelValue', value: string) =>
                 key,
                 type: NODE_TYPE.OBJECT,
                 value: null,
-                children: Object
-                    .entries(obj as Record<string, unknown>)
-                    .map(([k, v]) => jsonToTree(v, k)
+                children: Object.entries(obj as Record<string, unknown>).map(([k, v]) =>
+                    jsonToTree(v, k)
                 ),
                 expanded: true
             }
@@ -97,16 +97,16 @@ export function useJsonTree(emit: (event: 'update:modelValue', value: string) =>
         try {
             const parsed = JSON.parse(jsonString)
             if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-                parseError.value = 'Template must be a JSON object'
+                parseError.value = i18n.global.t('toast.template.mustBeObject')
                 return
             }
 
             parseError.value = null
-            tree.value = Object
-                .entries(parsed)
-                .map(([k, v]) => jsonToTree(v, k))
+            tree.value = Object.entries(parsed).map(([k, v]) => jsonToTree(v, k))
         } catch (e) {
-            parseError.value = `Invalid JSON: ${(e as Error).message}`
+            parseError.value = i18n.global.t('toast.template.invalidJson', {
+                message: (e as Error).message
+            })
         }
     }
 

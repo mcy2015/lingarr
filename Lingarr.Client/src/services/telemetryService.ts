@@ -1,17 +1,9 @@
-import { AxiosError, AxiosResponse, AxiosStatic } from 'axios'
-import { ITelemetryService } from '@/ts'
+import { AxiosStatic } from 'axios'
+import { ITelemetryService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/telemetry'): ITelemetryService => ({
     preview<T>(): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/preview`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/preview`).then((response) => response.data)
     }
 })
 

@@ -1,5 +1,5 @@
 ﻿using Lingarr.Core.Entities;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 
 namespace Lingarr.Server.Interfaces.Services;
@@ -17,6 +17,6 @@ public interface IStatisticsService
         TranslationRequest request,
         string serviceType,
         string? modelName,
-        BatchTranslatedLine[] translatedLines);
+        BatchSubtitleLine[] translatedLines);
     Task ResetStatistics();
 }

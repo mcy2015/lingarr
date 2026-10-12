@@ -1,20 +1,20 @@
 ﻿<template>
-    <div class="w-full bg-tertiary text-tertiary-content">
+    <div class="bg-tertiary text-tertiary-content w-full">
         <div class="border-primary hidden grid-cols-12 border-b-2 font-bold md:grid">
             <div class="col-span-1 px-4 py-2">
-                <span class="hidden lg:block">Episodes</span>
+                <span class="hidden lg:block">{{ t('shows.episodes') }}</span>
                 <span class="block lg:hidden">#</span>
             </div>
-            <div class="col-span-5 px-4 py-2">Title</div>
+            <div class="col-span-5 px-4 py-2">{{ t('shows.title') }}</div>
             <div class="col-span-5 flex justify-between py-2 pr-4">
-                <span>Subtitles</span>
-                <span>Include</span>
+                <span>{{ t('shows.subtitles') }}</span>
+                <span>{{ t('shows.include') }}</span>
             </div>
         </div>
         <div
             v-for="episode in episodes"
             :key="episode.id"
-            class="border-accent/20 hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:border-b-0 md:px-0 md:py-0">
+            class="border-line hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:border-b-0 md:px-0 md:py-0">
             <div class="hidden px-4 py-2 md:col-span-1 md:block">
                 {{ episode.episodeNumber }}
             </div>
@@ -53,7 +53,7 @@
                         " />
                     <span
                         class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                        Include
+                        {{ t('shows.include') }}
                     </span>
                 </div>
             </div>
@@ -61,7 +61,8 @@
     </div>
 </template>
 <script setup lang="ts">
-import { IEpisode, ISubtitle, MEDIA_TYPE } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import { IEpisode, ISubtitle, MEDIA_TYPE } from '@/types'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
@@ -73,6 +74,7 @@ const props = defineProps<{
     subtitles: ISubtitle[]
 }>()
 const showStore = useShowStore()
+const { t } = useI18n()
 
 const getSubtitle = (fileName: string | null) => {
     if (!fileName) return null

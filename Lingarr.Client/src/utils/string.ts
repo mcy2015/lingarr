@@ -1,49 +1,27 @@
-// oxlint-disable-next-line no-unused-vars - global String prototype
-interface String {
-    /**
-     * Adds query parameters to the string URL.
-     *
-     * This method appends the provided key-value pairs to the query string of the URL.
-     * If the URL already contains a query string, new parameters are added to it.
-     *
-     * @param params An object where each key-value pair represents a query parameter.
-     * @returns The string URL with the updated query parameters.
-     *
-     * @example
-     * const baseUrl = "https://api.example.com/translate";
-     * const subtitlePath = "path/to/subtitle.srt";
-     * const sourceLanguage = "en";
-     * const targetLanguage = "es";
-     *
-     * // Use the addParams method to append query parameters
-     * const url = baseUrl.addParams({
-     *   subtitle: subtitlePath,
-     *   source: sourceLanguage,
-     *   target: targetLanguage,
-     * });
-     *
-     * console.log(url);
-     * // Output: "https://api.example.com/translate?subtitle=path%2Fto%2Fsubtitle.srt&source=en&target=es"
-     */
-    addParams(params: {
-        [key: string]: string | number | boolean | string[] | number[] | Record<string, any>
-    }): string
+export type QueryParamValue = string | number | boolean | string[] | number[] | Record<string, unknown>
 
-    /**
-     * Formats a string by replacing placeholders e.g. `{key}` with values from the given object.
-     *
-     * @param {object} params - The object containing key-value pairs for replacement.
-     * @returns {string} The formatted string.
-     */
-    format(params: Record<string, string | number>): string
-}
-
-String.prototype.addParams = function (params: {
-    [key: string]: string | number | boolean | string[] | number[] | Record<string, any>
-}): string {
-    const urlString = this.toString()
-
-    const hasQueryString = urlString.includes('?')
+/**
+ * Builds a URL by appending query parameters to the given path.
+ *
+ * New parameters are appended to an existing query string when the path
+ * already contains one.
+ *
+ * @param path The base URL path.
+ * @param params An object where each key-value pair represents a query parameter.
+ * @returns The URL with the updated query parameters.
+ *
+ * @example
+ * const url = buildUrl('https://api.example.com/translate', {
+ *   subtitle: 'path/to/subtitle.srt',
+ *   source: 'en',
+ *   target: 'es'
+ * });
+ *
+ * console.log(url);
+ * // Output: "https://api.example.com/translate?subtitle=path%2Fto%2Fsubtitle.srt&source=en&target=es"
+ */
+export const buildUrl = (path: string, params: Record<string, QueryParamValue>): string => {
+    const hasQueryString = path.includes('?')
 
     const queryString = Object.keys(params)
         .flatMap((key) => {
@@ -61,10 +39,27 @@ String.prototype.addParams = function (params: {
         })
         .join('&')
 
+    if (!queryString) {
+        return path
+    }
+
     if (hasQueryString) {
-        return `${urlString}&${queryString}`
+        return `${path}&${queryString}`
     } else {
-        return `${urlString}?${queryString}`
+        return `${path}?${queryString}`
+    }
+}
+
+declare global {
+    // oxlint-disable-next-line no-unused-vars - global String prototype
+    interface String {
+        /**
+         * Formats a string by replacing placeholders e.g. `{key}` with values from the given object.
+         *
+         * @param {object} params - The object containing key-value pairs for replacement.
+         * @returns {string} The formatted string.
+         */
+        format(params: Record<string, string | number>): string
     }
 }
 
