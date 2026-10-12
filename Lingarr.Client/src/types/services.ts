@@ -103,6 +103,7 @@ export interface IParsedSubtitleFilename {
 export interface IImportedSubtitleResult {
     fileName: string
     success: boolean
+    mediaBound?: boolean
     savedPath?: string | null
     translationRequestId?: number | null
     error?: string | null
@@ -118,7 +119,10 @@ export interface IImportService {
         files: File[],
         sourceLanguage: string,
         targetLanguage: string,
-        translate: boolean
+        translate: boolean,
+        mediaType?: 'Movie' | 'Show',
+        mediaId?: number,
+        season?: number
     ): Promise<IImportSubtitlesResponse>
 }
 

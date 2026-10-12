@@ -159,7 +159,9 @@
         "status": {
             "stored": "Stored",
             "queued": "Queued (#{id})",
-            "failed": "Failed"
+            "failed": "Failed",
+            "bound": "Stored next to media",
+            "fallback": "Stored in import library"
         },
         "actions": {
             "import": "Import files",
@@ -169,6 +171,11 @@
         "toast": {
             "success": "Imported {count} file(s)",
             "failed": "Import failed: {message}"
+        },
+        "target": {
+            "show": "Show",
+            "season": "Season",
+            "pickShow": "Pick a show…"
         }
     },
     "dashboard": {

@@ -63,6 +63,26 @@
         </div>
 
         <div class="border-line bg-secondary flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+            <template v-if="activeTab === 'season'">
+                <label class="text-secondary-content flex items-center gap-2 text-sm">
+                    {{ t('import.target.show') }}
+                    <select
+                        v-model="selectedShowId"
+                        class="border-line bg-primary text-primary-content rounded-md border px-3 py-1.5 text-sm">
+                        <option :value="undefined" disabled>{{ t('import.target.pickShow') }}</option>
+                        <option v-for="show in shows" :key="show.id" :value="show.id">{{ show.title }}</option>
+                    </select>
+                </label>
+                <label class="text-secondary-content flex items-center gap-2 text-sm">
+                    {{ t('import.target.season') }}
+                    <select
+                        v-model="selectedSeasonNumber"
+                        class="border-line bg-primary text-primary-content rounded-md border px-3 py-1.5 text-sm"
+                        :disabled="seasons.length === 0">
+                        <option v-for="season in seasons" :key="season" :value="season">S{{ String(season).padStart(2, '0') }}</option>
+                    </select>
+                </label>
+            </template>
             <label class="text-secondary-content flex items-center gap-2 text-sm">
                 {{ t('import.options.source') }}
                 <select
@@ -108,7 +128,8 @@
                             <span v-else-if="item.translationRequestId" class="text-success mono">
                                 {{ t('import.status.queued', { id: item.translationRequestId }) }}
                             </span>
-                            <span v-else class="text-success">{{ t('import.status.stored') }}</span>
+                            <span v-else-if="item.mediaBound" class="text-success">{{ t('import.status.bound') }}</span>
+                            <span v-else class="text-success">{{ t('import.status.fallback') }}</span>
                         </td>
                     </tr>
                 </tbody>
@@ -118,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TabComponent from '@/components/common/TabComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
@@ -127,7 +148,13 @@ import Icon from '@/components/icons/Icon.vue'
 import services from '@/services'
 import { useSettingStore } from '@/store/setting'
 import { useToastStore } from '@/store/toast'
-import { IParsedSubtitleFilename, IImportedSubtitleResult, ITabOption } from '@/types'
+import {
+    IImportedSubtitleResult,
+    IPagedResult,
+    IParsedSubtitleFilename,
+    IShow,
+    ITabOption
+} from '@/types'
 
 const { t } = useI18n()
 const settingStore = useSettingStore()
@@ -150,6 +177,29 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const sourceLanguage = ref('en')
 const targetLanguage = ref('')
 const translate = ref(false)
+
+// directed season import: show + season binding
+const shows = ref<IShow[]>([])
+const selectedShowId = ref<number | undefined>(undefined)
+const selectedSeasonNumber = ref<number | undefined>(undefined)
+
+const seasons = computed<number[]>(() => {
+    const show = shows.value.find((candidate) => candidate.id === selectedShowId.value)
+    return show ? show.seasons.map((season) => season.seasonNumber).sort((a, b) => a - b) : []
+})
+
+watch(selectedShowId, () => {
+    selectedSeasonNumber.value = seasons.value[0]
+})
+
+void services.media
+    .shows<IPagedResult<IShow>>(1, '', 'title', true)
+    .then((page) => {
+        shows.value = page.items
+    })
+    .catch(() => {
+        // media list unavailable (e.g. no *arr connection) - season tab stays usable without binding
+    })
 
 const languages = computed(() => {
     const settings = settingStore.getSettings
@@ -207,11 +257,15 @@ const tierClass = (tier: string): Record<string, boolean> => ({
 const runImport = async (): Promise<void> => {
     importing.value = true
     try {
+        const directed = activeTab.value === 'season' && selectedShowId.value && selectedSeasonNumber.value
         const response = await services.import.importFiles(
             files.value,
             sourceLanguage.value,
             targetLanguage.value,
-            translate.value
+            translate.value,
+            directed ? 'Show' : undefined,
+            directed ? selectedShowId.value : undefined,
+            directed ? selectedSeasonNumber.value : undefined
         )
         results.value = response.results
         const succeeded = response.results.filter((item) => item.success).length

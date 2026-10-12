@@ -159,7 +159,9 @@
         "status": {
             "stored": "已入库",
             "queued": "已排队（#{id}）",
-            "failed": "失败"
+            "failed": "失败",
+            "bound": "已写入媒体目录",
+            "fallback": "已存入导入库"
         },
         "actions": {
             "import": "开始导入",
@@ -169,6 +171,11 @@
         "toast": {
             "success": "已导入 {count} 个文件",
             "failed": "导入失败：{message}"
+        },
+        "target": {
+            "show": "剧集",
+            "season": "季",
+            "pickShow": "选择剧集…"
         }
     },
     "dashboard": {
