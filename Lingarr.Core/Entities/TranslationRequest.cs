@@ -26,4 +26,9 @@ public class TranslationRequest : BaseEntity
     public DateTimeOffset? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
     public string? StackTrace { get; set; }
+    /// <summary>
+    /// SHA-256 of the normalized subtitle content (UTF-8, LF endings) for
+    /// import workbench duplicate detection; null for library requests.
+    /// </summary>
+    public string? ContentHash { get; set; }
 }

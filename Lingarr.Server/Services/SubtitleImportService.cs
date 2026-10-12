@@ -99,6 +99,7 @@ public class SubtitleImportService : ISubtitleImportService
             // Explicit per-import option: alters the stored text, so it never runs by default.
             var storedText = ChineseSubtitleConverter.Convert(Encoding.UTF8.GetString(utf8Bytes), chineseConvert);
             utf8Bytes = Encoding.UTF8.GetBytes(storedText);
+            var contentHash = ComputeContentHash(storedText);
 
             // Directed import: resolve the media video whose side this file belongs on.
             var mediaTarget = await ResolveMediaTarget(fileName, mediaType, mediaId, season);
@@ -112,6 +113,22 @@ public class SubtitleImportService : ISubtitleImportService
 
             if (translate)
             {
+                // Content-hash dedup: same subtitle content targeting the same
+                // language is already tracked (any status) - report it and skip
+                // the enqueue, the stored file still lands on disk.
+                var duplicateId = await _dbContext.TranslationRequests
+                    .Where(r => r.ContentHash == contentHash && r.TargetLanguage == targetLanguage)
+                    .OrderBy(r => r.Id)
+                    .Select(r => (int?)r.Id)
+                    .FirstOrDefaultAsync();
+                if (duplicateId is not null)
+                {
+                    result.DuplicateOfRequestId = duplicateId;
+                    result.Warning = $"duplicate of request #{duplicateId}";
+                    result.Success = true;
+                    return result;
+                }
+
                 var title = mediaTarget?.Title ?? Path.GetFileNameWithoutExtension(savedPath);
                 result.TranslationRequestId = await _queueService.CreateImportRequest(
                     savedPath,
@@ -119,7 +136,8 @@ public class SubtitleImportService : ISubtitleImportService
                     sourceLanguage,
                     targetLanguage,
                     mediaTarget?.MediaId,
-                    mediaTarget?.MediaType ?? MediaType.Movie);
+                    mediaTarget?.MediaType ?? MediaType.Movie,
+                    contentHash);
             }
 
             result.Success = true;
@@ -201,6 +219,17 @@ public class SubtitleImportService : ISubtitleImportService
     }
 
     private sealed record ImportMediaTarget(string Directory, int MediaId, MediaType MediaType, string Title);
+
+    /// <summary>
+    /// SHA-256 over the normalized text (LF endings) - stable across encodings,
+    /// BOMs and CRLF variants, so re-imports of the same subtitle deduplicate.
+    /// </summary>
+    private static string ComputeContentHash(string text)
+    {
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
 
     private static string SanitizeFileName(string fileName)
     {

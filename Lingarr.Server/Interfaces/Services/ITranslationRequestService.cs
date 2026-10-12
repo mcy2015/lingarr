@@ -36,7 +36,8 @@ public interface ITranslationRequestService
         string sourceLanguage,
         string targetLanguage,
         int? mediaId,
-        MediaType mediaType);
+        MediaType mediaType,
+        string? contentHash = null);
 
     /// <summary>
     /// Creates translation requests for multiple media items, handling subtitle discovery

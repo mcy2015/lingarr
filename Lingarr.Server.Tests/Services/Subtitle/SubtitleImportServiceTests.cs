@@ -106,7 +106,8 @@ public class SubtitleImportServiceTests : IDisposable
             "en",
             "zh",
             null,
-            MediaType.Movie), Times.Once);
+            MediaType.Movie,
+            It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -191,7 +192,8 @@ public class SubtitleImportServiceTests : IDisposable
         Assert.True(result.MediaBound);
         Assert.Equal(Path.GetDirectoryName(movie.Path), Path.GetDirectoryName(result.SavedPath));
         _queueService.Verify(q => q.CreateImportRequest(
-            result.SavedPath!, "Dune: Part Two", "en", "zh", movie.Id, MediaType.Movie), Times.Once);
+            result.SavedPath!, "Dune: Part Two", "en", "zh", movie.Id, MediaType.Movie,
+            It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -212,7 +214,8 @@ public class SubtitleImportServiceTests : IDisposable
         _queueService.Verify(q => q.CreateImportRequest(
             result.SavedPath!,
             "Shōgun - S01E05 - Broken to the Fist",
-            "en", "zh", episode.Id, MediaType.Episode), Times.Once);
+            "en", "zh", episode.Id, MediaType.Episode,
+            It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -231,7 +234,7 @@ public class SubtitleImportServiceTests : IDisposable
         Assert.StartsWith(Path.Combine(_root, "config", "imports"), result.SavedPath);
         _queueService.Verify(q => q.CreateImportRequest(
             result.SavedPath!, "Shogun.S01E99.chs", "en", "zh",
-            null, MediaType.Movie), Times.Once);
+            null, MediaType.Movie, It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -248,5 +251,54 @@ public class SubtitleImportServiceTests : IDisposable
         Assert.True(result.Success, result.Error);
         Assert.False(result.MediaBound);
         Assert.StartsWith(Path.Combine(_root, "config", "imports"), result.SavedPath);
+    }
+
+    [Fact]
+    public async Task ImportFiles_SameContentSameTarget_SecondImportSkipsEnqueueAsDuplicate()
+    {
+        const string content = "1\n00:00:01,000 --> 00:00:02,000\nhello\n";
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+        _dbContext.TranslationRequests.Add(new TranslationRequest
+        {
+            Title = "existing", SourceLanguage = "en", TargetLanguage = "zh",
+            SubtitleToTranslate = "/imports/first.srt", MediaType = MediaType.Movie,
+            Status = TranslationStatus.Completed, ContentHash = hash, Source = TranslationRequestSource.Import
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var results = await _service.ImportFiles(
+            [FormFile("dup.srt", Encoding.UTF8.GetBytes(content))], "en", "zh", translate: true);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        Assert.NotNull(result.DuplicateOfRequestId);
+        Assert.NotNull(result.Warning);
+        Assert.Null(result.TranslationRequestId);
+        _queueService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ImportFiles_SameContentDifferentTarget_IsNotADuplicate()
+    {
+        const string content = "1\n00:00:01,000 --> 00:00:02,000\nhello\n";
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+        _dbContext.TranslationRequests.Add(new TranslationRequest
+        {
+            Title = "existing", SourceLanguage = "en", TargetLanguage = "nl",
+            SubtitleToTranslate = "/imports/first.srt", MediaType = MediaType.Movie,
+            Status = TranslationStatus.Completed, ContentHash = hash, Source = TranslationRequestSource.Import
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var results = await _service.ImportFiles(
+            [FormFile("dup.srt", Encoding.UTF8.GetBytes(content))], "en", "zh", translate: true);
+
+        var result = Assert.Single(results);
+        Assert.Null(result.DuplicateOfRequestId);
+        _queueService.Verify(q => q.CreateImportRequest(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<int?>(), It.IsAny<MediaType>(), It.IsAny<string?>()), Times.Once);
     }
 }

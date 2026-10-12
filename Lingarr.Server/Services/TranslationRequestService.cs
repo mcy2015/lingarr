@@ -49,8 +49,9 @@ public class TranslationRequestService : ITranslationRequestService
         string sourceLanguage,
         string targetLanguage,
         int? mediaId,
-        MediaType mediaType)
-        => _queueService.CreateImportRequest(subtitlePath, title, sourceLanguage, targetLanguage, mediaId, mediaType);
+        MediaType mediaType,
+        string? contentHash = null)
+        => _queueService.CreateImportRequest(subtitlePath, title, sourceLanguage, targetLanguage, mediaId, mediaType, contentHash);
 
     /// <inheritdoc />
     public Task CreateBulkRequest(BulkTranslateRequest request)
