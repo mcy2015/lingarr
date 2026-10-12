@@ -1,0 +1,13 @@
+# Local override: give the client container its own node_modules volume.
+# The default dev compose bind-mounts the host node_modules into the container,
+# which lets the in-container `npm install` (linux binaries) clobber the host's
+# (darwin binaries) and break local builds. Compose both files explicitly:
+#   docker compose -f docker-compose.dev.yml -f docker-compose.dev.override.yml up -d Lingarr.Server Lingarr.Client
+services:
+  Lingarr.Client:
+    volumes: !override
+      - ./Lingarr.Client:/app:rw
+      - lingarr_client_node_modules:/app/node_modules
+
+volumes:
+  lingarr_client_node_modules:
