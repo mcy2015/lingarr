@@ -8,15 +8,17 @@
 
 ## 一、逐屏差距
 
-### 屏 1 · 概览 `/`
+### 屏 1 · 概览 `/` ✅（2026-10-12 B1 批次完成）
 
-| 原型元素 | 状态 | 缺口 / 所需接口 |
+> B1 全链落地：A1+A2+A3 三端点 + Dashboard 按原型第一屏重写，实测渲染与视觉比对通过。
+
+| 原型元素 | 状态 | 实现 |
 |---|---|---|
-| 管线条带（媒体库→缺字幕检测→队列→服务→写回，实时计数） | ❌ | 新接口 `GET /api/statistics/pipeline`：各阶段计数（媒体总数、缺字幕数、队列深度=Hangfire 各队列 pending、在线服务数、本月写回数）；数据源全部现成（ Hangfire MonitoringApi + MediaService + StatisticsService） |
-| KPI 条（进行中/排队/本月成本/30 天成功率） | ❌ | 进行中/排队可从 `counts` 复用；**本月成本需新数据**：任务表加 token/字符用量字段或用量日志表（P3-b 成本面板同源，合并实现）；成功率 = 按状态聚合 |
-| 活跃任务（轨道条+播放头+批次信息） | 🔶 | `GET /translationrequest/active` 已有；前端重做成轨道条 |
-| 服务健康（状态点+延迟+月成本） | ❌ | 新接口 `GET /api/translate/health`：各 provider 最近请求延迟/成败（需在 BaseTranslationService 记录）+ 配置状态 |
-| 最近动态 feed | ❌ | `translation_request_events` 表已有事件数据；新接口 `GET /api/translationrequest/events?take=20` 或复用 SignalR |
+| 管线条带（媒体库→缺字幕检测→队列→服务→写回，实时计数） | ✅ | `GET /api/statistics/pipeline`（A2）：媒体/缺字幕来自统计扫描（按目标语言求差、逐语言下限 0），队列深度=Hangfire 各队列 enqueued 求和，服务在线=已配置且窗口未失败，本月写回=CompletedAt≥月初且有写回文件 |
+| KPI 条（进行中/排队/本月成本/30 天成功率） | ✅ | 进行中/排队复用 `counts`；成功率=近 30 天 Completed/(Completed+Failed)；**成本显示「—」，待 A5（B2）** |
+| 活跃任务（轨道条+播放头+批次信息） | ✅ | 数据源用 `requests?status=InProgress`（/active 端点只有 MediaId/Status 不够展示）；`RequestProgress` SignalR 实时推进 + 终态触发全量刷新 + 30s 兜底轮询；ETA 线性估算与队列页同公式 |
+| 服务健康（状态点+延迟+月成本） | ✅ | `GET /api/translate/health`（A1）：`BaseTranslationService` 共享重试环逐 attempt 记录（工厂创建后注入单例记录器），环形窗口 20 样本；状态点 绿/黄/红/灰=健康/降级/故障/未配置；插件 ABI 实现不经过 Base 暂不记录；**月成本待 A5** |
+| 最近动态 feed | ✅ | `GET /api/translationrequest/events?take=`（A3）：事件表 join 请求标题，倒序 20 条，图标 ✓/✗/▸/⏸/· 着色 |
 
 ### 屏 2 · 媒体库 `/library` ✅ 结构 · 🔶 内容
 
@@ -81,9 +83,9 @@
 
 | # | 接口 | 规格 | 支撑界面 | 批次 |
 |---|---|---|---|---|
-| A1 | `GET /api/translate/health` | `[{service, configured, latencyMs?, successRate?, lastError?, monthlyCost?}]`；延迟/成败由 BaseTranslationService 请求计时聚合（内存环形+可选持久化） | 概览服务健康 · 设置 provider 卡片 | B1 |
-| A2 | `GET /api/statistics/pipeline` | `{mediaCount, missingSubtitles, queueDepth, servicesOnline, writtenThisMonth}` | 概览管线 | B1 |
-| A3 | `GET /api/translationrequest/events?take=` | 最近事件（复用 events 表） | 概览动态 | B1 |
+| A1 | `GET /api/translate/health` | `[{provider, displayName, configured, latencyMs?, successRate?, lastError?, lastRequestAt, sampleCount, monthlyCost?}]` | ✅ 已交付（内存环形窗口，重启清零；monthlyCost 待 A5） | B1 ✅ |
+| A2 | `GET /api/statistics/pipeline` | `{mediaCount, missingSubtitles, queueDepth, servicesOnline, writtenThisMonth, successRate30Days, monthlyCost?}` | ✅ 已交付（缺字幕=按目标语言与扫描文件数求差，逐语言下限 0） | B1 ✅ |
+| A3 | `GET /api/translationrequest/events?take=` | 最近事件（events 表 join 请求标题，倒序） | ✅ 已交付 | B1 ✅ |
 | A4 | 媒体字幕状态聚合 | `GET /media/shows` 投影加 `subtitleSummary: [{lang,state,count}]` + 最近活动；电影同 | 媒体库矩阵 | B2 |
 | A5 | 用量与成本 | 请求表加 `tokens/characters` 列（M0025）+ provider 单价设置；`GET /api/statistics/cost?month=` | 概览成本 KPI · 媒体库托盘预估 · provider 卡片月成本 | B2（=P3-b） |
 | A6 | 队列增强 | Summary 加 `ServiceType/StartedAt`；暂停端点 | 队列 provider 徽章/ETA/暂停 | B2 |
@@ -93,7 +95,7 @@
 
 ## 三、批次
 
-- **B1（概览优先）**：A1 + A2 + A3 + Dashboard 重做（管线+KPI+活跃任务轨道条+动态 feed），概览是首屏门面
+- **B1（概览优先）**：✅ 已完成（2026-10-12）——A1 + A2 + A3 + Dashboard 重做（管线+KPI+活跃任务轨道条+动态 feed）；分支 `feat/b1-overview`
 - **B2（数据层）**：A4 + A5 + A6（媒体库矩阵、成本面板、队列增强一次到位，共享 M0025）
 - **B3（长尾）**：A7 + A8 + A9
 - 校对台工作台：独立任务，与上述并行
