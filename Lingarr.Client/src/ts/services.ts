@@ -123,6 +123,8 @@ export interface ITranslationRequestService {
         ascending: boolean
     ): Promise<T>
     cancel<T>(translationRequest: ITranslationRequest): Promise<T>
+    convert<T>(id: number, bilingual: boolean): Promise<T>
+    convertAll<T>(bilingual: boolean): Promise<T>
     remove<T>(translationRequest: ITranslationRequest): Promise<T>
     retry<T>(translationRequest: ITranslationRequest): Promise<T>
     resume<T>(translationRequest: ITranslationRequest): Promise<T>

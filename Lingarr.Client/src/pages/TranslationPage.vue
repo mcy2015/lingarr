@@ -16,6 +16,12 @@
                     }}
                 </button>
                 <button
+                    v-if="!isSelectMode"
+                    class="hover:text-primary-content/50 border-accent text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
+                    @click="handleBatchConvert">
+                    {{ t('translations.list.batchConvert') }}
+                </button>
+                <button
                     class="hover:text-primary-content/50 border-accent text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="toggleSelectMode">
                     {{
@@ -102,6 +108,19 @@
                     <BadgeComponent classes="text-primary-content border-accent bg-secondary">
                         {{ item.targetLanguage.toUpperCase() }}
                     </BadgeComponent>
+                    <BadgeComponent
+                        v-if="item.status === TRANSLATION_STATUS.COMPLETED"
+                        :classes="
+                            item.isBilingual
+                                ? 'text-white border-green-200 bg-green-500/50'
+                                : 'text-primary-content/70 border-accent bg-secondary'
+                        ">
+                        {{
+                            item.isBilingual
+                                ? t('translations.bilingual')
+                                : t('translations.monolingual')
+                        }}
+                    </BadgeComponent>
                 </div>
                 <div class="flex items-center md:col-span-1 md:px-4 md:py-2">
                     <TranslationStatus :translation-status="item.status" />
@@ -173,6 +192,7 @@ import {
     TRANSLATION_STATUS
 } from '@/ts'
 import useTranslationRequestStore from '@/store/translationRequest'
+import services from '@/services'
 import { useSignalR } from '@/composables/useSignalR'
 import useDebounce from '@/composables/useDebounce'
 import PaginationComponent from '@/components/common/PaginationComponent.vue'
@@ -249,6 +269,16 @@ const handleDelete = async () => {
         await translationRequestStore.remove(request)
     }
     translationRequestStore.clearSelection()
+    translationRequestStore.fetch()
+}
+
+const handleBatchConvert = async () => {
+    if (!window.confirm(t('translations.list.batchConvertConfirm'))) return
+    try {
+        await services.translationRequest.convertAll(true)
+    } catch (error) {
+        console.error('Batch conversion failed:', error)
+    }
     translationRequestStore.fetch()
 }
 </script>

@@ -35,6 +35,7 @@ export const SETTINGS = {
     FIX_OVERLAPPING_SUBTITLES: 'fix_overlapping_subtitles',
     STRIP_SUBTITLE_FORMATTING: 'strip_subtitle_formatting',
     PRESERVE_LINE_BREAKS: 'preserve_line_breaks',
+    BILINGUAL_SUBTITLE_OUTPUT: 'bilingual_subtitle_output',
     ADD_TRANSLATOR_INFO: 'add_translator_info',
     SUBTITLE_VALIDATION_ENABLED: 'subtitle_validation_enabled',
     SUBTITLE_VALIDATION_MAXDURATIONSECS: 'subtitle_validation_maxdurationsecs',
@@ -104,6 +105,7 @@ export interface ISettings {
     fix_overlapping_subtitles: string
     strip_subtitle_formatting: string
     preserve_line_breaks: string
+    bilingual_subtitle_output: string
     add_translator_info: string
     theme: ITheme
     locale: ILocale

@@ -7,6 +7,21 @@
                 @click="router.push({ name: 'translations' })">
                 <ArrowLeft class="ml-1 h-3.5 w-3.5" />
             </ButtonComponent>
+            <ButtonComponent
+                v-if="detail?.status === TRANSLATION_STATUS.COMPLETED"
+                variant="secondary"
+                size="xs"
+                :disabled="converting"
+                class="ml-2"
+                @click="handleConvert">
+                {{
+                    converting
+                        ? t('translations.detail.converting')
+                        : detail?.isBilingual
+                          ? t('translations.detail.convertToMonolingual')
+                          : t('translations.detail.convertToBilingual')
+                }}
+            </ButtonComponent>
         </div>
 
         <div v-if="loading" class="flex justify-center py-12">
@@ -38,6 +53,25 @@
                                 <BadgeComponent
                                     classes="text-primary-content border-accent bg-secondary">
                                     {{ detail.targetLanguage.toUpperCase() }}
+                                </BadgeComponent>
+                            </div>
+                        </div>
+                        <div v-if="detail.status === TRANSLATION_STATUS.COMPLETED">
+                            <span class="font-semibold">{{
+                                t('translations.detail.outputForm')
+                            }}</span>
+                            <div class="mt-1">
+                                <BadgeComponent
+                                    :classes="
+                                        detail.isBilingual
+                                            ? 'text-white border-green-200 bg-green-500/50'
+                                            : 'text-primary-content/70 border-accent bg-secondary'
+                                    ">
+                                    {{
+                                        detail.isBilingual
+                                            ? t('translations.bilingual')
+                                            : t('translations.monolingual')
+                                    }}
                                 </BadgeComponent>
                             </div>
                         </div>
@@ -307,6 +341,22 @@ const editable = computed(
 )
 
 const proofreadable = computed(() => editable.value && translationRequestStore.proofreadSupported)
+
+const converting = ref(false)
+const handleConvert = async () => {
+    if (!detail.value || converting.value) return
+    converting.value = true
+    try {
+        await services.translationRequest.convert(detail.value.id, !detail.value.isBilingual)
+        detail.value = await services.translationRequest.get<ITranslationRequestDetail>(
+            Number(props.id)
+        )
+    } catch (error) {
+        console.error('Conversion failed:', error)
+    } finally {
+        converting.value = false
+    }
+}
 
 const showProgress = computed(() => {
     if (!detail.value) {

@@ -502,6 +502,8 @@
             "stripFormattingDescription": "Enable this option to remove all formatting tags (e.g., italics, bold, color, position) from (SRT) subtitles, resulting in plain text subtitles.",
             "preserveLineBreaks": "Preserve line breaks:",
             "preserveLineBreaksDescription": "Keep multi-line subtitles split across lines after translation instead of merging them into a single line. AI services translate the whole subtitle in one call; classic services (DeepL, Google, Libre, etc.) translate each line separately.",
+        "bilingualOutput": "Bilingual subtitle output",
+        "bilingualOutputDescription": "Write the translated lines on top and the original line below in the same subtitle cue. ASS/SSA outputs render the original in a smaller font. Only affects new translations; existing ones can be converted from the translations page.",
             "addTranslatorInfo": "Add translator info",
             "addTranslatorInfoDescription": "Add translator info at the beginning of subtitles.",
             "removeLanguageTag": "Remove language tag",
@@ -594,6 +596,8 @@
         }
     },
     "translations": {
+        "bilingual": "Bilingual",
+        "monolingual": "Monolingual",
         "columns": {
             "title": "Title",
             "source": "Source",
@@ -606,6 +610,8 @@
             "deleteWithCount": "Delete ({count})",
             "cancel": "Cancel",
             "select": "Select",
+            "batchConvert": "Convert all to bilingual",
+            "batchConvertConfirm": "Convert all completed translations to bilingual output?",
             "sortByAdded": "Sort by Added",
             "sortByCompleted": "Sort by Completed",
             "sortByTitle": "Sort by Title"
@@ -615,6 +621,7 @@
             "source": "Source",
             "target": "Target",
             "mediaType": "Media Type",
+            "outputForm": "Output",
             "createdAt": "Created At",
             "completed": "Completed",
             "subtitlePath": "Subtitle Path",
@@ -630,6 +637,9 @@
             "proofreadSuggestion": "Proofread suggestion",
             "apply": "Apply",
             "dismiss": "Dismiss",
+            "convertToBilingual": "Convert to bilingual",
+            "convertToMonolingual": "Convert to monolingual",
+            "converting": "Converting...",
             "notFound": "Not Found",
             "proofreadUnavailable": "Proofreading is not available for this line",
             "couldNotApplyChange": "Could not apply the change"

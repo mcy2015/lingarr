@@ -502,6 +502,8 @@
             "stripFormattingDescription": "启用此选项将移除(SRT)字幕中的所有格式标签(如斜体、粗体、颜色、位置),生成纯文本字幕。",
             "preserveLineBreaks": "保留换行:",
             "preserveLineBreaksDescription": "翻译后保留多行字幕的分行,而不是合并为单行。AI 服务会将整条字幕一次性翻译;传统服务(DeepL、Google、Libre 等)则逐行翻译。",
+        "bilingualOutput": "双语字幕输出",
+        "bilingualOutputDescription": "在同一条字幕中上方写入译文、下方附上原文(合并为一行)。ASS/SSA 格式的原文以小字号显示。仅对新的翻译生效;已有翻译可在「翻译任务」页一键转换。",
             "addTranslatorInfo": "添加翻译者信息",
             "addTranslatorInfoDescription": "在字幕开头添加翻译者信息。",
             "removeLanguageTag": "移除语言标签",
@@ -594,6 +596,8 @@
         }
     },
     "translations": {
+        "bilingual": "双语",
+        "monolingual": "单语",
         "columns": {
             "title": "标题",
             "source": "源",
@@ -606,6 +610,8 @@
             "deleteWithCount": "删除 ({count})",
             "cancel": "取消",
             "select": "选择",
+            "batchConvert": "全部转为双语",
+            "batchConvertConfirm": "将所有已完成的翻译转换为双语字幕?",
             "sortByAdded": "按添加时间排序",
             "sortByCompleted": "按完成时间排序",
             "sortByTitle": "按标题排序"
@@ -615,6 +621,7 @@
             "source": "源",
             "target": "目标",
             "mediaType": "媒体类型",
+            "outputForm": "输出",
             "createdAt": "创建时间",
             "completed": "已完成",
             "subtitlePath": "字幕路径",
@@ -631,6 +638,9 @@
             "apply": "应用",
             "dismiss": "忽略",
             "notFound": "未找到",
+            "convertToBilingual": "转为双语",
+            "convertToMonolingual": "转为单语",
+            "converting": "转换中…",
             "proofreadUnavailable": "该行暂不支持校对",
             "couldNotApplyChange": "无法应用更改"
         }

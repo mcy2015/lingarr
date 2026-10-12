@@ -68,6 +68,22 @@
 
                 <div class="flex flex-col space-x-2">
                     <span class="font-semibold">
+                        {{ t('settings.subtitle.bilingualOutput') }}
+                    </span>
+                    {{ t('settings.subtitle.bilingualOutputDescription') }}
+                </div>
+                <ToggleButton v-model="bilingualOutput">
+                    <span class="text-primary-content text-sm font-medium">
+                        {{
+                            bilingualOutput == 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
+                    </span>
+                </ToggleButton>
+
+                <div class="flex flex-col space-x-2">
+                    <span class="font-semibold">
                         {{ t('settings.subtitle.addTranslatorInfo') }}
                     </span>
                     {{ t('settings.subtitle.addTranslatorInfoDescription') }}
@@ -170,6 +186,14 @@ const preserveLineBreaks = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.PRESERVE_LINE_BREAKS) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.PRESERVE_LINE_BREAKS, newValue, true)
+        saveNotification.value?.show()
+    }
+})
+
+const bilingualOutput = computed({
+    get: (): string => settingsStore.getSetting(SETTINGS.BILINGUAL_SUBTITLE_OUTPUT) as string,
+    set: (newValue: string): void => {
+        settingsStore.updateSetting(SETTINGS.BILINGUAL_SUBTITLE_OUTPUT, newValue, true)
         saveNotification.value?.show()
     }
 })

@@ -61,6 +61,28 @@ const service = (
                 })
         })
     },
+    convert<T>(id: number, bilingual: boolean): Promise<T> {
+        return new Promise((resolve, reject) => {
+            http.post(`${resource}/convert`, { id, bilingual })
+                .then((response: AxiosResponse<T>) => {
+                    resolve(response.data)
+                })
+                .catch((error: AxiosError) => {
+                    reject(error.response)
+                })
+        })
+    },
+    convertAll<T>(bilingual: boolean): Promise<T> {
+        return new Promise((resolve, reject) => {
+            http.post(`${resource}/convert/all`, { bilingual })
+                .then((response: AxiosResponse<T>) => {
+                    resolve(response.data)
+                })
+                .catch((error: AxiosError) => {
+                    reject(error.response)
+                })
+        })
+    },
     remove<T>(translationRequest: ITranslationRequest): Promise<T> {
         return new Promise((resolve, reject) => {
             http.post(`${resource}/remove`, translationRequest)
