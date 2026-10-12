@@ -54,6 +54,14 @@ public class TranslationRequestService : ITranslationRequestService
         => _queueService.CreateImportRequest(subtitlePath, title, sourceLanguage, targetLanguage, mediaId, mediaType, contentHash);
 
     /// <inheritdoc />
+    public Task<string?> PauseTranslationRequest(TranslationRequest pauseRequest)
+        => _queueService.PauseTranslationRequest(pauseRequest);
+
+    /// <inheritdoc />
+    public Task<string?> ResumePausedTranslationRequest(TranslationRequest resumeRequest)
+        => _queueService.ResumePausedTranslationRequest(resumeRequest);
+
+    /// <inheritdoc />
     public Task CreateBulkRequest(BulkTranslateRequest request)
         => _queueService.CreateBulkRequest(request);
 
@@ -75,8 +83,13 @@ public class TranslationRequestService : ITranslationRequestService
         string? orderBy,
         bool ascending,
         int pageNumber,
-        int pageSize)
-        => _queryService.GetTranslationRequests(searchQuery, orderBy, ascending, pageNumber, pageSize);
+        int pageSize,
+        TranslationStatus? status = null)
+        => _queryService.GetTranslationRequests(searchQuery, orderBy, ascending, pageNumber, pageSize, status);
+
+    /// <inheritdoc />
+    public Task<Dictionary<TranslationStatus, int>> GetStatusCounts()
+        => _queryService.GetStatusCounts();
 
     /// <inheritdoc />
     public Task<string?> RemoveTranslationRequest(TranslationRequest cancelRequest)

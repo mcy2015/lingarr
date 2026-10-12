@@ -2,7 +2,7 @@
     <CardComponent :title="t('services.plugins.title')">
         <template #description>
             {{ t('services.plugins.descriptionPrefix') }}
-            <a class="cursor-pointer underline" @click="router.push({ name: 'services-settings' })">
+            <a class="cursor-pointer underline" @click="router.push({ name: 'settings-providers' })">
                 {{ t('services.plugins.servicesLink') }}
             </a>
             {{ t('services.plugins.descriptionSuffix') }}

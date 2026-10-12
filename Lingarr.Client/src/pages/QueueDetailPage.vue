@@ -4,7 +4,7 @@
             <ButtonComponent
                 variant="ghost"
                 size="xs"
-                @click="router.push({ name: 'translations' })">
+                @click="router.push({ name: 'queue' })">
                 <Icon name="arrowLeft" class="ml-1 h-3.5 w-3.5" />
             </ButtonComponent>
             <ButtonComponent

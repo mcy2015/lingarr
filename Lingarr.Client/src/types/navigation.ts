@@ -6,3 +6,8 @@ export interface MenuItem {
     route: string
     children: string[]
 }
+
+export interface MenuItemGroup {
+    title: string
+    items: MenuItem[]
+}

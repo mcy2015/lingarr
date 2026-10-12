@@ -82,6 +82,8 @@ public class TranslationJob
             var request = await _translationRequestService.UpdateTranslationRequest(translationRequest,
                 TranslationStatus.InProgress,
                 jobId);
+            request.StartedAt = DateTimeOffset.UtcNow;
+            await _dbContext.SaveChangesAsync();
             await _eventService.LogEvent(request.Id, TranslationStatus.InProgress);
             await _translationRequestService.UpdateActiveCount();
 
@@ -191,6 +193,12 @@ public class TranslationJob
             var serviceType = run.ServiceType;
             var translationService = run.PrimaryService;
 
+            // persist the service that processed (or is processing) this request
+            // so the queue screen can show the provider badge; note `request` is
+            // the tracked entity - the job parameter is a deserialized copy
+            request.ServiceType = serviceType;
+            await _dbContext.SaveChangesAsync();
+
             if (settings[SettingKeys.Translation.FixOverlappingSubtitles] == "true")
             {
                 translatedSubtitles = _subtitleService.FixOverlappingSubtitles(translatedSubtitles);
@@ -238,6 +246,31 @@ public class TranslationJob
             
             translationRequest.ErrorMessage = ex.Message;
             translationRequest.StackTrace = ex.ToString();
+
+            // record how many Hangfire retries were already attempted for this job
+            if (!string.IsNullOrEmpty(translationRequest.JobId))
+            {
+                try
+                {
+                    var details = JobStorage.Current.GetMonitoringApi()
+                        .JobDetails(translationRequest.JobId);
+                    var failedState = details?.History?.LastOrDefault(state =>
+                        state.StateName == "Failed"
+                        && state.Data != null
+                        && state.Data.TryGetValue("RetryCount", out _));
+                    if (failedState?.Data != null
+                        && int.TryParse(failedState.Data["RetryCount"], out var retryCount))
+                    {
+                        translationRequest.RetryCount = retryCount;
+                    }
+                }
+                catch (Exception monitorEx)
+                {
+                    _logger.LogWarning(monitorEx, "Unable to read Hangfire retry count for {JobId}",
+                        translationRequest.JobId);
+                }
+            }
+
             await _dbContext.SaveChangesAsync(cancellationToken);
             
             await _eventService.LogEvent(translationRequest.Id, TranslationStatus.Failed, ex.Message);

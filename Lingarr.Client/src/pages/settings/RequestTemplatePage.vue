@@ -5,7 +5,7 @@
                 <ButtonComponent
                     variant="ghost"
                     size="xs"
-                    @click="router.push({ name: 'services-settings' })">
+                    @click="router.push({ name: 'settings-providers' })">
                     <Icon name="arrowLeft" class="ml-1 h-3.5 w-3.5" />
                 </ButtonComponent>
             </div>
@@ -91,7 +91,7 @@ watch(
             return
         }
         if (options.length === 0) {
-            router.push({ name: 'services-settings' })
+            router.push({ name: 'settings-providers' })
             return
         }
         if (!options.some((option) => option.value === current)) {

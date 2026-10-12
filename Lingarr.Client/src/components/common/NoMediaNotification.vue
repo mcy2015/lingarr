@@ -13,7 +13,7 @@
                 <li>{{ t('common.noMedia.step3') }}</li>
             </ol>
         </div>
-        <ButtonComponent variant="accent" @click="router.push({ name: 'integration-settings' })">
+        <ButtonComponent variant="accent" @click="router.push({ name: 'settings-sources' })">
             {{ t('common.noMedia.goToSettings') }}
         </ButtonComponent>
     </div>

@@ -43,16 +43,22 @@
             "completed": "已完成",
             "failed": "已失败",
             "cancelled": "已取消",
-            "interrupted": "已中断"
+            "interrupted": "已中断",
+            "paused": "已暂停"
         }
     },
     "nav": {
         "dashboard": "仪表盘",
-        "movies": "电影",
-        "shows": "剧集",
-        "translations": "翻译任务",
+        "library": "媒体库",
         "import": "导入",
-        "settings": "设置"
+        "settings": "设置",
+        "queue": "任务队列"
+    },
+    "library": {
+        "tabs": {
+            "shows": "剧集",
+            "movies": "电影"
+        }
     },
     "version": {
         "development": "开发版",
@@ -131,43 +137,88 @@
         "title": "导入字幕",
         "tabs": {
             "free": "自由导入",
-            "season": "整季包"
+            "season": "定向导入 · 整季"
         },
+        "planned": "规划中",
         "dropzone": {
-            "title": "拖拽字幕文件到此处，或点击选择",
-            "formats": ".srt / .ass / .ssa — 导入时自动转码为 UTF-8"
+            "title": "拖拽字幕文件到此处，或点击选择"
         },
-        "seasonHint": "文件名中的季集标记（SxxExx、第x集）会被自动解析；文件存入导入库，写回媒体目录的能力在路线图中。",
-        "options": {
-            "source": "源语言",
-            "target": "目标语言",
-            "translate": "导入后加入翻译队列",
-            "chineseConvert": "简繁转换"
+        "scan": {
+            "title": "扫描路径",
+            "pathTitle": "服务器路径扫描将在 B3 批次提供"
+        },
+        "hint": {
+            "title": "导入即任务",
+            "body": "文件经「解析 → 编码转码 → 入库」处理，可同时进入翻译队列；按内容哈希与既有任务去重。"
+        },
+        "queue": {
+            "title": "处理队列",
+            "meta": "{files} 个文件 · 翻译 {translate} · 仅入库 {store}"
         },
         "table": {
             "file": "文件",
-            "season": "季",
-            "episode": "集",
+            "detected": "检出",
+            "encoding": "编码",
+            "target": "目标",
+            "action": "动作",
+            "status": "状态",
+            "episodeCol": "匹配集",
             "match": "置信度",
-            "languages": "语言",
-            "status": "状态"
+            "languages": "语言"
         },
+        "lines": "{count} 行",
+        "encoding": {
+            "convert": "非 UTF-8 · 将转码"
+        },
+        "targetFormat": {
+            "original": "原格式"
+        },
+        "action": {
+            "translate": "转换＋翻译",
+            "store": "仅转换",
+            "translateShort": "入库＋翻译",
+            "storeShort": "仅入库"
+        },
+        "options": {
+            "source": "源语言",
+            "target": "目标语言",
+            "chineseConvert": "简繁",
+            "transcode": "转码 UTF-8",
+            "transcodeHint": "导入统一转码为 UTF-8 存储",
+            "bilingual": "双语输出",
+            "bilingualHint": "由全局字幕设置在写回时决定",
+            "bilingualFollows": "跟随全局",
+            "writeback": "写回",
+            "conflict": "冲突"
+        },
+        "on": "开",
+        "off": "关",
+        "writeback": {
+            "importsDir": "导入库目录",
+            "mediaDir": "媒体目录（未匹配 → 导入库）"
+        },
+        "conflict": {
+            "suffix": "加后缀不覆盖"
+        },
+        "estimate": "预计 {files} 项 · 共 {lines} 行 · 翻译 {translate} 项",
         "match": {
             "Exact": "精确",
             "Guess": "猜测",
             "None": "未匹配"
         },
         "status": {
-            "stored": "已入库",
             "queued": "已排队（#{id}）",
             "failed": "失败",
             "bound": "已写入媒体目录",
             "fallback": "已存入导入库",
-            "duplicate": "内容与任务 #{id} 重复，已跳过入队"
+            "duplicate": "与任务 #{id} 重复 · 跳过入队",
+            "waiting": "◐ 等待",
+            "processing": "◐ 处理中…"
         },
         "actions": {
-            "import": "开始导入",
-            "clear": "清除"
+            "clear": "清除",
+            "importCounts": "开始导入 {files} 项 · 翻译 {translate} 项",
+            "excludeUnmatched": "排除未匹配"
         },
         "empty": "尚未选择文件。",
         "toast": {
@@ -175,9 +226,16 @@
             "failed": "导入失败：{message}"
         },
         "target": {
-            "show": "剧集",
-            "season": "季",
-            "pickShow": "选择剧集…"
+            "pickShow": "选择剧集…",
+            "change": "更换目标"
+        },
+        "season": {
+            "dropTitle": "拖入整季字幕包，或点击选择",
+            "dropFormats": "SxxExx / E01 / 1x02 / 第x集 自动映射 · .srt / .ass · 简繁自动归一",
+            "preview": "映射预览",
+            "meta": "{files} 个文件 · {matched} 已匹配 · {unmatched} 待指派",
+            "targetMeta": "目标 · S{season} · 映射自文件名 · {files} 个文件",
+            "pickMeta": "选择目标剧集与季，绑定本次导入"
         },
         "chinese": {
             "none": "保持原样",
@@ -474,7 +532,14 @@
             "tasks": "任务",
             "logs": "日志",
             "telemetry": "遥测",
-            "logout": "退出登录"
+            "logout": "退出登录",
+            "groups": {
+                "providers": "翻译服务",
+                "sources": "媒体与自动化",
+                "quality": "字幕与质量",
+                "system": "系统"
+            },
+            "mapping": "语言映射"
         },
         "status": {
             "enabled": "已启用",
@@ -675,6 +740,16 @@
             "sortByCompleted": "按完成时间排序",
             "sortByTitle": "按标题排序"
         },
+        "queueTabs": {
+            "all": "全部",
+            "inProgress": "进行中",
+            "pending": "排队",
+            "completed": "已完成",
+            "failed": "失败"
+        },
+        "badges": {
+            "import": "导入"
+        },
         "detail": {
             "status": "状态",
             "source": "源",
@@ -702,6 +777,13 @@
             "converting": "转换中…",
             "proofreadUnavailable": "该行暂不支持校对",
             "couldNotApplyChange": "无法应用更改"
+        },
+        "queueFooter": "队列由 Hangfire 6 队列驱动（movies / shows / system / translation / webhook / default）· 并发由 MAX_CONCURRENT_JOBS 控制",
+        "wroteBack": "写回",
+        "eta": {
+            "pausedHint": "已暂停，恢复后继续",
+            "remainingHint": "预计剩余时间",
+            "retries": "重试 {count} 次"
         }
     }
 }

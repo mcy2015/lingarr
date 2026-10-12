@@ -35,25 +35,37 @@ const routes: RouteRecordRaw[] = [
                 name: 'dashboard'
             },
             {
+                path: '/library',
+                component: () => import('@/pages/LibraryPage.vue'),
+                name: 'library'
+            },
+            {
+                path: '/queue',
+                component: () => import('@/pages/QueuePage.vue'),
+                name: 'queue'
+            },
+            {
+                path: '/queue/:id',
+                component: () => import('@/pages/QueueDetailPage.vue'),
+                name: 'queue-detail',
+                props: true
+            },
+            {
+                // legacy paths -> new IA (bookmarks kept alive)
                 path: '/shows',
-                component: () => import('@/pages/ShowPage.vue'),
-                name: 'shows'
+                redirect: '/library?type=show'
             },
             {
                 path: '/movies',
-                component: () => import('@/pages/MoviePage.vue'),
-                name: 'movies'
+                redirect: '/library?type=movie'
             },
             {
                 path: '/translations',
-                component: () => import('@/pages/TranslationPage.vue'),
-                name: 'translations'
+                redirect: '/queue'
             },
             {
                 path: '/translations/:id',
-                component: () => import('@/pages/TranslationDetailPage.vue'),
-                name: 'translation-detail',
-                props: true
+                redirect: (to) => ({ path: `/queue/${String(to.params.id)}` })
             },
             {
                 path: '/import',
@@ -66,49 +78,28 @@ const routes: RouteRecordRaw[] = [
                 name: 'settings',
                 children: [
                     {
-                        path: 'services',
-                        name: 'services-settings',
-                        component: () => import('@/pages/settings/ServicesPage.vue')
+                        path: '',
+                        redirect: { name: 'settings-providers' }
                     },
                     {
-                        path: 'integration',
-                        name: 'integration-settings',
-                        component: () => import('@/pages/settings/IntegrationPage.vue')
+                        path: 'providers',
+                        name: 'settings-providers',
+                        component: () => import('@/pages/settings/SettingsProvidersPage.vue')
                     },
                     {
-                        path: 'authentication',
-                        name: 'authentication-settings',
-                        component: () => import('@/pages/settings/AuthenticationPage.vue')
+                        path: 'sources',
+                        name: 'settings-sources',
+                        component: () => import('@/pages/settings/SettingsSourcesPage.vue')
                     },
                     {
-                        path: 'subtitle',
-                        name: 'subtitle-settings',
-                        component: () => import('@/pages/settings/SubtitlePage.vue')
+                        path: 'quality',
+                        name: 'settings-quality',
+                        component: () => import('@/pages/settings/SettingsQualityPage.vue')
                     },
                     {
-                        path: 'automation',
-                        name: 'automation-settings',
-                        component: () => import('@/pages/settings/AutomationPage.vue')
-                    },
-                    {
-                        path: 'mapping',
-                        name: 'mapping-settings',
-                        component: () => import('@/pages/settings/MappingPage.vue')
-                    },
-                    {
-                        path: 'tasks',
-                        name: 'tasks-settings',
-                        component: () => import('@/pages/settings/SchedulePage.vue')
-                    },
-                    {
-                        path: 'logs',
-                        name: 'logs-settings',
-                        component: () => import('@/pages/settings/LogsPage.vue')
-                    },
-                    {
-                        path: 'telemetry',
-                        name: 'telemetry-settings',
-                        component: () => import('@/pages/settings/TelemetryPage.vue')
+                        path: 'system',
+                        name: 'settings-system',
+                        component: () => import('@/pages/settings/SettingsSystemPage.vue')
                     },
                     {
                         path: 'request-template/:service',
@@ -117,9 +108,45 @@ const routes: RouteRecordRaw[] = [
                         props: true
                     },
                     {
+                        // legacy settings paths -> grouped panels (bookmarks kept alive)
+                        path: 'services',
+                        redirect: { name: 'settings-providers' }
+                    },
+                    {
                         path: 'plugins',
-                        name: 'plugins-settings',
-                        component: () => import('@/pages/settings/PluginsPage.vue')
+                        redirect: { name: 'settings-providers' }
+                    },
+                    {
+                        path: 'integration',
+                        redirect: { name: 'settings-sources' }
+                    },
+                    {
+                        path: 'automation',
+                        redirect: { name: 'settings-sources' }
+                    },
+                    {
+                        path: 'mapping',
+                        redirect: { name: 'settings-sources' }
+                    },
+                    {
+                        path: 'subtitle',
+                        redirect: { name: 'settings-quality' }
+                    },
+                    {
+                        path: 'authentication',
+                        redirect: { name: 'settings-system' }
+                    },
+                    {
+                        path: 'tasks',
+                        redirect: { name: 'settings-system' }
+                    },
+                    {
+                        path: 'logs',
+                        redirect: { name: 'settings-system' }
+                    },
+                    {
+                        path: 'telemetry',
+                        redirect: { name: 'settings-system' }
                     }
                 ]
             }

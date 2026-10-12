@@ -32,6 +32,7 @@ export type IFilter = {
     searchQuery: string
     sortBy: string
     isAscending: boolean
+    status?: string | null
 }
 export type IOptions = {
     label: string

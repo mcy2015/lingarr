@@ -19,17 +19,20 @@ public class TranslationPipeline : ITranslationPipeline
     private readonly ISettingService _settings;
     private readonly ITranslationServiceFactory _translationServiceFactory;
     private readonly IProgressService _progressService;
+    private readonly IAsyncTranslationRegistry _asyncTranslationRegistry;
     private readonly ILogger<TranslationPipeline> _logger;
 
     public TranslationPipeline(
         ISettingService settings,
         ITranslationServiceFactory translationServiceFactory,
         IProgressService progressService,
+        IAsyncTranslationRegistry asyncTranslationRegistry,
         ILogger<TranslationPipeline> logger)
     {
         _settings = settings;
         _translationServiceFactory = translationServiceFactory;
         _progressService = progressService;
+        _asyncTranslationRegistry = asyncTranslationRegistry;
         _logger = logger;
     }
 
@@ -95,7 +98,7 @@ public class TranslationPipeline : ITranslationPipeline
                 dispatch.MaxBatchSize, run.Subtitles.Count, run.Request.Id);
 
             var translator = new SubtitleTranslationService(
-                dispatch.Services, _logger, _progressService);
+                dispatch.Services, _logger, _progressService, pauseGate: _asyncTranslationRegistry);
             var translated = await translator.TranslateSubtitlesBatch(
                 run.Subtitles,
                 run.Request,

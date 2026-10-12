@@ -43,16 +43,22 @@
             "completed": "Completed",
             "failed": "Failed",
             "cancelled": "Cancelled",
-            "interrupted": "Interrupted"
+            "interrupted": "Interrupted",
+            "paused": "Paused"
         }
     },
     "nav": {
         "dashboard": "Dashboard",
-        "movies": "Movies",
-        "shows": "TV Shows",
-        "translations": "Translations",
+        "library": "Library",
         "import": "Import",
-        "settings": "Settings"
+        "settings": "Settings",
+        "queue": "Queue"
+    },
+    "library": {
+        "tabs": {
+            "shows": "TV Shows",
+            "movies": "Movies"
+        }
     },
     "version": {
         "development": "Development",
@@ -133,41 +139,86 @@
             "free": "Free import",
             "season": "Season pack"
         },
+        "planned": "planned",
         "dropzone": {
-            "title": "Drag subtitle files here, or click to browse",
-            "formats": ".srt / .ass / .ssa — converted to UTF-8 on import"
+            "title": "Drag subtitle files here, or click to browse"
         },
-        "seasonHint": "File names are parsed for season/episode markers (SxxExx, 第x集). Files are stored in the import library; writing back next to media is on the roadmap.",
-        "options": {
-            "source": "Source language",
-            "target": "Target language",
-            "translate": "Queue translation after import",
-            "chineseConvert": "Chinese variant"
+        "scan": {
+            "title": "Scan path",
+            "pathTitle": "Server-path scanning arrives with the B3 batch"
+        },
+        "hint": {
+            "title": "Import as task",
+            "body": "files are parsed → transcoded to UTF-8 → stored, and can enter the translation queue; deduplicated against existing requests by content hash."
+        },
+        "queue": {
+            "title": "Processing queue",
+            "meta": "{files} files · {translate} to translate · {store} store-only"
         },
         "table": {
             "file": "File",
-            "season": "Season",
-            "episode": "Episode",
+            "detected": "Detected",
+            "encoding": "Encoding",
+            "target": "Target",
+            "action": "Action",
+            "status": "Status",
+            "episodeCol": "Episode",
             "match": "Match",
-            "languages": "Languages",
-            "status": "Status"
+            "languages": "Languages"
         },
+        "lines": "{count} lines",
+        "encoding": {
+            "convert": "not UTF-8 → transcode"
+        },
+        "targetFormat": {
+            "original": "Original format"
+        },
+        "action": {
+            "translate": "Convert + translate",
+            "store": "Convert only",
+            "translateShort": "Store + translate",
+            "storeShort": "Store only"
+        },
+        "options": {
+            "source": "Source language",
+            "target": "Target language",
+            "chineseConvert": "Chinese variant",
+            "transcode": "UTF-8 transcode",
+            "transcodeHint": "Imports are always stored as UTF-8",
+            "bilingual": "Bilingual output",
+            "bilingualHint": "Decided by the global subtitle setting at write-back time",
+            "bilingualFollows": "follows global",
+            "writeback": "Write-back",
+            "conflict": "Conflict"
+        },
+        "on": "On",
+        "off": "Off",
+        "writeback": {
+            "importsDir": "Import library dir",
+            "mediaDir": "Next to media (unmatched → import library)"
+        },
+        "conflict": {
+            "suffix": "Add suffix, never overwrite"
+        },
+        "estimate": "{files} items · {lines} lines · {translate} to translate",
         "match": {
             "Exact": "Exact",
             "Guess": "Guess",
             "None": "Unmatched"
         },
         "status": {
-            "stored": "Stored",
             "queued": "Queued (#{id})",
             "failed": "Failed",
             "bound": "Stored next to media",
             "fallback": "Stored in import library",
-            "duplicate": "Duplicate of request #{id} — enqueue skipped"
+            "duplicate": "Duplicate of request #{id} — enqueue skipped",
+            "waiting": "◐ Waiting",
+            "processing": "◐ Processing…"
         },
         "actions": {
-            "import": "Import files",
-            "clear": "Clear"
+            "clear": "Clear",
+            "importCounts": "Import {files} · translate {translate}",
+            "excludeUnmatched": "Exclude unmatched"
         },
         "empty": "No files selected yet.",
         "toast": {
@@ -175,9 +226,16 @@
             "failed": "Import failed: {message}"
         },
         "target": {
-            "show": "Show",
-            "season": "Season",
-            "pickShow": "Pick a show…"
+            "pickShow": "Pick a show…",
+            "change": "Change target"
+        },
+        "season": {
+            "dropTitle": "Drag a season pack here, or click to browse",
+            "dropFormats": "SxxExx / E01 / 1x02 / 第x集 auto-mapped · .srt / .ass · Simplified/Traditional normalized",
+            "preview": "Mapping preview",
+            "meta": "{files} files · {matched} matched · {unmatched} unassigned",
+            "targetMeta": "Target · S{season} · mapping from file names · {files} files",
+            "pickMeta": "Pick a show and season to bind this pack"
         },
         "chinese": {
             "none": "Keep as-is",
@@ -474,7 +532,14 @@
             "tasks": "Tasks",
             "logs": "Logs",
             "telemetry": "Telemetry",
-            "logout": "Logout"
+            "logout": "Logout",
+            "groups": {
+                "providers": "Translation services",
+                "sources": "Media & automation",
+                "quality": "Subtitles & quality",
+                "system": "System"
+            },
+            "mapping": "Language mapping"
         },
         "status": {
             "enabled": "Enabled",
@@ -675,6 +740,16 @@
             "sortByCompleted": "Sort by Completed",
             "sortByTitle": "Sort by Title"
         },
+        "queueTabs": {
+            "all": "All",
+            "inProgress": "In progress",
+            "pending": "Queued",
+            "completed": "Completed",
+            "failed": "Failed"
+        },
+        "badges": {
+            "import": "Import"
+        },
         "detail": {
             "status": "Status",
             "source": "Source",
@@ -702,6 +777,13 @@
             "notFound": "Not Found",
             "proofreadUnavailable": "Proofreading is not available for this line",
             "couldNotApplyChange": "Could not apply the change"
+        },
+        "queueFooter": "Driven by 6 Hangfire queues (movies / shows / system / translation / webhook / default) · concurrency via MAX_CONCURRENT_JOBS",
+        "wroteBack": "Wrote back",
+        "eta": {
+            "pausedHint": "Paused — resume to continue",
+            "remainingHint": "Estimated remaining time",
+            "retries": "{count} retries"
         }
     }
 }

@@ -23,6 +23,19 @@ public class TranslationRequest : BaseEntity
     public TranslationRequestSource Source { get; set; } = TranslationRequestSource.Library;
     public required MediaType MediaType { get; set; }
     public required TranslationStatus Status { get; set; }
+
+    /// <summary>Translation service that processed (or is processing) this request.</summary>
+    public string? ServiceType { get; set; }
+
+    /// <summary>Persisted progress percentage, updated as batches complete.</summary>
+    public int Progress { get; set; } = 0;
+
+    /// <summary>When the translation run actually started (for ETA estimation).</summary>
+    public DateTimeOffset? StartedAt { get; set; }
+
+    /// <summary>Hangfire retry attempts recorded when a request fails.</summary>
+    public int RetryCount { get; set; } = 0;
+
     public DateTimeOffset? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
     public string? StackTrace { get; set; }

@@ -26,6 +26,10 @@ public class ProgressService : IProgressService
     /// <inheritdoc />
     public async Task Emit(TranslationRequest translationRequest, int progress)
     {
+        // persist the progress so the queue screen can restore track bars
+        // (and estimate ETAs) after reloads, not just for live SignalR clients
+        translationRequest.Progress = Math.Max(translationRequest.Progress, progress);
+        await _dbContext.SaveChangesAsync();
         await _hubContext.Clients.Group("TranslationRequests").SendAsync("RequestProgress", new
         {
             translationRequest.Id,

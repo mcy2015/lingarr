@@ -1,4 +1,6 @@
 ﻿using Lingarr.Core.Entities;
+using System.Collections.Generic;
+using Lingarr.Core.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Interfaces.Services;
@@ -67,20 +69,43 @@ public class TranslationRequestController : ControllerBase
     /// <response code="200">Returns the paginated list of translation requests</response>
     /// <response code="500">If there was an error checking for updates</response>
     /// <returns>ActionResult containing the paginated list of translation requests</returns>
+    /// <summary>
+    /// Returns the request count per translation status for the queue filter tabs.
+    /// </summary>
+    [HttpGet("counts")]
+    public async Task<ActionResult<Dictionary<TranslationStatus, int>>> GetStatusCounts()
+    {
+        return Ok(await _translationRequestService.GetStatusCounts());
+    }
+
+    /// <summary>
+    /// Retrieves a paginated list of translation requests with optional filtering and sorting
+    /// </summary>
+    /// <param name="searchQuery">Optional search term to filter requests</param>
+    /// <param name="orderBy">Property name to sort the results by</param>
+    /// <param name="ascending">Sort direction; true for ascending, false for descending</param>
+    /// <param name="status">Optional status filter for the queue tabs</param>
+    /// <param name="pageSize">Number of items per page</param>
+    /// <param name="pageNumber">Page number to retrieve</param>
+    /// <response code="200">Returns the paginated list of translation requests</response>
+    /// <response code="500">If there was an error checking for updates</response>
+    /// <returns>ActionResult containing the paginated list of translation requests</returns>
     [HttpGet("requests")]
     public async Task<ActionResult<PagedResult<TranslationRequestSummary>>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending = true,
         int pageSize = 20,
-        int pageNumber = 1)
+        int pageNumber = 1,
+        TranslationStatus? status = null)
     {
         var value = await _translationRequestService.GetTranslationRequests(
             searchQuery,
             orderBy,
             ascending,
             pageNumber,
-            pageSize);
+            pageSize,
+            status);
 
         return Ok(value);
     }
@@ -93,6 +118,26 @@ public class TranslationRequestController : ControllerBase
     /// <response code="404">If the translation request was not found</response>
     /// <response code="500">If there was an error checking for updates</response>
     /// <returns>ActionResult containing the canceled translation request if found, or NotFound if the request doesn't exist</returns>
+    /// <summary>
+    /// Cooperatively pauses a running translation at the next batch boundary.
+    /// </summary>
+    [HttpPost("pause")]
+    public async Task<ActionResult<string?>> PauseTranslationRequest([FromBody] TranslationRequest pauseRequest)
+    {
+        var error = await _translationRequestService.PauseTranslationRequest(pauseRequest);
+        return error != null ? BadRequest(new { message = error }) : Ok(error);
+    }
+
+    /// <summary>
+    /// Releases a paused translation so the running job continues.
+    /// </summary>
+    [HttpPost("resume-paused")]
+    public async Task<ActionResult<string?>> ResumePausedTranslationRequest([FromBody] TranslationRequest resumeRequest)
+    {
+        var error = await _translationRequestService.ResumePausedTranslationRequest(resumeRequest);
+        return error != null ? BadRequest(new { message = error }) : Ok(error);
+    }
+
     [HttpPost("cancel")]
     public async Task<ActionResult<string>> CancelTranslationRequest([FromBody] TranslationRequest cancelRequest)
     {
