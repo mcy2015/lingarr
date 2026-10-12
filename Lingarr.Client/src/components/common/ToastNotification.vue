@@ -11,6 +11,7 @@
             <div
                 v-for="toast in toastStore.toasts"
                 :key="toast.id"
+                :role="toast.type === 'error' ? 'alert' : 'status'"
                 class="border-line bg-secondary pointer-events-auto w-full overflow-hidden rounded-md shadow-lg">
                 <div class="p-4">
                     <div class="flex items-start">

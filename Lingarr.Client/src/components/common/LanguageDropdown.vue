@@ -1,5 +1,5 @@
 <template>
-    <DropdownComponent ref="dropdown" width="small">
+    <DropdownComponent ref="dropdown" width="small" :label="t('common.language')">
         <template #button>
             <Icon name="language" class="h-5 w-5" />
         </template>
@@ -35,7 +35,7 @@ import { setLocale, SUPPORTED_LOCALES, type LocaleCode } from '@/i18n'
 import DropdownComponent from '@/components/common/DropdownComponent.vue'
 import Icon from '@/components/icons/Icon.vue'
 
-const { locale } = useI18n()
+const { t, locale } = useI18n()
 const currentLocale = computed(() => locale.value)
 const dropdown = ref<InstanceType<typeof DropdownComponent>>()
 

@@ -3,7 +3,7 @@
         <!-- NLE-style track: segmented fill + playhead -->
         <div class="h-2 w-full select-none overflow-hidden rounded-sm bg-tertiary">
             <div
-                class="h-full select-none rounded-sm transition-all duration-1000 ease-out"
+                class="h-full select-none rounded-sm transition-[width] duration-1000 ease-out"
                 :style="{
                     width: `${fillWidth}%`,
                     background: fillBackground

@@ -1,16 +1,21 @@
 {
     "common": {
         "close": "关闭",
+        "back": "返回",
+        "menu": "打开菜单",
+        "language": "语言",
+        "theme": "主题",
+        "skipToContent": "跳到主要内容",
         "saved": "已保存",
         "loading": "加载中…",
         "retry": "重试",
         "refresh": "刷新",
-        "searchMedia": "搜索媒体...",
+        "searchMedia": "搜索媒体…",
         "orderBy": "排序",
-        "translateTo": "翻译为...",
+        "translateTo": "翻译为…",
         "translationStarted": "已开始翻译",
         "requiredPlaceholdersMissing": "缺少必需的占位符:{placeholders}",
-        "selectItems": "选择项目...",
+        "selectItems": "选择项目…",
         "selectSourceLanguageFirst": "请先选择源语言。",
         "pagination": {
             "page": "第",
@@ -227,6 +232,7 @@
         },
         "target": {
             "pickShow": "选择剧集…",
+            "season": "季",
             "change": "更换目标"
         },
         "season": {

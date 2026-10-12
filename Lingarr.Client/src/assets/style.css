@@ -3,6 +3,15 @@
 @import 'tailwindcss';
 @config '../../tailwind.config.mjs';
 
+/* Timecode/numeric metadata face (docs/DESIGN.md) — templates spell it `mono`;
+   kept in the utilities layer so font-* utilities can still override it. */
+@utility mono {
+    font-family:
+        'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SFMono-Regular',
+        Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+}
+
 /* Default Lingarr theme — "Timeline" design system, see docs/DESIGN.md */
 @layer base {
     :root {
@@ -37,6 +46,9 @@
         --syntax-string: #a8d4a0;
         --syntax-number: #e0a870;
         --syntax-keyword: #c4a0d8;
+
+        /* Dark-first: native scrollbars, inputs and form controls follow the theme */
+        color-scheme: dark;
     }
 
     body {
@@ -62,7 +74,8 @@
     --syntax-key: #268bd2;
     --syntax-string: #2aa198;
     --syntax-number: #cb4b16;
-    --syntax-keyword: #6c71c4;
+    --syntax-keyword: #6c71b4;
+    color-scheme: light;
 }
 
 .solarized-dark {
@@ -337,4 +350,17 @@
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+/* Collapse decorative motion (spinners, drawer slide, toasts) when the user
+   opts out; state indicators stay visible, only the motion goes away. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        transition-delay: 0ms !important;
+    }
 }

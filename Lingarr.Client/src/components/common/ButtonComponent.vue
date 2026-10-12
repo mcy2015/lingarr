@@ -2,7 +2,7 @@
     <button
         :type="type"
         :disabled="disabled || loading"
-        class="inline-flex cursor-pointer items-center justify-center rounded-md text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-primary disabled:cursor-not-allowed disabled:opacity-50"
+        class="inline-flex cursor-pointer items-center justify-center rounded-md text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-primary disabled:cursor-not-allowed disabled:opacity-50"
         :class="[variantClasses, sizeClasses]"
         @click="handleClick">
         <Icon v-if="loading" name="loaderCircle" class="mr-2 h-4 w-4 animate-spin" />

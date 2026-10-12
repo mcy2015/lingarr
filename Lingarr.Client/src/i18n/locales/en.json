@@ -1,16 +1,21 @@
 {
     "common": {
         "close": "Close",
+        "back": "Back",
+        "menu": "Open menu",
+        "language": "Language",
+        "theme": "Theme",
+        "skipToContent": "Skip to content",
         "saved": "Saved",
-        "loading": "Loading...",
+        "loading": "Loading…",
         "retry": "Retry",
         "refresh": "Refresh",
-        "searchMedia": "Search media...",
+        "searchMedia": "Search media…",
         "orderBy": "Order by",
-        "translateTo": "Translate to ...",
+        "translateTo": "Translate to …",
         "translationStarted": "Translation started",
         "requiredPlaceholdersMissing": "Required placeholders missing: {placeholders}",
-        "selectItems": "Select items...",
+        "selectItems": "Select items…",
         "selectSourceLanguageFirst": "Select a source language first.",
         "pagination": {
             "page": "Page",
@@ -72,7 +77,7 @@
         "skip": "Skip",
         "enable": "Enable",
         "continue": "Continue",
-        "completing": "Completing...",
+        "completing": "Completing…",
         "goToDashboard": "Go to Dashboard",
         "steps": {
             "choose": "Choose",
@@ -127,7 +132,7 @@
         "password": "Password",
         "passwordPlaceholder": "Enter your password",
         "signIn": "Sign In",
-        "signingIn": "Signing in...",
+        "signingIn": "Signing in…",
         "errors": {
             "missingCredentials": "Please enter your username and password",
             "invalidCredentials": "Invalid username or password"
@@ -227,6 +232,7 @@
         },
         "target": {
             "pickShow": "Pick a show…",
+            "season": "Season",
             "change": "Change target"
         },
         "season": {
@@ -517,8 +523,8 @@
             "noPluginsPrefix": "No plugins loaded. Add plugin DLLs to the folder set by",
             "noPluginsSuffix": "and restart Lingarr.",
             "noSettings": "This provider has no configurable settings.",
-            "selectOption": "Select option...",
-            "loadingOptions": "Loading options...",
+            "selectOption": "Select option…",
+            "loadingOptions": "Loading options…",
             "noOptionsEndpoint": "No options endpoint configured.",
             "noOptionsReturned": "No options returned.",
             "optionsLoadError": "Error loading options. Please try again."
@@ -598,7 +604,7 @@
             "title": "API Key",
             "description": "Click the button below to (re)generate your API key",
             "generate": "Generate API Key",
-            "generating": "Generating...",
+            "generating": "Generating…",
             "label": "API Key",
             "howToUse": "How to Use",
             "headerIntro": "Include the API key in your HTTP requests using the",
@@ -750,13 +756,13 @@
             "level": "Level",
             "source": "Source",
             "message": "Message",
-            "waiting": "Waiting for logs...",
+            "waiting": "Waiting for logs…",
             "totalEntries": "Total entries: {count}",
             "failedToProcessData": "Failed to process log data: {data}",
-            "connectionError": "Log stream connection error. Attempting to reconnect in 5 seconds..."
+            "connectionError": "Log stream connection error. Attempting to reconnect in 5 seconds…"
         },
         "languageSelect": {
-            "placeholder": "Select language...",
+            "placeholder": "Select language…",
             "selectSourceFirst": "Select a source language first.",
             "search": "Select or search language"
         }
@@ -815,7 +821,7 @@
             "dismiss": "Dismiss",
             "convertToBilingual": "Convert to bilingual",
             "convertToMonolingual": "Convert to monolingual",
-            "converting": "Converting...",
+            "converting": "Converting…",
             "notFound": "Not Found",
             "proofreadUnavailable": "Proofreading is not available for this line",
             "couldNotApplyChange": "Could not apply the change"
