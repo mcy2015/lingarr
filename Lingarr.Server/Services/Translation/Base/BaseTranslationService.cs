@@ -130,7 +130,8 @@ public abstract class BaseTranslationService : ITranslationService
     /// <summary>
     /// Executes a provider operation with the shared retry policy: exponential
     /// backoff on 429/503, cancellation passthrough, any other failure wrapped
-    /// in a <see cref="TranslationException"/>.
+    /// in a <see cref="TranslationException"/>. Every attempt outcome feeds the
+    /// health tracker when the factory attached one (see SetHealthTracking).
     /// </summary>
     /// <param name="serviceName">Display name used in log messages (e.g. "OpenAI").</param>
     /// <param name="failureMessage">Message for the wrapped exception on non-retryable failures.</param>
@@ -150,12 +151,16 @@ public abstract class BaseTranslationService : ITranslationService
         var delay = _retryDelay;
         for (var attempt = 1; attempt <= _maxRetries; attempt++)
         {
+            var attemptStarted = DateTimeOffset.UtcNow;
             try
             {
-                return await operation(linked.Token);
+                var result = await operation(linked.Token);
+                RecordHealth(true, DateTimeOffset.UtcNow - attemptStarted);
+                return result;
             }
             catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
             {
+                RecordHealth(false, DateTimeOffset.UtcNow - attemptStarted, $"{ex.StatusCode}");
                 if (attempt == _maxRetries)
                 {
                     if (logText is null)
@@ -183,11 +188,32 @@ public abstract class BaseTranslationService : ITranslationService
             }
             catch (Exception ex)
             {
+                RecordHealth(false, DateTimeOffset.UtcNow - attemptStarted, failureMessage);
                 _logger.LogError(ex, "Error occurred during {ServiceName} operation", serviceName);
                 throw new TranslationException(failureMessage, ex);
             }
         }
 
         throw new TranslationException($"{failureMessage}: maximum retry attempts reached.");
+    }
+
+    /// <summary>
+    /// Health tracking context, attached by the factory after construction.
+    /// Providers are created per request (not via DI), so this is wired after
+    /// the fact rather than through the constructor. Plugin implementations of
+    /// the Contracts ABI do not inherit this base and stay untracked.
+    /// </summary>
+    private ITranslationHealthService? _healthService;
+    private string? _healthServiceType;
+
+    public void SetHealthTracking(ITranslationHealthService healthService, string serviceType)
+    {
+        _healthService = healthService;
+        _healthServiceType = serviceType;
+    }
+
+    private void RecordHealth(bool success, TimeSpan latency, string? error = null)
+    {
+        _healthService?.Record(_healthServiceType ?? GetType().Name, success, latency, error);
     }
 }

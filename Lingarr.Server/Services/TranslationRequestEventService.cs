@@ -2,6 +2,7 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Interfaces.Services;
+using Lingarr.Server.Models.TranslationRequests;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lingarr.Server.Services;
@@ -44,6 +45,26 @@ public class TranslationRequestEventService : ITranslationRequestEventService
         return await _dbContext.TranslationRequestEvents
             .Where(e => e.TranslationRequestId == translationRequestId)
             .OrderBy(e => e.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<TranslationRequestEventSummary>> GetRecentEvents(int take = 20)
+    {
+        return await _dbContext.TranslationRequestEvents
+            .Join(_dbContext.TranslationRequests,
+                e => e.TranslationRequestId,
+                r => r.Id,
+                (e, r) => new TranslationRequestEventSummary
+                {
+                    Id = e.Id,
+                    RequestId = e.TranslationRequestId,
+                    RequestTitle = r.Title,
+                    Status = e.Status,
+                    Message = e.Message,
+                    CreatedAt = e.CreatedAt
+                })
+            .OrderByDescending(e => e.Id)
+            .Take(take)
             .ToListAsync();
     }
 }

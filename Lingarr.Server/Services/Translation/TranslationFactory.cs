@@ -27,7 +27,8 @@ public class TranslationFactory : ITranslationServiceFactory
     public ITranslationService CreateTranslationService(string serviceType)
     {
         var languageCodeService = _serviceProvider.GetRequiredService<LanguageCodeService>();
-        return serviceType.ToLower() switch
+        var name = serviceType.ToLowerInvariant();
+        ITranslationService service = name switch
         {
             "libretranslate" => new LibreService(
                 _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(),
@@ -137,9 +138,20 @@ public class TranslationFactory : ITranslationServiceFactory
             ),
 
             // load any registered plugins
-            _ => _serviceProvider.GetKeyedService<ITranslationService>(serviceType.ToLowerInvariant())
+            _ => _serviceProvider.GetKeyedService<ITranslationService>(name)
                  ?? throw new ArgumentException("Unsupported translation service type", nameof(serviceType))
         };
+
+        // Feed the shared health tracker from the base retry loop; plugin ABI
+        // implementations (no base class) intentionally stay untracked.
+        if (service is Base.BaseTranslationService builtIn)
+        {
+            builtIn.SetHealthTracking(
+                _serviceProvider.GetRequiredService<ITranslationHealthService>(),
+                name);
+        }
+
+        return service;
     }
 
     /// <inheritdoc />
