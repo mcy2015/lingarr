@@ -20,6 +20,7 @@ using Lingarr.Server.Models;
 using Lingarr.Server.Models.Batch.Response;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Services;
+using Lingarr.Server.Services.Translation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.Sqlite;
@@ -194,8 +195,11 @@ public class TranslateControllerContentTests : IDisposable
             asyncTranslationRegistry,
             queryService,
             mediaServiceMock.Object,
-            _settingServiceMock.Object,
-            _translationServiceFactoryMock.Object,
+            new TranslationPipeline(
+                _settingServiceMock.Object,
+                _translationServiceFactoryMock.Object,
+                _progressServiceMock.Object,
+                NullLogger<TranslationPipeline>.Instance),
             eventServiceMock.Object,
             _progressServiceMock.Object,
             _statisticsServiceMock.Object,

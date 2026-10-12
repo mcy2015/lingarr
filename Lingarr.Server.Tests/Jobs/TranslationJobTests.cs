@@ -15,6 +15,7 @@ using Lingarr.Server.Jobs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Services;
+using Lingarr.Server.Services.Translation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -102,7 +103,11 @@ public class TranslationJobTests
             _subtitleService.Object,
             new NoOpScheduleService(),
             _statisticsService.Object,
-            _factory,
+            new TranslationPipeline(
+                _settings,
+                _factory,
+                _progressService.Object,
+                NullLogger<TranslationPipeline>.Instance),
             _translationRequestService.Object,
             _eventService.Object);
     }

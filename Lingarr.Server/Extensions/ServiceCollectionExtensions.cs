@@ -192,6 +192,7 @@ public static class ServiceCollectionExtensions
         
         // Register translate services
         builder.Services.AddScoped<ITranslationServiceFactory, TranslationFactory>();
+        builder.Services.AddScoped<Interfaces.Services.Translation.ITranslationPipeline, Lingarr.Server.Services.Translation.TranslationPipeline>();
         builder.Services.AddSingleton<LanguageCodeService>();
         builder.Services.AddSingleton<IRequestTemplateService, RequestTemplateService>();
 

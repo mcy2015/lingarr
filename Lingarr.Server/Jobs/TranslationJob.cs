@@ -14,7 +14,6 @@ using Lingarr.Server.Services.Translation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Extensions;
 using SubtitleValidationOptions = Lingarr.Server.Models.SubtitleValidationOptions;
-
 namespace Lingarr.Server.Jobs;
 
 public class TranslationJob
@@ -26,7 +25,7 @@ public class TranslationJob
     private readonly ISubtitleService _subtitleService;
     private readonly IScheduleService _scheduleService;
     private readonly IStatisticsService _statisticsService;
-    private readonly ITranslationServiceFactory _translationServiceFactory;
+    private readonly ITranslationPipeline _translationPipeline;
     private readonly ITranslationRequestService _translationRequestService;
     private readonly ITranslationRequestEventService _eventService;
 
@@ -38,7 +37,7 @@ public class TranslationJob
         ISubtitleService subtitleService,
         IScheduleService scheduleService,
         IStatisticsService statisticsService,
-        ITranslationServiceFactory translationServiceFactory,
+        ITranslationPipeline translationPipeline,
         ITranslationRequestService translationRequestService,
         ITranslationRequestEventService eventService)
     {
@@ -49,7 +48,7 @@ public class TranslationJob
         _subtitleService = subtitleService;
         _scheduleService = scheduleService;
         _statisticsService = statisticsService;
-        _translationServiceFactory = translationServiceFactory;
+        _translationPipeline = translationPipeline;
         _translationRequestService = translationRequestService;
         _eventService = eventService;
     }
@@ -89,7 +88,6 @@ public class TranslationJob
             _logger.LogInformation("TranslateJob started for subtitle: |Green|{filePath}|/Green|",
                 translationRequest.SubtitleToTranslate);
             var settings = await _settings.GetSettings([
-                SettingKeys.Translation.ServiceType,
                 SettingKeys.Translation.FixOverlappingSubtitles,
                 SettingKeys.Translation.StripSubtitleFormatting,
                 SettingKeys.Translation.PreserveLineBreaks,
@@ -103,33 +101,15 @@ public class TranslationJob
                 SettingKeys.SubtitleValidation.MinDurationMs,
                 SettingKeys.SubtitleValidation.MaxDurationSecs,
 
-                SettingKeys.Translation.AiContextBefore,
-                SettingKeys.Translation.AiContextAfter,
-                SettingKeys.Translation.AiContextUseTranslated,
-                SettingKeys.Translation.UseBatchTranslation,
-                SettingKeys.Translation.MaxBatchSize,
                 SettingKeys.Translation.RemoveLanguageTag,
                 SettingKeys.Translation.UseSubtitleTagging,
                 SettingKeys.Translation.SubtitleTag
             ]);
-            var serviceNames = TranslationServices.Parse(settings[SettingKeys.Translation.ServiceType]);
-            var serviceType = serviceNames[0];
             var stripSubtitleFormatting = settings[SettingKeys.Translation.StripSubtitleFormatting] == "true";
-            var preserveLineBreaks = settings[SettingKeys.Translation.PreserveLineBreaks] == "true";
             var bilingualOutput = settings[SettingKeys.Translation.BilingualSubtitleOutput] == "true";
             var addTranslatorInfo = settings[SettingKeys.Translation.AddTranslatorInfo] == "true";
             var validateSubtitles = settings[SettingKeys.SubtitleValidation.ValidateSubtitles] != "false";
             var removeLanguageTag = settings[SettingKeys.Translation.RemoveLanguageTag] != "false";
-
-            var contextBefore = int.TryParse(settings[SettingKeys.Translation.AiContextBefore],
-                out var linesBefore)
-                ? linesBefore
-                : 0;
-            var contextAfter = int.TryParse(settings[SettingKeys.Translation.AiContextAfter],
-                out var linesAfter)
-                ? linesAfter
-                : 0;
-            var useTranslatedContext = settings[SettingKeys.Translation.AiContextUseTranslated] == "true";
 
             // validate subtitles
             if (validateSubtitles)
@@ -177,14 +157,7 @@ public class TranslationJob
                 }
             }
 
-            // translate subtitles
-            var services = _translationServiceFactory.CreateTranslationServices(serviceNames);
-            if (services.Count == 0)
-            {
-                throw new TranslationException($"No usable translation services configured: [{string.Join(", ", serviceNames)}]");
-            }
-            var translationService = services[0].Service;
-            var translator = new SubtitleTranslationService(services, _logger, _progressService, useTranslatedContext);
+            // translate subtitles via the shared pipeline
             var subtitles = await _subtitleService.ReadSubtitles(request.SubtitleToTranslate);
 
             // subtitle already carries a translation from an earlier prior run.
@@ -211,46 +184,12 @@ public class TranslationJob
                 }
             }
 
-            List<SubtitleItem> translatedSubtitles;
-            if (settings[SettingKeys.Translation.UseBatchTranslation] == "true"
-                && services.Any(entry => entry.Service is IBatchTranslationService))
-            {
-                var maxSize = int.TryParse(settings[SettingKeys.Translation.MaxBatchSize],
-                    out var batchSize)
-                    ? batchSize
-                    : 10000;
-
-                _logger.LogInformation(
-                    "Using batch translation with max batch size: {maxBatchSize} for subtitle: {filePath}",
-                    maxSize, translationRequest.SubtitleToTranslate);
-
-                translatedSubtitles = await translator.TranslateSubtitlesBatch(
-                    subtitles,
-                    request,
-                    stripSubtitleFormatting,
-                    preserveLineBreaks,
-                    maxSize,
-                    cancellationToken);
-            }
-            else
-            {
-                if (contextBefore > 0 || contextAfter > 0)
-                {
-                    _logger.LogInformation(
-                        "Using individual translation with context (before: {contextBefore}, after: {contextAfter}, translated context: {useTranslatedContext}) for subtitle: {filePath}",
-                        contextBefore, contextAfter, useTranslatedContext, translationRequest.SubtitleToTranslate);
-                }
-
-                translatedSubtitles = await translator.TranslateSubtitles(
-                    subtitles,
-                    request,
-                    stripSubtitleFormatting,
-                    preserveLineBreaks,
-                    contextBefore,
-                    contextAfter,
-                    cancellationToken
-                );
-            }
+            var run = await _translationPipeline.RunAsync(
+                new TranslationRun(request, subtitles),
+                cancellationToken: cancellationToken);
+            var translatedSubtitles = run.TranslatedSubtitles;
+            var serviceType = run.ServiceType;
+            var translationService = run.PrimaryService;
 
             if (settings[SettingKeys.Translation.FixOverlappingSubtitles] == "true")
             {
