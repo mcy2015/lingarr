@@ -10,6 +10,10 @@ const service = (http: AxiosStatic, resource = '/api/statistics'): IStatisticsSe
         return http.get(`${resource}/daily/${days}`).then((response) => response.data)
     },
 
+    getPipelineStatistics() {
+        return http.get(`${resource}/pipeline`).then((response) => response.data)
+    },
+
     resetStatistics(): Promise<void> {
         return http.post(`${resource}/reset`).then((response) => response.data)
     }

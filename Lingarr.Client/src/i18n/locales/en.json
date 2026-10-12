@@ -313,6 +313,48 @@
             }
         }
     },
+    "overview": {
+        "pipe": {
+            "library": "Media library",
+            "mediaUnit": "items",
+            "missing": "Missing subtitles",
+            "trackUnit": "tracks",
+            "queue": "Translation queue",
+            "queueUnit": "= {running} running + {waiting} queued",
+            "services": "Services",
+            "onlineUnit": "online",
+            "written": "Written this month",
+            "writtenUnit": "files"
+        },
+        "kpi": {
+            "inProgress": "Active tasks",
+            "queued": "Queued",
+            "cost": "API cost this month",
+            "successRate": "30-day success rate"
+        },
+        "active": {
+            "title": "Active tasks",
+            "live": "live · SignalR",
+            "empty": "No tasks running right now.",
+            "etaHint": "Linear estimate from start time and progress"
+        },
+        "health": {
+            "title": "Service health",
+            "configuredCount": "{count} configured",
+            "offline": "not configured",
+            "offlineHint": "Required settings are missing for this provider",
+            "noTraffic": "no traffic yet",
+            "noTrafficHint": "Configured; no requests since restart",
+            "healthy": "success {rate}% over recent window",
+            "degraded": "degraded — success {rate}% over recent window",
+            "failing": "failing — success {rate}% over recent window"
+        },
+        "feed": {
+            "title": "Recent activity",
+            "count": "{count} events",
+            "empty": "No activity yet."
+        }
+    },
     "placeholder": {
         "model": {
             "insert": "insert {'{'}model{'}'}",

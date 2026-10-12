@@ -147,8 +147,44 @@ export interface ITranslateService {
         mediaType: MediaType
     ): Promise<T>
     getLanguages<T>(): Promise<T>
+    getHealth(): Promise<ITranslationServiceHealth[]>
     proofreadStatus<T>(): Promise<T>
     proofreadLine<T>(request: IProofreadLineRequest): Promise<T>
+}
+
+/// Health row per provider for the overview card and settings provider
+/// cards (server gap-audit A1): config status plus a rolling request window.
+export interface ITranslationServiceHealth {
+    provider: string
+    displayName: string
+    configured: boolean
+    latencyMs: number | null
+    successRate: number | null
+    lastError: string | null
+    lastRequestAt: string | null
+    sampleCount: number
+    monthlyCost: number | null
+}
+
+/// Overview pipeline strip payload (server gap-audit A2).
+export interface IPipelineStatistics {
+    mediaCount: number
+    missingSubtitles: number
+    queueDepth: number
+    servicesOnline: number
+    writtenThisMonth: number
+    successRate30Days: number | null
+    monthlyCost: number | null
+}
+
+/// One status-transition row of the overview activity feed (server gap-audit A3).
+export interface ITranslationRequestEventSummary {
+    id: number
+    requestId: number
+    requestTitle: string
+    status: string
+    message: string | null
+    createdAt: string
 }
 
 export interface ITranslationRequestService {
@@ -162,6 +198,7 @@ export interface ITranslationRequestService {
         status?: string | null
     ): Promise<T>
     statusCounts(): Promise<Record<string, number>>
+    getRecentEvents(take: number): Promise<ITranslationRequestEventSummary[]>
     pause<T>(translationRequest: ITranslationRequest): Promise<T>
     resumePaused<T>(translationRequest: ITranslationRequest): Promise<T>
     cancel<T>(translationRequest: ITranslationRequest): Promise<T>
@@ -194,6 +231,7 @@ export interface IDirectoryService {
 export interface IStatisticsService {
     getStatistics<T>(): Promise<T>
     getDailyStatistics<T>(days?: number): Promise<T>
+    getPipelineStatistics(): Promise<IPipelineStatistics>
     resetStatistics(): Promise<void>
 }
 

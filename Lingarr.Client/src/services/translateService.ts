@@ -28,6 +28,9 @@ const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateServ
     getLanguages<T>(): Promise<T> {
         return http.get(`${resource}/languages`).then((response) => response.data)
     },
+    getHealth() {
+        return http.get(`${resource}/health`).then((response) => response.data)
+    },
     proofreadStatus<T>(): Promise<T> {
         return http.get(`${resource}/proofread/status`).then((response) => response.data)
     },

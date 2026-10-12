@@ -313,6 +313,48 @@
             }
         }
     },
+    "overview": {
+        "pipe": {
+            "library": "媒体库",
+            "mediaUnit": "部",
+            "missing": "缺字幕检测",
+            "trackUnit": "条",
+            "queue": "翻译队列",
+            "queueUnit": "= {running} 进行 + {waiting} 排队",
+            "services": "翻译服务",
+            "onlineUnit": "在线",
+            "written": "本月写回",
+            "writtenUnit": "条"
+        },
+        "kpi": {
+            "inProgress": "进行中任务",
+            "queued": "排队等待",
+            "cost": "本月 API 成本",
+            "successRate": "30 天任务成功率"
+        },
+        "active": {
+            "title": "活跃任务",
+            "live": "实时 · SignalR",
+            "empty": "当前没有运行中的任务。",
+            "etaHint": "由开始时间与进度线性估算"
+        },
+        "health": {
+            "title": "服务健康",
+            "configuredCount": "{count} 个已配置",
+            "offline": "未连接",
+            "offlineHint": "该服务缺少必填配置",
+            "noTraffic": "暂无请求",
+            "noTrafficHint": "已配置，重启后尚无请求",
+            "healthy": "近期窗口成功率 {rate}%",
+            "degraded": "降级 — 近期窗口成功率 {rate}%",
+            "failing": "故障 — 近期窗口成功率 {rate}%"
+        },
+        "feed": {
+            "title": "最近动态",
+            "count": "{count} 条",
+            "empty": "暂无动态。"
+        }
+    },
     "placeholder": {
         "model": {
             "insert": "插入 {'{'}model{'}'}",
