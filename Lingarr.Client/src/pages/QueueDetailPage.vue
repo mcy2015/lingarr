@@ -23,6 +23,14 @@
                           : t('translations.detail.convertToBilingual')
                 }}
             </ButtonComponent>
+            <router-link
+                v-if="detail?.status === TRANSLATION_STATUS.COMPLETED"
+                :to="{ name: 'proofread', params: { id } }"
+                class="ml-2">
+                <ButtonComponent variant="accent" size="xs">
+                    {{ t('proofread.openWorkbench') }}
+                </ButtonComponent>
+            </router-link>
         </div>
 
         <div v-if="loading" class="flex justify-center py-12">

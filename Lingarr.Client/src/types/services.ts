@@ -39,6 +39,7 @@ export interface Services {
     telemetry: ITelemetryService
     requestTemplate: IRequestTemplateService
     plugin: IPluginService
+    glossary: IGlossaryService
 }
 
 export interface IPluginService {
@@ -269,4 +270,19 @@ export interface ITelemetryService {
 
 export interface IRequestTemplateService {
     getDefaults<T>(): Promise<T>
+}
+
+export interface ITranslationGlossary {
+    id: number
+    sourceTerm: string
+    targetTerm: string
+    note?: string | null
+    isLocked: boolean
+}
+
+export interface IGlossaryService {
+    getAll(): Promise<ITranslationGlossary[]>
+    create<T>(entry: Partial<ITranslationGlossary>): Promise<T>
+    update<T>(id: number, entry: Partial<ITranslationGlossary>): Promise<T>
+    remove<T>(id: number): Promise<T>
 }

@@ -57,7 +57,8 @@
         "library": "媒体库",
         "import": "导入",
         "settings": "设置",
-        "queue": "任务队列"
+        "queue": "任务队列",
+        "proofread": "校对台"
     },
     "library": {
         "tabs": {
@@ -898,5 +899,35 @@
             "remainingHint": "预计剩余时间",
             "retries": "重试 {count} 次"
         }
+    },
+    "proofread": {
+        "loading": "正在加载请求…",
+        "noLines": "该请求还没有可校对的持久化行。",
+        "subtitle": "{source} → {target} · 人工精校 · {count} 行",
+        "progress": "已校对 {done} / {total} 行",
+        "legend": {
+            "source": "源轨 {lang}",
+            "target": "译文轨 {lang}"
+        },
+        "keys": {
+            "navigate": "上下行",
+            "approve": "通过当前行",
+            "edit": "编辑"
+        },
+        "approve": "✓ 通过",
+        "reject": "✗ 驳回",
+        "unsaved": "● 已修改，未保存",
+        "editLabel": "编辑译文",
+        "glossaryCount": "{count} 条术语",
+        "glossaryLocked": "{source} → {target} · 已锁定",
+        "glossaryHint": "{source} → {target}",
+        "export": "导出当前快照",
+        "finish": "完成校对并写回（{done}/{total}）",
+        "mark": {
+            "approved": "已通过",
+            "pending": "待校对",
+            "rejected": "已驳回"
+        },
+        "openWorkbench": "打开校对台"
     }
 }
