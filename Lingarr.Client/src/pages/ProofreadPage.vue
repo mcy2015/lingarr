@@ -148,13 +148,15 @@ import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
 import { useProofreadKeyboard } from '@/composables/useProofreadKeyboard'
 import {
+    IPagedResult,
     ITranslationGlossary,
+    ITranslationRequest,
     ITranslationRequestDetail,
     ISubtitleLineComparison,
     PROOFREAD_LINE_ORIGIN
 } from '@/types'
 
-const props = defineProps<{ id: string }>()
+const props = defineProps<{ id?: string }>()
 
 const { t } = useI18n()
 const router = useRouter()
@@ -190,7 +192,25 @@ function setEditRef(el: unknown): void {
 }
 
 onMounted(async () => {
-    const requestId = Number(props.id)
+    let requestId = Number(props.id)
+    if (!Number.isFinite(requestId) || requestId <= 0) {
+        // bare /proofread — land on the newest completed request
+        const page = await services.translationRequest.requests<IPagedResult<ITranslationRequest>>(
+            1,
+            '',
+            'Id',
+            false,
+            'Completed'
+        )
+        const latest = page.items?.[0]
+        if (!latest) {
+            loading.value = false
+            return
+        }
+        requestId = latest.id
+        void router.replace({ name: 'proofread', params: { id: String(requestId) } })
+    }
+
     try {
         detail.value = await services.translationRequest.get<ITranslationRequestDetail>(requestId)
         glossary.value = await services.glossary.getAll()
