@@ -265,6 +265,8 @@ HttpClient 卫生差：`OpenAiService.cs:43`（ctor 兜底 `new HttpClient()`）
 
 ### P2 — 债务清理与打磨
 
+> ✅ **已于 2026-10-12 基本完成**（#17/18/19/20/21/22/23/24，提交 ec0b72c..bf4a216 + 5b9fdc8）。后端 290/290 绿，前端 lint/build/vitest 11/11 绿。其中 #21 的 token 语义清理由用户并行提交（6bbf664）。**遗留两项**：①JobContextFilter AsyncLocal→PerformContext（涉及 9 个作业签名，单实例下现状安全，暂缓）；②请求 record 合并仅做了 SignupRequest（其余形状确实不同，非重复）。
+
 | # | 事项 | 位置 | 说明 |
 |---|---|---|---|
 | 17 | DTO 收拢：`BatchTranslatedLine` 等并入 Contracts；分页端点不再泄 EF 实体（`StackTrace`）；~25 个单字段 request record 分组 | `Server/Models` | 机械改动，为 API 版本化解锁 |
