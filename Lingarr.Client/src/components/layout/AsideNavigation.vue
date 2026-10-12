@@ -9,7 +9,8 @@
         <aside
             :class="isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
             class="border-line bg-secondary fixed top-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r transition-transform duration-300 ease-in-out md:sticky">
-            <TimesIcon
+            <Icon
+                name="times"
                 class="absolute top-1 right-1 block h-6 w-6 cursor-pointer md:hidden"
                 @click="isOpen = false" />
             <div class="flex h-16 items-center border-b border-line px-5">
@@ -28,7 +29,7 @@
                                     : 'text-secondary-content/70 hover:bg-tertiary/50 hover:text-primary-content'
                             "
                             @click="isOpen = false">
-                            <component :is="item.icon" class="h-4 w-4 flex-none" />
+                            <Icon :name="item.icon" class="h-4 w-4 flex-none" />
                             <div class="relative">
                                 {{ t(item.label) }}
 
@@ -86,13 +87,8 @@ import { useI18n } from 'vue-i18n'
 import { useInstanceStore } from '@/store/instance'
 import { useTranslationRequestStore } from '@/store/translationRequest'
 import { MenuItem } from '@/types'
-import HomeIcon from '@/components/icons/HomeIcon.vue'
-import MovieIcon from '@/components/icons/MovieIcon.vue'
-import ShowIcon from '@/components/icons/ShowIcon.vue'
-import SettingIcon from '@/components/icons/SettingIcon.vue'
-import TimesIcon from '@/components/icons/TimesIcon.vue'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
-import LanguageIcon from '@/components/icons/LanguageIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const translationRequestStore = useTranslationRequestStore()
 const instanceStore = useInstanceStore()
@@ -110,13 +106,13 @@ const isOpen = computed({
 })
 
 const menuItems: MenuItem[] = [
-    { label: 'nav.dashboard', icon: HomeIcon, route: 'dashboard', children: [] },
-    { label: 'nav.movies', icon: MovieIcon, route: 'movies', children: [] },
-    { label: 'nav.shows', icon: ShowIcon, route: 'shows', children: [] },
-    { label: 'nav.translations', icon: LanguageIcon, route: 'translations', children: [] },
+    { label: 'nav.dashboard', icon: 'home', route: 'dashboard', children: [] },
+    { label: 'nav.movies', icon: 'movie', route: 'movies', children: [] },
+    { label: 'nav.shows', icon: 'show', route: 'shows', children: [] },
+    { label: 'nav.translations', icon: 'language', route: 'translations', children: [] },
     {
         label: 'nav.settings',
-        icon: SettingIcon,
+        icon: 'setting',
         route: 'integration-settings',
         children:
             router

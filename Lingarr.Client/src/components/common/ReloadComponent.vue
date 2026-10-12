@@ -1,6 +1,7 @@
 ﻿<template>
     <div :title="t('common.refresh')" @click="reload">
-        <ReloadIcon
+        <Icon
+            name="reload"
             class="h-6 w-6 cursor-pointer transition-all duration-300 ease-in-out"
             :class="{ 'animate-spin': reloading }" />
     </div>
@@ -9,7 +10,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ReloadIcon from '@/components/icons/ReloadIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const emit = defineEmits(['toggle:update'])
 const { t } = useI18n()

@@ -14,16 +14,15 @@
         class="ml-auto flex cursor-pointer items-center justify-end space-x-2 md:ml-0 md:justify-center"
         @click="orderBy">
         <span class="md:hidden">{{ t('common.orderBy') }}</span>
-        <CaretUpIcon v-if="modelValue.isAscending" class="h-6 w-6" />
-        <CaretDownIcon v-else class="h-6 w-6" />
+        <Icon v-if="modelValue.isAscending" name="caretUp" class="h-6 w-6" />
+        <Icon v-else name="caretDown" class="h-6 w-6" />
     </button>
 </template>
 
 <script lang="ts" setup>
 import { IOptions, IFilter } from '@/types'
 import { useI18n } from 'vue-i18n'
-import CaretUpIcon from '@/components/icons/CaretUpIcon.vue'
-import CaretDownIcon from '@/components/icons/CaretDownIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 

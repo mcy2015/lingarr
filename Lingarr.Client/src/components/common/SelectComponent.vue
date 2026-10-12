@@ -19,8 +19,9 @@
                 </span>
             </div>
             <div class="flex shrink-0 items-center">
-                <LoaderCircleIcon v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-                <CaretRightIcon
+                <Icon v-if="isLoading" name="loaderCircle" class="mr-2 h-4 w-4 animate-spin" />
+                <Icon
+                    name="caretRight"
                     class="arrow-right transition-transform duration-200"
                     :class="[{ 'rotate-90': isOpen }, size === 'sm' ? 'h-3 w-3' : 'h-5 w-5']" />
             </div>
@@ -50,8 +51,7 @@
 <script setup lang="ts">
 import { Ref, ref, nextTick, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import CaretRightIcon from '@/components/icons/CaretRightIcon.vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import useClickOutside from '@/composables/useClickOutside'
 import { ISelectOption } from '@/types'
 

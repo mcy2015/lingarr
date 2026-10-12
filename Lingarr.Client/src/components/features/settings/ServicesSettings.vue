@@ -42,7 +42,7 @@
                             :title="t('services.configureCredentials')"
                             :aria-label="t('services.configureCredentials')"
                             @click="configuringIndex = index">
-                            <SettingIcon class="h-4 w-4" />
+                            <Icon name="setting" class="h-4 w-4" />
                         </button>
                         <button
                             type="button"
@@ -51,7 +51,7 @@
                             :title="t('services.moveUp')"
                             :aria-label="t('services.moveUp')"
                             @click="moveRow(index, -1)">
-                            <CaretUpIcon class="h-4 w-4" />
+                            <Icon name="caretUp" class="h-4 w-4" />
                         </button>
                         <button
                             type="button"
@@ -60,7 +60,7 @@
                             :title="t('services.moveDown')"
                             :aria-label="t('services.moveDown')"
                             @click="moveRow(index, 1)">
-                            <CaretDownIcon class="h-4 w-4" />
+                            <Icon name="caretDown" class="h-4 w-4" />
                         </button>
                         <button
                             type="button"
@@ -69,12 +69,12 @@
                             :title="t('services.removeService')"
                             :aria-label="t('services.removeService')"
                             @click="removeRow(index)">
-                            <TrashIcon class="h-4 w-4" />
+                            <Icon name="trash" class="h-4 w-4" />
                         </button>
                     </li>
                     <li v-if="services.length < serviceOptions.length && serviceOptions.length > 0">
                         <ButtonComponent variant="ghost" size="xs" @click="addRow">
-                            <PlusIcon class="mr-1 h-3 w-3" />
+                            <Icon name="plus" class="mr-1 h-3 w-3" />
                             {{ t('services.addFallbackService') }}
                         </ButtonComponent>
                     </li>
@@ -113,7 +113,7 @@
                             })
                         ">
                         {{ t('services.openRequestSettings') }}
-                        <ArrowRight class="mt-1 ml-1 h-4 w-4" />
+                        <Icon name="arrowRight" class="mt-1 ml-1 h-4 w-4" />
                     </ButtonComponent>
                 </div>
             </div>
@@ -136,12 +136,7 @@ import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import SaveNotification from '@/components/common/SaveNotification.vue'
 import DynamicPluginForm from '@/components/features/settings/DynamicPluginForm.vue'
 import SourceAndTarget from '@/components/features/settings/SourceAndTarget.vue'
-import ArrowRight from '@/components/icons/ArrowRight.vue'
-import CaretUpIcon from '@/components/icons/CaretUpIcon.vue'
-import CaretDownIcon from '@/components/icons/CaretDownIcon.vue'
-import TrashIcon from '@/components/icons/TrashIcon.vue'
-import PlusIcon from '@/components/icons/PlusIcon.vue'
-import SettingIcon from '@/components/icons/SettingIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)

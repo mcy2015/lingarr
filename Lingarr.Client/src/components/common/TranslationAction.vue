@@ -3,15 +3,15 @@
         <button
             class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
             @click="router.push({ name: 'translation-detail', params: { id: item.id } })">
-            <EyeOnIcon class="h-5 w-5" />
+            <Icon name="eyeOn" class="h-5 w-5" />
         </button>
         <div class="flex w-20 items-center gap-2">
-            <LoaderCircleIcon v-if="loading" class="h-5 w-5 animate-spin" />
+            <Icon v-if="loading" name="loaderCircle" class="h-5 w-5 animate-spin" />
             <button
                 v-else-if="inProgress"
                 class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                 @click="executeAction(TRANSLATION_ACTIONS.CANCEL)">
-                <TimesIcon class="h-5 w-5" />
+                <Icon name="times" class="h-5 w-5" />
             </button>
             <template v-else-if="removable">
                 <button
@@ -20,7 +20,7 @@
                     :title="t('common.translationAction.resume')"
                     class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.RESUME)">
-                    <StartIcon class="h-5 w-5" />
+                    <Icon name="start" class="h-5 w-5" />
                 </button>
                 <button
                     v-if="proofreadable"
@@ -28,20 +28,20 @@
                     :title="t('common.translationAction.proofread')"
                     class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.PROOFREAD)">
-                    <SearchIcon class="h-5 w-5" />
+                    <Icon name="search" class="h-5 w-5" />
                 </button>
                 <button
                     :disabled="loading"
                     :title="t('common.translationAction.retry')"
                     class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.RETRY)">
-                    <RetryIcon class="h-5 w-5" />
+                    <Icon name="retry" class="h-5 w-5" />
                 </button>
                 <button
                     :disabled="loading"
                     class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.REMOVE)">
-                    <TrashIcon class="h-5 w-5" />
+                    <Icon name="trash" class="h-5 w-5" />
                 </button>
             </template>
         </div>
@@ -54,13 +54,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ITranslationRequest, TRANSLATION_ACTIONS, TRANSLATION_STATUS } from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
-import TimesIcon from '@/components/icons/TimesIcon.vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
-import TrashIcon from '@/components/icons/TrashIcon.vue'
-import RetryIcon from '@/components/icons/RetryIcon.vue'
-import StartIcon from '@/components/icons/StartIcon.vue'
-import SearchIcon from '@/components/icons/SearchIcon.vue'
-import EyeOnIcon from '@/components/icons/EyeOnIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 const router = useRouter()
 const translationRequestStore = useTranslationRequestStore()
 const { t } = useI18n()

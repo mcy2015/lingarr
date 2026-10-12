@@ -39,7 +39,7 @@
 
         <div v-if="translateStore.isLanguagesLoading" class="py-4">
             <div class="flex items-center space-x-2">
-                <LoaderCircleIcon class="h-5 w-5" />
+                <Icon name="loaderCircle" class="h-5 w-5" />
                 <span>{{ t('common.loading') }}</span>
             </div>
         </div>
@@ -78,7 +78,7 @@ import LanguageSelect from '@/components/features/settings/LanguageSelect.vue'
 import { ILanguage, SETTINGS } from '@/types'
 import { useTranslateStore } from '@/store/translate'
 import { useSettingStore } from '@/store/setting'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const settingsStore = useSettingStore()
 const translateStore = useTranslateStore()

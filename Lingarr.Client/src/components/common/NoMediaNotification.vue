@@ -1,6 +1,6 @@
 ﻿<template>
     <div class="flex grow flex-col items-center justify-center gap-4 p-4">
-        <MediaEmojiIcon />
+        <Icon name="mediaEmoji" class="mb-4 h-16 w-16" />
         <h2 class="mb-2 text-xl font-semibold">{{ t('common.noMedia.title') }}</h2>
         <p class="mb-4 max-w-md text-center text-sm">
             {{ t('common.noMedia.description') }}
@@ -19,7 +19,7 @@
     </div>
 </template>
 <script setup lang="ts">
-import MediaEmojiIcon from '@/components/icons/MediaEmojiIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'

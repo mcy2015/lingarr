@@ -72,7 +72,7 @@
                 class="text-primary-content hover:text-primary-content/50 ml-auto h-4 w-4 shrink-0 cursor-pointer opacity-0 transition-colors group-hover:opacity-100"
                 :title="t('services.template.remove')"
                 @click="$emit('delete')">
-                <TrashIcon class="h-4 w-4" />
+                <Icon name="trash" class="h-4 w-4" />
             </button>
         </div>
 
@@ -97,7 +97,7 @@
                 size="xs"
                 :style="{ marginLeft: `${(depth + 1) * 1.25}rem` }"
                 @click="addChild">
-                <PlusIcon class="mr-1 h-3 w-3" />
+                <Icon name="plus" class="mr-1 h-3 w-3" />
                 {{
                     node.type === NODE_TYPE.OBJECT
                         ? t('services.template.addProperty')
@@ -115,8 +115,7 @@ import CaretButton from '@/components/common/CaretButton.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
 import SelectComponent from '@/components/common/SelectComponent.vue'
-import TrashIcon from '@/components/icons/TrashIcon.vue'
-import PlusIcon from '@/components/icons/PlusIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 
 const {

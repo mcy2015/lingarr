@@ -6,10 +6,10 @@
                 <button
                     class="text-info transition duration-300 hover:text-info"
                     @click="addMapping">
-                    <PlusIcon class="h-5 w-5" />
+                    <Icon name="plus" class="h-5 w-5" />
                 </button>
-                <LoaderCircleIcon v-if="loading" class="h-5 w-5 animate-spin" />
-                <FloppyIcon v-else class="h-5 w-5 cursor-pointer" @click="saveMappings" />
+                <Icon v-if="loading" name="loaderCircle" class="h-5 w-5 animate-spin" />
+                <Icon v-else name="floppy" class="h-5 w-5 cursor-pointer" @click="saveMappings" />
             </div>
         </div>
 
@@ -25,7 +25,8 @@
                 :key="`pair-${index}`"
                 class="md:border-line rounded-lg py-4 shadow-sm md:grid md:grid-cols-12 md:rounded-none md:border-b md:bg-transparent md:p-0 md:shadow-none">
                 <div class="float-right md:hidden">
-                    <TimesIcon
+                    <Icon
+                        name="times"
                         class="h-5 w-5 cursor-pointer text-danger transition duration-300 hover:text-danger"
                         @click="removeMapping(index)" />
                 </div>
@@ -48,7 +49,7 @@
                                 'w-full justify-end': !pair.sourcePath
                             }"
                             @click="openModal('source', index)">
-                            <PlusIcon class="h-12 w-5" />
+                            <Icon name="plus" class="h-12 w-5" />
                         </div>
                     </div>
                 </div>
@@ -70,7 +71,7 @@
                                 'w-full justify-end': !pair.destinationPath
                             }"
                             @click="openModal('target', index)">
-                            <PlusIcon class="h-12 w-5" />
+                            <Icon name="plus" class="h-12 w-5" />
                         </div>
                     </div>
                 </div>
@@ -88,7 +89,8 @@
 
                 <div
                     class="hidden items-center justify-between md:col-span-1 md:flex md:justify-end md:px-4 md:py-2">
-                    <TimesIcon
+                    <Icon
+                        name="times"
                         class="h-5 w-5 cursor-pointer text-danger transition duration-300 hover:text-danger"
                         @click="removeMapping(index)" />
                 </div>
@@ -105,11 +107,8 @@ import { useI18n } from 'vue-i18n'
 import { useMappingStore } from '@/store/mapping'
 import { MEDIA_TYPE } from '@/types'
 import SelectComponent from '@/components/common/SelectComponent.vue'
-import TimesIcon from '@/components/icons/TimesIcon.vue'
-import PlusIcon from '@/components/icons/PlusIcon.vue'
-import FloppyIcon from '@/components/icons/FloppyIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import DirectoryModal from '@/components/features/settings/DirectoryModal.vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
 import { delay } from '@/utils/delay'
 
 const mappingStore = useMappingStore()

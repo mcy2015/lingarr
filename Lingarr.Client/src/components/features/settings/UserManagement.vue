@@ -17,7 +17,7 @@
                 </div>
 
                 <div v-if="authStore.loading" class="flex justify-center py-8">
-                    <LoaderCircleIcon class="h-8 w-8 animate-spin" />
+                    <Icon name="loaderCircle" class="h-8 w-8 animate-spin" />
                 </div>
 
                 <div>
@@ -223,7 +223,7 @@ import { INPUT_TYPE, INPUT_VALIDATION_TYPE, IUser } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import StatusMessage from '@/components/common/StatusMessage.vue'
 import { useAuthStore } from '@/store/auth'
 import { formatDateTime } from '@/utils/date'

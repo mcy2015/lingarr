@@ -40,8 +40,9 @@
 
                         <div class="flex w-full items-center justify-end">
                             <ButtonComponent type="submit" :disabled="loading" variant="primary">
-                                <LoaderCircleIcon
+                                <Icon
                                     v-if="loading"
+                                    name="loaderCircle"
                                     class="mr-2 h-4 w-4 animate-spin" />
                                 {{ loading ? t('login.signingIn') : t('login.signIn') }}
                             </ButtonComponent>
@@ -57,7 +58,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import services from '@/services'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
 

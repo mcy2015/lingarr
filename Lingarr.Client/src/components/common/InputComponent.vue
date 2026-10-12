@@ -30,8 +30,8 @@
                 type="button"
                 class="absolute inset-y-0 right-0 flex cursor-pointer items-center pr-3"
                 @click="togglePassword">
-                <EyeOnIcon v-if="showPassword" class="h-5 w-5" />
-                <EyeOffIcon v-else class="h-5 w-5" />
+                <Icon v-if="showPassword" name="eyeOn" class="h-5 w-5" />
+                <Icon v-else name="eyeOff" class="h-5 w-5" />
             </button>
         </div>
         <p v-if="validationType && isInvalid" class="mt-1 text-sm text-danger" v-html="error" />
@@ -44,8 +44,7 @@ import { InputType, INPUT_TYPE, InputValidationType } from '@/types'
 import useValidation from '@/composables/useValidation'
 import useDebounce from '@/composables/useDebounce'
 import ValidationIcon from '@/components/common/ValidationIcon.vue'
-import EyeOnIcon from '@/components/icons/EyeOnIcon.vue'
-import EyeOffIcon from '@/components/icons/EyeOffIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const props = withDefaults(
     defineProps<{

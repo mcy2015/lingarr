@@ -8,13 +8,13 @@
             <header class="border-line bg-secondary px-4 py-2.5 sm:px-6 lg:px-8">
                 <div class="flex w-full items-center justify-between space-x-2 md:justify-end">
                     <div class="md:hidden">
-                        <MenuIcon class="block h-5 w-5 cursor-pointer" @click="isOpen = !isOpen" />
+                        <Icon name="menu" class="block h-5 w-5 cursor-pointer" @click="isOpen = !isOpen" />
                     </div>
                     <div class="flex items-center justify-between">
                         <LanguageDropdown />
                         <DropdownComponent width="medium">
                             <template #button>
-                                <ThemeIcon class="h-5 w-5" />
+                                <Icon name="theme" class="h-5 w-5" />
                             </template>
                             <template #content>
                                 <div
@@ -58,8 +58,7 @@ import useTranslationRequestStore from '@/store/translationRequest'
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'
 import DropdownComponent from '@/components/common/DropdownComponent.vue'
 import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
-import ThemeIcon from '@/components/icons/ThemeIcon.vue'
-import MenuIcon from '@/components/icons/MenuIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()

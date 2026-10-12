@@ -5,7 +5,7 @@
                 variant="ghost"
                 size="xs"
                 @click="router.push({ name: 'translations' })">
-                <ArrowLeft class="ml-1 h-3.5 w-3.5" />
+                <Icon name="arrowLeft" class="ml-1 h-3.5 w-3.5" />
             </ButtonComponent>
             <ButtonComponent
                 v-if="detail?.status === TRANSLATION_STATUS.COMPLETED"
@@ -25,7 +25,7 @@
         </div>
 
         <div v-if="loading" class="flex justify-center py-12">
-            <LoaderCircleIcon class="text-primary-content/50 h-8 w-8 animate-spin" />
+            <Icon name="loaderCircle" class="text-primary-content/50 h-8 w-8 animate-spin" />
         </div>
 
         <div v-else-if="detail" class="grid grid-flow-row auto-rows-max grid-cols-1 gap-4 p-4">
@@ -177,7 +177,7 @@
                                         :title="t('translations.detail.editThisLine')"
                                         class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                                         @click="startEdit(line)">
-                                        <PenIcon class="h-4 w-4" />
+                                        <Icon name="pen" class="h-4 w-4" />
                                     </button>
                                     <button
                                         v-if="proofreadable"
@@ -185,10 +185,11 @@
                                         :title="t('translations.detail.proofreadThisLine')"
                                         class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                         @click="requestProofread(line)">
-                                        <LoaderCircleIcon
+                                        <Icon
                                             v-if="proofreadState[line.position]?.loading"
+                                            name="loaderCircle"
                                             class="h-4 w-4 animate-spin" />
-                                        <SearchIcon v-else class="h-4 w-4" />
+                                        <Icon v-else name="search" class="h-4 w-4" />
                                     </button>
                                 </div>
                             </div>
@@ -219,14 +220,14 @@
                                                         PROOFREAD_LINE_ORIGIN.MANUAL
                                                     )
                                                 ">
-                                                <CheckMarkIcon class="mr-1 h-4 w-4" />
+                                                <Icon name="checkMark" class="mr-1 h-4 w-4" />
                                                 {{ t('translations.detail.accept') }}
                                             </ButtonComponent>
                                             <ButtonComponent
                                                 variant="ghost"
                                                 size="xs"
                                                 @click="dismissProofread(line)">
-                                                <TimesCircleIcon class="mr-1 h-4 w-4" />
+                                                <Icon name="timesCircle" class="mr-1 h-4 w-4" />
                                                 {{ t('translations.detail.cancel') }}
                                             </ButtonComponent>
                                         </div>
@@ -247,14 +248,14 @@
                                                         PROOFREAD_LINE_ORIGIN.PROOFREAD
                                                     )
                                                 ">
-                                                <CheckMarkIcon class="mr-1 h-4 w-4" />
+                                                <Icon name="checkMark" class="mr-1 h-4 w-4" />
                                                 {{ t('translations.detail.apply') }}
                                             </ButtonComponent>
                                             <ButtonComponent
                                                 variant="ghost"
                                                 size="xs"
                                                 @click="dismissProofread(line)">
-                                                <TimesCircleIcon class="mr-1 h-4 w-4" />
+                                                <Icon name="timesCircle" class="mr-1 h-4 w-4" />
                                                 {{ t('translations.detail.dismiss') }}
                                             </ButtonComponent>
                                         </div>
@@ -303,12 +304,7 @@ import BadgeComponent from '@/components/common/BadgeComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
 import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
-import ArrowLeft from '@/components/icons/ArrowLeft.vue'
-import PenIcon from '@/components/icons/PenIcon.vue'
-import SearchIcon from '@/components/icons/SearchIcon.vue'
-import CheckMarkIcon from '@/components/icons/CheckMarkIcon.vue'
-import TimesCircleIcon from '@/components/icons/TimesCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{
     id: string

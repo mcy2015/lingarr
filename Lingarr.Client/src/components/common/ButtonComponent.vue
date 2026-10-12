@@ -5,14 +5,14 @@
         class="inline-flex cursor-pointer items-center justify-center rounded-md text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-primary disabled:cursor-not-allowed disabled:opacity-50"
         :class="[variantClasses, sizeClasses]"
         @click="handleClick">
-        <LoaderCircleIcon v-if="loading" class="mr-2 h-4 w-4 animate-spin" />
+        <Icon v-if="loading" name="loaderCircle" class="mr-2 h-4 w-4 animate-spin" />
         <slot></slot>
     </button>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 interface Props {
     variant?: 'primary' | 'secondary' | 'accent' | 'ghost'

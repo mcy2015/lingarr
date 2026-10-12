@@ -8,9 +8,9 @@
                     :class="{
                         'brightness-50': item.fade
                     }">
-                    <component
-                        :is="item.icon"
+                    <Icon
                         v-if="item.icon"
+                        :name="item.icon"
                         class="text-primary-content h-4 w-4" />
                 </div>
                 <div class="grow">
@@ -58,16 +58,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AutomationIcon from '@/components/icons/AutomationIcon.vue'
-import NotificationIcon from '@/components/icons/NotificationIcon.vue'
-import HistoryIcon from '@/components/icons/HistoryIcon.vue'
-import LanguageIcon from '@/components/icons/LanguageIcon.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
-import IntegrationIcon from '@/components/icons/IntegrationIcon.vue'
-import StatisticsIcon from '@/components/icons/StatisticsIcon.vue'
-import HomeIcon from '@/components/icons/HomeIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
+import type { IconName } from '@/components/icons'
 
 const { t } = useI18n()
+
+interface RoadmapItem {
+    icon?: IconName
+    title: string
+    description: string
+    date: string
+    status: string
+    fade: boolean
+}
 
 const statusLabels: Record<string, string> = {
     Completed: 'dashboard.roadmap.status.completed',
@@ -76,9 +80,9 @@ const statusLabels: Record<string, string> = {
 }
 
 // computed so titles re-resolve when the locale changes
-const roadmapItems = computed(() => [
+const roadmapItems = computed<RoadmapItem[]>(() => [
     {
-        icon: IntegrationIcon,
+        icon: 'integration',
         title: t('dashboard.roadmap.items.aiTranslation.title'),
         description: t('dashboard.roadmap.items.aiTranslation.description'),
         date: '2024',
@@ -86,7 +90,7 @@ const roadmapItems = computed(() => [
         fade: true
     },
     {
-        icon: NotificationIcon,
+        icon: 'notification',
         title: t('dashboard.roadmap.items.enhancedNotifications.title'),
         description: t('dashboard.roadmap.items.enhancedNotifications.description'),
         date: '2024',
@@ -94,7 +98,7 @@ const roadmapItems = computed(() => [
         fade: true
     },
     {
-        icon: HistoryIcon,
+        icon: 'history',
         title: t('dashboard.roadmap.items.translationHistory.title'),
         description: t('dashboard.roadmap.items.translationHistory.description'),
         date: '2024',
@@ -102,7 +106,7 @@ const roadmapItems = computed(() => [
         fade: true
     },
     {
-        icon: AutomationIcon,
+        icon: 'automation',
         title: t('dashboard.roadmap.items.scheduleControls.title'),
         description: t('dashboard.roadmap.items.scheduleControls.description'),
         date: '2024',
@@ -110,7 +114,7 @@ const roadmapItems = computed(() => [
         fade: true
     },
     {
-        icon: LanguageIcon,
+        icon: 'language',
         title: t('dashboard.roadmap.items.appLocalization.title'),
         description: t('dashboard.roadmap.items.appLocalization.description'),
         date: '2024',
@@ -118,7 +122,7 @@ const roadmapItems = computed(() => [
         fade: true
     },
     {
-        icon: StatisticsIcon,
+        icon: 'statistics',
         title: t('dashboard.roadmap.items.dashboardImprovements.title'),
         description: t('dashboard.roadmap.items.dashboardImprovements.description'),
         date: '2024',
@@ -126,7 +130,7 @@ const roadmapItems = computed(() => [
         fade: false
     },
     {
-        icon: HomeIcon,
+        icon: 'home',
         title: t('dashboard.roadmap.items.versionRelease.title'),
         description: t('dashboard.roadmap.items.versionRelease.description'),
         date: '2024 - 2025',

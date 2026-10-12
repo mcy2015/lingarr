@@ -15,10 +15,11 @@
                     class="bg-accent text-secondary-content flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium"
                     @click.stop="removeItem(item)">
                     <span class="text-accent-content mr-2">{{ item.name }}</span>
-                    <TimesIcon class="mt-0.5 h-4 w-4" />
+                    <Icon name="times" class="mt-0.5 h-4 w-4" />
                 </span>
             </div>
-            <CaretRightIcon
+            <Icon
+                name="caretRight"
                 :class="{ 'rotate-90': isOpen }"
                 class="arrow-right h-5 w-5 transition-transform duration-200" />
         </div>
@@ -41,7 +42,7 @@
                     v-if="searchTerm"
                     class="absolute right-0 z-10 flex cursor-pointer items-center p-3"
                     @click="searchTerm = ''">
-                    <TimesIcon class="h-4 w-4" />
+                    <Icon name="times" class="h-4 w-4" />
                 </span>
             </li>
             <li
@@ -61,8 +62,7 @@
 import { Ref, ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ILanguage } from '@/types'
-import CaretRightIcon from '@/components/icons/CaretRightIcon.vue'
-import TimesIcon from '@/components/icons/TimesIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import useClickOutside from '@/composables/useClickOutside'
 
 const {

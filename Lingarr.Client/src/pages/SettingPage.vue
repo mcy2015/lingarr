@@ -15,7 +15,7 @@
                             :title="item.label"
                             :aria-label="item.label"
                             class="flex w-full cursor-pointer items-center justify-center md:justify-start">
-                            <component :is="item.icon" class="h-4 w-4 md:mr-3" />
+                            <Icon :name="item.icon" class="h-4 w-4 md:mr-3" />
                             <span class="hidden text-sm md:inline-block">
                                 {{ item.label }}
                             </span>
@@ -27,7 +27,7 @@
                         @click="handleLogout">
                         <div
                             class="flex w-full cursor-pointer items-center justify-center md:justify-start">
-                            <LogoutIcon class="h-4 w-4 md:mr-3" />
+                            <Icon name="logout" class="h-4 w-4 md:mr-3" />
                             <span class="hidden text-sm md:inline-block">
                                 {{ t('settings.menu.logout') }}
                             </span>
@@ -54,15 +54,7 @@ import { computed } from 'vue'
 import { MenuItem, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import services from '@/services'
-import IntegrationIcon from '@/components/icons/IntegrationIcon.vue'
-import KeyIcon from '@/components/icons/KeyIcon.vue'
-import SettingIcon from '@/components/icons/SettingIcon.vue'
-import AutomationIcon from '@/components/icons/AutomationIcon.vue'
-import TaskIcon from '@/components/icons/TaskIcon.vue'
-import LanguageIcon from '@/components/icons/LanguageIcon.vue'
-import LogIcon from '@/components/icons/LogIcon.vue'
-import LogoutIcon from '@/components/icons/LogoutIcon.vue'
-import TelemetryIcon from '@/components/icons/TelemetryIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const router = useRouter()
 const settings = useSettingStore()
@@ -72,45 +64,45 @@ const { t } = useI18n()
 const menuItems = computed<MenuItem[]>(() => [
     {
         label: t('settings.menu.integrations'),
-        icon: IntegrationIcon,
+        icon: 'integration',
         route: 'integration-settings',
         children: []
     },
     {
         label: t('settings.menu.authentication'),
-        icon: KeyIcon,
+        icon: 'key',
         route: 'authentication-settings',
         children: []
     },
     {
         label: t('settings.menu.services'),
-        icon: SettingIcon,
+        icon: 'setting',
         route: 'services-settings',
         children: []
     },
     {
         label: t('settings.menu.subtitle'),
-        icon: LanguageIcon,
+        icon: 'language',
         route: 'subtitle-settings',
         children: []
     },
     {
         label: t('settings.menu.automation'),
-        icon: AutomationIcon,
+        icon: 'automation',
         route: 'automation-settings',
         children: []
     },
     {
         label: t('settings.menu.plugins'),
-        icon: SettingIcon,
+        icon: 'setting',
         route: 'plugins-settings',
         children: []
     },
-    { label: t('settings.menu.tasks'), icon: TaskIcon, route: 'tasks-settings', children: [] },
-    { label: t('settings.menu.logs'), icon: LogIcon, route: 'logs-settings', children: [] },
+    { label: t('settings.menu.tasks'), icon: 'task', route: 'tasks-settings', children: [] },
+    { label: t('settings.menu.logs'), icon: 'log', route: 'logs-settings', children: [] },
     {
         label: t('settings.menu.telemetry'),
-        icon: TelemetryIcon,
+        icon: 'telemetry',
         route: 'telemetry-settings',
         children: []
     }

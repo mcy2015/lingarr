@@ -12,13 +12,9 @@
             <div class="p-4">
                 <div class="flex items-start">
                     <div class="shrink-0">
-                        <CheckMarkCircleIcon
-                            v-if="type === 'success'"
-                            class="h-6 w-6 text-success" />
-                        <TimesCircleIcon
-                            v-else-if="type === 'error'"
-                            class="h-6 w-6 text-danger" />
-                        <ExclamationIcon v-else class="h-6 w-6 text-info" />
+                        <Icon v-if="type === 'success'" name="checkMarkCircle" class="h-6 w-6 text-success" />
+                        <Icon v-else-if="type === 'error'" name="timesCircle" class="h-6 w-6 text-danger" />
+                        <Icon v-else name="exclamation" class="h-6 w-6 text-info" />
                     </div>
                     <div class="ml-3 w-0 flex-1 pt-0.5">
                         <p class="text-sm font-medium text-primary-content">
@@ -33,7 +29,7 @@
                             class="text-secondary-content/60 hover:text-primary-content inline-flex rounded-md"
                             @click="close">
                             <span class="sr-only">{{ t('common.close') }}</span>
-                            <TimesIcon class="h-5 w-5" />
+                            <Icon name="times" class="h-5 w-5" />
                         </button>
                     </div>
                 </div>
@@ -53,10 +49,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import CheckMarkCircleIcon from '@/components/icons/CheckMarkCircleIcon.vue'
-import TimesCircleIcon from '@/components/icons/TimesCircleIcon.vue'
-import ExclamationIcon from '@/components/icons/ExclamationIcon.vue'
-import TimesIcon from '@/components/icons/TimesIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 type Status = 'success' | 'error' | 'info'
 

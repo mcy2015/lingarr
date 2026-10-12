@@ -2,9 +2,9 @@
     <div v-if="message" class="rounded-md border p-4" :class="[borderClass, bgClass]">
         <div class="flex items-start">
             <div v-if="showIcon" class="shrink-0">
-                <CheckMarkCircleIcon v-if="type === 'success'" class="h-5 w-5" :class="iconClass" />
-                <TimesCircleIcon v-else-if="type === 'error'" class="h-5 w-5" :class="iconClass" />
-                <ExclamationIcon v-else class="h-5 w-5" :class="iconClass" />
+                <Icon v-if="type === 'success'" name="checkMarkCircle" class="h-5 w-5" :class="iconClass" />
+                <Icon v-else-if="type === 'error'" name="timesCircle" class="h-5 w-5" :class="iconClass" />
+                <Icon v-else name="exclamation" class="h-5 w-5" :class="iconClass" />
             </div>
             <div :class="{ 'ml-3': showIcon }">
                 <p class="text-sm" :class="textClass">{{ message }}</p>
@@ -15,9 +15,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import CheckMarkCircleIcon from '@/components/icons/CheckMarkCircleIcon.vue'
-import TimesCircleIcon from '@/components/icons/TimesCircleIcon.vue'
-import ExclamationIcon from '@/components/icons/ExclamationIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 type MessageType = 'success' | 'error' | 'warning' | 'info'
 

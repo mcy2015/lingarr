@@ -4,7 +4,7 @@
             <template #content>
                 <template v-if="loading">
                     <div class="flex h-64 items-center justify-center">
-                        <LoaderCircleIcon class="h-8 w-8 animate-spin" />
+                        <Icon name="loaderCircle" class="h-8 w-8 animate-spin" />
                     </div>
                 </template>
 
@@ -79,7 +79,7 @@
                 <div class="h-80">
                     <LanguageChart v-if="dailyStats?.length" :daily-stats="dailyStats" />
                     <div v-else-if="loading" class="flex h-full w-full items-center justify-center">
-                        <LoaderCircleIcon class="h-8 w-8 animate-spin" />
+                        <Icon name="loaderCircle" class="h-8 w-8 animate-spin" />
                     </div>
                     <div v-else class="flex h-full w-full items-center justify-center text-xs">
                         {{ t('dashboard.noStatistics') }}
@@ -127,7 +127,7 @@ import { DailyStatistic, MEDIA_TYPE, Statistics } from '@/types'
 import services from '@/services'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
-import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import LanguageChart from './LanguageChart.vue'
 import StatCard from './StatCard.vue'
 import MetricCard from './MetricCard.vue'

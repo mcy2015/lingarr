@@ -53,11 +53,11 @@
 
             <div v-if="enableAuth === 'true'" class="mt-4 space-y-2 border-t border-line pt-4">
                 <div class="flex items-center text-xs text-secondary-content/60">
-                    <ExclamationIcon class="mr-2 h-4 w-4 text-info" />
+                    <Icon name="exclamation" class="mr-2 h-4 w-4 text-info" />
                     {{ t('onboarding.completion.userAccountNote') }}
                 </div>
                 <div class="flex items-center text-xs text-secondary-content/60">
-                    <ExclamationIcon class="mr-2 h-4 w-4 text-info" />
+                    <Icon name="exclamation" class="mr-2 h-4 w-4 text-info" />
                     {{ t('onboarding.completion.apiKeyNote') }}
                 </div>
             </div>
@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import ExclamationIcon from '@/components/icons/ExclamationIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()

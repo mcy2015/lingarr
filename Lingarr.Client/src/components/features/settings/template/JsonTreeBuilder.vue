@@ -15,7 +15,7 @@
                 @update="onTreeChange"
                 @delete="removeRoot(index)" />
             <ButtonComponent variant="ghost" size="xs" class="mt-2" @click="addRootProperty">
-                <PlusIcon class="mr-1 h-3 w-3" />
+                <Icon name="plus" class="mr-1 h-3 w-3" />
                 {{ t('services.template.addProperty') }}
             </ButtonComponent>
         </div>
@@ -40,7 +40,7 @@ import { useJsonTree } from '@/composables/useJsonTree'
 import JsonTreeNode from './JsonTreeNode.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import PlaceholderButton from '@/components/common/PlaceholderButton.vue'
-import PlusIcon from '@/components/icons/PlusIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 import StatusMessage from '@/components/common/StatusMessage.vue'
 
 const props = defineProps<{

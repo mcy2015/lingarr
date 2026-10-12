@@ -1,7 +1,7 @@
 <template>
     <DropdownComponent width="small">
         <template #button>
-            <LanguageIcon class="h-5 w-5" />
+            <Icon name="language" class="h-5 w-5" />
         </template>
         <template #content>
             <div
@@ -21,7 +21,7 @@
                     role="menuitem"
                     @click="switchLocale(locale.code)">
                     {{ locale.label }}
-                    <CheckMarkIcon v-if="locale.code === currentLocale" class="inline h-4 w-4" />
+                    <Icon v-if="locale.code === currentLocale" name="checkMark" class="inline h-4 w-4" />
                 </button>
             </div>
         </template>
@@ -33,8 +33,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, SUPPORTED_LOCALES, type LocaleCode } from '@/i18n'
 import DropdownComponent from '@/components/common/DropdownComponent.vue'
-import LanguageIcon from '@/components/icons/LanguageIcon.vue'
-import CheckMarkIcon from '@/components/icons/CheckMarkIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const { locale } = useI18n()
 const currentLocale = computed(() => locale.value)
