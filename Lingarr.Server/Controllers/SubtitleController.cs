@@ -81,7 +81,8 @@ public class SubtitleController : ControllerBase
         [FromForm] bool translate = false,
         [FromForm] string? mediaType = null,
         [FromForm] int? mediaId = null,
-        [FromForm] int? season = null)
+        [FromForm] int? season = null,
+        [FromForm] string chineseConvert = "none")
     {
         if (files.Count == 0)
         {
@@ -107,7 +108,7 @@ public class SubtitleController : ControllerBase
         }
 
         var results = await _subtitleImportService.ImportFiles(files, sourceLanguage, targetLanguage, translate,
-            mediaType, mediaId, season);
+            mediaType, mediaId, season, chineseConvert);
         return Ok(new ImportSubtitlesResponse { Results = results });
     }
 }

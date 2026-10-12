@@ -110,6 +110,22 @@ public class SubtitleImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportFiles_ChineseConvertTraditionalToSimplified_WritesSimplifiedContent()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        const string traditional = "1\n00:00:01,000 --> 00:00:02,000\n這是繁體中文字幕\n";
+        var big5Bytes = Encoding.GetEncoding("big5").GetBytes(traditional);
+
+        var results = await _service.ImportFiles(
+            [FormFile("movie.cht.srt", big5Bytes)], "zh", "zh", translate: false,
+            chineseConvert: "simplified");
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success, result.Error);
+        Assert.Contains("这是繁体中文字幕", await File.ReadAllTextAsync(result.SavedPath!));
+    }
+
+    [Fact]
     public async Task ImportFiles_DuplicateFileName_GetsUniqueSuffixNotOverwrite()
     {
         await _service.ImportFiles([FormFile("same.srt", "one"u8.ToArray())], "en", "zh", translate: false);

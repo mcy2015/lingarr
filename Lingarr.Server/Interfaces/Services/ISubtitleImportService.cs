@@ -23,5 +23,6 @@ public interface ISubtitleImportService
         bool translate,
         string? mediaType = null,
         int? mediaId = null,
-        int? season = null);
+        int? season = null,
+        string? chineseConvert = null);
 }

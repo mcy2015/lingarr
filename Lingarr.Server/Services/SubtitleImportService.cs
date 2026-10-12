@@ -1,3 +1,4 @@
+using System.Text;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Subtitle;
@@ -50,7 +51,8 @@ public class SubtitleImportService : ISubtitleImportService
         bool translate,
         string? mediaType = null,
         int? mediaId = null,
-        int? season = null)
+        int? season = null,
+        string? chineseConvert = null)
     {
         var importsDirectory = Path.Combine(_environment.ContentRootPath, "config", "imports");
         Directory.CreateDirectory(importsDirectory);
@@ -59,7 +61,7 @@ public class SubtitleImportService : ISubtitleImportService
         foreach (var file in files)
         {
             results.Add(await ImportOne(file, importsDirectory, sourceLanguage, targetLanguage, translate,
-                mediaType, mediaId, season));
+                mediaType, mediaId, season, chineseConvert));
         }
 
         return results;
@@ -73,7 +75,8 @@ public class SubtitleImportService : ISubtitleImportService
         bool translate,
         string? mediaType,
         int? mediaId,
-        int? season)
+        int? season,
+        string? chineseConvert)
     {
         // Browsers send bare file names, but strip directories defensively.
         var fileName = Path.GetFileName(file.FileName);
@@ -92,6 +95,10 @@ public class SubtitleImportService : ISubtitleImportService
             using var buffered = new MemoryStream();
             await stream.CopyToAsync(buffered);
             var utf8Bytes = _encodingService.ConvertToUtf8(buffered.ToArray());
+
+            // Explicit per-import option: alters the stored text, so it never runs by default.
+            var storedText = ChineseSubtitleConverter.Convert(Encoding.UTF8.GetString(utf8Bytes), chineseConvert);
+            utf8Bytes = Encoding.UTF8.GetBytes(storedText);
 
             // Directed import: resolve the media video whose side this file belongs on.
             var mediaTarget = await ResolveMediaTarget(fileName, mediaType, mediaId, season);
