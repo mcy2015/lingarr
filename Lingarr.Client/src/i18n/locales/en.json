@@ -43,7 +43,8 @@
             "completed": "Completed",
             "failed": "Failed",
             "cancelled": "Cancelled",
-            "interrupted": "Interrupted"
+            "interrupted": "Interrupted",
+            "paused": "Paused"
         }
     },
     "nav": {
@@ -726,6 +727,11 @@
             "couldNotApplyChange": "Could not apply the change"
         },
         "queueFooter": "Driven by 6 Hangfire queues (movies / shows / system / translation / webhook / default) · concurrency via MAX_CONCURRENT_JOBS",
-        "wroteBack": "Wrote back"
+        "wroteBack": "Wrote back",
+        "eta": {
+            "pausedHint": "Paused — resume to continue",
+            "remainingHint": "Estimated remaining time",
+            "retries": "{count} retries"
+        }
     }
 }

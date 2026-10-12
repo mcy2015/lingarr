@@ -43,7 +43,8 @@
             "completed": "已完成",
             "failed": "已失败",
             "cancelled": "已取消",
-            "interrupted": "已中断"
+            "interrupted": "已中断",
+            "paused": "已暂停"
         }
     },
     "nav": {
@@ -726,6 +727,11 @@
             "couldNotApplyChange": "无法应用更改"
         },
         "queueFooter": "队列由 Hangfire 6 队列驱动（movies / shows / system / translation / webhook / default）· 并发由 MAX_CONCURRENT_JOBS 控制",
-        "wroteBack": "写回"
+        "wroteBack": "写回",
+        "eta": {
+            "pausedHint": "已暂停，恢复后继续",
+            "remainingHint": "预计剩余时间",
+            "retries": "重试 {count} 次"
+        }
     }
 }

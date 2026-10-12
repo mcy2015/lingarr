@@ -9,9 +9,17 @@
             <Icon v-if="loading" name="loaderCircle" class="h-5 w-5 animate-spin" />
             <button
                 v-else-if="inProgress"
+                :title="t('common.translationAction.pause')"
                 class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
-                @click="executeAction(TRANSLATION_ACTIONS.CANCEL)">
-                <Icon name="times" class="h-5 w-5" />
+                @click="executeAction(TRANSLATION_ACTIONS.PAUSE)">
+                <Icon name="pause" class="h-5 w-5" />
+            </button>
+            <button
+                v-else-if="item.status === TRANSLATION_STATUS.PAUSED"
+                :title="t('common.translationAction.resumePaused')"
+                class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
+                @click="executeAction(TRANSLATION_ACTIONS.RESUME_PAUSED)">
+                <Icon name="start" class="h-5 w-5" />
             </button>
             <template v-else-if="removable">
                 <button

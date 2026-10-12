@@ -162,6 +162,8 @@ export interface ITranslationRequestService {
         status?: string | null
     ): Promise<T>
     statusCounts(): Promise<Record<string, number>>
+    pause<T>(translationRequest: ITranslationRequest): Promise<T>
+    resumePaused<T>(translationRequest: ITranslationRequest): Promise<T>
     cancel<T>(translationRequest: ITranslationRequest): Promise<T>
     convert<T>(id: number, bilingual: boolean): Promise<T>
     convertAll<T>(bilingual: boolean): Promise<T>

@@ -86,6 +86,11 @@
                         class="border-line text-secondary-content shrink-0 rounded border px-1.5 py-0.5 text-xs">
                         {{ t('translations.badges.import') }}
                     </span>
+                    <span
+                        v-if="item.serviceType"
+                        class="border-line text-secondary-content mono shrink-0 rounded border px-1.5 py-0.5 text-xs lowercase">
+                        {{ item.serviceType }}
+                    </span>
                     <span class="mono text-secondary-content/70 shrink-0 text-xs">
                         {{ item.sourceLanguage.toUpperCase() }} →
                         {{ item.targetLanguage.toUpperCase() }}
@@ -135,12 +140,22 @@
                 <!-- ETA 列 -->
                 <div class="mono text-right text-xs">
                     <span
-                        v-if="item.status === TRANSLATION_STATUS.INPROGRESS"
-                        class="text-secondary-content">
-                        {{ item.progress }}%
+                        v-if="item.status === TRANSLATION_STATUS.PAUSED"
+                        class="text-warning"
+                        :title="t('translations.eta.pausedHint')">
+                        ⏸ {{ item.progress }}%
+                    </span>
+                    <span
+                        v-else-if="item.status === TRANSLATION_STATUS.INPROGRESS"
+                        class="text-secondary-content"
+                        :title="t('translations.eta.remainingHint')">
+                        {{ remainingEta(item) }}
                     </span>
                     <span v-else-if="item.status === TRANSLATION_STATUS.FAILED" class="text-danger">
                         ✗ {{ item.progress }}%
+                        <span v-if="item.retryCount" class="text-secondary-content/70">
+                            · {{ t('translations.eta.retries', { count: item.retryCount }) }}
+                        </span>
                     </span>
                     <span
                         v-else-if="
@@ -223,9 +238,27 @@ const statusColor = (status: string): string => {
             return 'var(--danger)'
         case TRANSLATION_STATUS.COMPLETED:
             return 'var(--success)'
+        case TRANSLATION_STATUS.PAUSED:
+            return 'var(--warning)'
         default:
             return 'var(--line)'
     }
+}
+
+// linear ETA: elapsed / progress * remaining; only meaningful with a start
+// time and some progress, otherwise falls back to the plain percentage
+const remainingEta = (item: ITranslationRequest): string => {
+    if (item.startedAt && item.progress > 0) {
+        const elapsed = Date.now() - new Date(item.startedAt).getTime()
+        const remaining = (elapsed / item.progress) * (100 - item.progress)
+        if (remaining > 0 && remaining < 1000 * 60 * 60 * 24) {
+            const totalSeconds = Math.round(remaining / 1000)
+            const minutes = Math.floor(totalSeconds / 60)
+            const seconds = totalSeconds % 60
+            return `${item.progress}% · ~${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+        }
+    }
+    return `${item.progress}%`
 }
 
 const fileName = (path: string): string => path.split('/').pop() ?? path
@@ -266,6 +299,10 @@ async function handleAction(translationRequest: ITranslationRequest, action: TRA
             return await translationRequestStore.resume(translationRequest)
         case TRANSLATION_ACTIONS.PROOFREAD:
             return await translationRequestStore.proofread(translationRequest)
+        case TRANSLATION_ACTIONS.PAUSE:
+            return await translationRequestStore.pause(translationRequest)
+        case TRANSLATION_ACTIONS.RESUME_PAUSED:
+            return await translationRequestStore.resumePaused(translationRequest)
         default:
             console.error('unknown translation request action: ' + action)
     }

@@ -63,6 +63,14 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
             this.filter = { ...this.filter, status: status, pageNumber: 1 }
             await this.fetch()
         },
+        async pause(translationRequest: ITranslationRequest) {
+            await services.translationRequest.pause(translationRequest)
+            await this.fetch()
+        },
+        async resumePaused(translationRequest: ITranslationRequest) {
+            await services.translationRequest.resumePaused(translationRequest)
+            await this.fetch()
+        },
         setActiveTranslations(activeTranslations: IActiveTranslation[]) {
             this.activeTranslations = activeTranslations
         },

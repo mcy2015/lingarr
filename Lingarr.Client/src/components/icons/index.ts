@@ -89,6 +89,8 @@ export const ICONS = {
         '<path fill="currentColor" stroke="none" fill-rule="evenodd" clip-rule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18H9.071l6-6H16a2 2 0 012 2v2a2 2 0 01-2 2z"/>',
     timesCircle:
         '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+    pause: '<rect x="14" y="4" width="4" height="16" rx="1"/>'
+        + '<rect x="6" y="4" width="4" height="16" rx="1"/>',
     times: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     trash:
         '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>'

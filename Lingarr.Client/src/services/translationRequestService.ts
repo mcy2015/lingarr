@@ -34,6 +34,14 @@ const service = (
     statusCounts<T>(): Promise<T> {
         return http.get(`${resource}/counts`).then((response) => response.data)
     },
+    pause<T>(translationRequest: ITranslationRequest): Promise<T> {
+        return http.post(`${resource}/pause`, translationRequest).then((response) => response.data)
+    },
+    resumePaused<T>(translationRequest: ITranslationRequest): Promise<T> {
+        return http
+            .post(`${resource}/resume-paused`, translationRequest)
+            .then((response) => response.data)
+    },
     cancel<T>(translationRequest: ITranslationRequest): Promise<T> {
         return http.post(`${resource}/cancel`, translationRequest).then((response) => response.data)
     },
