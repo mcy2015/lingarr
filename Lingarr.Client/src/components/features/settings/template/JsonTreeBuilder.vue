@@ -16,12 +16,10 @@
                 @delete="removeRoot(index)" />
             <ButtonComponent variant="ghost" size="xs" class="mt-2" @click="addRootProperty">
                 <PlusIcon class="mr-1 h-3 w-3" />
-                Add Property
+                {{ t('services.template.addProperty') }}
             </ButtonComponent>
         </div>
-        <div
-            class="border-accent/20 mt-3 flex flex-wrap gap-3 border-t pt-3"
-            @mousedown.prevent>
+        <div class="border-accent/20 mt-3 flex flex-wrap gap-3 border-t pt-3" @mousedown.prevent>
             <PlaceholderButton
                 v-for="item in placeholders"
                 :key="item.placeholder"
@@ -36,6 +34,7 @@
 
 <script setup lang="ts">
 import { nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { IPlaceholder } from '@/ts'
 import { useJsonTree } from '@/composables/useJsonTree'
 import JsonTreeNode from './JsonTreeNode.vue'
@@ -49,19 +48,14 @@ const props = defineProps<{
     placeholders: IPlaceholder[]
 }>()
 
+const { t } = useI18n()
+
 const emit = defineEmits<{
     'update:modelValue': [value: string]
 }>()
 
-const {
-    tree,
-    parseError,
-    nextId,
-    onTreeChange,
-    addRootProperty,
-    removeRoot,
-    watchModelValue
-} = useJsonTree(emit)
+const { tree, parseError, nextId, onTreeChange, addRootProperty, removeRoot, watchModelValue } =
+    useJsonTree(emit)
 
 watchModelValue(() => props.modelValue)
 

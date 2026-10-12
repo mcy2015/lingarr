@@ -1,16 +1,16 @@
 ﻿<template>
     <div class="w-full">
-        <div class="flex flex-wrap items-center justify-end gap-2 bg-tertiary p-4">
+        <div class="bg-tertiary flex flex-wrap items-center justify-end gap-2 p-4">
             <ReloadComponent @toggle:update="scheduleStore.fetchRecurringJobs" />
         </div>
 
         <div class="w-full px-4">
-            <div class="hidden border-b border-accent font-bold md:grid md:grid-cols-12">
-                <div class="col-span-5 px-4 py-2">Job Name</div>
-                <div class="col-span-2 px-4 py-2">State</div>
-                <div class="col-span-2 px-4 py-2">Last Execution</div>
-                <div class="col-span-2 px-4 py-2">Next Execution</div>
-                <div class="col-span-1 px-4 py-2">Actions</div>
+            <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+                <div class="col-span-5 px-4 py-2">{{ t('settings.schedule.jobName') }}</div>
+                <div class="col-span-2 px-4 py-2">{{ t('settings.schedule.state') }}</div>
+                <div class="col-span-2 px-4 py-2">{{ t('settings.schedule.lastExecution') }}</div>
+                <div class="col-span-2 px-4 py-2">{{ t('settings.schedule.nextExecution') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('settings.schedule.actions') }}</div>
             </div>
 
             <div
@@ -21,7 +21,7 @@
                     <span class="min-w-0 flex-1 md:flex-none">{{ job.id }}</span>
                     <span class="ml-auto flex-none md:hidden">
                         <TriggerJob
-                            title="Run"
+                            :title="t('settings.schedule.run')"
                             @toggle:trigger="scheduleStore.startJob(job.id)" />
                     </span>
                 </div>
@@ -36,7 +36,7 @@
                     </span>
                     <span
                         class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                        Last run
+                        {{ t('settings.schedule.lastRun') }}
                     </span>
                 </div>
                 <div
@@ -47,11 +47,13 @@
                     </span>
                     <span
                         class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                        Next run
+                        {{ t('settings.schedule.nextRun') }}
                     </span>
                 </div>
                 <div class="hidden md:col-span-1 md:flex md:items-center md:px-4 md:py-2">
-                    <TriggerJob title="Run" @toggle:trigger="scheduleStore.startJob(job.id)" />
+                    <TriggerJob
+                        :title="t('settings.schedule.run')"
+                        @toggle:trigger="scheduleStore.startJob(job.id)" />
                 </div>
             </div>
         </div>
@@ -60,6 +62,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Hub } from '@/ts'
 import { formatDateTime } from '@/utils/date'
 import { useSignalR } from '@/composables/useSignalR'
@@ -69,6 +72,7 @@ import TriggerJob from '@/components/common/TriggerJob.vue'
 
 const scheduleStore = useScheduleStore()
 const signalR = useSignalR()
+const { t } = useI18n()
 const hubConnection = ref<Hub>()
 const jobs = computed(() => scheduleStore.getRecurringJobs)
 

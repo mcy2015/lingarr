@@ -1,7 +1,7 @@
 ﻿<template>
     <div class="flex items-center gap-2">
         <button
-            class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors"
+            class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
             @click="router.push({ name: 'translation-detail', params: { id: item.id } })">
             <EyeOnIcon class="h-5 w-5" />
         </button>
@@ -9,7 +9,7 @@
             <LoaderCircleIcon v-if="loading" class="h-5 w-5 animate-spin" />
             <button
                 v-else-if="inProgress"
-                class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors"
+                class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                 @click="executeAction(TRANSLATION_ACTIONS.CANCEL)">
                 <TimesIcon class="h-5 w-5" />
             </button>
@@ -17,29 +17,29 @@
                 <button
                     v-if="resumable"
                     :disabled="loading"
-                    title="Resume, reuse already-translated lines"
-                    class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors"
+                    :title="t('common.translationAction.resume')"
+                    class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.RESUME)">
                     <StartIcon class="h-5 w-5" />
                 </button>
                 <button
                     v-if="proofreadable"
                     :disabled="loading"
-                    title="Proofread, compare against the source and correct mistranslations"
-                    class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors"
+                    :title="t('common.translationAction.proofread')"
+                    class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.PROOFREAD)">
                     <SearchIcon class="h-5 w-5" />
                 </button>
                 <button
                     :disabled="loading"
-                    title="Retry, start over"
-                    class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors"
+                    :title="t('common.translationAction.retry')"
+                    class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.RETRY)">
                     <RetryIcon class="h-5 w-5" />
                 </button>
                 <button
                     :disabled="loading"
-                    class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors"
+                    class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                     @click="executeAction(TRANSLATION_ACTIONS.REMOVE)">
                     <TrashIcon class="h-5 w-5" />
                 </button>
@@ -51,6 +51,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ITranslationRequest, TRANSLATION_ACTIONS, TRANSLATION_STATUS } from '@/ts'
 import useTranslationRequestStore from '@/store/translationRequest'
 import TimesIcon from '@/components/icons/TimesIcon.vue'
@@ -62,6 +63,7 @@ import SearchIcon from '@/components/icons/SearchIcon.vue'
 import EyeOnIcon from '@/components/icons/EyeOnIcon.vue'
 const router = useRouter()
 const translationRequestStore = useTranslationRequestStore()
+const { t } = useI18n()
 
 const props = defineProps<{
     item: ITranslationRequest

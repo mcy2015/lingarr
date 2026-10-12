@@ -11,8 +11,8 @@
             <div
                 v-if="isVisible"
                 :class="alignmentClass"
-                class="absolute -top-5 z-50 w-36 transform rounded-sm border border-accent bg-secondary px-3 py-1 text-center text-sm shadow-lg">
-                {{ tooltip }}
+                class="border-accent bg-secondary absolute -top-5 z-50 w-36 transform rounded-sm border px-3 py-1 text-center text-sm shadow-lg">
+                {{ tooltip || t('common.translationStarted') }}
             </div>
         </Transition>
     </div>
@@ -20,9 +20,12 @@
 
 <script setup lang="ts">
 import { ref, computed, ComputedRef } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const {
-    tooltip = 'Translation started',
+    tooltip = '',
     duration = 2000,
     alignment = 'left'
 } = defineProps<{

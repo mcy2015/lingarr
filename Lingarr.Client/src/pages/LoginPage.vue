@@ -1,7 +1,7 @@
 <template>
     <div class="flex min-h-screen items-center justify-center px-4">
         <div class="w-full max-w-sm">
-            <CardComponent title="Sign in to Lingarr">
+            <CardComponent :title="t('login.title')">
                 <template #content>
                     <div
                         v-if="error"
@@ -11,26 +11,30 @@
 
                     <form class="space-y-6" @submit.prevent="handleLogin">
                         <div>
-                            <label for="username" class="mb-1 block text-sm">Username</label>
+                            <label for="username" class="mb-1 block text-sm">
+                                {{ t('login.username') }}
+                            </label>
                             <input
                                 id="username"
                                 v-model="username"
                                 type="text"
                                 autocomplete="username"
-                                placeholder="Enter your username"
-                                class="outline-hidden w-full rounded-md border border-accent bg-transparent px-4 py-2 transition-colors duration-200"
+                                :placeholder="t('login.usernamePlaceholder')"
+                                class="border-accent w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
                                 required />
                         </div>
 
                         <div>
-                            <label for="password" class="mb-1 block text-sm">Password</label>
+                            <label for="password" class="mb-1 block text-sm">
+                                {{ t('login.password') }}
+                            </label>
                             <input
                                 id="password"
                                 v-model="password"
                                 type="password"
                                 autocomplete="current-password"
-                                placeholder="Enter your password"
-                                class="outline-hidden w-full rounded-md border border-accent bg-transparent px-4 py-2 transition-colors duration-200"
+                                :placeholder="t('login.passwordPlaceholder')"
+                                class="border-accent w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
                                 required />
                         </div>
 
@@ -39,7 +43,7 @@
                                 <LoaderCircleIcon
                                     v-if="loading"
                                     class="mr-2 h-4 w-4 animate-spin" />
-                                {{ loading ? 'Signing in...' : 'Sign In' }}
+                                {{ loading ? t('login.signingIn') : t('login.signIn') }}
                             </ButtonComponent>
                         </div>
                     </form>
@@ -51,12 +55,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import services from '@/services'
 import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const loading = ref(false)
 const error = ref('')
@@ -66,7 +72,7 @@ const password = ref('')
 
 const handleLogin = async () => {
     if (!username.value || !password.value) {
-        error.value = 'Please enter your username and password'
+        error.value = t('login.errors.missingCredentials')
         return
     }
 
@@ -82,7 +88,7 @@ const handleLogin = async () => {
         router.replace({ name: 'dashboard' })
     } catch (err: any) {
         console.error('Login error:', err)
-        error.value = err?.data?.message || 'Invalid username or password'
+        error.value = err?.data?.message || t('login.errors.invalidCredentials')
     } finally {
         loading.value = false
     }

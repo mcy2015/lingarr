@@ -6,7 +6,7 @@
             <CaretButton
                 v-if="node.type === NODE_TYPE.OBJECT || node.type === NODE_TYPE.ARRAY"
                 :is-expanded="!node.expanded"
-                class="text-secondary-content/60 shrink-0 transition-colors duration-200 hover:text-primary-content"
+                class="text-secondary-content/60 hover:text-primary-content shrink-0 transition-colors duration-200"
                 @click="toggleExpand" />
             <div v-else class="h-6 w-6 shrink-0" />
 
@@ -15,12 +15,12 @@
                 :model-value="node.key"
                 size="sm"
                 :debounce="0"
-                placeholder="key"
+                :placeholder="t('services.template.keyPlaceholder')"
                 class="w-28"
                 @update:model-value="updateKey" />
             <span
                 v-else-if="parentType === 'array'"
-                class="bg-accent/20 rounded px-1.5 py-0.5 text-xs font-medium text-accent-content">
+                class="bg-accent/20 text-accent-content rounded px-1.5 py-0.5 text-xs font-medium">
                 [{{ arrayIndex }}]
             </span>
 
@@ -30,7 +30,7 @@
                 :options="NODE_TYPE_OPTIONS"
                 :selected="node.type"
                 size="sm"
-                placeholder="type"
+                :placeholder="t('services.template.typePlaceholder')"
                 @update:selected="updateType($event as NodeType)" />
 
             <template v-if="node.type === NODE_TYPE.STRING">
@@ -38,7 +38,7 @@
                     :model-value="node.value as string"
                     size="sm"
                     :debounce="0"
-                    placeholder="value"
+                    :placeholder="t('services.template.valuePlaceholder')"
                     class="min-w-0 flex-1"
                     @update:model-value="updateValue" />
             </template>
@@ -59,27 +59,27 @@
             </template>
             <template v-else-if="node.type === NODE_TYPE.OBJECT">
                 <span class="text-secondary-content/60 text-xs">
-                    { {{ node.children.length }}
-                    {{ node.children.length === 1 ? 'property' : 'properties' }} }
+                    { {{ t('services.template.propertyCount', node.children.length) }} }
                 </span>
             </template>
             <template v-else-if="node.type === NODE_TYPE.ARRAY">
                 <span class="text-secondary-content/60 text-xs">
-                    [ {{ node.children.length }}
-                    {{ node.children.length === 1 ? 'item' : 'items' }} ]
+                    [ {{ t('services.template.itemCount', node.children.length) }} ]
                 </span>
             </template>
 
             <button
-                class="text-primary-content hover:text-primary-content/50 ml-auto h-4 w-4 cursor-pointer shrink-0 opacity-0 transition-colors group-hover:opacity-100"
-                title="Remove"
+                class="text-primary-content hover:text-primary-content/50 ml-auto h-4 w-4 shrink-0 cursor-pointer opacity-0 transition-colors group-hover:opacity-100"
+                :title="t('services.template.remove')"
                 @click="$emit('delete')">
                 <TrashIcon class="h-4 w-4" />
             </button>
         </div>
 
         <div
-            v-if="(node.type === NODE_TYPE.OBJECT || node.type === NODE_TYPE.ARRAY) && node.expanded"
+            v-if="
+                (node.type === NODE_TYPE.OBJECT || node.type === NODE_TYPE.ARRAY) && node.expanded
+            "
             class="border-accent/15 ml-2 border-l"
             :style="{ marginLeft: `${depth * 1.25 + 0.5}rem` }">
             <JsonTreeNode
@@ -98,13 +98,18 @@
                 :style="{ marginLeft: `${(depth + 1) * 1.25}rem` }"
                 @click="addChild">
                 <PlusIcon class="mr-1 h-3 w-3" />
-                {{ node.type === NODE_TYPE.OBJECT ? 'Add Property' : 'Add Item' }}
+                {{
+                    node.type === NODE_TYPE.OBJECT
+                        ? t('services.template.addProperty')
+                        : t('services.template.addItem')
+                }}
             </ButtonComponent>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { INPUT_TYPE, NODE_TYPE, NODE_TYPE_OPTIONS, TreeNode, NodeType } from '@/ts'
 import CaretButton from '@/components/common/CaretButton.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
@@ -132,6 +137,8 @@ const emit = defineEmits<{
     update: []
     delete: []
 }>()
+
+const { t } = useI18n()
 
 function toggleExpand() {
     node.expanded = !node.expanded

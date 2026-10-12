@@ -7,7 +7,7 @@
         <div
             v-if="manifest.settings.length === 0 && !manifest.description"
             class="text-sm opacity-60">
-            This provider has no configurable settings.
+            {{ t('services.plugins.noSettings') }}
         </div>
 
         <PluginField
@@ -19,8 +19,11 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { IPluginManifest } from '@/ts'
 import PluginField from '@/components/features/settings/PluginField.vue'
+
+const { t } = useI18n()
 
 defineProps<{
     manifest: IPluginManifest

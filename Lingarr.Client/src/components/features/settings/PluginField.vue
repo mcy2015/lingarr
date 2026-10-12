@@ -10,8 +10,8 @@
                 :options="remoteOptions"
                 :selected="fieldValue"
                 :load-on-open="true"
-                placeholder="Select option..."
-                :no-options="remoteError ?? 'Loading options...'"
+                :placeholder="t('services.plugins.selectOption')"
+                :no-options="remoteError ?? t('services.plugins.loadingOptions')"
                 @update:selected="(value: string) => (fieldValue = value)"
                 @fetch-options="loadRemoteOptions" />
         </template>
@@ -19,7 +19,9 @@
             v-else
             :id="field.key"
             v-model="fieldValue"
-            :type="field.type === PLUGIN_SETTING_TYPE.SECRET ? INPUT_TYPE.PASSWORD : INPUT_TYPE.TEXT"
+            :type="
+                field.type === PLUGIN_SETTING_TYPE.SECRET ? INPUT_TYPE.PASSWORD : INPUT_TYPE.TEXT
+            "
             :label="field.label"
             :placeholder="field.default ?? ''"
             :validation-type="validationType"
@@ -34,6 +36,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
     IEncryptedSettings,
     INPUT_TYPE,
@@ -53,6 +56,8 @@ import SelectComponent from '@/components/common/SelectComponent.vue'
 const props = defineProps<{
     field: IPluginSettingField
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits(['save'])
 
@@ -101,11 +106,7 @@ const fieldValue = computed<string>({
                 isValid.value
             )
         } else {
-            settingsStore.updateSetting(
-                props.field.key as keyof ISettings,
-                newValue,
-                isValid.value
-            )
+            settingsStore.updateSetting(props.field.key as keyof ISettings, newValue, isValid.value)
         }
         if (isValid.value) {
             emit('save')
@@ -115,7 +116,7 @@ const fieldValue = computed<string>({
 
 async function loadRemoteOptions(): Promise<void> {
     if (!props.field.optionsEndpoint) {
-        remoteError.value = 'No options endpoint configured.'
+        remoteError.value = t('services.plugins.noOptionsEndpoint')
         remoteSelect.value?.setLoadingState(false)
         return
     }
@@ -125,11 +126,11 @@ async function loadRemoteOptions(): Promise<void> {
         const response = await services.plugin.getOptions(props.field.optionsEndpoint)
         remoteOptions.value = response.options ?? []
         if (remoteOptions.value.length === 0) {
-            remoteError.value = response.message ?? 'No options returned.'
+            remoteError.value = response.message ?? t('services.plugins.noOptionsReturned')
         }
     } catch (error) {
         console.error('Failed to load options:', error)
-        remoteError.value = 'Error loading options. Please try again.'
+        remoteError.value = t('services.plugins.optionsLoadError')
     } finally {
         remoteSelect.value?.setLoadingState(false)
     }

@@ -2,17 +2,19 @@
     <div class="relative">
         <div
             ref="excludeClickOutside"
-            class="flex min-h-12 cursor-pointer items-center justify-between rounded-md border border-accent px-4 py-2"
+            class="border-accent flex min-h-12 cursor-pointer items-center justify-between rounded-md border px-4 py-2"
             @click="toggleDropdown">
-            <span v-if="selectedItems.length === 0" class="text-gray-400">Select language...</span>
+            <span v-if="selectedItems.length === 0" class="text-gray-400">
+                {{ t('settings.languageSelect.placeholder') }}
+            </span>
             <div v-else class="flex flex-1 flex-wrap items-center gap-2">
                 <span
                     v-for="(item, index) in selectedItems"
                     :key="`${item.code}-${index}`"
                     :data-key="`${item.code}-${index}`"
-                    class="flex cursor-pointer items-center rounded-md bg-accent px-3 py-1 text-sm font-medium text-secondary-content"
+                    class="bg-accent text-secondary-content flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium"
                     @click.stop="removeItem(item)">
-                    <span class="mr-2 text-accent-content">{{ item.name }}</span>
+                    <span class="text-accent-content mr-2">{{ item.name }}</span>
                     <TimesIcon class="mt-0.5 h-4 w-4" />
                 </span>
             </div>
@@ -23,15 +25,17 @@
         <ul
             v-show="isOpen"
             ref="clickOutside"
-            class="absolute z-10 max-h-60 w-full overflow-auto rounded-md border border-accent bg-primary shadow-lg"
+            class="border-accent bg-primary absolute z-10 max-h-60 w-full overflow-auto rounded-md border shadow-lg"
             :class="openUpward ? 'bottom-full mb-1' : 'top-full mt-1'">
-            <li v-if="!options?.length" class="p-3">Select a source language first.</li>
+            <li v-if="!options?.length" class="p-3">
+                {{ t('settings.languageSelect.selectSourceFirst') }}
+            </li>
             <li v-else class="flex items-center">
                 <input
                     ref="searchInput"
                     v-model="searchTerm"
-                    class="outline-hidden relative w-full border-b border-accent bg-transparent p-2"
-                    placeholder="Select or search language" />
+                    class="border-accent relative w-full border-b bg-transparent p-2 outline-hidden"
+                    :placeholder="t('settings.languageSelect.search')" />
 
                 <span
                     v-if="searchTerm"
@@ -55,6 +59,7 @@
 
 <script setup lang="ts">
 import { Ref, ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ILanguage } from '@/ts'
 import CaretRightIcon from '@/components/icons/CaretRightIcon.vue'
 import TimesIcon from '@/components/icons/TimesIcon.vue'
@@ -71,6 +76,8 @@ const {
 }>()
 
 const emit = defineEmits(['update:selected'])
+
+const { t } = useI18n()
 
 const isOpen: Ref<boolean> = ref(false)
 const openUpward: Ref<boolean> = ref(false)

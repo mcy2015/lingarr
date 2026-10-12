@@ -1,24 +1,27 @@
 <template>
-    <CardComponent title="Anonymous Telemetry">
+    <CardComponent :title="t('settings.telemetry.title')">
         <template #description>
-            Help improve Lingarr by sharing anonymous usage statistics. No personal information,
-            file names, or subtitle content is collected.
+            {{ t('settings.telemetry.description') }}
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
                 <SaveNotification ref="saveNotification" />
                 <div class="flex items-center space-x-2">
-                    <span>Share anonymous usage statistics:</span>
+                    <span>{{ t('settings.telemetry.shareStats') }}</span>
 
                     <ToggleButton v-model="telemetryEnabled">
-                        <span class="text-sm font-medium text-primary-content">
-                            {{ telemetryEnabled === 'true' ? 'Enabled' : 'Disabled' }}
+                        <span class="text-primary-content text-sm font-medium">
+                            {{
+                                telemetryEnabled === 'true'
+                                    ? t('settings.status.enabled')
+                                    : t('settings.status.disabled')
+                            }}
                         </span>
                     </ToggleButton>
                 </div>
 
-                <span class="text-sm">Telemetry that will be sent if enabled:</span>
-                <div class="rounded-md bg-primary p-4">
+                <span class="text-sm">{{ t('settings.telemetry.previewLabel') }}</span>
+                <div class="bg-primary rounded-md p-4">
                     <pre class="overflow-x-auto rounded-md p-4 text-xs">{{
                         JSON.stringify(previewData, null, 2)
                     }}</pre>
@@ -30,6 +33,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
 import { SETTINGS } from '@/ts'
 import CardComponent from '@/components/common/CardComponent.vue'
@@ -38,6 +42,7 @@ import services from '@/services'
 import SaveNotification from '@/components/common/SaveNotification.vue'
 
 const store = useSettingStore()
+const { t } = useI18n()
 const previewData = ref<any>(null)
 
 const telemetryEnabled = computed({

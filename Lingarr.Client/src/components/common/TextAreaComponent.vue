@@ -15,19 +15,23 @@
             <ValidationIcon
                 :is-valid="isValid"
                 :is-invalid="isInvalid"
-                class="absolute right-3 top-3" />
+                class="absolute top-3 right-3" />
         </div>
         <p v-if="missingPlaceholders.length > 0" class="mt-1 text-sm text-red-600">
-            Required placeholders missing: {{ missingPlaceholders.join(' and ') }}
+            {{
+                t('common.requiredPlaceholdersMissing', {
+                    placeholders: missingPlaceholders.join(' and ')
+                })
+            }}
         </p>
         <div class="flex flex-wrap gap-3">
             <PlaceholderButton
                 v-for="(item, index) in placeholders"
                 :key="index"
                 :placeholder="item.placeholder"
-                :placeholder-text="item.placeholderText"
-                :title="item.title"
-                :description="item.description"
+                :placeholder-text="t(item.placeholderText)"
+                :title="t(item.title)"
+                :description="t(item.description)"
                 @insert="insertPlaceholder" />
         </div>
     </div>
@@ -35,6 +39,7 @@
 
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { IPlaceholder } from '@/ts'
 import useDebounce from '@/composables/useDebounce'
 import ValidationIcon from '@/components/common/ValidationIcon.vue'
@@ -59,6 +64,8 @@ const props = withDefaults(
         requiredPlaceholders: () => []
     }
 )
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void

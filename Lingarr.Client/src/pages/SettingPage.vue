@@ -1,7 +1,7 @@
 <template>
     <div class="grid h-full grid-cols-[auto_1fr]">
-        <aside class="w-[3.175rem] shrink-0 bg-secondary md:w-40">
-            <nav class="flex h-full flex-col pt-4 md:pl-4 md:pt-8">
+        <aside class="bg-secondary w-[3.175rem] shrink-0 md:w-40">
+            <nav class="flex h-full flex-col pt-4 md:pt-8 md:pl-4">
                 <ul class="flex flex-col space-y-4">
                     <li
                         v-for="(item, index) in menuItems"
@@ -28,7 +28,9 @@
                         <div
                             class="flex w-full cursor-pointer items-center justify-center md:justify-start">
                             <LogoutIcon class="h-4 w-4 md:mr-3" />
-                            <span class="hidden text-sm md:inline-block">Logout</span>
+                            <span class="hidden text-sm md:inline-block">
+                                {{ t('settings.menu.logout') }}
+                            </span>
                         </div>
                     </li>
                 </ul>
@@ -47,6 +49,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { MenuItem, SETTINGS } from '@/ts'
 import { useSettingStore } from '@/store/setting'
 import services from '@/services'
@@ -62,47 +65,53 @@ import TelemetryIcon from '@/components/icons/TelemetryIcon.vue'
 
 const router = useRouter()
 const settings = useSettingStore()
+const { t } = useI18n()
 
 const menuItems: MenuItem[] = [
     {
-        label: 'Integrations',
+        label: t('settings.menu.integrations'),
         icon: IntegrationIcon,
         route: 'integration-settings',
         children: []
     },
     {
-        label: 'Authentication',
+        label: t('settings.menu.authentication'),
         icon: KeyIcon,
         route: 'authentication-settings',
         children: []
     },
     {
-        label: 'Services',
+        label: t('settings.menu.services'),
         icon: SettingIcon,
         route: 'services-settings',
         children: []
     },
     {
-        label: 'Subtitle',
+        label: t('settings.menu.subtitle'),
         icon: LanguageIcon,
         route: 'subtitle-settings',
         children: []
     },
     {
-        label: 'Automation',
+        label: t('settings.menu.automation'),
         icon: AutomationIcon,
         route: 'automation-settings',
         children: []
     },
     {
-        label: 'Plugins',
+        label: t('settings.menu.plugins'),
         icon: SettingIcon,
         route: 'plugins-settings',
         children: []
     },
-    { label: 'Tasks', icon: TaskIcon, route: 'tasks-settings', children: [] },
-    { label: 'Logs', icon: LogIcon, route: 'logs-settings', children: [] },
-    { label: 'Telemetry', icon: TelemetryIcon, route: 'telemetry-settings', children: [] }
+    { label: t('settings.menu.tasks'), icon: TaskIcon, route: 'tasks-settings', children: [] },
+    { label: t('settings.menu.logs'), icon: LogIcon, route: 'logs-settings', children: [] },
+    {
+        label: t('settings.menu.telemetry'),
+        icon: TelemetryIcon,
+        route: 'telemetry-settings',
+        children: []
+    }
 ]
 
 const handleLogout = async () => {

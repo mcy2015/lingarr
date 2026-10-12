@@ -5,16 +5,17 @@
         </label>
         <div
             ref="excludeClickOutside"
-
-            class="flex cursor-pointer items-center justify-between rounded-md border border-accent"
+            class="border-accent flex cursor-pointer items-center justify-between rounded-md border"
             :class="size === 'sm' ? 'h-6 px-1.5 py-0.5 text-xs' : 'h-12 px-4 py-2'"
             @click="toggleDropdown">
-            <span v-if="!selected" class="text-gray-400">{{ placeholder }}</span>
+            <span v-if="!selected" class="text-gray-400">
+                {{ placeholder || t('common.selectItems') }}
+            </span>
             <span v-else-if="size === 'sm'" class="truncate">{{ displaySelectedLabel }}</span>
             <div v-else class="flex max-h-12 flex-wrap gap-2 overflow-auto">
                 <span
-                    class="flex cursor-pointer items-center rounded-md bg-accent px-3 py-1 text-sm font-medium">
-                    <span class="mr-2 text-accent-content">{{ displaySelectedLabel }}</span>
+                    class="bg-accent flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium">
+                    <span class="text-accent-content mr-2">{{ displaySelectedLabel }}</span>
                 </span>
             </div>
             <div class="flex shrink-0 items-center">
@@ -27,9 +28,9 @@
         <ul
             v-show="isOpen"
             ref="clickOutside"
-            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-accent bg-primary shadow-lg">
+            class="border-accent bg-primary absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border shadow-lg">
             <li v-if="!sortedOptions.length" :class="size === 'sm' ? 'p-1.5 text-xs' : 'p-3'">
-                {{ noOptions }}
+                {{ noOptions || t('common.selectSourceLanguageFirst') }}
             </li>
             <li
                 v-for="(option, index) in sortedOptions"
@@ -48,10 +49,13 @@
 
 <script setup lang="ts">
 import { Ref, ref, nextTick, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import CaretRightIcon from '@/components/icons/CaretRightIcon.vue'
 import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
 import useClickOutside from '@/composables/useClickOutside'
 import { ISelectOption } from '@/ts'
+
+const { t } = useI18n()
 
 const props = withDefaults(
     defineProps<{
@@ -68,8 +72,8 @@ const props = withDefaults(
         label: '',
         options: () => [],
         selected: '',
-        placeholder: 'Select items...',
-        noOptions: 'Select a source language first.',
+        placeholder: '',
+        noOptions: '',
         selectedLabel: '',
         size: 'md'
     }

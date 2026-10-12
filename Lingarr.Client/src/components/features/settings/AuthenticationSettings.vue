@@ -1,19 +1,23 @@
 <template>
-    <CardComponent title="Authentication Settings">
+    <CardComponent :title="t('settings.authentication.title')">
         <template #description></template>
         <template #content>
             <div class="flex flex-col space-y-4">
                 <StatusMessage :message="error" type="error" />
                 <div class="flex items-center space-x-2">
-                    <span>Authentication enabled:</span>
+                    <span>{{ t('settings.authentication.enabled') }}</span>
                     <ToggleButton v-model="authEnabled">
-                        <span class="text-sm font-medium text-primary-content">
-                            {{ authEnabled === 'true' ? 'Enabled' : 'Disabled' }}
+                        <span class="text-primary-content text-sm font-medium">
+                            {{
+                                authEnabled === 'true'
+                                    ? t('settings.status.enabled')
+                                    : t('settings.status.disabled')
+                            }}
                         </span>
                     </ToggleButton>
                 </div>
                 <div v-if="authEnabled === 'false'" class="text-sm text-gray-400">
-                    Note: At least one user must exist before authentication can be enabled.
+                    {{ t('settings.authentication.note') }}
                 </div>
             </div>
         </template>
@@ -22,6 +26,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
 import { SETTINGS } from '@/ts'
 import CardComponent from '@/components/common/CardComponent.vue'
@@ -31,6 +36,7 @@ import StatusMessage from '@/components/common/StatusMessage.vue'
 import services from '@/services'
 
 const settingsStore = useSettingStore()
+const { t } = useI18n()
 const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
 const error = ref<string>('')
 
@@ -42,13 +48,12 @@ const authEnabled = computed({
             try {
                 const hasUsers = await services.auth.hasAnyUsers()
                 if (!hasUsers) {
-                    error.value =
-                        'There are currently no users. Create a user before enabling authentication.'
+                    error.value = t('settings.authentication.noUsers')
                     return
                 }
             } catch (err: any) {
                 console.error('Error checking for users:', err)
-                error.value = 'Failed to verify users. Please try again.'
+                error.value = t('settings.authentication.verifyFailed')
                 return
             }
             setTimeout(() => {

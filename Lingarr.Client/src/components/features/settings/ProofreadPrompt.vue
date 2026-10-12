@@ -1,15 +1,14 @@
 <template>
-    <CardComponent title="Proofread Prompt">
+    <CardComponent :title="t('settings.proofread.title')">
         <template #description>
-            Define the prompts used when proofreading an already completed translation.
+            {{ t('settings.proofread.description') }}
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
                 <SaveNotification ref="saveNotification" />
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Proofread system prompt</span>
-                    Define the AI's behavior when comparing a translated line against its source
-                    line.
+                    <span class="font-semibold">{{ t('settings.proofread.systemPrompt') }}</span>
+                    {{ t('settings.proofread.systemPromptDescription') }}
                 </div>
                 <TextAreaComponent
                     v-model="proofreadPrompt"
@@ -20,9 +19,8 @@
                     @update:validation="(val) => (isSystemPromptValid = val)" />
 
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Proofread user prompt</span>
-                    Sent together with the source line and its existing translation for each
-                    proofread request.
+                    <span class="font-semibold">{{ t('settings.proofread.userPrompt') }}</span>
+                    {{ t('settings.proofread.userPromptDescription') }}
                 </div>
                 <TextAreaComponent
                     v-model="proofreadUserPrompt"
@@ -38,6 +36,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
 import { PLACEHOLDER, SETTINGS } from '@/ts'
 import CardComponent from '@/components/common/CardComponent.vue'
@@ -45,6 +44,7 @@ import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
 import SaveNotification from '@/components/common/SaveNotification.vue'
 
 const settingsStore = useSettingStore()
+const { t } = useI18n()
 const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
 const isSystemPromptValid = ref(false)
 const isUserPromptValid = ref(false)

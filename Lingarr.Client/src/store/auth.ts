@@ -1,6 +1,7 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { IUser, IAuthStore } from '@/ts'
 import services from '@/services'
+import i18n from '@/i18n'
 
 export const useAuthStore = defineStore('auth', {
     state: (): IAuthStore => ({
@@ -96,14 +97,14 @@ export const useAuthStore = defineStore('auth', {
                         username: this.editUsername,
                         password: this.editPassword
                     })
-                    this.success = 'User created successfully'
+                    this.success = i18n.global.t('toast.user.created')
                 } else {
                     // Updating a user
                     await services.auth.updateUser(this.editingUserId!, {
                         username: this.editUsername,
                         password: this.editPassword
                     })
-                    this.success = 'User updated successfully'
+                    this.success = i18n.global.t('toast.user.updated')
                 }
 
                 setTimeout(() => {
@@ -116,7 +117,9 @@ export const useAuthStore = defineStore('auth', {
                 console.error('Error saving user:', err)
                 this.error =
                     err?.data?.message ||
-                    (this.isCreating ? 'Failed to create user' : 'Failed to update user')
+                    (this.isCreating
+                        ? i18n.global.t('toast.user.createFailed')
+                        : i18n.global.t('toast.user.updateFailed'))
             } finally {
                 this.loading = false
             }
@@ -130,7 +133,7 @@ export const useAuthStore = defineStore('auth', {
             try {
                 await services.auth.deleteUser(user.id)
 
-                this.success = 'User deleted successfully'
+                this.success = i18n.global.t('toast.user.deleted')
                 setTimeout(() => {
                     this.success = ''
                 }, 3000)
@@ -138,7 +141,7 @@ export const useAuthStore = defineStore('auth', {
                 await this.loadUsers()
             } catch (err: any) {
                 console.error('Error deleting user:', err)
-                this.error = err?.data?.message || 'Failed to delete user'
+                this.error = err?.data?.message || i18n.global.t('toast.user.deleteFailed')
             } finally {
                 this.deletingUserId = null
             }

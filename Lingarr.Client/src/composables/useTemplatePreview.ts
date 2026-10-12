@@ -1,5 +1,6 @@
 import { computed } from 'vue'
 import { SETTINGS } from '@/ts'
+import i18n from '@/i18n'
 import { useSettingStore } from '@/store/setting'
 
 interface TemplatePreviewProps {
@@ -69,7 +70,9 @@ export function useTemplatePreview(props: TemplatePreviewProps) {
             JSON.parse(substituted)
             return null
         } catch (e) {
-            return `Invalid JSON: ${(e as Error).message}`
+            return i18n.global.t('toast.template.invalidJson', {
+                message: (e as Error).message
+            })
         }
     })
 

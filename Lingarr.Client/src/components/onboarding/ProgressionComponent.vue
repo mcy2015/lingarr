@@ -20,6 +20,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const { currentStep, totalSteps, enableAuth } = defineProps<{
     currentStep: number
@@ -28,14 +31,14 @@ const { currentStep, totalSteps, enableAuth } = defineProps<{
 }>()
 
 const steps = computed(() => {
-    const labels = ['Choose']
+    const labels = [t('onboarding.steps.choose')]
 
     if (enableAuth === 'true') {
-        labels.push('Account')
+        labels.push(t('onboarding.steps.account'))
     }
 
-    labels.push('Telemetry')
-    labels.push('Complete')
+    labels.push(t('onboarding.steps.telemetry'))
+    labels.push(t('onboarding.steps.complete'))
 
     return labels
 })

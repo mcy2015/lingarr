@@ -8,62 +8,62 @@ export interface IPlaceholder {
 export const PLACEHOLDER: Record<string, IPlaceholder> = {
     MODEL: {
         placeholder: '{model}',
-        placeholderText: 'insert {model}',
-        title: 'Model',
-        description: 'The AI model configured for the selected service'
+        placeholderText: 'placeholder.model.insert',
+        title: 'placeholder.model.title',
+        description: 'placeholder.model.description'
     },
     SYSTEM_PROMPT: {
         placeholder: '{systemPrompt}',
-        placeholderText: 'insert {systemPrompt}',
-        title: 'System Prompt',
-        description: 'The rendered system prompt'
+        placeholderText: 'placeholder.systemPrompt.insert',
+        title: 'placeholder.systemPrompt.title',
+        description: 'placeholder.systemPrompt.description'
     },
     USER_MESSAGE: {
         placeholder: '{userMessage}',
-        placeholderText: 'insert {userMessage}',
-        title: 'User Message',
-        description: 'The rendered user prompt, or the subtitle batch in batch mode'
+        placeholderText: 'placeholder.userMessage.insert',
+        title: 'placeholder.userMessage.title',
+        description: 'placeholder.userMessage.description'
     },
     SOURCE_LANGUAGE: {
         placeholder: '{sourceLanguage}',
-        placeholderText: 'insert {sourceLanguage}',
-        title: 'Source Language',
-        description: 'The language the subtitle is translated from'
+        placeholderText: 'placeholder.sourceLanguage.insert',
+        title: 'placeholder.sourceLanguage.title',
+        description: 'placeholder.sourceLanguage.description'
     },
     TARGET_LANGUAGE: {
         placeholder: '{targetLanguage}',
-        placeholderText: 'insert {targetLanguage}',
-        title: 'Target Language',
-        description: 'The language the subtitle is translated to'
+        placeholderText: 'placeholder.targetLanguage.insert',
+        title: 'placeholder.targetLanguage.title',
+        description: 'placeholder.targetLanguage.description'
     },
     LINE_TO_TRANSLATE: {
         placeholder: '{lineToTranslate}',
-        placeholderText: 'insert {lineToTranslate}',
-        title: 'Subtitle Line',
-        description: 'The subtitle line that needs to be translated'
+        placeholderText: 'placeholder.lineToTranslate.insert',
+        title: 'placeholder.lineToTranslate.title',
+        description: 'placeholder.lineToTranslate.description'
     },
     CONTEXT_BEFORE: {
         placeholder: '{contextBefore}',
-        placeholderText: 'insert {contextBefore}',
-        title: 'Context Before',
-        description: 'Subtitles before the subtitle line that can be used as context'
+        placeholderText: 'placeholder.contextBefore.insert',
+        title: 'placeholder.contextBefore.title',
+        description: 'placeholder.contextBefore.description'
     },
     CONTEXT_AFTER: {
         placeholder: '{contextAfter}',
-        placeholderText: 'insert {contextAfter}',
-        title: 'Context After',
-        description: 'Subtitles after the subtitle line that can be used as context'
+        placeholderText: 'placeholder.contextAfter.insert',
+        title: 'placeholder.contextAfter.title',
+        description: 'placeholder.contextAfter.description'
     },
     SOURCE_LINE: {
         placeholder: '{sourceLine}',
-        placeholderText: 'insert {sourceLine}',
-        title: 'Source Line',
-        description: 'The original subtitle line being proofread'
+        placeholderText: 'placeholder.sourceLine.insert',
+        title: 'placeholder.sourceLine.title',
+        description: 'placeholder.sourceLine.description'
     },
     TRANSLATED_LINE: {
         placeholder: '{translatedLine}',
-        placeholderText: 'insert {translatedLine}',
-        title: 'Translated Line',
-        description: 'The existing translation being proofread'
+        placeholderText: 'placeholder.translatedLine.insert',
+        title: 'placeholder.translatedLine.title',
+        description: 'placeholder.translatedLine.description'
     }
 }

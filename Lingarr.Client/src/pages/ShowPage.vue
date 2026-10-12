@@ -1,49 +1,55 @@
 ﻿<template>
     <div v-if="settingsCompleted === 'true'" class="w-full">
-        <div class="flex flex-wrap items-center justify-between gap-2 bg-tertiary p-4">
+        <div class="bg-tertiary flex flex-wrap items-center justify-between gap-2 p-4">
             <SearchComponent v-model="filter" />
             <div
                 class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:items-center md:justify-between md:space-x-2">
                 <ToggleButton
                     v-model="navigateToDetails"
                     size="small"
-                    label="Open details on request" />
+                    :label="t('shows.openDetailsOnRequest')" />
                 <ContextMenu
                     v-if="isSelectMode && showStore.selectedShows.length > 0"
                     @select="handleTranslate">
                     <ButtonComponent size="sm" variant="accent">
-                        Translate ({{ showStore.selectedShows.length }})
+                        {{
+                            t('shows.translateWithCount', { count: showStore.selectedShows.length })
+                        }}
                     </ButtonComponent>
                 </ContextMenu>
                 <ButtonComponent size="sm" variant="accent" @click="toggleSelectMode">
-                    {{ isSelectMode ? 'Cancel' : 'Translate multiple' }}
+                    {{ isSelectMode ? t('shows.cancel') : t('shows.translateMultiple') }}
                 </ButtonComponent>
                 <ButtonComponent
                     size="sm"
                     variant="accent"
                     @click="showStore.includeAll(MEDIA_TYPE.SHOW, true)">
-                    Include All
+                    {{ t('shows.includeAll') }}
                 </ButtonComponent>
                 <ButtonComponent
                     size="sm"
                     variant="accent"
                     @click="showStore.includeAll(MEDIA_TYPE.SHOW, false)">
-                    Exclude All
+                    {{ t('shows.excludeAll') }}
                 </ButtonComponent>
-                <span class="text-sm text-accent-content">
-                    {{ showStore.includeSummary.included }}/{{ showStore.includeSummary.total }}
-                    included
+                <span class="text-accent-content text-sm">
+                    {{
+                        t('shows.includedSummary', {
+                            included: showStore.includeSummary.included,
+                            total: showStore.includeSummary.total
+                        })
+                    }}
                 </span>
                 <div class="flex flex-wrap items-center gap-2">
                     <SortControls
                         v-model="filter"
                         :options="[
                             {
-                                label: 'Sort by Title',
+                                label: t('shows.sortByTitle'),
                                 value: 'Title'
                             },
                             {
-                                label: 'Sort by Added',
+                                label: t('shows.sortByAdded'),
                                 value: 'DateAdded'
                             }
                         ]" />
@@ -56,10 +62,10 @@
             <!-- Shows -->
             <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
                 <div :class="isSelectMode ? 'col-span-7' : 'col-span-8'" class="px-4 py-2">
-                    Title
+                    {{ t('shows.title') }}
                 </div>
-                <div class="col-span-1 px-4 py-2">Include</div>
-                <div class="col-span-3 px-4 py-2">Delay</div>
+                <div class="col-span-1 px-4 py-2">{{ t('shows.include') }}</div>
+                <div class="col-span-3 px-4 py-2">{{ t('shows.delay') }}</div>
                 <div
                     v-if="isSelectMode"
                     class="col-span-1 flex items-center justify-center px-4 py-2">
@@ -98,13 +104,13 @@
                             " />
                         <span
                             class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                            Include
+                            {{ t('shows.include') }}
                         </span>
                     </div>
                     <div class="flex items-center gap-2 md:col-span-3 md:px-4 md:py-2" @click.stop>
                         <InputComponent
                             :model-value="item.translationAgeThreshold ?? null"
-                            placeholder="hours"
+                            :placeholder="t('shows.hours')"
                             class="w-14"
                             size="sm"
                             :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
@@ -117,7 +123,7 @@
                             " />
                         <span
                             class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                            Delay
+                            {{ t('shows.delay') }}
                         </span>
                     </div>
                     <div
@@ -144,7 +150,17 @@
 
 <script setup lang="ts">
 import { ref, Ref, computed, onMounted, ComputedRef } from 'vue'
-import { IFilter, ILanguage, INPUT_TYPE, INPUT_VALIDATION_TYPE, IPagedResult, IShow, MEDIA_TYPE, SETTINGS } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import {
+    IFilter,
+    ILanguage,
+    INPUT_TYPE,
+    INPUT_VALIDATION_TYPE,
+    IPagedResult,
+    IShow,
+    MEDIA_TYPE,
+    SETTINGS
+} from '@/ts'
 import useDebounce from '@/composables/useDebounce'
 import { useInstanceStore } from '@/store/instance'
 import { useSettingStore } from '@/store/setting'
@@ -168,6 +184,7 @@ const instanceStore = useInstanceStore()
 const showStore = useShowStore()
 const settingStore = useSettingStore()
 const translateStore = useTranslateStore()
+const { t } = useI18n()
 const expandedShow: Ref<boolean | number | null> = ref(null)
 
 const settingsCompleted: ComputedRef<string> = computed(

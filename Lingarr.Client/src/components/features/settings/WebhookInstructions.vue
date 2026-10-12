@@ -1,15 +1,14 @@
 <template>
-    <CardComponent title="Webhook">
+    <CardComponent :title="t('services.webhook.title')">
         <template #description>
-            Configure webhooks in Radarr and Sonarr to automatically trigger translations when new
-            media is added.
+            {{ t('services.webhook.description') }}
         </template>
         <template #content>
             <div class="flex flex-col space-y-2">
                 <span>
-                    Go to
+                    {{ t('services.webhook.goTo') }}
                     <b>Settings → Connect → Connections → +</b>
-                    and use this URL:
+                    {{ t('services.webhook.andUseThisUrl') }}
                 </span>
                 <span class="font-semibold">Radarr</span>
                 <CodeSnippet class="mt-1 block overflow-x-auto">{{ radarrWebhookUrl }}</CodeSnippet>
@@ -21,9 +20,12 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import CardComponent from '@/components/common/CardComponent.vue'
 import CodeSnippet from '@/components/common/CodeSnippet.vue'
 import { resolveUrl } from '@/utils/baseUrl'
+
+const { t } = useI18n()
 
 const radarrWebhookUrl = resolveUrl('/api/webhook/radarr')
 const sonarrWebhookUrl = resolveUrl('/api/webhook/sonarr')

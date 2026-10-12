@@ -1,14 +1,16 @@
 <template>
-    <CardComponent title="Translation Prompt">
+    <CardComponent :title="t('settings.translationPrompt.title')">
         <template #description>
-            Define the prompts used when translating subtitle lines.
+            {{ t('settings.translationPrompt.description') }}
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
                 <SaveNotification ref="saveNotification" />
                 <div class="flex flex-col space-x-2">
-                    <span class="font-semibold">Translation system prompt</span>
-                    Define the AI's behavior and tone by setting global instructions.
+                    <span class="font-semibold">
+                        {{ t('settings.translationPrompt.systemPrompt') }}
+                    </span>
+                    {{ t('settings.translationPrompt.systemPromptDescription') }}
                 </div>
                 <TextAreaComponent
                     v-model="aiPrompt"
@@ -20,9 +22,10 @@
 
                 <div v-if="useBatchTranslation !== 'true'" class="space-y-4">
                     <div class="flex flex-col space-x-2">
-                        <span class="font-semibold">Translation user prompt</span>
-                        Use the context placeholders to include lines before and after the current
-                        subtitle, helping the AI generate a more accurate translation.
+                        <span class="font-semibold">
+                            {{ t('settings.translationPrompt.userPrompt') }}
+                        </span>
+                        {{ t('settings.translationPrompt.userPromptDescription') }}
                     </div>
                     <TextAreaComponent
                         v-model="aiUserPrompt"
@@ -42,32 +45,33 @@
                         v-model="contextBefore"
                         :type="INPUT_TYPE.NUMBER"
                         :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
-                        label="Context before"
+                        :label="t('settings.translationPrompt.contextBefore')"
                         @update:validation="(val) => (isValid.contextBefore = val)" />
                     <InputComponent
                         v-model="contextAfter"
                         :type="INPUT_TYPE.NUMBER"
                         :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
-                        label="Context after"
+                        :label="t('settings.translationPrompt.contextAfter')"
                         @update:validation="(val) => (isValid.contextAfter = val)" />
 
                     <div class="flex flex-col">
-                        <span class="font-semibold">Structured context with translations</span>
-                        Sends {contextBefore} and {contextAfter} as one JSON object per line with
-                        its position and text, plus the translation for lines that are already
-                        translated, so the AI can keep names and terms consistent. Only applies when
-                        the placeholders are used in the user prompt; tell the model in the prompt
-                        to follow the earlier translations.
+                        <span class="font-semibold">
+                            {{ t('settings.translationPrompt.structuredContext') }}
+                        </span>
+                        {{ t('settings.translationPrompt.structuredContextDescription') }}
                     </div>
                     <ToggleButton v-model="useTranslatedContext">
                         <span class="text-primary-content text-sm font-medium">
-                            {{ useTranslatedContext == 'true' ? 'Enabled' : 'Disabled' }}
+                            {{
+                                useTranslatedContext == 'true'
+                                    ? t('settings.status.enabled')
+                                    : t('settings.status.disabled')
+                            }}
                         </span>
                     </ToggleButton>
                 </div>
                 <div v-else class="text-xs">
-                    The user prompt is not applied when sending subtitles in batch; the subtitle
-                    batch is sent directly as the user message.
+                    {{ t('settings.translationPrompt.batchNote') }}
                 </div>
             </div>
         </template>
@@ -76,6 +80,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
 import { INPUT_TYPE, INPUT_VALIDATION_TYPE, PLACEHOLDER, SETTINGS } from '@/ts'
 import CardComponent from '@/components/common/CardComponent.vue'
@@ -85,6 +90,7 @@ import ToggleButton from '@/components/common/ToggleButton.vue'
 import SaveNotification from '@/components/common/SaveNotification.vue'
 
 const settingsStore = useSettingStore()
+const { t } = useI18n()
 const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
 const isSystemPromptValid = ref(false)
 const isUserPromptValid = ref(false)

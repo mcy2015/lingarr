@@ -1,35 +1,41 @@
 ﻿<template>
     <div class="w-full">
         <!-- Search and Filters -->
-        <div class="flex flex-wrap items-center justify-between gap-2 bg-tertiary p-4">
+        <div class="bg-tertiary flex flex-wrap items-center justify-between gap-2 p-4">
             <SearchComponent v-model="filter" />
             <div
                 class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:justify-between md:space-x-2">
                 <button
                     v-if="isSelectMode"
-                    class="hover:text-primary-content/50 cursor-pointer rounded-md border border-accent px-2 py-1 text-primary-content transition-colors"
+                    class="hover:text-primary-content/50 border-accent text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="handleDelete">
-                    Delete ({{ translationRequestStore.selectedRequests.length }})
+                    {{
+                        t('translations.list.deleteWithCount', {
+                            count: translationRequestStore.selectedRequests.length
+                        })
+                    }}
                 </button>
                 <button
-                    class="hover:text-primary-content/50 cursor-pointer rounded-md border border-accent px-2 py-1 text-primary-content transition-colors"
+                    class="hover:text-primary-content/50 border-accent text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="toggleSelectMode">
-                    {{ isSelectMode ? 'Cancel' : 'Select' }}
+                    {{
+                        isSelectMode ? t('translations.list.cancel') : t('translations.list.select')
+                    }}
                 </button>
                 <div class="flex flex-wrap items-center gap-2">
                     <SortControls
                         v-model="filter"
                         :options="[
                             {
-                                label: 'Sort by Added',
+                                label: t('translations.list.sortByAdded'),
                                 value: 'CreatedAt'
                             },
                             {
-                                label: 'Sort by Completed',
+                                label: t('translations.list.sortByCompleted'),
                                 value: 'CompletedAt'
                             },
                             {
-                                label: 'Sort by Title',
+                                label: t('translations.list.sortByTitle'),
                                 value: 'Title'
                             }
                         ]" />
@@ -39,15 +45,15 @@
         </div>
 
         <div class="w-full px-4">
-            <div class="hidden border-b border-accent font-bold md:grid md:grid-cols-12">
-                <div class="col-span-4 px-4 py-2">Title</div>
-                <div class="col-span-1 px-4 py-2">Source</div>
-                <div class="col-span-1 px-4 py-2">Target</div>
-                <div class="col-span-1 px-4 py-2">Status</div>
+            <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+                <div class="col-span-4 px-4 py-2">{{ t('translations.columns.title') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.source') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.target') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.status') }}</div>
                 <div class="px-4 py-2" :class="isSelectMode ? 'col-span-2' : 'col-span-3'">
-                    Progress
+                    {{ t('translations.columns.progress') }}
                 </div>
-                <div class="col-span-1 px-4 py-2">Completed</div>
+                <div class="col-span-1 px-4 py-2">{{ t('translations.columns.completed') }}</div>
                 <div class="col-span-1"></div>
                 <div
                     v-if="isSelectMode"
@@ -122,7 +128,7 @@
                         :completed-at="item.completedAt" />
                     <span
                         class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                        Completed
+                        {{ t('translations.columns.completed') }}
                     </span>
                 </div>
                 <div
@@ -156,6 +162,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, ComputedRef, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
     Hub,
     IFilter,
@@ -182,6 +189,7 @@ import CheckboxComponent from '@/components/common/CheckboxComponent.vue'
 const signalR = useSignalR()
 const hubConnection = ref<Hub>()
 const translationRequestStore = useTranslationRequestStore()
+const { t } = useI18n()
 
 const translationRequests: ComputedRef<IPagedResult<ITranslationRequest>> = computed(
     () => translationRequestStore.getTranslationRequests

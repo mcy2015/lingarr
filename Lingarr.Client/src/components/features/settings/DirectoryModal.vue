@@ -61,7 +61,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="select-none space-y-1 text-gray-400">
+                            <div class="space-y-1 text-gray-400 select-none">
                                 <div
                                     v-for="dir in directoryContents"
                                     :key="dir.fullPath"
@@ -92,7 +92,7 @@
                             <div
                                 class="inline-flex cursor-pointer items-center rounded-md border border-gray-600 px-4 py-1 text-gray-400 transition duration-300 hover:border-gray-500 hover:text-gray-400"
                                 @click="selectDirectory">
-                                Select
+                                {{ t('services.directory.select') }}
                             </div>
                         </div>
                     </div>
@@ -104,8 +104,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { DirectoryItem } from '@/ts'
 import services from '@/services'
+
+const { t } = useI18n()
 
 const props = defineProps<{
     isOpen: boolean

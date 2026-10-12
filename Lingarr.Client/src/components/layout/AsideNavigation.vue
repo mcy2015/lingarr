@@ -3,14 +3,14 @@
         <!-- Backdrop -->
         <div
             v-if="isOpen"
-            class="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
+            class="bg-opacity-50 fixed inset-0 z-40 bg-black md:hidden"
             @click="isOpen = false"></div>
         <!-- Aside -->
         <aside
             :class="isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
-            class="fixed left-0 top-0 z-50 flex h-full w-64 flex-col overflow-hidden border-r border-accent bg-secondary transition-transform duration-300 ease-in-out md:sticky">
+            class="border-accent bg-secondary fixed top-0 left-0 z-50 flex h-full w-64 flex-col overflow-hidden border-r transition-transform duration-300 ease-in-out md:sticky">
             <TimesIcon
-                class="absolute right-1 top-1 block h-6 w-6 cursor-pointer md:hidden"
+                class="absolute top-1 right-1 block h-6 w-6 cursor-pointer md:hidden"
                 @click="isOpen = false" />
             <div class="flex h-16 items-center justify-center">
                 <h1 class="text-xl font-bold">Lingarr</h1>
@@ -30,7 +30,7 @@
 
                                 <span
                                     v-if="item.route == 'translations' && activeRequests > 0"
-                                    class="absolute -right-4 -top-1 inline-flex items-center justify-center rounded-full bg-accent px-1 py-0.5 text-xs font-bold leading-none text-secondary-content">
+                                    class="bg-accent text-secondary-content absolute -top-1 -right-4 inline-flex items-center justify-center rounded-full px-1 py-0.5 text-xs leading-none font-bold">
                                     {{ activeRequests }}
                                 </span>
                             </div>
@@ -47,11 +47,11 @@
                 <img
                     v-if="instanceStore.getPoster"
                     :src="`/api/image/${instanceStore.getPoster}`"
-                    class="h-full w-full object-cover mask-gradient"
+                    class="mask-gradient h-full w-full object-cover"
                     alt="poster" />
                 <div
                     v-if="instanceStore.getVersion.currentVersion.length"
-                    class="absolute bottom-0 right-0 flex w-full justify-center p-4">
+                    class="absolute right-0 bottom-0 flex w-full justify-center p-4">
                     <BadgeComponent
                         v-if="instanceStore.getVersion.isDevelopment"
                         classes="text-white border-amber-200 bg-amber-500/50">

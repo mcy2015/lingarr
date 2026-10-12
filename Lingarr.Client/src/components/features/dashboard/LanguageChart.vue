@@ -6,8 +6,8 @@
             :data="chartData"
             :options="chartOptions"
             class="h-full w-full" />
-        <div v-else class="flex h-full w-full items-center justify-center text-primary-content">
-            No data available
+        <div v-else class="text-primary-content flex h-full w-full items-center justify-center">
+            {{ t('dashboard.noData') }}
         </div>
     </div>
 </template>
@@ -28,6 +28,7 @@ import {
     Legend
 } from 'chart.js/auto'
 import { Bar } from 'vue-chartjs'
+import { useI18n } from 'vue-i18n'
 import { DailyStatistic } from '@/ts'
 import { formatDayLabel } from '@/utils/date'
 import { useInstanceStore } from '@/store/instance'
@@ -46,6 +47,8 @@ ChartJS.register(
 const props = defineProps<{
     dailyStats: DailyStatistic[]
 }>()
+
+const { t } = useI18n()
 
 const getCssVariable = (variableName: string): string => {
     return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim()
@@ -94,7 +97,7 @@ const chartData = computed<ChartData<'bar'> | undefined>(() => {
 
     const datasets: ChartDataset<'bar' | 'line'>[] = [
         {
-            label: 'Daily Translations',
+            label: t('dashboard.dailyTranslations'),
             data: translationCounts.value,
             backgroundColor: colors.value.bar.background,
             borderColor: colors.value.bar.border,
@@ -104,7 +107,7 @@ const chartData = computed<ChartData<'bar'> | undefined>(() => {
             order: 2
         },
         {
-            label: '7-Day Average',
+            label: t('dashboard.sevenDayAverage'),
             data: movingAverage.value,
             borderColor: colors.value.line.border,
             borderWidth: 2,
@@ -200,9 +203,9 @@ const chartOptions: ChartOptions<'bar'> = {
                 },
                 label(context) {
                     if (context.datasetIndex === 1) {
-                        return `Average: ${context.parsed.y} translations`
+                        return t('dashboard.tooltip.average', { count: context.parsed.y })
                     }
-                    return `${context.parsed.y} translations`
+                    return t('dashboard.tooltip.count', { count: context.parsed.y })
                 }
             }
         }

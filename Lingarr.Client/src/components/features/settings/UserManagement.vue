@@ -1,5 +1,5 @@
 <template>
-    <CardComponent title="User Management">
+    <CardComponent :title="t('settings.users.title')">
         <template #description></template>
         <template #content>
             <div class="flex flex-col space-y-2 pb-4">
@@ -12,7 +12,7 @@
                         size="xs"
                         :disabled="authStore.isCreating || authStore.editingUserId !== null"
                         @click="authStore.createOrEditUser()">
-                        Create User
+                        {{ t('settings.users.create') }}
                     </ButtonComponent>
                 </div>
 
@@ -21,25 +21,29 @@
                 </div>
 
                 <div>
-                    <div class="grid grid-cols-12 border-b border-accent font-bold">
-                        <div class="col-span-7 px-4 py-2 md:col-span-4">Username</div>
-                        <div class="col-span-3 hidden px-4 py-2 md:block">Last Login</div>
+                    <div class="border-accent grid grid-cols-12 border-b font-bold">
+                        <div class="col-span-7 px-4 py-2 md:col-span-4">
+                            {{ t('settings.users.username') }}
+                        </div>
+                        <div class="col-span-3 hidden px-4 py-2 md:block">
+                            {{ t('settings.users.lastLogin') }}
+                        </div>
                         <div class="col-span-2 flex justify-end px-4 py-2 md:col-span-5">
-                            Actions
+                            {{ t('settings.users.actions') }}
                         </div>
                     </div>
                     <div v-if="authStore.isCreatingUser">
                         <div
-                            class="hover:bg-accent/5 bg-accent/10 grid grid-cols-12 border-b border-accent">
+                            class="hover:bg-accent/5 bg-accent/10 border-accent grid grid-cols-12 border-b">
                             <div class="col-span-7 flex items-center px-4 py-2 md:col-span-4">
                                 <div class="w-full">
                                     <InputComponent
                                         id="newUsername"
                                         v-model="authStore.editUsername"
-                                        placeholder="Username"
+                                        :placeholder="t('settings.users.username')"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :min-length="2"
-                                        error-message="Username must be at least 2 characters long"
+                                        :error-message="t('settings.users.usernameError')"
                                         @update:validation="authStore.setUsernameValidation" />
                                 </div>
                             </div>
@@ -55,7 +59,9 @@
                                     :disabled="authStore.loading"
                                     @click="authStore.cancelEdit">
                                     <span class="md:hidden">X</span>
-                                    <span class="hidden md:block">Cancel</span>
+                                    <span class="hidden md:block">
+                                        {{ t('settings.users.cancel') }}
+                                    </span>
                                 </ButtonComponent>
                                 <ButtonComponent
                                     variant="accent"
@@ -63,11 +69,11 @@
                                     :disabled="!authStore.canSave || authStore.loading"
                                     :loading="authStore.loading"
                                     @click="authStore.saveUser()">
-                                    Create
+                                    {{ t('settings.users.createAction') }}
                                 </ButtonComponent>
                             </div>
                         </div>
-                        <div class="bg-accent/5 grid grid-cols-1 border-b border-accent">
+                        <div class="bg-accent/5 border-accent grid grid-cols-1 border-b">
                             <div class="col-span-1 px-4 py-2">
                                 <div class="space-y-2">
                                     <InputComponent
@@ -75,10 +81,10 @@
                                         v-model="authStore.editPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
-                                        label="Password (required)"
-                                        placeholder="Enter password"
+                                        :label="t('settings.users.passwordRequired')"
+                                        :placeholder="t('settings.users.passwordPlaceholder')"
                                         :min-length="4"
-                                        error-message="Password must be at least 4 characters long and match"
+                                        :error-message="t('settings.users.passwordError')"
                                         @update:validation="authStore.setPasswordValidation" />
 
                                     <InputComponent
@@ -86,10 +92,12 @@
                                         v-model="authStore.editConfirmPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
-                                        label="Confirm Password (required)"
-                                        placeholder="Confirm your password"
+                                        :label="t('settings.users.confirmPasswordRequired')"
+                                        :placeholder="
+                                            t('settings.users.confirmPasswordPlaceholder')
+                                        "
                                         :min-length="4"
-                                        error-message="Password must be at least 4 characters long and match"
+                                        :error-message="t('settings.users.passwordError')"
                                         @update:validation="
                                             authStore.setConfirmPasswordValidation
                                         " />
@@ -99,23 +107,27 @@
                     </div>
                     <!-- Existing Users -->
                     <div v-for="user in authStore.users" :key="user.id">
-                        <div class="hover:bg-accent/5 grid grid-cols-12 border-b border-accent">
+                        <div class="hover:bg-accent/5 border-accent grid grid-cols-12 border-b">
                             <div class="col-span-7 flex items-center px-4 py-2 md:col-span-4">
                                 <div v-if="authStore.editingUserId === user.id" class="w-full">
                                     <InputComponent
                                         id="editUsername"
                                         v-model="authStore.editUsername"
-                                        placeholder="Username"
+                                        :placeholder="t('settings.users.username')"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :min-length="2"
-                                        error-message="Username must be at least 2 characters long"
+                                        :error-message="t('settings.users.usernameError')"
                                         @update:validation="authStore.setUsernameValidation" />
                                 </div>
                                 <span v-else class="text-sm">{{ user.username }}</span>
                             </div>
                             <div
-                                class="col-span-3 hidden items-center whitespace-nowrap px-4 py-2 text-sm md:flex">
-                                {{ user.lastLoginAt ? formatDateTime(user.lastLoginAt) : 'Never' }}
+                                class="col-span-3 hidden items-center px-4 py-2 text-sm whitespace-nowrap md:flex">
+                                {{
+                                    user.lastLoginAt
+                                        ? formatDateTime(user.lastLoginAt)
+                                        : t('settings.users.never')
+                                }}
                             </div>
                             <div
                                 class="col-span-2 flex items-center justify-end gap-2 px-4 py-2 md:col-span-5">
@@ -126,7 +138,9 @@
                                         :disabled="authStore.loading"
                                         @click="authStore.cancelEdit">
                                         <span class="md:hidden">X</span>
-                                        <span class="hidden md:block">Cancel</span>
+                                        <span class="hidden md:block">
+                                            {{ t('settings.users.cancel') }}
+                                        </span>
                                     </ButtonComponent>
                                     <ButtonComponent
                                         variant="accent"
@@ -134,7 +148,7 @@
                                         :disabled="!authStore.canSave || authStore.loading"
                                         :loading="authStore.loading"
                                         @click="authStore.saveUser()">
-                                        Save
+                                        {{ t('settings.users.save') }}
                                     </ButtonComponent>
                                 </template>
                                 <template v-else>
@@ -142,7 +156,7 @@
                                         variant="accent"
                                         size="xs"
                                         @click="authStore.createOrEditUser(user)">
-                                        Edit
+                                        {{ t('settings.users.edit') }}
                                     </ButtonComponent>
                                     <ButtonComponent
                                         v-if="authStore.users.length >= 2"
@@ -151,14 +165,14 @@
                                         :disabled="authStore.deletingUserId === user.id"
                                         :loading="authStore.deletingUserId === user.id"
                                         @click="deleteUserConfirm(user)">
-                                        Delete
+                                        {{ t('settings.users.delete') }}
                                     </ButtonComponent>
                                 </template>
                             </div>
                         </div>
                         <div
                             v-if="authStore.editingUserId === user.id"
-                            class="bg-accent/5 grid grid-cols-1 border-b border-accent">
+                            class="bg-accent/5 border-accent grid grid-cols-1 border-b">
                             <div class="col-span-1 px-4 py-2">
                                 <div class="space-y-2">
                                     <InputComponent
@@ -166,10 +180,10 @@
                                         v-model="authStore.editPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
-                                        label="New Password (optional)"
-                                        placeholder="Leave blank to keep current password"
+                                        :label="t('settings.users.newPasswordOptional')"
+                                        :placeholder="t('settings.users.newPasswordPlaceholder')"
                                         :min-length="4"
-                                        error-message="Password must be at least 4 characters long and match"
+                                        :error-message="t('settings.users.passwordError')"
                                         @update:validation="authStore.setPasswordValidation" />
 
                                     <InputComponent
@@ -177,10 +191,12 @@
                                         v-model="authStore.editConfirmPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
-                                        label="Confirm New Password (optional)"
-                                        placeholder="Confirm your new password"
+                                        :label="t('settings.users.confirmNewPasswordOptional')"
+                                        :placeholder="
+                                            t('settings.users.confirmNewPasswordPlaceholder')
+                                        "
                                         :min-length="4"
-                                        error-message="Password must be at least 4 characters long and match"
+                                        :error-message="t('settings.users.passwordError')"
                                         @update:validation="
                                             authStore.setConfirmPasswordValidation
                                         " />
@@ -192,7 +208,7 @@
                     <div
                         if="authStore.users.length === 0 && !authStore.createUser"
                         class="py-8 text-center text-gray-400">
-                        No users found
+                        {{ t('settings.users.noUsers') }}
                     </div>
                 </div>
             </div>
@@ -202,6 +218,7 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { INPUT_TYPE, INPUT_VALIDATION_TYPE, IUser } from '@/ts'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
@@ -212,9 +229,10 @@ import { useAuthStore } from '@/store/auth'
 import { formatDateTime } from '@/utils/date'
 
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 const deleteUserConfirm = async (user: IUser) => {
-    if (!confirm(`Are you sure you want to delete user "${user.username}"?`)) {
+    if (!confirm(t('settings.users.deleteConfirm', { name: user.username }))) {
         return
     }
     await authStore.deleteUser(user)

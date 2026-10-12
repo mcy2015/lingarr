@@ -1,14 +1,13 @@
 <template>
-    <CardComponent title="Services">
+    <CardComponent :title="t('services.title')">
         <template #description>
-            Configure the translation service for subtitle localization. Add fallback services to be
-            tried in order when the primary service fails.
+            {{ t('services.description') }}
         </template>
         <template #content>
             <SaveNotification ref="saveNotification" />
 
             <div class="space-y-2">
-                <span class="font-semibold">Translation services</span>
+                <span class="font-semibold">{{ t('services.translationServices') }}</span>
                 <ol class="space-y-2">
                     <li
                         v-for="(serviceName, index) in services"
@@ -22,7 +21,11 @@
                         <span
                             class="bg-accent/20 text-accent-content shrink-0 rounded px-2 py-0.5 text-xs font-semibold tracking-wider uppercase"
                             aria-hidden="true">
-                            {{ index === 0 ? 'Primary' : `Fallback ${index}` }}
+                            {{
+                                index === 0
+                                    ? t('services.primary')
+                                    : t('services.fallback', { index })
+                            }}
                         </span>
                         <div class="min-w-0 flex-1">
                             <SelectComponent
@@ -36,8 +39,8 @@
                             class="text-primary-content hover:text-primary-content/50 focus-visible:ring-accent cursor-pointer rounded p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30"
                             :disabled="index === configuringIndex"
                             :aria-pressed="index === configuringIndex"
-                            title="Configure credentials"
-                            aria-label="Configure credentials"
+                            :title="t('services.configureCredentials')"
+                            :aria-label="t('services.configureCredentials')"
                             @click="configuringIndex = index">
                             <SettingIcon class="h-4 w-4" />
                         </button>
@@ -45,8 +48,8 @@
                             type="button"
                             class="text-primary-content hover:text-primary-content/50 focus-visible:ring-accent cursor-pointer rounded p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30"
                             :disabled="index === 0"
-                            title="Move up"
-                            aria-label="Move up"
+                            :title="t('services.moveUp')"
+                            :aria-label="t('services.moveUp')"
                             @click="moveRow(index, -1)">
                             <CaretUpIcon class="h-4 w-4" />
                         </button>
@@ -54,8 +57,8 @@
                             type="button"
                             class="text-primary-content hover:text-primary-content/50 focus-visible:ring-accent cursor-pointer rounded p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30"
                             :disabled="index === services.length - 1"
-                            title="Move down"
-                            aria-label="Move down"
+                            :title="t('services.moveDown')"
+                            :aria-label="t('services.moveDown')"
                             @click="moveRow(index, 1)">
                             <CaretDownIcon class="h-4 w-4" />
                         </button>
@@ -63,8 +66,8 @@
                             type="button"
                             class="text-primary-content hover:text-primary-content/50 focus-visible:ring-accent cursor-pointer rounded p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30"
                             :disabled="services.length <= 1"
-                            title="Remove service"
-                            aria-label="Remove service"
+                            :title="t('services.removeService')"
+                            :aria-label="t('services.removeService')"
                             @click="removeRow(index)">
                             <TrashIcon class="h-4 w-4" />
                         </button>
@@ -72,7 +75,7 @@
                     <li v-if="services.length < serviceOptions.length && serviceOptions.length > 0">
                         <ButtonComponent variant="ghost" size="xs" @click="addRow">
                             <PlusIcon class="mr-1 h-3 w-3" />
-                            Add fallback service
+                            {{ t('services.addFallbackService') }}
                         </ButtonComponent>
                     </li>
                 </ol>
@@ -80,7 +83,9 @@
 
             <div v-if="configuringManifest || manifestError" class="mt-4 space-y-2">
                 <div class="text-sm">
-                    <span class="text-secondary-content/60">Configuring credentials for</span>
+                    <span class="text-secondary-content/60">
+                        {{ t('services.configuringCredentialsFor') }}
+                    </span>
                     <span class="ml-1 font-semibold">{{ configuringLabel }}</span>
                 </div>
                 <DynamicPluginForm
@@ -93,8 +98,10 @@
             <div v-if="configuringManifest?.hasRequestTemplate" class="mt-6">
                 <div class="flex flex-col gap-4">
                     <div class="flex flex-col space-x-2">
-                        <span class="font-semibold">Customize request template and prompts</span>
-                        Adjust the AI request body, system prompt and context for translations.
+                        <span class="font-semibold">
+                            {{ t('services.customizeRequestTemplate') }}
+                        </span>
+                        {{ t('services.requestTemplateHint') }}
                     </div>
                     <ButtonComponent
                         variant="primary"
@@ -105,7 +112,7 @@
                                 params: { service: services[configuringIndex] }
                             })
                         ">
-                        Open Request Settings
+                        {{ t('services.openRequestSettings') }}
                         <ArrowRight class="mt-1 ml-1 h-4 w-4" />
                     </ButtonComponent>
                 </div>
@@ -119,6 +126,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
 import { IPluginManifest, IPluginSummary, SETTINGS, SERVICE_TYPE } from '@/ts'
 import servicesApi from '@/services'
@@ -135,6 +143,7 @@ import TrashIcon from '@/components/icons/TrashIcon.vue'
 import PlusIcon from '@/components/icons/PlusIcon.vue'
 import SettingIcon from '@/components/icons/SettingIcon.vue'
 
+const { t } = useI18n()
 const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
 const settingsStore = useSettingStore()
 const router = useRouter()
@@ -161,7 +170,7 @@ async function loadManifest(provider: string) {
     } catch (error) {
         console.error('Failed to load manifest', error)
         configuringManifest.value = null
-        manifestError.value = `No manifest available for ${provider}.`
+        manifestError.value = t('services.noManifest', { provider })
     }
 }
 
@@ -230,11 +239,7 @@ watch(
     }
 )
 
-watch(
-    () => services.value[configuringIndex.value],
-    loadManifest,
-    { immediate: true }
-)
+watch(() => services.value[configuringIndex.value], loadManifest, { immediate: true })
 
 onMounted(async () => {
     try {

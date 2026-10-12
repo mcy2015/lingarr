@@ -1,5 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import services from '@/services'
+import i18n from '@/i18n'
 import { IPathMapping } from '@/ts'
 
 export const useMappingStore = defineStore('mapping', {
@@ -13,7 +14,7 @@ export const useMappingStore = defineStore('mapping', {
             try {
                 this.mappings = await services.mapping.getMappings()
             } catch (error) {
-                this.error = 'Failed to fetch mappings'
+                this.error = i18n.global.t('toast.mapping.fetchFailed')
                 console.error('Error fetching mappings:', error)
             }
         },
@@ -23,7 +24,7 @@ export const useMappingStore = defineStore('mapping', {
                 await services.mapping.setMappings(newMappings)
                 this.mappings = newMappings
             } catch (error) {
-                this.error = 'Failed to set mappings'
+                this.error = i18n.global.t('toast.mapping.saveFailed')
                 console.error('Error setting mappings:', error)
             }
         },

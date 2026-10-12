@@ -8,7 +8,7 @@
         leave-to-class="opacity-0">
         <div
             v-if="isVisible"
-            class="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg shadow-lg ring-1 ring-black ring-opacity-5">
+            class="ring-opacity-5 pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg shadow-lg ring-1 ring-black">
             <div class="p-4">
                 <div class="flex items-start">
                     <div class="shrink-0">
@@ -30,7 +30,7 @@
                     </div>
                     <div class="ml-4 flex shrink-0">
                         <button class="inline-flex rounded-md bg-white" @click="close">
-                            <span class="sr-only">Close</span>
+                            <span class="sr-only">{{ t('common.close') }}</span>
                             <TimesIcon class="h-5 w-5" />
                         </button>
                     </div>
@@ -50,6 +50,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import CheckMarkCircleIcon from '@/components/icons/CheckMarkCircleIcon.vue'
 import TimesCircleIcon from '@/components/icons/TimesCircleIcon.vue'
 import ExclamationIcon from '@/components/icons/ExclamationIcon.vue'
@@ -70,6 +71,8 @@ const {
 }>()
 
 const emit = defineEmits(['close'])
+
+const { t } = useI18n()
 
 const isVisible = ref(true)
 const progress = ref(100)

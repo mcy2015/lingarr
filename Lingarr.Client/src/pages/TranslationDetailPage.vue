@@ -18,13 +18,13 @@
                 <template #content>
                     <div class="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
                         <div>
-                            <span class="font-semibold">Status</span>
+                            <span class="font-semibold">{{ t('translations.detail.status') }}</span>
                             <div class="mt-1">
                                 <TranslationStatus :translation-status="detail.status" />
                             </div>
                         </div>
                         <div>
-                            <span class="font-semibold">Source</span>
+                            <span class="font-semibold">{{ t('translations.detail.source') }}</span>
                             <div class="mt-1">
                                 <BadgeComponent
                                     classes="text-primary-content border-accent bg-secondary">
@@ -33,7 +33,7 @@
                             </div>
                         </div>
                         <div>
-                            <span class="font-semibold">Target</span>
+                            <span class="font-semibold">{{ t('translations.detail.target') }}</span>
                             <div class="mt-1">
                                 <BadgeComponent
                                     classes="text-primary-content border-accent bg-secondary">
@@ -42,23 +42,31 @@
                             </div>
                         </div>
                         <div>
-                            <span class="font-semibold">Media Type</span>
+                            <span class="font-semibold">
+                                {{ t('translations.detail.mediaType') }}
+                            </span>
                             <div class="mt-1 text-sm">{{ detail.mediaType }}</div>
                         </div>
                         <div v-if="detail.createdAt">
-                            <span class="font-semibold">Created At</span>
+                            <span class="font-semibold">
+                                {{ t('translations.detail.createdAt') }}
+                            </span>
                             <div class="mt-1 text-sm">
                                 {{ formatDateTime(detail.createdAt) }}
                             </div>
                         </div>
                         <div v-if="detail.completedAt">
-                            <span class="font-semibold">Completed</span>
+                            <span class="font-semibold">
+                                {{ t('translations.detail.completed') }}
+                            </span>
                             <div class="mt-1 text-sm">
                                 {{ formatDateTime(detail.completedAt) }}
                             </div>
                         </div>
                         <div v-if="detail.subtitleToTranslate" class="col-span-2">
-                            <span class="font-semibold">Subtitle Path</span>
+                            <span class="font-semibold">
+                                {{ t('translations.detail.subtitlePath') }}
+                            </span>
                             <div class="mt-1 text-sm break-all">
                                 {{ detail.subtitleToTranslate }}
                             </div>
@@ -71,12 +79,11 @@
                         <details v-if="detail.stackTrace" class="mt-3">
                             <summary
                                 class="cursor-pointer text-sm text-red-400/70 hover:text-red-400">
-                                StackTrace
+                                {{ t('translations.detail.stackTrace') }}
                             </summary>
                             <pre
                                 class="mt-2 rounded bg-black/30 p-3 text-xs break-all whitespace-pre-wrap text-red-300/80"
-                                >{{ detail.stackTrace }}</pre
-                            >
+                                >{{ detail.stackTrace }}</pre>
                         </details>
                     </div>
                     <div v-if="showProgress" class="flex items-center gap-3">
@@ -88,13 +95,21 @@
                 </template>
             </CardComponent>
 
-            <CardComponent v-if="reversedLines.length > 0" title="Translated Lines">
+            <CardComponent
+                v-if="reversedLines.length > 0"
+                :title="t('translations.detail.translatedLines')">
                 <template #content>
                     <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
                         <div class="col-span-1 px-4 py-2 text-sm">#</div>
-                        <div class="col-span-4 px-4 py-2 text-sm">Source</div>
-                        <div class="col-span-5 px-4 py-2 text-sm">Target</div>
-                        <div class="col-span-2 px-4 py-2 text-sm">Service</div>
+                        <div class="col-span-4 px-4 py-2 text-sm">
+                            {{ t('translations.detail.source') }}
+                        </div>
+                        <div class="col-span-5 px-4 py-2 text-sm">
+                            {{ t('translations.detail.target') }}
+                        </div>
+                        <div class="col-span-2 px-4 py-2 text-sm">
+                            {{ t('translations.detail.service') }}
+                        </div>
                     </div>
                     <div class="max-h-96 overflow-y-auto">
                         <div
@@ -119,20 +134,22 @@
                             </div>
                             <div
                                 class="text-primary-content/70 flex items-center justify-between gap-2 px-4 py-2 text-xs md:col-span-2">
-                                <span class="truncate">{{ line.service ?? 'unknown' }}</span>
+                                <span class="truncate">
+                                    {{ line.service ?? t('translations.detail.unknown') }}
+                                </span>
                                 <div class="flex shrink-0 items-center gap-2">
                                     <button
                                         v-if="editable"
-                                        title="Edit this line"
-                                        class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors"
+                                        :title="t('translations.detail.editThisLine')"
+                                        class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
                                         @click="startEdit(line)">
                                         <PenIcon class="h-4 w-4" />
                                     </button>
                                     <button
                                         v-if="proofreadable"
                                         :disabled="proofreadState[line.position]?.loading"
-                                        title="Proofread this line"
-                                        class="hover:text-primary-content/50 cursor-pointer text-primary-content transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                        :title="t('translations.detail.proofreadThisLine')"
+                                        class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                         @click="requestProofread(line)">
                                         <LoaderCircleIcon
                                             v-if="proofreadState[line.position]?.loading"
@@ -147,7 +164,9 @@
                                 <div class="flex flex-col gap-2 md:ml-auto md:w-1/2">
                                     <template
                                         v-if="proofreadState[line.position].draft !== undefined">
-                                        <span class="font-semibold">Edit translation</span>
+                                        <span class="font-semibold">
+                                            {{ t('translations.detail.editTranslation') }}
+                                        </span>
                                         <TextAreaComponent
                                             class="w-full"
                                             :model-value="proofreadState[line.position].draft ?? ''"
@@ -167,19 +186,21 @@
                                                     )
                                                 ">
                                                 <CheckMarkIcon class="mr-1 h-4 w-4" />
-                                                Accept
+                                                {{ t('translations.detail.accept') }}
                                             </ButtonComponent>
                                             <ButtonComponent
                                                 variant="ghost"
                                                 size="xs"
                                                 @click="dismissProofread(line)">
                                                 <TimesCircleIcon class="mr-1 h-4 w-4" />
-                                                Cancel
+                                                {{ t('translations.detail.cancel') }}
                                             </ButtonComponent>
                                         </div>
                                     </template>
                                     <template v-else-if="proofreadState[line.position].suggestion">
-                                        <span class="font-semibold">Proofread suggestion</span>
+                                        <span class="font-semibold">
+                                            {{ t('translations.detail.proofreadSuggestion') }}
+                                        </span>
                                         <span>{{ proofreadState[line.position].suggestion }}</span>
                                         <div class="flex items-center justify-end gap-3">
                                             <ButtonComponent
@@ -193,14 +214,14 @@
                                                     )
                                                 ">
                                                 <CheckMarkIcon class="mr-1 h-4 w-4" />
-                                                Apply
+                                                {{ t('translations.detail.apply') }}
                                             </ButtonComponent>
                                             <ButtonComponent
                                                 variant="ghost"
                                                 size="xs"
                                                 @click="dismissProofread(line)">
                                                 <TimesCircleIcon class="mr-1 h-4 w-4" />
-                                                Dismiss
+                                                {{ t('translations.detail.dismiss') }}
                                             </ButtonComponent>
                                         </div>
                                     </template>
@@ -217,13 +238,16 @@
             </CardComponent>
         </div>
 
-        <div v-else class="text-primary-content/50 py-12 text-center">Not Found</div>
+        <div v-else class="text-primary-content/50 py-12 text-center">
+            {{ t('translations.detail.notFound') }}
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
     Hub,
     ITranslationRequestDetail,
@@ -266,6 +290,7 @@ interface IProofreadLineState {
 const router = useRouter()
 const signalR = useSignalR()
 const translationRequestStore = useTranslationRequestStore()
+const { t } = useI18n()
 
 const detail = ref<ITranslationRequestDetail | null>(null)
 const loading = ref(true)
@@ -278,8 +303,7 @@ const reversedLines = computed(() => (detail.value ? [...detail.value.lines].rev
 
 const editable = computed(
     () =>
-        detail.value?.status === TRANSLATION_STATUS.COMPLETED &&
-        !!detail.value?.translatedSubtitle
+        detail.value?.status === TRANSLATION_STATUS.COMPLETED && !!detail.value?.translatedSubtitle
 )
 
 const proofreadable = computed(() => editable.value && translationRequestStore.proofreadSupported)
@@ -356,7 +380,7 @@ async function requestProofread(line: ISubtitleLineComparison) {
     } catch {
         proofreadState[line.position] = {
             loading: false,
-            error: 'Proofreading is not available for this line'
+            error: t('translations.detail.proofreadUnavailable')
         }
     }
 }
@@ -398,7 +422,7 @@ async function applyLine(
     } catch {
         proofreadState[line.position] = {
             loading: false,
-            error: 'Could not apply the change'
+            error: t('translations.detail.couldNotApplyChange')
         }
         return
     }

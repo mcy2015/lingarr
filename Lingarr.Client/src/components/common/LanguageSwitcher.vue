@@ -8,7 +8,7 @@
             :class="
                 isActive(locale.code)
                     ? 'border-accent bg-accent text-secondary-content'
-                    : 'border-accent bg-transparent text-muted hover:brightness-150'
+                    : 'border-accent text-muted bg-transparent hover:brightness-150'
             "
             :aria-pressed="isActive(locale.code)"
             @click="switchLocale(locale.code)">

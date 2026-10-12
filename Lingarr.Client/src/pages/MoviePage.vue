@@ -1,49 +1,57 @@
 ﻿<template>
     <div v-if="settingsCompleted === 'true'" class="w-full">
-        <div class="flex flex-wrap items-center justify-between gap-2 bg-tertiary p-4">
+        <div class="bg-tertiary flex flex-wrap items-center justify-between gap-2 p-4">
             <SearchComponent v-model="filter" />
             <div
                 class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:items-center md:justify-between md:space-x-2">
                 <ToggleButton
                     v-model="navigateToDetails"
                     size="small"
-                    label="Open details on request" />
+                    :label="t('movies.openDetailsOnRequest')" />
                 <ContextMenu
                     v-if="isSelectMode && movieStore.selectedMovies.length > 0"
                     @select="handleTranslate">
                     <ButtonComponent size="sm" variant="accent">
-                        Translate ({{ movieStore.selectedMovies.length }})
+                        {{
+                            t('movies.translateWithCount', {
+                                count: movieStore.selectedMovies.length
+                            })
+                        }}
                     </ButtonComponent>
                 </ContextMenu>
                 <ButtonComponent size="sm" variant="accent" @click="toggleSelectMode">
-                    {{ isSelectMode ? 'Cancel' : 'Translate multiple' }}
+                    {{ isSelectMode ? t('movies.cancel') : t('movies.translateMultiple') }}
                 </ButtonComponent>
                 <ButtonComponent
                     size="sm"
                     variant="accent"
                     @click="movieStore.includeAll(MEDIA_TYPE.MOVIE, true)">
-                    Include All
+                    {{ t('movies.includeAll') }}
                 </ButtonComponent>
                 <ButtonComponent
                     size="sm"
                     variant="accent"
                     @click="movieStore.includeAll(MEDIA_TYPE.MOVIE, false)">
-                    Exclude All
+                    {{ t('movies.excludeAll') }}
                 </ButtonComponent>
-                <span class="text-sm text-accent-content">
-                    {{ movieStore.includeSummary.included }}/{{ movieStore.includeSummary.total }}
-                    included
+                <span class="text-accent-content text-sm">
+                    {{
+                        t('movies.includedSummary', {
+                            included: movieStore.includeSummary.included,
+                            total: movieStore.includeSummary.total
+                        })
+                    }}
                 </span>
                 <div class="flex flex-wrap items-center gap-2">
                     <SortControls
                         v-model="filter"
                         :options="[
                             {
-                                label: 'Sort by Title',
+                                label: t('movies.sortByTitle'),
                                 value: 'Title'
                             },
                             {
-                                label: 'Sort by Added',
+                                label: t('movies.sortByAdded'),
                                 value: 'DateAdded'
                             }
                         ]" />
@@ -55,11 +63,11 @@
         <div class="w-full px-4">
             <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
                 <div :class="isSelectMode ? 'col-span-4' : 'col-span-5'" class="px-4 py-2">
-                    Title
+                    {{ t('movies.title') }}
                 </div>
-                <div class="col-span-4 px-4 py-2">Subtitles</div>
-                <div class="col-span-1 px-4 py-2">Include</div>
-                <div class="col-span-2 px-4 py-2">Delay</div>
+                <div class="col-span-4 px-4 py-2">{{ t('movies.subtitles') }}</div>
+                <div class="col-span-1 px-4 py-2">{{ t('movies.include') }}</div>
+                <div class="col-span-2 px-4 py-2">{{ t('movies.delay') }}</div>
                 <div
                     v-if="isSelectMode"
                     class="col-span-1 flex items-center justify-center px-4 py-2">
@@ -118,13 +126,13 @@
                             " />
                         <span
                             class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                            Include
+                            {{ t('movies.include') }}
                         </span>
                     </div>
                     <div class="flex items-center gap-2 md:col-span-2 md:px-4 md:py-2" @click.stop>
                         <InputComponent
                             :model-value="item?.translationAgeThreshold"
-                            placeholder="hours"
+                            :placeholder="t('movies.hours')"
                             class="w-14"
                             size="sm"
                             :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
@@ -137,7 +145,7 @@
                             " />
                         <span
                             class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                            Delay
+                            {{ t('movies.delay') }}
                         </span>
                     </div>
                     <div
@@ -162,7 +170,17 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, ComputedRef } from 'vue'
-import { IFilter, ILanguage, IMovie, INPUT_TYPE, INPUT_VALIDATION_TYPE, IPagedResult, MEDIA_TYPE, SETTINGS } from '@/ts'
+import { useI18n } from 'vue-i18n'
+import {
+    IFilter,
+    ILanguage,
+    IMovie,
+    INPUT_TYPE,
+    INPUT_VALIDATION_TYPE,
+    IPagedResult,
+    MEDIA_TYPE,
+    SETTINGS
+} from '@/ts'
 import useDebounce from '@/composables/useDebounce'
 import { useMovieStore } from '@/store/movie'
 import { useSettingStore } from '@/store/setting'
@@ -185,6 +203,7 @@ const movieStore = useMovieStore()
 const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()
 const translateStore = useTranslateStore()
+const { t } = useI18n()
 
 const settingsCompleted: ComputedRef<string> = computed(
     () => settingStore.getSetting(SETTINGS.RADARR_SETTINGS_COMPLETED) as string

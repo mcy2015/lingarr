@@ -1,8 +1,7 @@
 ﻿<template>
-    <CardComponent title="AI Request Body Template">
+    <CardComponent :title="t('services.template.title')">
         <template #description>
-            Customize the JSON structure sent to your AI provider. Placeholders are replaced across
-            the whole template when performing translations and can be used in any field.
+            {{ t('services.template.description') }}
         </template>
         <template #content>
             <div class="space-y-4">
@@ -10,7 +9,7 @@
                     <div class="flex flex-wrap items-center gap-2">
                         <span
                             class="text-secondary-content/50 mr-1 text-xs font-medium tracking-wider uppercase">
-                            Presets
+                            {{ t('services.template.presets') }}
                         </span>
                         <ButtonComponent
                             v-for="preset in presetOptions"
@@ -30,7 +29,7 @@
                                     : 'text-secondary-content/70 hover:bg-accent/10 hover:text-accent-content'
                             "
                             @click="mode = 'builder'">
-                            Builder
+                            {{ t('services.template.builder') }}
                         </button>
                         <button
                             class="border-accent/30 cursor-pointer border-l px-3 py-1 text-xs font-medium transition-colors duration-200"
@@ -46,10 +45,16 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <span class="text-sm font-semibold">Language format:</span>
+                    <span class="text-sm font-semibold">
+                        {{ t('services.template.languageFormat') }}
+                    </span>
                     <ToggleButton v-model="languageCodeFormat">
                         <span class="text-primary-content text-sm font-medium">
-                            {{ languageCodeFormat === 'true' ? 'Code (en)' : 'Name (English)' }}
+                            {{
+                                languageCodeFormat === 'true'
+                                    ? t('services.template.codeFormat')
+                                    : t('services.template.nameFormat')
+                            }}
                         </span>
                     </ToggleButton>
                 </div>
@@ -82,6 +87,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { PLACEHOLDER, SETTINGS, SERVICE_TYPE, ISettings } from '@/ts'
 import { useSettingStore } from '@/store/setting'
 import useDebounce from '@/composables/useDebounce'
@@ -95,6 +101,7 @@ import JsonTreeBuilder from './JsonTreeBuilder.vue'
 import JsonPreview from './JsonPreview.vue'
 
 const settingsStore = useSettingStore()
+const { t } = useI18n()
 const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
 const mode = ref<'builder' | 'json'>('builder')
 const jsonText = ref('')
