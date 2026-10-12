@@ -26,7 +26,7 @@
                             @click="isOpen = false">
                             <component :is="item.icon" class="mr-2 h-4 w-4" />
                             <div class="relative">
-                                {{ item.label }}
+                                {{ t(item.label) }}
 
                                 <span
                                     v-if="item.route == 'translations' && activeRequests > 0"
@@ -38,6 +38,10 @@
                     </li>
                 </ul>
             </nav>
+            <!-- Language switcher -->
+            <div class="px-6 pb-4">
+                <LanguageSwitcher />
+            </div>
             <!-- Version and media section -->
             <div class="pointer-events-none h-64 w-full">
                 <img
@@ -51,20 +55,20 @@
                     <BadgeComponent
                         v-if="instanceStore.getVersion.isDevelopment"
                         classes="text-white border-amber-200 bg-amber-500/50">
-                        {{ 'Development' }}
+                        {{ t('version.development') }}
                     </BadgeComponent>
                     <BadgeComponent
                         v-else-if="instanceStore.getVersion.newVersion"
                         classes="text-white border-green-200 bg-green-500/50">
                         {{
-                            'Update {version} is available'.format({
+                            t('version.updateAvailable', {
                                 version: instanceStore.getVersion.latestVersion
                             })
                         }}
                     </BadgeComponent>
                     <BadgeComponent v-else>
                         {{
-                            'Version: {version}'.format({
+                            t('version.current', {
                                 version: instanceStore.getVersion.currentVersion
                             })
                         }}
@@ -78,6 +82,7 @@
 <script setup lang="ts">
 import { computed, ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useInstanceStore } from '@/store/instance'
 import { useTranslationRequestStore } from '@/store/translationRequest'
 import { MenuItem } from '@/ts'
@@ -87,12 +92,14 @@ import ShowIcon from '@/components/icons/ShowIcon.vue'
 import SettingIcon from '@/components/icons/SettingIcon.vue'
 import TimesIcon from '@/components/icons/TimesIcon.vue'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import LanguageIcon from '@/components/icons/LanguageIcon.vue'
 
 const translationRequestStore = useTranslationRequestStore()
 const instanceStore = useInstanceStore()
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
 const activeRequests: ComputedRef<number> = computed(
     () => translationRequestStore.getActiveTranslationCount
@@ -104,12 +111,12 @@ const isOpen = computed({
 })
 
 const menuItems: MenuItem[] = [
-    { label: 'Dashboard', icon: HomeIcon, route: 'dashboard', children: [] },
-    { label: 'Movies', icon: MovieIcon, route: 'movies', children: [] },
-    { label: 'TV Shows', icon: ShowIcon, route: 'shows', children: [] },
-    { label: 'Translations', icon: LanguageIcon, route: 'translations', children: [] },
+    { label: 'nav.dashboard', icon: HomeIcon, route: 'dashboard', children: [] },
+    { label: 'nav.movies', icon: MovieIcon, route: 'movies', children: [] },
+    { label: 'nav.shows', icon: ShowIcon, route: 'shows', children: [] },
+    { label: 'nav.translations', icon: LanguageIcon, route: 'translations', children: [] },
     {
-        label: 'Settings',
+        label: 'nav.settings',
         icon: SettingIcon,
         route: 'integration-settings',
         children:

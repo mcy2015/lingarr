@@ -1,0 +1,23 @@
+{
+    "common": {
+        "cancel": "取消",
+        "close": "关闭",
+        "save": "保存",
+        "saved": "已保存",
+        "loading": "加载中…",
+        "retry": "重试",
+        "search": "搜索"
+    },
+    "nav": {
+        "dashboard": "仪表盘",
+        "movies": "电影",
+        "shows": "剧集",
+        "translations": "翻译任务",
+        "settings": "设置"
+    },
+    "version": {
+        "development": "开发版",
+        "updateAvailable": "有新版本 {version} 可用",
+        "current": "版本:{version}"
+    }
+}

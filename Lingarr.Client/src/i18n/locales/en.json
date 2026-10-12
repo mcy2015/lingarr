@@ -1,0 +1,23 @@
+{
+    "common": {
+        "cancel": "Cancel",
+        "close": "Close",
+        "save": "Save",
+        "saved": "Saved",
+        "loading": "Loading...",
+        "retry": "Retry",
+        "search": "Search"
+    },
+    "nav": {
+        "dashboard": "Dashboard",
+        "movies": "Movies",
+        "shows": "TV Shows",
+        "translations": "Translations",
+        "settings": "Settings"
+    },
+    "version": {
+        "development": "Development",
+        "updateAvailable": "Update {version} is available",
+        "current": "Version: {version}"
+    }
+}
