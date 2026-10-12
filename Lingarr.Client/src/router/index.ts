@@ -35,25 +35,37 @@ const routes: RouteRecordRaw[] = [
                 name: 'dashboard'
             },
             {
+                path: '/library',
+                component: () => import('@/pages/LibraryPage.vue'),
+                name: 'library'
+            },
+            {
+                path: '/queue',
+                component: () => import('@/pages/QueuePage.vue'),
+                name: 'queue'
+            },
+            {
+                path: '/queue/:id',
+                component: () => import('@/pages/QueueDetailPage.vue'),
+                name: 'queue-detail',
+                props: true
+            },
+            {
+                // legacy paths -> new IA (bookmarks kept alive)
                 path: '/shows',
-                component: () => import('@/pages/ShowPage.vue'),
-                name: 'shows'
+                redirect: '/library?type=show'
             },
             {
                 path: '/movies',
-                component: () => import('@/pages/MoviePage.vue'),
-                name: 'movies'
+                redirect: '/library?type=movie'
             },
             {
                 path: '/translations',
-                component: () => import('@/pages/TranslationPage.vue'),
-                name: 'translations'
+                redirect: '/queue'
             },
             {
                 path: '/translations/:id',
-                component: () => import('@/pages/TranslationDetailPage.vue'),
-                name: 'translation-detail',
-                props: true
+                redirect: (to) => ({ path: `/queue/${String(to.params.id)}` })
             },
             {
                 path: '/import',

@@ -48,11 +48,16 @@
     },
     "nav": {
         "dashboard": "仪表盘",
-        "movies": "电影",
-        "shows": "剧集",
-        "translations": "翻译任务",
+        "library": "媒体库",
         "import": "导入",
-        "settings": "设置"
+        "settings": "设置",
+        "queue": "任务队列"
+    },
+    "library": {
+        "tabs": {
+            "shows": "剧集",
+            "movies": "电影"
+        }
     },
     "version": {
         "development": "开发版",
@@ -474,7 +479,14 @@
             "tasks": "任务",
             "logs": "日志",
             "telemetry": "遥测",
-            "logout": "退出登录"
+            "logout": "退出登录",
+            "groups": {
+                "providers": "翻译服务",
+                "sources": "媒体与自动化",
+                "quality": "字幕与质量",
+                "system": "系统"
+            },
+            "mapping": "语言映射"
         },
         "status": {
             "enabled": "已启用",

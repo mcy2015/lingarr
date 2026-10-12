@@ -34,7 +34,7 @@
                                 {{ t(item.label) }}
 
                                     <span
-                                    v-if="item.route == 'translations' && activeRequests > 0"
+                                    v-if="item.route == 'queue' && activeRequests > 0"
                                     class="bg-accent text-accent-content absolute -top-1 -right-5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 font-mono text-xs leading-none font-bold">
                                     {{ activeRequests }}
                                 </span>
@@ -107,9 +107,8 @@ const isOpen = computed({
 
 const menuItems: MenuItem[] = [
     { label: 'nav.dashboard', icon: 'home', route: 'dashboard', children: [] },
-    { label: 'nav.movies', icon: 'movie', route: 'movies', children: [] },
-    { label: 'nav.shows', icon: 'show', route: 'shows', children: [] },
-    { label: 'nav.translations', icon: 'language', route: 'translations', children: [] },
+    { label: 'nav.library', icon: 'movie', route: 'library', children: [] },
+    { label: 'nav.queue', icon: 'language', route: 'queue', children: [] },
     { label: 'nav.import', icon: 'folders', route: 'import', children: [] },
     {
         label: 'nav.settings',

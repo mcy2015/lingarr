@@ -81,7 +81,7 @@ const selectOption = async (target: ILanguage) => {
         )
         toggle()
         if (navigateToDetails.value) {
-            router.push({ name: 'translation-detail', params: { id: requestId } })
+            router.push({ name: 'queue-detail', params: { id: requestId } })
         } else {
             tooltip.value?.showTooltip()
         }

@@ -2,7 +2,7 @@
     <div class="flex items-center gap-2">
         <button
             class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
-            @click="router.push({ name: 'translation-detail', params: { id: item.id } })">
+            @click="router.push({ name: 'queue-detail', params: { id: item.id } })">
             <Icon name="eyeOn" class="h-5 w-5" />
         </button>
         <div class="flex w-20 items-center gap-2">
