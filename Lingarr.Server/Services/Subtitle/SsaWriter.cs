@@ -16,7 +16,8 @@ public class SsaWriter : ISubtitleWriter
     public async Task WriteStreamAsync(
         Stream stream, 
         IEnumerable<SubtitleItem> subtitleItems, 
-        bool stripSubtitleFormatting)
+        bool stripSubtitleFormatting,
+        bool bilingual = false)
     {
         var items = subtitleItems.ToList();
         if (!items.Any()) return;
@@ -98,6 +99,18 @@ public class SsaWriter : ISubtitleWriter
                 
             // Join lines according to wrap style
             var text = JoinLinesByWrapStyle(linesToUse, item.SsaFormat?.WrapStyle ?? SsaWrapStyle.None);
+
+            if (bilingual && item.TranslatedLines.Any(l => !string.IsNullOrEmpty(l)))
+            {
+                // Append the original as a single smaller line below the translation.
+                // Braces are stripped so plain text cannot be interpreted as override tags.
+                var source = item.PlaintextLines.Count > 0 ? item.PlaintextLines : item.Lines;
+                var original = string.Join(" ", source).Replace("{", "").Replace("}", "");
+                if (!string.IsNullOrWhiteSpace(original))
+                {
+                    text += $"\\N{{\\fs16}}{original}";
+                }
+            }
                 
             if (stripSubtitleFormatting)
             {
