@@ -1,6 +1,6 @@
 # Lingarr 重构计划与完成情况总览
 
-> 更新：2026-10-12 · 分支：`refactor/ia-migration`（领先 main 14 提交，未推送）
+> 更新：2026-10-12 · 分支：`main`（`refactor/ia-migration` 14+1 提交已并入并推送 origin）
 > 基线：main = `3858195`（feat/visual-refresh 合并，已推送 origin）
 > 配套文档：`module-analysis.zh-CN.md`（P0-P2 清单）· `redesign-proposal.zh-CN.md`（P3 设计）· `ia-gap-audit.zh-CN.md`（原型差距与接口计划）
 > 质量快照：Server.Tests **366/366** · Migrations.Tests **12/12**（真容器）· 前端 build/oxlint/vitest 11/11 · i18n en/zh-CN **579/579**
@@ -20,6 +20,7 @@
 | 队列 A 档 | 原型 qrow 风格六项（纯前端） | ✅ 完成+截图验证 | `79f3fc9` |
 | 队列 B 档 | 运行时字段 + provider/ETA/暂停/重试（全栈） | ✅ 完成+冒烟 | `8f03bd1` `1d3eaa9` `eb106ee` |
 | 合并/推送 | feat/visual-refresh → main（47+1 提交）→ origin | ✅ main 已推送 | `3858195` |
+| 合并/推送 | refactor/ia-migration → main（14+1 提交）→ origin | ✅ main 已推送 | 本次合并 |
 | 实机核验+修复 | localhost:9876 六屏巡检；发现并修复导入台整页崩溃 | ✅ 修复+实测恢复 | `80fa3a3` |
 | 导入台原型复刻 | 按原型第四屏一比一重写（双面板/六列表/选项条/per-file 动作/客户端检出） | ✅ 完成+全链实测 | `5e1b39a` |
 
