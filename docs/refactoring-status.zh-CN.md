@@ -1,6 +1,6 @@
 # Lingarr 重构计划与完成情况总览
 
-> 更新：2026-10-12 · 分支：`refactor/ia-migration`（领先 main 9 提交，未推送）
+> 更新：2026-10-12 · 分支：`refactor/ia-migration`（领先 main 12 提交，未推送）
 > 基线：main = `3858195`（feat/visual-refresh 合并，已推送 origin）
 > 配套文档：`module-analysis.zh-CN.md`（P0-P2 清单）· `redesign-proposal.zh-CN.md`（P3 设计）· `ia-gap-audit.zh-CN.md`（原型差距与接口计划）
 > 质量快照：Server.Tests **366/366** · Migrations.Tests **12/12**（真容器）· 前端 build/oxlint/vitest 11/11 · i18n en/zh-CN **545/545**
@@ -20,6 +20,7 @@
 | 队列 A 档 | 原型 qrow 风格六项（纯前端） | ✅ 完成+截图验证 | `79f3fc9` |
 | 队列 B 档 | 运行时字段 + provider/ETA/暂停/重试（全栈） | ✅ 完成+冒烟 | `8f03bd1` `1d3eaa9` `eb106ee` |
 | 合并/推送 | feat/visual-refresh → main（47+1 提交）→ origin | ✅ main 已推送 | `3858195` |
+| 实机核验+修复 | localhost:9876 六屏巡检；发现并修复导入台整页崩溃 | ✅ 修复+实测恢复 | `80fa3a3` |
 
 ---
 
@@ -82,11 +83,13 @@
 | 编码探测 + UTF-8 转码（BOM/严格 UTF-8/Ude/CJK 合理性覆盖） | ✅ | `3fe92a3`，12 测试 |
 | M0023 `source` 判别列 | ✅ | `6344863`，真容器 12/12 |
 | 端点 `POST /subtitles/import` + `/parse-filenames` | ✅ | `7542ecf` |
-| 前端导入台（自由/整季双 tab、映射预览、简繁、去重提示） | ✅ | `23c399e` + `2e30423`，实渲染截图 |
+| 前端导入台（自由/整季双 tab、映射预览、简繁、去重提示） | ✅ | `23c399e` + `2e30423`；**2026-10-12 实机发现整页崩溃并已修**（见下） |
 | 定向/整季媒体绑定（写回剧集视频旁） | ✅ | `7c51199` 后端 + `152cb6c` 前端，真机冒烟 ✓ |
 | 简繁转换选项（OpenccNetLib，短语级） | ✅ | `aff1fd8`，6 测试 |
 | 内容哈希去重（M0024 + skip 入队） | ✅ | `d38d3a0` + `594c259`（copy 块丢字段修复），真机冒烟 ✓ |
 | 全链路冒烟（导入→翻译→写回） | ✅ | 自由导入 + 定向绑定 两条链均通过 |
+
+**2026-10-12 实机核验补记**：localhost:9876 六屏巡检发现 `/import` 整页崩溃——`getSettings` getter（2024 年上游遗留，此前零消费者）对 `applySettingsOnLoad` 已解析成数组的 `source/target_languages` 再次 `JSON.parse`，`"[object Object]"` 抛错；软导航主区域空白、硬加载整应用不挂载，配置过语言的实例必现（语言为 null 的全新实例侥幸不炸，或因此逃过当时冒烟）。修复：`parseLanguages` 兼容 `string | ILanguage[]` 两种形态（`80fa3a3`），修复后硬加载实测完整渲染，lint/vitest/vue-tsc 全绿。
 
 ## 六、阶段五：IA 迁移 + 队列原型对齐 ✅
 
@@ -141,5 +144,5 @@
 | Migrations.Tests（Testcontainers MySQL/PG/SQLite） | **12/12** ✅ |
 | 前端 build（vue-tsc + vite）/ oxlint / vitest | ✅ / ✅ / 11/11 |
 | i18n | en/zh-CN 545/545 完全同步 |
-| 真机冒烟 | 自由导入 ✓ · 定向绑定 ✓ · 去重 ✓ · 简繁 ✓ · 暂停校验 ✓ · provider chip ✓ |
+| 真机冒烟 | 自由导入 ✓ · 定向绑定 ✓ · 去重 ✓ · 简繁 ✓ · 暂停校验 ✓ · provider chip ✓ · 六屏实机巡检 ✓（导入台崩溃修复后） |
 | dev 环境 | Server/Client/Mysql/LibreTranslate 四容器运行中（localhost:9876 UI · 9877 API） |
