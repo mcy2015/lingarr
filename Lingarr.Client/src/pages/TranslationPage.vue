@@ -1,19 +1,29 @@
 ﻿<template>
     <div class="w-full">
         <!-- Search and Filters -->
-        <div class="bg-tertiary flex flex-wrap items-center justify-between gap-2 p-4">
-            <SearchComponent v-model="filter" />
-            <div
-                class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:justify-between md:space-x-2">
+        <ListToolbar
+            v-model:filter="filter"
+            :sort-options="[
+                {
+                    label: t('translations.list.sortByAdded'),
+                    value: 'CreatedAt'
+                },
+                {
+                    label: t('translations.list.sortByCompleted'),
+                    value: 'CompletedAt'
+                },
+                {
+                    label: t('translations.list.sortByTitle'),
+                    value: 'Title'
+                }
+            ]"
+            @reload="translationRequestStore.fetch()">
+            <template #actions>
                 <button
                     v-if="isSelectMode"
                     class="hover:text-primary-content/50 border-line text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="handleDelete">
-                    {{
-                        t('translations.list.deleteWithCount', {
-                            count: translationRequestStore.selectedRequests.length
-                        })
-                    }}
+                    {{ t('translations.list.deleteWithCount', { count: selectedCount }) }}
                 </button>
                 <button
                     v-if="!isSelectMode"
@@ -28,27 +38,8 @@
                         isSelectMode ? t('translations.list.cancel') : t('translations.list.select')
                     }}
                 </button>
-                <div class="flex flex-wrap items-center gap-2">
-                    <SortControls
-                        v-model="filter"
-                        :options="[
-                            {
-                                label: t('translations.list.sortByAdded'),
-                                value: 'CreatedAt'
-                            },
-                            {
-                                label: t('translations.list.sortByCompleted'),
-                                value: 'CompletedAt'
-                            },
-                            {
-                                label: t('translations.list.sortByTitle'),
-                                value: 'Title'
-                            }
-                        ]" />
-                    <ReloadComponent @toggle:update="translationRequestStore.fetch()" />
-                </div>
-            </div>
-        </div>
+            </template>
+        </ListToolbar>
 
         <div class="w-full px-4">
             <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
@@ -64,9 +55,7 @@
                 <div
                     v-if="isSelectMode"
                     class="col-span-1 flex items-center justify-center px-4 py-2">
-                    <CheckboxComponent
-                        :model-value="translationRequestStore.selectAll"
-                        @change="translationRequestStore.toggleSelectAll()" />
+                    <CheckboxComponent :model-value="selectAll" @change="toggleSelectAll()" />
                 </div>
             </div>
             <div
@@ -90,12 +79,8 @@
                             :on-action="(action) => handleAction(item, action)" />
                         <CheckboxComponent
                             v-if="isSelectMode"
-                            :model-value="
-                                translationRequestStore.selectedRequests.some(
-                                    (request) => request.id === item.id
-                                )
-                            "
-                            @change="translationRequestStore.toggleSelect(item)" />
+                            :model-value="isSelected(item)"
+                            @change="toggleSelect(item)" />
                     </span>
                 </div>
                 <div class="flex items-center md:col-span-1 md:px-4 md:py-2">
@@ -162,12 +147,8 @@
                     v-if="isSelectMode"
                     class="hidden items-center justify-center py-2 md:col-span-1 md:flex md:px-4">
                     <CheckboxComponent
-                        :model-value="
-                            translationRequestStore.selectedRequests.some(
-                                (request) => request.id === item.id
-                            )
-                        "
-                        @change="translationRequestStore.toggleSelect(item)" />
+                        :model-value="isSelected(item)"
+                        @change="toggleSelect(item)" />
                 </div>
             </div>
         </div>
@@ -180,12 +161,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, ComputedRef, computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
     Hub,
-    IFilter,
-    IPagedResult,
     ITranslationRequest,
     MEDIA_TYPE,
     TRANSLATION_ACTIONS,
@@ -194,11 +173,10 @@ import {
 import useTranslationRequestStore from '@/store/translationRequest'
 import services from '@/services'
 import { useSignalR } from '@/composables/useSignalR'
-import useDebounce from '@/composables/useDebounce'
+import { useSelection } from '@/composables/useSelection'
+import { usePagedList } from '@/composables/usePagedList'
 import PaginationComponent from '@/components/common/PaginationComponent.vue'
-import SortControls from '@/components/common/SortControls.vue'
-import SearchComponent from '@/components/common/SearchComponent.vue'
-import ReloadComponent from '@/components/common/ReloadComponent.vue'
+import ListToolbar from '@/components/common/ListToolbar.vue'
 import TranslationStatus from '@/components/common/TranslationStatus.vue'
 import TranslationProgress from '@/components/common/TranslationProgress.vue'
 import TranslationAction from '@/components/common/TranslationAction.vue'
@@ -211,16 +189,22 @@ const hubConnection = ref<Hub>()
 const translationRequestStore = useTranslationRequestStore()
 const { t } = useI18n()
 
-const translationRequests: ComputedRef<IPagedResult<ITranslationRequest>> = computed(
-    () => translationRequestStore.getTranslationRequests
-)
-
-const filter: ComputedRef<IFilter> = computed({
-    get: () => translationRequestStore.filter,
-    set: useDebounce((value: IFilter) => {
-        translationRequestStore.setFilter(value)
-    }, 300)
+const { items: translationRequests, filter } = usePagedList<ITranslationRequest>({
+    items: () => translationRequestStore.getTranslationRequests,
+    filter: () => translationRequestStore.getFilter,
+    setFilter: (value) => translationRequestStore.setFilter(value),
+    fetch: () => translationRequestStore.fetch()
 })
+
+const {
+    selectedIds,
+    selectedCount,
+    selectAll,
+    isSelected,
+    toggleSelect,
+    toggleSelectAll,
+    clearSelection
+} = useSelection<ITranslationRequest>(() => translationRequests.value.items)
 
 async function handleAction(translationRequest: ITranslationRequest, action: TRANSLATION_ACTIONS) {
     switch (action) {
@@ -240,7 +224,6 @@ async function handleAction(translationRequest: ITranslationRequest, action: TRA
 }
 
 onMounted(async () => {
-    await translationRequestStore.fetch()
     await translationRequestStore.fetchProofreadStatus()
     hubConnection.value = await signalR.connect(
         'TranslationRequests',
@@ -260,15 +243,18 @@ const isSelectMode = ref(false)
 const toggleSelectMode = () => {
     isSelectMode.value = !isSelectMode.value
     if (!isSelectMode.value) {
-        translationRequestStore.clearSelection()
+        clearSelection()
     }
 }
 
 const handleDelete = async () => {
-    for (const request of translationRequestStore.getSelectedRequests) {
+    const selected = translationRequests.value.items.filter((request) =>
+        selectedIds.value.has(request.id)
+    )
+    for (const request of selected) {
         await translationRequestStore.remove(request)
     }
-    translationRequestStore.clearSelection()
+    clearSelection()
     translationRequestStore.fetch()
 }
 

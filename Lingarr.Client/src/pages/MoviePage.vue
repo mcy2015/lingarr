@@ -1,22 +1,27 @@
 ﻿<template>
     <div v-if="settingsCompleted === 'true'" class="w-full">
-        <div class="bg-tertiary flex flex-wrap items-center justify-between gap-2 p-4">
-            <SearchComponent v-model="filter" />
-            <div
-                class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:items-center md:justify-between md:space-x-2">
+        <ListToolbar
+            v-model:filter="filter"
+            center-actions
+            :sort-options="[
+                {
+                    label: t('movies.sortByTitle'),
+                    value: 'Title'
+                },
+                {
+                    label: t('movies.sortByAdded'),
+                    value: 'DateAdded'
+                }
+            ]"
+            @reload="movieStore.fetch()">
+            <template #actions>
                 <ToggleButton
                     v-model="navigateToDetails"
                     size="small"
                     :label="t('movies.openDetailsOnRequest')" />
-                <ContextMenu
-                    v-if="isSelectMode && movieStore.selectedMovies.length > 0"
-                    @select="handleTranslate">
+                <ContextMenu v-if="isSelectMode && selectedCount > 0" @select="handleTranslate">
                     <ButtonComponent size="sm" variant="accent">
-                        {{
-                            t('movies.translateWithCount', {
-                                count: movieStore.selectedMovies.length
-                            })
-                        }}
+                        {{ t('movies.translateWithCount', { count: selectedCount }) }}
                     </ButtonComponent>
                 </ContextMenu>
                 <ButtonComponent size="sm" variant="accent" @click="toggleSelectMode">
@@ -42,23 +47,8 @@
                         })
                     }}
                 </span>
-                <div class="flex flex-wrap items-center gap-2">
-                    <SortControls
-                        v-model="filter"
-                        :options="[
-                            {
-                                label: t('movies.sortByTitle'),
-                                value: 'Title'
-                            },
-                            {
-                                label: t('movies.sortByAdded'),
-                                value: 'DateAdded'
-                            }
-                        ]" />
-                    <ReloadComponent @toggle:update="movieStore.fetch()" />
-                </div>
-            </div>
-        </div>
+            </template>
+        </ListToolbar>
 
         <div class="w-full px-4">
             <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
@@ -71,9 +61,7 @@
                 <div
                     v-if="isSelectMode"
                     class="col-span-1 flex items-center justify-center px-4 py-2">
-                    <CheckboxComponent
-                        :model-value="movieStore.selectAll"
-                        @change="movieStore.toggleSelectAll()" />
+                    <CheckboxComponent :model-value="selectAll" @change="toggleSelectAll()" />
                 </div>
             </div>
             <div v-for="item in movies.items" :key="item.id">
@@ -88,10 +76,8 @@
                             :media-type="MEDIA_TYPE.MOVIE" />
                         <span v-if="isSelectMode" class="ml-auto md:hidden">
                             <CheckboxComponent
-                                :model-value="
-                                    movieStore.selectedMovies.some((m) => m.id === item.id)
-                                "
-                                @change="movieStore.toggleSelect(item)" />
+                                :model-value="isSelected(item)"
+                                @change="toggleSelect(item)" />
                         </span>
                     </div>
                     <div
@@ -152,8 +138,8 @@
                         v-if="isSelectMode"
                         class="hidden items-center justify-center px-4 py-2 md:col-span-1 md:flex">
                         <CheckboxComponent
-                            :model-value="movieStore.selectedMovies.some((m) => m.id === item.id)"
-                            @change="movieStore.toggleSelect(item)" />
+                            :model-value="isSelected(item)"
+                            @change="toggleSelect(item)" />
                     </div>
                 </div>
             </div>
@@ -169,29 +155,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, ComputedRef } from 'vue'
+import { ref, computed, ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-    IFilter,
     ILanguage,
     IMovie,
     INPUT_TYPE,
     INPUT_VALIDATION_TYPE,
-    IPagedResult,
     MEDIA_TYPE,
     SETTINGS
 } from '@/types'
 import useDebounce from '@/composables/useDebounce'
+import { useSelection } from '@/composables/useSelection'
+import { usePagedList } from '@/composables/usePagedList'
 import { useMovieStore } from '@/store/movie'
 import { useSettingStore } from '@/store/setting'
 import { useInstanceStore } from '@/store/instance'
 import { useTranslateStore } from '@/store/translate'
 import PaginationComponent from '@/components/common/PaginationComponent.vue'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
-import SortControls from '@/components/common/SortControls.vue'
-import SearchComponent from '@/components/common/SearchComponent.vue'
+import ListToolbar from '@/components/common/ListToolbar.vue'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
-import ReloadComponent from '@/components/common/ReloadComponent.vue'
 import NoMediaNotification from '@/components/common/NoMediaNotification.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
@@ -216,38 +200,39 @@ const navigateToDetails = computed({
     }
 })
 
-const movies: ComputedRef<IPagedResult<IMovie>> = computed(() => movieStore.get)
-const filter: ComputedRef<IFilter> = computed({
-    get: () => movieStore.getFilter,
-    set: useDebounce((value: IFilter) => {
-        movieStore.setFilter(value)
-    }, 300)
+const { items: movies, filter } = usePagedList<IMovie>({
+    items: () => movieStore.get,
+    filter: () => movieStore.getFilter,
+    setFilter: (value) => movieStore.setFilter(value),
+    fetch: () => movieStore.fetch()
 })
 
 const toggleMovie = useDebounce(async (movie: IMovie) => {
     instanceStore.setPoster({ content: movie, type: 'movie' })
 }, 1000)
 
+const {
+    selectedIds,
+    selectedCount,
+    selectAll,
+    isSelected,
+    toggleSelect,
+    toggleSelectAll,
+    clearSelection
+} = useSelection<IMovie>(() => movies.value.items)
+
 const isSelectMode = ref(false)
 
 const toggleSelectMode = () => {
     isSelectMode.value = !isSelectMode.value
     if (!isSelectMode.value) {
-        movieStore.clearSelection()
+        clearSelection()
     }
 }
 
 const handleTranslate = async (language: ILanguage) => {
-    await translateStore.bulkTranslate(
-        movieStore.selectedMovies.map((movie) => movie.id),
-        language.code,
-        MEDIA_TYPE.MOVIE
-    )
-    movieStore.clearSelection()
+    await translateStore.bulkTranslate([...selectedIds.value], language.code, MEDIA_TYPE.MOVIE)
+    clearSelection()
     isSelectMode.value = false
 }
-
-onMounted(async () => {
-    await movieStore.fetch()
-})
 </script>

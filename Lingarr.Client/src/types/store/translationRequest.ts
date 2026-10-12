@@ -4,7 +4,5 @@ export interface IUseTranslationRequestStore {
     activeTranslations: IActiveTranslation[]
     translationRequests: IPagedResult<ITranslationRequest>
     filter: IFilter
-    selectedRequests: ITranslationRequest[]
-    selectAll: boolean
     proofreadSupported: boolean
 }

@@ -28,8 +28,6 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
             isAscending: true,
             pageNumber: 1
         },
-        selectedRequests: [] as ITranslationRequest[],
-        selectAll: false,
         proofreadSupported: false
     }),
     getters: {
@@ -38,9 +36,7 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
         getTranslationRequests(): IPagedResult<ITranslationRequest> {
             return this.translationRequests
         },
-        getFilter: (state: IUseTranslationRequestStore): IFilter => state.filter,
-        getSelectedRequests: (state: IUseTranslationRequestStore): ITranslationRequest[] =>
-            state.selectedRequests
+        getFilter: (state: IUseTranslationRequestStore): IFilter => state.filter
     },
     actions: {
         async setFilter(filterVal: IFilter) {
@@ -122,28 +118,6 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
                     return request
                 }
             )
-        },
-        clearSelection() {
-            this.selectedRequests = []
-            this.selectAll = false
-        },
-        toggleSelectAll() {
-            this.selectAll = !this.selectAll
-            if (this.selectAll) {
-                this.selectedRequests = [...this.translationRequests.items]
-            } else {
-                this.selectedRequests = []
-            }
-        },
-
-        toggleSelect(request: ITranslationRequest) {
-            const index = this.selectedRequests.findIndex((r) => r.id === request.id)
-            if (index === -1) {
-                this.selectedRequests.push(request)
-            } else {
-                this.selectedRequests.splice(index, 1)
-            }
-            this.selectAll = this.selectedRequests.length === this.translationRequests.items.length
         }
     }
 })

@@ -1,20 +1,27 @@
 ﻿<template>
     <div v-if="settingsCompleted === 'true'" class="w-full">
-        <div class="bg-tertiary flex flex-wrap items-center justify-between gap-2 p-4">
-            <SearchComponent v-model="filter" />
-            <div
-                class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:items-center md:justify-between md:space-x-2">
+        <ListToolbar
+            v-model:filter="filter"
+            center-actions
+            :sort-options="[
+                {
+                    label: t('shows.sortByTitle'),
+                    value: 'Title'
+                },
+                {
+                    label: t('shows.sortByAdded'),
+                    value: 'DateAdded'
+                }
+            ]"
+            @reload="showStore.fetch()">
+            <template #actions>
                 <ToggleButton
                     v-model="navigateToDetails"
                     size="small"
                     :label="t('shows.openDetailsOnRequest')" />
-                <ContextMenu
-                    v-if="isSelectMode && showStore.selectedShows.length > 0"
-                    @select="handleTranslate">
+                <ContextMenu v-if="isSelectMode && selectedCount > 0" @select="handleTranslate">
                     <ButtonComponent size="sm" variant="accent">
-                        {{
-                            t('shows.translateWithCount', { count: showStore.selectedShows.length })
-                        }}
+                        {{ t('shows.translateWithCount', { count: selectedCount }) }}
                     </ButtonComponent>
                 </ContextMenu>
                 <ButtonComponent size="sm" variant="accent" @click="toggleSelectMode">
@@ -40,23 +47,8 @@
                         })
                     }}
                 </span>
-                <div class="flex flex-wrap items-center gap-2">
-                    <SortControls
-                        v-model="filter"
-                        :options="[
-                            {
-                                label: t('shows.sortByTitle'),
-                                value: 'Title'
-                            },
-                            {
-                                label: t('shows.sortByAdded'),
-                                value: 'DateAdded'
-                            }
-                        ]" />
-                    <ReloadComponent @toggle:update="showStore.fetch()" />
-                </div>
-            </div>
-        </div>
+            </template>
+        </ListToolbar>
 
         <div class="w-full px-4">
             <!-- Shows -->
@@ -69,9 +61,7 @@
                 <div
                     v-if="isSelectMode"
                     class="col-span-1 flex items-center justify-center px-4 py-2">
-                    <CheckboxComponent
-                        :model-value="showStore.selectAll"
-                        @change="showStore.toggleSelectAll()" />
+                    <CheckboxComponent :model-value="selectAll" @change="toggleSelectAll()" />
                 </div>
             </div>
             <div v-for="item in shows.items" :key="item.id">
@@ -86,8 +76,8 @@
                         <ActiveTranslationBadge :show="item" />
                         <span v-if="isSelectMode" class="ml-auto md:hidden" @click.stop>
                             <CheckboxComponent
-                                :model-value="showStore.selectedShows.some((s) => s.id === item.id)"
-                                @change="showStore.toggleSelect(item)" />
+                                :model-value="isSelected(item)"
+                                @change="toggleSelect(item)" />
                         </span>
                     </div>
                     <div class="flex items-center gap-2 md:col-span-1 md:px-4 md:py-2" @click.stop>
@@ -131,8 +121,8 @@
                         class="hidden items-center justify-center px-4 py-2 md:col-span-1 md:flex"
                         @click.stop>
                         <CheckboxComponent
-                            :model-value="showStore.selectedShows.some((s) => s.id === item.id)"
-                            @change="showStore.toggleSelect(item)" />
+                            :model-value="isSelected(item)"
+                            @change="toggleSelect(item)" />
                     </div>
                 </div>
                 <SeasonTable v-if="expandedShow === item.id" :seasons="item.seasons" />
@@ -149,28 +139,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, Ref, computed, onMounted, ComputedRef } from 'vue'
+import { ref, Ref, computed, ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-    IFilter,
     ILanguage,
     INPUT_TYPE,
     INPUT_VALIDATION_TYPE,
-    IPagedResult,
     IShow,
     MEDIA_TYPE,
     SETTINGS
 } from '@/types'
-import useDebounce from '@/composables/useDebounce'
+import { useSelection } from '@/composables/useSelection'
+import { usePagedList } from '@/composables/usePagedList'
 import { useInstanceStore } from '@/store/instance'
 import { useSettingStore } from '@/store/setting'
 import { useShowStore } from '@/store/show'
 import { useTranslateStore } from '@/store/translate'
 import PaginationComponent from '@/components/common/PaginationComponent.vue'
-import SearchComponent from '@/components/common/SearchComponent.vue'
+import ListToolbar from '@/components/common/ListToolbar.vue'
 import CaretButton from '@/components/common/CaretButton.vue'
-import SortControls from '@/components/common/SortControls.vue'
-import ReloadComponent from '@/components/common/ReloadComponent.vue'
 import NoMediaNotification from '@/components/common/NoMediaNotification.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 import SeasonTable from '@/components/features/show/SeasonTable.vue'
@@ -198,12 +185,11 @@ const navigateToDetails = computed({
     }
 })
 
-const shows: ComputedRef<IPagedResult<IShow>> = computed(() => showStore.get)
-const filter: ComputedRef<IFilter> = computed({
-    get: () => showStore.getFilter,
-    set: useDebounce((value: IFilter) => {
-        showStore.setFilter(value)
-    }, 300)
+const { items: shows, filter } = usePagedList<IShow>({
+    items: () => showStore.get,
+    filter: () => showStore.getFilter,
+    setFilter: (value) => showStore.setFilter(value),
+    fetch: () => showStore.fetch()
 })
 
 const toggleShow = async (show: IShow) => {
@@ -215,26 +201,28 @@ const toggleShow = async (show: IShow) => {
     expandedShow.value = show.id
 }
 
+const {
+    selectedIds,
+    selectedCount,
+    selectAll,
+    isSelected,
+    toggleSelect,
+    toggleSelectAll,
+    clearSelection
+} = useSelection<IShow>(() => shows.value.items)
+
 const isSelectMode = ref(false)
 
 const toggleSelectMode = () => {
     isSelectMode.value = !isSelectMode.value
     if (!isSelectMode.value) {
-        showStore.clearSelection()
+        clearSelection()
     }
 }
 
 const handleTranslate = async (language: ILanguage) => {
-    await translateStore.bulkTranslate(
-        showStore.selectedShows.map((s) => s.id),
-        language.code,
-        MEDIA_TYPE.SHOW
-    )
-    showStore.clearSelection()
+    await translateStore.bulkTranslate([...selectedIds.value], language.code, MEDIA_TYPE.SHOW)
+    clearSelection()
     isSelectMode.value = false
 }
-
-onMounted(async () => {
-    await showStore.fetch()
-})
 </script>
