@@ -39,7 +39,7 @@
                     @click="showStore.includeAll(MEDIA_TYPE.SHOW, false)">
                     {{ t('shows.excludeAll') }}
                 </ButtonComponent>
-                <span class="text-accent-content text-sm">
+                <span class="text-secondary-content text-sm">
                     {{
                         t('shows.includedSummary', {
                             included: showStore.includeSummary.included,

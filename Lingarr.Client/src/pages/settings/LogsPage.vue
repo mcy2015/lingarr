@@ -1,6 +1,6 @@
 ﻿<template>
     <div class="bg-secondary w-full p-4">
-        <div class="border-secondary bg-primary text-secondary-content mb-4 border-b-2 font-bold">
+        <div class="border-line bg-primary text-secondary-content mb-4 border-b-2 font-bold">
             <div class="flex items-center justify-between px-4 py-3">
                 <h1 class="text-xl">{{ t('settings.logs.title') }}</h1>
                 <div class="flex items-center space-x-3">
@@ -8,7 +8,7 @@
                     <div class="flex items-center space-x-4">
                         <select
                             v-model="filterOptions.logLevel"
-                            class="border-secondary bg-secondary text-accent-content rounded border px-2 py-1 text-sm">
+                            class="border-line bg-tertiary text-primary-content rounded border px-2 py-1 text-sm">
                             <option value="all">{{ t('settings.logs.allLevels') }}</option>
                             <option value="information">
                                 {{ t('settings.logs.information') }}
@@ -20,12 +20,12 @@
 
                     <div class="flex space-x-2">
                         <button
-                            class="hover:bg-accent/80 bg-accent cursor-pointer rounded px-3 py-1 text-sm font-medium text-primary-content transition"
+                            class="hover:bg-accent/80 bg-accent cursor-pointer rounded px-3 py-1 text-sm font-medium text-accent-content transition"
                             @click="exportLogs">
                             {{ t('settings.logs.export') }}
                         </button>
                         <button
-                            class="bg-warning hover:bg-warning/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-primary-content transition"
+                            class="bg-warning hover:bg-warning/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-warning-content transition"
                             @click="toggleAutoScroll">
                             {{
                                 autoScroll
@@ -34,7 +34,7 @@
                             }}
                         </button>
                         <button
-                            class="bg-danger hover:bg-danger/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-primary-content transition"
+                            class="bg-danger hover:bg-danger/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-danger-content transition"
                             @click="clearLogs">
                             {{ t('settings.logs.clear') }}
                         </button>
@@ -44,7 +44,7 @@
         </div>
 
         <div
-            class="border-secondary bg-primary text-secondary-content grid grid-cols-12 border-b-2 font-bold">
+            class="border-line bg-primary text-secondary-content grid grid-cols-12 border-b-2 font-bold">
             <div class="col-span-1 px-4 py-2">{{ t('settings.logs.time') }}</div>
             <div class="col-span-1 px-4 py-2">{{ t('settings.logs.level') }}</div>
             <div class="col-span-3 px-4 py-2">{{ t('settings.logs.source') }}</div>
@@ -53,7 +53,7 @@
 
         <div
             ref="logContainer"
-            class="bg-primary text-accent-content h-[70vh] overflow-y-auto font-mono text-sm">
+            class="bg-primary text-primary-content h-[70vh] overflow-y-auto font-mono text-sm">
             <div v-if="filteredLogs.length === 0" class="flex h-full items-center justify-center">
                 <div class="text-center text-secondary-content/60">
                     <div class="mb-2 text-lg">📋</div>
@@ -64,7 +64,7 @@
             <!-- Log Entries -->
             <div v-for="(log, index) in filteredLogs" :key="index" class="log-entry">
                 <div
-                    class="hover:bg-secondary/20 border-secondary/30 grid grid-cols-12 border-b py-2 transition-colors">
+                    class="hover:bg-secondary/20 border-line/60 grid grid-cols-12 border-b py-2 transition-colors">
                     <div class="col-span-1 px-4 text-secondary-content/60">
                         {{ formatTime(log.timestamp) }}
                     </div>
@@ -85,7 +85,7 @@
 
                 <div
                     v-if="log.stackTrace"
-                    class="border-secondary/30 bg-danger/5 ml-6 border-b py-2 pr-4 pl-12 text-xs">
+                    class="border-line/60 bg-danger/5 ml-6 border-b py-2 pr-4 pl-12 text-xs text-danger/90">
                     <pre class="whitespace-pre-wrap">{{ log.stackTrace }}</pre>
                 </div>
             </div>
@@ -93,11 +93,11 @@
 
         <!-- Footer Stats -->
         <div
-            class="border-secondary bg-primary text-secondary-content mt-4 flex justify-between border-t-2 px-4 py-2 text-sm">
+            class="border-line bg-primary text-secondary-content mt-4 flex justify-between border-t-2 px-4 py-2 text-sm">
             <div>{{ t('settings.logs.totalEntries', { count: filteredLogs.length }) }}</div>
             <div>
                 {{ t('settings.logs.autoScroll') }}
-                <span :class="autoScroll ? 'text-success' : 'text-error'">
+                <span :class="autoScroll ? 'text-success' : 'text-danger'">
                     {{ autoScroll ? t('settings.status.enabled') : t('settings.status.disabled') }}
                 </span>
             </div>
@@ -138,7 +138,7 @@ const formatLogMessage = (message: string): string => {
     let formattedMessage = message
         .replace(/\|Green\|([^|]+)\|\/Green\|/g, '<span class="text-success">$1</span>')
         .replace(/\|Red\|([^|]+)\|\/Red\|/g, '<span class="text-danger">$1</span>')
-        .replace(/\|Orange\|([^|]+)\|\/Orange\|/g, '<span class="text-orange-500">$1</span>')
+        .replace(/\|Orange\|([^|]+)\|\/Orange\|/g, '<span class="text-warning">$1</span>')
 
     // Highlight environment variables
     formattedMessage = formattedMessage.replace(
@@ -152,9 +152,9 @@ const formatLogMessage = (message: string): string => {
 const getLogLevelBadgeClass = (level: string): string => {
     const levelLower = level.toLowerCase()
     if (levelLower.includes('error')) return 'bg-danger/20 text-danger'
-    if (levelLower.includes('warning')) return 'bg-orange-500/20 text-orange-500'
-    if (levelLower.includes('information')) return 'bg-success/20 text-success'
-    return 'bg-info/20 text-info'
+    if (levelLower.includes('warning')) return 'bg-warning/20 text-warning'
+    if (levelLower.includes('information')) return 'bg-info/20 text-info'
+    return 'bg-tertiary text-secondary-content'
 }
 
 const scrollToBottom = async () => {

@@ -15,7 +15,7 @@
             <div v-else class="flex max-h-12 flex-wrap gap-2 overflow-auto">
                 <span
                     class="bg-accent flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium">
-                    <span class="text-accent-content mr-2">{{ displaySelectedLabel }}</span>
+                    <span class="text-primary-content mr-2">{{ displaySelectedLabel }}</span>
                 </span>
             </div>
             <div class="flex shrink-0 items-center">

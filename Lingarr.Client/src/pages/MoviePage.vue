@@ -39,7 +39,7 @@
                     @click="movieStore.includeAll(MEDIA_TYPE.MOVIE, false)">
                     {{ t('movies.excludeAll') }}
                 </ButtonComponent>
-                <span class="text-accent-content text-sm">
+                <span class="text-secondary-content text-sm">
                     {{
                         t('movies.includedSummary', {
                             included: movieStore.includeSummary.included,

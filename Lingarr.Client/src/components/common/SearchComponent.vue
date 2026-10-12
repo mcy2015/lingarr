@@ -8,11 +8,11 @@
             @input="search" />
         <Icon
             name="search"
-            class="text-accent-content absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 transform" />
+            class="text-secondary-content/60 absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 transform" />
         <Icon
             v-if="modelValue.searchQuery"
             name="times"
-            class="text-accent-content absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 transform cursor-pointer"
+            class="text-secondary-content/60 absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 transform cursor-pointer"
             @click="clear" />
     </div>
 </template>

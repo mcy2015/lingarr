@@ -1,7 +1,7 @@
 ﻿<template>
     <div class="bg-secondary p-4">
         <div
-            class="border-secondary bg-primary text-secondary-content grid grid-cols-12 border-b-2 font-bold">
+            class="border-line bg-primary text-secondary-content grid grid-cols-12 border-b-2 font-bold">
             <div class="col-span-6 px-4 py-2 md:col-span-3">{{ t('shows.season') }}</div>
             <div class="col-span-6 flex justify-between px-4 py-2 md:col-span-8">
                 <span>{{ t('shows.episodes') }}</span>
@@ -13,7 +13,7 @@
         <div
             v-for="season in seasons"
             :key="season.id"
-            class="bg-primary text-accent-content text-sm md:text-base">
+            class="bg-primary text-primary-content text-sm md:text-base">
             <div
                 class="grid grid-cols-12 transition-colors"
                 :class="{ 'hover:bg-accent/5 cursor-pointer': season.episodes.length }"
