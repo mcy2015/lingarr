@@ -94,6 +94,7 @@ public static class SettingKeys
         public const string FixOverlappingSubtitles = "fix_overlapping_subtitles";
         public const string StripSubtitleFormatting = "strip_subtitle_formatting";
         public const string PreserveLineBreaks = "preserve_line_breaks";
+        public const string BilingualSubtitleOutput = "bilingual_subtitle_output";
         public const string AddTranslatorInfo = "add_translator_info";
         public const string UseBatchTranslation = "use_batch_translation";
         public const string MaxBatchSize = "max_batch_size";

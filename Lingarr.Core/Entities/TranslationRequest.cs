@@ -12,6 +12,11 @@ public class TranslationRequest : BaseEntity
     public required string TargetLanguage { get; set; }
     public string? SubtitleToTranslate { get; set; }
     public string? TranslatedSubtitle { get; set; }
+    /// <summary>
+    /// Whether the written output subtitle is bilingual
+    /// (translated lines on top, original line below).
+    /// </summary>
+    public bool IsBilingual { get; set; } = false;
     public required MediaType MediaType { get; set; }
     public required TranslationStatus Status { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
