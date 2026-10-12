@@ -923,8 +923,7 @@
             "pausedHint": "已暂停，恢复后继续",
             "remainingHint": "预计剩余时间",
             "retries": "重试 {count} 次"
-        },
-        "queueFooterLive": "队列深度 {depth} · Hangfire 并发 {workers}"
+        }
     },
     "proofread": {
         "loading": "正在加载请求…",

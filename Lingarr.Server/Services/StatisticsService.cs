@@ -90,10 +90,6 @@ public class StatisticsService : IStatisticsService
                 ? Math.Round(completed30 / (double)(completed30 + failed30) * 100, 1)
                 : null,
             MonthlyCost = await _costService.GetCurrentMonthTotalCostAsync(),
-            ConcurrentJobs = int.TryParse(
-                Environment.GetEnvironmentVariable("MAX_CONCURRENT_JOBS"), out var workers)
-                ? workers
-                : 4
         };
     }
 

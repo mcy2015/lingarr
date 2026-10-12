@@ -201,7 +201,6 @@ export interface IPipelineStatistics {
     writtenThisMonth: number
     successRate30Days: number | null
     monthlyCost: number | null
-    concurrentJobs: number
 }
 
 /// One status-transition row of the overview activity feed (server gap-audit A3).

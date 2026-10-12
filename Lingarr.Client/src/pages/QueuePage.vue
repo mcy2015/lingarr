@@ -183,14 +183,6 @@
             :total-count="translationRequests.totalCount"
             :page-size="translationRequests.pageSize" />
 
-        <p v-if="runtime" class="mono text-secondary-content/70 mt-3 shrink-0 px-4 text-xs">
-            {{
-                t('translations.queueFooterLive', {
-                    depth: runtime.queueDepth,
-                    workers: runtime.concurrentJobs
-                })
-            }}
-        </p>
     </div>
 </template>
 
@@ -200,7 +192,6 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
     Hub,
-    IPipelineStatistics,
     ITranslationRequest,
     TRANSLATION_ACTIONS,
     TRANSLATION_STATUS
@@ -325,16 +316,6 @@ onMounted(() => {
 onUnmounted(() => {
     uiStore.clearCta()
     uiStore.setSubOverride('')
-})
-
-/// queue footer: live Hangfire depth + worker count (was static copy)
-const runtime = ref<IPipelineStatistics | null>(null)
-onMounted(async () => {
-    try {
-        runtime.value = await services.statistics.getPipelineStatistics()
-    } catch {
-        runtime.value = null
-    }
 })
 
 // live topbar sub: total tasks across the status tabs

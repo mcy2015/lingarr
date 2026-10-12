@@ -923,8 +923,7 @@
             "pausedHint": "Paused — resume to continue",
             "remainingHint": "Estimated remaining time",
             "retries": "{count} retries"
-        },
-        "queueFooterLive": "Queue depth {depth} · Hangfire workers: {workers}"
+        }
     },
     "proofread": {
         "loading": "Loading request…",
