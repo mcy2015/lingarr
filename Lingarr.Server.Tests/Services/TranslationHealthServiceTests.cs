@@ -7,6 +7,7 @@ using Lingarr.Contracts.Plugins;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Services;
 using Lingarr.Server.Services.Plugins;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
 
@@ -24,7 +25,14 @@ public class TranslationHealthServiceTests
             .Select(manifest => new RegisteredPlugin { Manifest = manifest, IsBuiltIn = true })
             .ToList());
         settings = new Mock<ISettingService>();
-        return new TranslationHealthService(registry.Object, settings.Object);
+
+        // the singleton tracker resolves the scoped setting service through a
+        // real scope factory, so tests provide one backed by a minimal provider
+        var services = new ServiceCollection();
+        services.AddSingleton(settings.Object);
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+
+        return new TranslationHealthService(registry.Object, scopeFactory);
     }
 
     private static IPluginManifest Manifest(

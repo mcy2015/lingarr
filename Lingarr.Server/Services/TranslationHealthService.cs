@@ -18,12 +18,17 @@ public class TranslationHealthService : ITranslationHealthService
 
     private readonly ConcurrentDictionary<string, ConcurrentQueue<HealthSample>> _samples = new();
     private readonly IPluginRegistry _registry;
-    private readonly ISettingService _settings;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public TranslationHealthService(IPluginRegistry registry, ISettingService settings)
+    /// <summary>
+    /// The tracker is a singleton but reads settings (scoped) for the
+    /// configuration check, so it opens its own scope per aggregation call
+    /// instead of capturing a scoped service.
+    /// </summary>
+    public TranslationHealthService(IPluginRegistry registry, IServiceScopeFactory scopeFactory)
     {
         _registry = registry;
-        _settings = settings;
+        _scopeFactory = scopeFactory;
     }
 
     public void Record(string serviceType, bool success, TimeSpan latency, string? error = null)
@@ -63,6 +68,9 @@ public class TranslationHealthService : ITranslationHealthService
 
     public async Task<List<TranslationServiceHealth>> GetServiceHealthAsync()
     {
+        using var scope = _scopeFactory.CreateScope();
+        var settings = scope.ServiceProvider.GetRequiredService<ISettingService>();
+
         var health = new List<TranslationServiceHealth>();
         foreach (var plugin in _registry.All)
         {
@@ -75,8 +83,8 @@ public class TranslationHealthService : ITranslationHealthService
                 }
 
                 var value = field.Type == PluginSettingType.Secret
-                    ? await _settings.GetEncryptedSetting(field.Key)
-                    : await _settings.GetSetting(field.Key);
+                    ? await settings.GetEncryptedSetting(field.Key)
+                    : await settings.GetSetting(field.Key);
                 if (string.IsNullOrEmpty(value))
                 {
                     missingFields.Add(field.Key);
