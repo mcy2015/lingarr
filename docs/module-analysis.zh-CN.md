@@ -250,6 +250,8 @@ HttpClient 卫生差：`OpenAiService.cs:43`（ctor 兜底 `new HttpClient()`）
 
 ### P1 — 核心结构重构，建议带测试推进
 
+> ✅ **已于 2026-10-12 全部完成**（八项，9 个提交 4638ca5..18889b2）。后端 290/290 测试绿，前端 lint/build/vitest 10/10 绿。遗留说明：#9 中 LocalAI 批量保留其特有的解析重试分支；DeepL/Libre/GTranslator 的 SDK 重试循环未统一（语义不同）；#10 采用外观模式保持消费者零改动；#11 中取消语义对齐为内容路径旧行为（取消即标 Cancelled，不再产出部分结果）。
+
 | # | 事项 | 位置 | 价值/风险 | 说明 |
 |---|---|---|---|---|
 | 9 | **翻译 provider 骨架统一**（后端最大收益） | `Services/Translation/*`（18 个重试循环、10 份 InitializeAsync、5 个 chat-completions 克隆） | ●/◐ | 共享初始化 + `ResilientInvoker` + ChatCompletions 客户端；顺带修 DeepSeek 零重试 bug；以 Gemini/LocalAI 现有测试为锚 |
