@@ -1,7 +1,7 @@
 ﻿<template>
-    <div class="w-full">
+    <div class="w-full flex h-full min-h-0 flex-col overflow-hidden p-4 lg:p-6">
         <!-- Status filter tabs (per prototype queue screen) -->
-        <div class="mb-2 flex flex-wrap items-center gap-2">
+        <div class="mb-2 flex shrink-0 flex-wrap items-center gap-2">
             <button
                 v-for="tab in statusTabs"
                 :key="tab.value ?? 'all'"
@@ -65,7 +65,7 @@
             </template>
         </ListToolbar>
 
-        <div class="w-full space-y-1 px-4">
+        <div class="shell-scroll w-full min-h-0 flex-1 space-y-1 overflow-y-auto px-1">
             <div
                 v-for="item in translationRequests.items"
                 :key="item.id"
@@ -183,7 +183,7 @@
             :total-count="translationRequests.totalCount"
             :page-size="translationRequests.pageSize" />
 
-        <p class="text-secondary-content/70 mt-3 px-4 text-xs">
+        <p class="text-secondary-content/70 mt-3 shrink-0 px-4 text-xs">
             {{ t('translations.queueFooter') }}
         </p>
     </div>

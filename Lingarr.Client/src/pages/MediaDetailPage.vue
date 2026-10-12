@@ -1,7 +1,7 @@
 <template>
-    <div class="w-full space-y-3.5">
+    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
         <!-- ═══ 头部：返回 · 标题 · 汇总 chips · 动作 ═══ -->
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex shrink-0 flex-wrap items-center gap-3">
             <button
                 type="button"
                 class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
@@ -42,7 +42,7 @@
 
         <!-- ═══ 剧集：季段选 + 逐集轨道表 ═══ -->
         <template v-if="isShow">
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
                 <div class="border-line inline-flex overflow-hidden rounded-md border" role="group" :aria-label="t('mediaDetail.seasons')">
                     <button
                         v-for="season in seasons"
@@ -60,7 +60,8 @@
                 </span>
             </div>
 
-            <div class="border-line bg-secondary overflow-x-auto rounded-md border">
+            <div class="border-line bg-secondary flex min-h-0 flex-[1.5] flex-col rounded-md border">
+                <div class="shell-scroll min-h-0 flex-1 overflow-auto">
                 <table class="w-full text-[13px]">
                     <thead>
                         <tr>
@@ -133,12 +134,13 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         </template>
 
         <!-- ═══ 电影：字幕轨 chips 列表 ═══ -->
-        <div v-else class="border-line bg-secondary rounded-md border">
-            <div class="border-line flex items-center gap-2.5 border-b px-4 py-3">
+        <div v-else class="border-line bg-secondary flex min-h-0 flex-1 flex-col rounded-md border">
+            <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('library.detail.subtitles') }}</h2>
                 <span class="mono text-secondary-content ml-auto text-xs">
                     {{ item?.subtitleFiles?.length ?? 0 }}
@@ -147,6 +149,7 @@
             <div v-if="!item?.subtitleFiles?.length" class="text-secondary-content/60 px-4 py-5 text-center text-xs">
                 {{ t('mediaDetail.noSubtitles') }}
             </div>
+            <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
             <div
                 v-for="file in item?.subtitleFiles ?? []"
                 :key="file.path"
@@ -154,11 +157,12 @@
                 <span :class="chipClass()">{{ file.language.toUpperCase() }}</span>
                 <span class="mono text-secondary-content truncate text-xs">{{ file.fileName }}{{ file.format }}</span>
             </div>
+            </div>
         </div>
 
         <!-- ═══ 翻译历史 ═══ -->
-        <div class="border-line bg-secondary rounded-md border">
-            <div class="border-line flex items-center gap-2.5 border-b px-4 py-3">
+        <div class="border-line bg-secondary flex min-h-[160px] flex-1 flex-col rounded-md border">
+            <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.history') }}</h2>
                 <span class="mono text-secondary-content ml-auto text-xs">
                     {{ t('mediaDetail.historyCount', { count: history.length }) }}
@@ -167,6 +171,7 @@
             <div v-if="history.length === 0" class="text-secondary-content/60 px-4 py-5 text-center text-xs">
                 {{ t('mediaDetail.noHistory') }}
             </div>
+            <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
             <router-link
             v-for="request in history"
                 :key="request.id"
@@ -184,6 +189,7 @@
                 </span>
                 <span :class="historyStatusClass(request)">{{ historyStatusLabel(request) }}</span>
             </router-link>
+            </div>
         </div>
     </div>
 </template>

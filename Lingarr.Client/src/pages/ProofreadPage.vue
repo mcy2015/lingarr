@@ -1,7 +1,7 @@
 <template>
-    <div class="w-full space-y-3.5">
+    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
         <!-- ═══ 头部：标题 · 进度 · 双轨图例 ═══ -->
-        <div class="flex flex-wrap items-center gap-4">
+        <div class="flex shrink-0 flex-wrap items-center gap-4">
             <div class="min-w-0">
                 <b class="text-[15px] font-semibold">{{ detail?.title ?? t('proofread.loading') }}</b>
                 <div class="mono text-secondary-content mt-0.5 text-[11.5px]">
@@ -44,7 +44,7 @@
         <div v-else-if="lines.length === 0" class="text-secondary-content/60 py-10 text-center text-sm">
             {{ t('proofread.noLines') }}
         </div>
-        <div v-else class="space-y-2">
+        <div v-else class="shell-scroll min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             <div
                 v-for="line in lines"
                 :key="line.position"
@@ -117,7 +117,7 @@
         </div>
 
         <!-- ═══ 吸底操作条 ═══ -->
-        <div class="border-line bg-secondary sticky bottom-0 flex flex-wrap items-center gap-4 rounded-md border px-4 py-2.5">
+        <div class="border-line bg-secondary flex shrink-0 flex-wrap items-center gap-4 rounded-md border px-4 py-2.5">
             <div class="text-secondary-content flex flex-wrap gap-3.5 text-[11.5px]">
                 <span><kbd>J</kbd><kbd>K</kbd> {{ t('proofread.keys.navigate') }}</span>
                 <span><kbd>Enter</kbd> {{ t('proofread.keys.approve') }}</span>

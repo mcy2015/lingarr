@@ -1,6 +1,6 @@
 <template>
-    <div class="space-y-4">
-        <div class="flex flex-wrap items-center gap-3">
+    <div class="flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden p-4 lg:p-6">
+        <div class="flex shrink-0 flex-wrap items-center gap-3">
             <TabComponent
                 :model-value="activeTab"
                 :options="tabs"
@@ -14,11 +14,13 @@
             </button>
         </div>
 
-        <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
-                <component :is="Component" />
-            </transition>
-        </router-view>
+        <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
+            <router-view v-slot="{ Component }">
+                <transition name="fade" mode="out-in">
+                    <component :is="Component" />
+                </transition>
+            </router-view>
+        </div>
     </div>
 </template>
 

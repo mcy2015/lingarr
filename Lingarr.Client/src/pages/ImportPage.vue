@@ -1,6 +1,6 @@
 <template>
-    <div class="w-full space-y-3.5">
-        <TabComponent v-model="activeTab" :options="tabs" />
+    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
+        <TabComponent v-model="activeTab" :options="tabs" class="shrink-0" />
         <input
             ref="fileInput"
             type="file"
@@ -10,8 +10,10 @@
             @change="onFileInput" />
 
         <!-- ═══ 自由导入 ═══ -->
-        <div v-if="activeTab === 'free'" class="grid items-start gap-3.5 md:grid-cols-[300px_minmax(0,1fr)]">
-            <div>
+        <div
+            v-if="activeTab === 'free'"
+            class="grid min-h-0 flex-1 gap-3.5 md:grid-cols-[300px_minmax(0,1fr)]">
+            <div class="shell-scroll min-h-0 overflow-y-auto pr-1">
                 <button
                     type="button"
                     class="hover:bg-tertiary/40 w-full cursor-pointer rounded-md px-5 py-8 text-center transition-colors"
@@ -53,13 +55,14 @@
                 </div>
             </div>
 
-            <div class="overflow-x-auto rounded-md border border-line bg-secondary">
-                <div class="flex items-center gap-2.5 border-b border-line px-4 py-3">
+            <div class="rounded-md border border-line bg-secondary flex min-h-0 flex-col">
+                <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
                     <h2 class="text-[13px] font-semibold">{{ t('import.queue.title') }}</h2>
                     <span class="mono text-secondary-content ml-auto text-xs">
                         {{ t('import.queue.meta', { files: rows.length, translate: translateCount, store: storeCount }) }}
                     </span>
                 </div>
+                <div class="shell-scroll min-h-0 flex-1 overflow-auto">
                 <table class="w-full text-[13px]">
                     <thead>
                         <tr>
@@ -116,8 +119,9 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
                 <div
-                    class="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-line px-4 py-3 text-[12.5px]">
+                    class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-line px-4 py-3 text-[12.5px]">
                     <span class="text-secondary-content flex items-center gap-2">
                         {{ t('import.options.transcode') }}
                         <span
@@ -160,7 +164,7 @@
                         {{ t('import.estimate', { files: rows.length, lines: totalLines, translate: translateCount }) }}
                     </span>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
+                <div class="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-4 py-3">
                     <label class="text-secondary-content flex items-center gap-1.5 text-[12.5px]">
                         {{ t('import.options.source') }}
                         <select
@@ -201,8 +205,8 @@
         </div>
 
         <!-- ═══ 定向导入 · 整季 ═══ -->
-        <div v-else>
-            <div class="mb-3.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div v-else class="flex min-h-0 flex-1 flex-col gap-3.5">
+            <div class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
                 <div class="min-w-0">
                     <b class="text-[15px] font-semibold">
                         {{ selectedShow?.title ?? t('import.target.pickShow') }}
@@ -241,7 +245,7 @@
 
             <button
                 type="button"
-                class="hover:bg-tertiary/40 mb-3 w-full cursor-pointer rounded-md px-5 py-5 text-center transition-colors"
+                class="hover:bg-tertiary/40 w-full shrink-0 cursor-pointer rounded-md px-5 py-5 text-center transition-colors"
                 :style="{
                     borderWidth: '1.5px',
                     borderStyle: 'dashed',
@@ -258,8 +262,8 @@
                 </span>
             </button>
 
-            <div class="overflow-x-auto rounded-md border border-line bg-secondary">
-                <div class="flex items-center gap-2.5 border-b border-line px-4 py-3">
+            <div class="rounded-md border border-line bg-secondary flex min-h-0 flex-1 flex-col">
+                <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
                     <h2 class="text-[13px] font-semibold">{{ t('import.season.preview') }}</h2>
                     <span class="mono text-secondary-content ml-auto text-xs">
                         {{
@@ -271,6 +275,7 @@
                         }}
                     </span>
                 </div>
+                <div class="shell-scroll min-h-0 flex-1 overflow-auto">
                 <table class="w-full text-[13px]">
                     <thead>
                         <tr>
@@ -330,7 +335,8 @@
                         </tr>
                     </tbody>
                 </table>
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-line px-4 py-3 text-[12.5px]">
+                </div>
+                <div class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-line px-4 py-3 text-[12.5px]">
                     <label class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.source') }}
                         <select

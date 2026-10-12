@@ -1,7 +1,7 @@
 <template>
-    <div v-if="configured" class="w-full space-y-3.5">
+    <div v-if="configured" class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
         <!-- ═══ 工具条：类型段选 · 搜索 · 过滤 · 导入 · 全局统计 ═══ -->
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex shrink-0 flex-wrap items-center gap-2">
             <div class="border-line seg inline-flex overflow-hidden rounded-md border" role="group" :aria-label="t('library.tabs.group')">
                 <button
                     v-for="option in typeOptions"
@@ -57,8 +57,9 @@
             </span>
         </div>
 
-        <!-- ═══ 矩阵表 ═══ -->
-        <div class="border-line bg-secondary overflow-x-auto rounded-md border">
+        <!-- ═══ 矩阵表（弹性行，表体卡内滚动） ═══ -->
+        <div class="border-line bg-secondary flex min-h-0 flex-1 flex-col rounded-md border">
+            <div class="shell-scroll min-h-0 flex-1 overflow-auto">
             <table class="w-full text-[13px]">
                 <thead>
                     <tr>
@@ -149,12 +150,13 @@
                     </template>
                 </tbody>
             </table>
+            </div>
         </div>
 
         <!-- ═══ 批量托盘（吸底） ═══ -->
         <div
             v-if="selection.size > 0"
-            class="border-accent bg-secondary sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-md border px-4 py-2.5 shadow-lg">
+            class="border-accent bg-secondary z-10 flex shrink-0 flex-wrap items-center gap-3 rounded-md border px-4 py-2.5 shadow-lg">
             <span class="text-[12.5px]">
                 {{ t('library.tray.selected', { count: selection.size }) }}
             </span>
