@@ -118,6 +118,26 @@ public class TranslationRequestController : ControllerBase
     /// <response code="404">If the translation request was not found</response>
     /// <response code="500">If there was an error checking for updates</response>
     /// <returns>ActionResult containing the canceled translation request if found, or NotFound if the request doesn't exist</returns>
+    /// <summary>
+    /// Cooperatively pauses a running translation at the next batch boundary.
+    /// </summary>
+    [HttpPost("pause")]
+    public async Task<ActionResult<string?>> PauseTranslationRequest([FromBody] TranslationRequest pauseRequest)
+    {
+        var error = await _translationRequestService.PauseTranslationRequest(pauseRequest);
+        return error != null ? BadRequest(new { message = error }) : Ok(error);
+    }
+
+    /// <summary>
+    /// Releases a paused translation so the running job continues.
+    /// </summary>
+    [HttpPost("resume-paused")]
+    public async Task<ActionResult<string?>> ResumePausedTranslationRequest([FromBody] TranslationRequest resumeRequest)
+    {
+        var error = await _translationRequestService.ResumePausedTranslationRequest(resumeRequest);
+        return error != null ? BadRequest(new { message = error }) : Ok(error);
+    }
+
     [HttpPost("cancel")]
     public async Task<ActionResult<string>> CancelTranslationRequest([FromBody] TranslationRequest cancelRequest)
     {

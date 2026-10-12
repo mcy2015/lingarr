@@ -48,6 +48,7 @@ public class SubtitleTranslationService
     private int _lastProgression = -1;
     private readonly IReadOnlyList<TranslationServiceEntry> _services;
     private readonly IProgressService? _progressService;
+    private readonly Lingarr.Server.Interfaces.Services.IRequestPauseGate? _pauseGate;
     private readonly ILogger _logger;
     private readonly bool _useTranslatedContext;
     private readonly bool _mergeStackedLines;
@@ -74,7 +75,8 @@ public class SubtitleTranslationService
         ILogger logger,
         IProgressService? progressService = null,
         bool useTranslatedContext = false,
-        bool mergeStackedLines = true)
+        bool mergeStackedLines = true,
+        Lingarr.Server.Interfaces.Services.IRequestPauseGate? pauseGate = null)
     {
         if (services.Count == 0)
         {
@@ -82,6 +84,7 @@ public class SubtitleTranslationService
         }
         _services = services;
         _progressService = progressService;
+        _pauseGate = pauseGate;
         _logger = logger;
         _useTranslatedContext = useTranslatedContext;
         _mergeStackedLines = mergeStackedLines;
@@ -131,6 +134,11 @@ public class SubtitleTranslationService
             {
                 _lastProgression = -1;
                 break;
+            }
+
+            if (_pauseGate is not null)
+            {
+                await _pauseGate.WaitAsync(translationRequest.Id, cancellationToken);
             }
 
             if (subtitle.TranslatedLines.Count > 0)
@@ -361,6 +369,11 @@ public class SubtitleTranslationService
             {
                 _lastProgression = -1;
                 break;
+            }
+
+            if (_pauseGate is not null)
+            {
+                await _pauseGate.WaitAsync(translationRequest.Id, cancellationToken);
             }
 
             var currentBatch = subtitles

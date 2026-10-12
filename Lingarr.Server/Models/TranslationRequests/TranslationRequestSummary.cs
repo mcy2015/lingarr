@@ -20,6 +20,10 @@ public class TranslationRequestSummary
     public required MediaType MediaType { get; set; }
     public required TranslationStatus Status { get; set; }
     public TranslationRequestSource Source { get; set; }
+    public string? ServiceType { get; set; }
+    public int Progress { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public int RetryCount { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

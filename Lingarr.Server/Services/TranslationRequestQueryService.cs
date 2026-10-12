@@ -162,7 +162,11 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
                 CompletedAt = translationRequest.CompletedAt,
                 ErrorMessage = translationRequest.ErrorMessage,
                 CreatedAt = translationRequest.CreatedAt,
-                Source = translationRequest.Source
+                Source = translationRequest.Source,
+                ServiceType = translationRequest.ServiceType,
+                Progress = translationRequest.Progress,
+                StartedAt = translationRequest.StartedAt,
+                RetryCount = translationRequest.RetryCount
             })
             .ToListAsync();
 

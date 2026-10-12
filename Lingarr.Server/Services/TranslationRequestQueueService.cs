@@ -102,6 +102,50 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
         return await EnqueueRequest(translationRequest);
     }
 
+    /// <inheritdoc />
+    public async Task<string?> PauseTranslationRequest(TranslationRequest pauseRequest)
+    {
+        if (pauseRequest.Status != TranslationStatus.InProgress)
+        {
+            return "Only in-progress requests can be paused";
+        }
+
+        if (!_asyncTranslationRegistry.TryPause(pauseRequest.Id))
+        {
+            return "Request is already paused";
+        }
+
+        pauseRequest.Status = TranslationStatus.Paused;
+        await _dbContext.SaveChangesAsync();
+        await _progressService.Emit(pauseRequest, pauseRequest.Progress);
+        await _eventService.LogEvent(pauseRequest.Id, TranslationStatus.Paused);
+        await _queryService.UpdateActiveCount();
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> ResumePausedTranslationRequest(TranslationRequest resumeRequest)
+    {
+        if (resumeRequest.Status != TranslationStatus.Paused)
+        {
+            return "Only paused requests can be resumed";
+        }
+
+        if (!_asyncTranslationRegistry.TryResume(resumeRequest.Id))
+        {
+            // the job already restarted (e.g. app restart cleared the in-memory gate)
+            resumeRequest.Status = TranslationStatus.InProgress;
+            await _dbContext.SaveChangesAsync();
+            return null;
+        }
+
+        resumeRequest.Status = TranslationStatus.InProgress;
+        await _dbContext.SaveChangesAsync();
+        await _progressService.Emit(resumeRequest, resumeRequest.Progress);
+        await _eventService.LogEvent(resumeRequest.Id, TranslationStatus.InProgress);
+        return null;
+    }
+
     private async Task<int> EnqueueRequest(TranslationRequest translationRequest)
     {
         if (translationRequest.SubtitleToTranslate != null)

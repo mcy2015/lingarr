@@ -40,6 +40,16 @@ public interface ITranslationRequestService
         string? contentHash = null);
 
     /// <summary>
+    /// Cooperatively pauses a running translation at the next batch boundary.
+    /// </summary>
+    Task<string?> PauseTranslationRequest(TranslationRequest pauseRequest);
+
+    /// <summary>
+    /// Releases a paused translation so the running job continues.
+    /// </summary>
+    Task<string?> ResumePausedTranslationRequest(TranslationRequest resumeRequest);
+
+    /// <summary>
     /// Creates translation requests for multiple media items, handling subtitle discovery
     /// and source language resolution server-side.
     /// </summary>
