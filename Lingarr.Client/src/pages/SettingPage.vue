@@ -1,6 +1,6 @@
 <template>
     <div class="grid h-full grid-cols-[auto_1fr]">
-        <aside class="bg-secondary w-[3.175rem] shrink-0 md:w-40">
+        <aside class="bg-secondary w-[3.175rem] shrink-0 md:sticky md:top-0 md:h-dvh md:w-40">
             <nav class="flex h-full flex-col pt-4 md:pt-8 md:pl-4">
                 <ul class="flex flex-col space-y-4">
                     <li
