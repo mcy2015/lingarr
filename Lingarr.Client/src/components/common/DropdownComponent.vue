@@ -48,6 +48,12 @@ const toggleDropdown = () => {
     isOpen.value = !isOpen.value
 }
 
+defineExpose({
+    close: () => {
+        isOpen.value = false
+    }
+})
+
 useClickOutside(clickOutside, () => {
     isOpen.value = false
 })

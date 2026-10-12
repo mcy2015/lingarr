@@ -12,7 +12,7 @@
                     </div>
                     <div class="flex items-center justify-between">
                         <LanguageDropdown />
-                        <DropdownComponent width="medium">
+                        <DropdownComponent ref="themeDropdownEl" width="medium">
                             <template #button>
                                 <Icon name="theme" class="h-5 w-5" />
                             </template>
@@ -64,6 +64,7 @@ const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()
 const translationRequestStore = useTranslationRequestStore()
 const signalR = useSignalR()
+const themeDropdownEl = ref<InstanceType<typeof DropdownComponent>>()
 const settingHubConnection = ref<Hub>()
 const requestHubConnection = ref<Hub>()
 
@@ -77,6 +78,7 @@ const onActiveTranslations = (activeTranslations: IActiveTranslation[]) => {
 
 const setTheme = (theme: ITheme) => {
     instanceStore.storeTheme(theme)
+    themeDropdownEl.value?.close()
 }
 
 const isOpen = computed({
