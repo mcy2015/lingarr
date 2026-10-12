@@ -20,7 +20,7 @@ public class SubtitleImportService : ISubtitleImportService
 {
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".srt", ".ass", ".ssa"
+        ".srt", ".ass", ".ssa", ".vtt"
     };
 
     private readonly IHostEnvironment _environment;
@@ -52,7 +52,8 @@ public class SubtitleImportService : ISubtitleImportService
         string? mediaType = null,
         int? mediaId = null,
         int? season = null,
-        string? chineseConvert = null)
+        string? chineseConvert = null,
+        bool isBilingual = false)
     {
         var importsDirectory = Path.Combine(_environment.ContentRootPath, "config", "imports");
         Directory.CreateDirectory(importsDirectory);
@@ -60,15 +61,103 @@ public class SubtitleImportService : ISubtitleImportService
         var results = new List<ImportedSubtitleResult>();
         foreach (var file in files)
         {
-            results.Add(await ImportOne(file, importsDirectory, sourceLanguage, targetLanguage, translate,
-                mediaType, mediaId, season, chineseConvert));
+            await using var stream = file.OpenReadStream();
+            using var buffered = new MemoryStream();
+            await stream.CopyToAsync(buffered);
+            results.Add(await ImportBytes(
+                Path.GetFileName(file.FileName),
+                buffered.ToArray(),
+                importsDirectory,
+                sourceLanguage,
+                targetLanguage,
+                translate,
+                mediaType,
+                mediaId,
+                season,
+                chineseConvert,
+                isBilingual));
         }
 
         return results;
     }
 
-    private async Task<ImportedSubtitleResult> ImportOne(
-        IFormFile file,
+    /// <inheritdoc />
+    public Task<List<ScannedSubtitleFile>> ScanPath(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            throw new DirectoryNotFoundException($"Path '{path}' is not an existing directory.");
+        }
+
+        const int cap = 500;
+        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+            .Where(file => SupportedExtensions.Contains(Path.GetExtension(file)))
+            .Take(cap + 1)
+            .ToList();
+        if (files.Count > cap)
+        {
+            throw new InvalidOperationException($"Path scan found more than {cap} subtitle files; narrow the directory.");
+        }
+
+        return Task.FromResult(files
+            .Select(file => new ScannedSubtitleFile
+            {
+                Path = file,
+                FileName = Path.GetFileName(file),
+                SizeBytes = new FileInfo(file).Length
+            })
+            .OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToList());
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ImportedSubtitleResult>> ImportPaths(
+        List<string> paths,
+        string sourceLanguage,
+        string targetLanguage,
+        bool translate,
+        string? mediaType = null,
+        int? mediaId = null,
+        int? season = null,
+        string? chineseConvert = null,
+        bool isBilingual = false)
+    {
+        var importsDirectory = Path.Combine(_environment.ContentRootPath, "config", "imports");
+        Directory.CreateDirectory(importsDirectory);
+
+        var results = new List<ImportedSubtitleResult>();
+        foreach (var path in paths)
+        {
+            if (!File.Exists(path))
+            {
+                results.Add(new ImportedSubtitleResult
+                {
+                    FileName = Path.GetFileName(path),
+                    Error = "File no longer exists on the server."
+                });
+                continue;
+            }
+
+            results.Add(await ImportBytes(
+                Path.GetFileName(path),
+                await File.ReadAllBytesAsync(path),
+                importsDirectory,
+                sourceLanguage,
+                targetLanguage,
+                translate,
+                mediaType,
+                mediaId,
+                season,
+                chineseConvert,
+                isBilingual));
+        }
+
+        return results;
+    }
+
+    private async Task<ImportedSubtitleResult> ImportBytes(
+        string fileName,
+        byte[] content,
         string importsDirectory,
         string sourceLanguage,
         string targetLanguage,
@@ -76,10 +165,9 @@ public class SubtitleImportService : ISubtitleImportService
         string? mediaType,
         int? mediaId,
         int? season,
-        string? chineseConvert)
+        string? chineseConvert,
+        bool isBilingual)
     {
-        // Browsers send bare file names, but strip directories defensively.
-        var fileName = Path.GetFileName(file.FileName);
         var result = new ImportedSubtitleResult { FileName = fileName };
 
         try
@@ -91,10 +179,7 @@ public class SubtitleImportService : ISubtitleImportService
                 return result;
             }
 
-            await using var stream = file.OpenReadStream();
-            using var buffered = new MemoryStream();
-            await stream.CopyToAsync(buffered);
-            var utf8Bytes = _encodingService.ConvertToUtf8(buffered.ToArray());
+            var utf8Bytes = _encodingService.ConvertToUtf8(content);
 
             // Explicit per-import option: alters the stored text, so it never runs by default.
             var storedText = ChineseSubtitleConverter.Convert(Encoding.UTF8.GetString(utf8Bytes), chineseConvert);
@@ -137,7 +222,8 @@ public class SubtitleImportService : ISubtitleImportService
                     targetLanguage,
                     mediaTarget?.MediaId,
                     mediaTarget?.MediaType ?? MediaType.Movie,
-                    contentHash);
+                    contentHash,
+                    isBilingual);
             }
 
             result.Success = true;

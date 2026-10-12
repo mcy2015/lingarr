@@ -1,6 +1,7 @@
 import {
     DirectoryItem,
     ILanguage,
+    IScannedSubtitleFile,
     ISettings,
     ISubtitle,
     ITranslationRequest,
@@ -126,6 +127,18 @@ export interface IImportSubtitlesResponse {
 }
 
 export interface IImportService {
+    scanPath(path: string): Promise<IScannedSubtitleFile[]>
+    importPaths<T>(params: {
+        paths: string[]
+        sourceLanguage: string
+        targetLanguage: string
+        translate: boolean
+        mediaType?: 'Movie' | 'Show'
+        mediaId?: number
+        season?: number
+        chineseConvert?: string
+        isBilingual?: boolean
+    }): Promise<T>
     parseFilenames(filenames: string[]): Promise<IParsedSubtitleFilename[]>
     importFiles(
         files: File[],
@@ -135,7 +148,8 @@ export interface IImportService {
         mediaType?: 'Movie' | 'Show',
         mediaId?: number,
         season?: number,
-        chineseConvert?: string
+        chineseConvert?: string,
+        isBilingual?: boolean
     ): Promise<IImportSubtitlesResponse>
 }
 

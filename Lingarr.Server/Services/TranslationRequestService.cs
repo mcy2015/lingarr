@@ -50,8 +50,9 @@ public class TranslationRequestService : ITranslationRequestService
         string targetLanguage,
         int? mediaId,
         MediaType mediaType,
-        string? contentHash = null)
-        => _queueService.CreateImportRequest(subtitlePath, title, sourceLanguage, targetLanguage, mediaId, mediaType, contentHash);
+        string? contentHash = null,
+        bool isBilingual = false)
+        => _queueService.CreateImportRequest(subtitlePath, title, sourceLanguage, targetLanguage, mediaId, mediaType, contentHash, isBilingual);
 
     /// <inheritdoc />
     public Task<string?> PauseTranslationRequest(TranslationRequest pauseRequest)

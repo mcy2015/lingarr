@@ -2,6 +2,36 @@ import { AxiosStatic } from 'axios'
 import { IImportService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/subtitle'): IImportService => ({
+    scanPath: async (path: string) => {
+        const response = await http.post(`${resource}/scan-path`, { path })
+        return response.data
+    },
+
+    importPaths: async <T>(params: {
+        paths: string[]
+        sourceLanguage: string
+        targetLanguage: string
+        translate: boolean
+        mediaType?: 'Movie' | 'Show'
+        mediaId?: number
+        season?: number
+        chineseConvert?: string
+        isBilingual?: boolean
+    }): Promise<T> => {
+        const response = await http.post(`${resource}/import-paths`, {
+            paths: params.paths,
+            sourceLanguage: params.sourceLanguage,
+            targetLanguage: params.targetLanguage,
+            translate: params.translate,
+            mediaType: params.mediaType,
+            mediaId: params.mediaId,
+            season: params.season,
+            chineseConvert: params.chineseConvert ?? 'none',
+            isBilingual: params.isBilingual ?? false
+        })
+        return response.data
+    },
+
     parseFilenames: async (filenames: string[]) => {
         const response = await http.post(`${resource}/parse-filenames`, { filenames })
         return response.data
@@ -15,9 +45,11 @@ const service = (http: AxiosStatic, resource = '/api/subtitle'): IImportService 
         mediaType?: 'Movie' | 'Show',
         mediaId?: number,
         season?: number,
-        chineseConvert?: string
+        chineseConvert?: string,
+        isBilingual?: boolean
     ) => {
         const formData = new FormData()
+        formData.append('isBilingual', String(isBilingual ?? false))
         files.forEach((file) => formData.append('files', file))
         formData.append('sourceLanguage', sourceLanguage)
         formData.append('targetLanguage', targetLanguage)

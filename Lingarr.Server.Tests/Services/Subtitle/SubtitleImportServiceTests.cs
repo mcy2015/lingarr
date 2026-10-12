@@ -63,7 +63,7 @@ public class SubtitleImportServiceTests : IDisposable
     public async Task ImportFiles_UnsupportedExtension_ReportsErrorAndSkipsQueue()
     {
         var results = await _service.ImportFiles(
-            [FormFile("subtitles.vtt", [1, 2, 3])], "en", "zh", translate: true);
+            [FormFile("subtitles.sub", [1, 2, 3])], "en", "zh", translate: true);
 
         var result = Assert.Single(results);
         Assert.False(result.Success);

@@ -37,7 +37,8 @@ public interface ITranslationRequestService
         string targetLanguage,
         int? mediaId,
         MediaType mediaType,
-        string? contentHash = null);
+        string? contentHash = null,
+        bool isBilingual = false);
 
     /// <summary>
     /// Cooperatively pauses a running translation at the next batch boundary.

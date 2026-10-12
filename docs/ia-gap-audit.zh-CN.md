@@ -20,7 +20,7 @@
 | 服务健康（状态点+延迟+月成本） | ✅ | `GET /api/translate/health`（A1）：`BaseTranslationService` 共享重试环逐 attempt 记录（工厂创建后注入单例记录器），环形窗口 20 样本；状态点 绿/黄/红/灰=健康/降级/故障/未配置；插件 ABI 实现不经过 Base 暂不记录；**月成本待 A5** |
 | 最近动态 feed | ✅ | `GET /api/translationrequest/events?take=`（A3）：事件表 join 请求标题，倒序 20 条，图标 ✓/✗/▸/⏸/· 着色 |
 
-### 屏 2 · 媒体库 `/library` ✅ 结构 · 🔶 内容
+### 屏 2 · 媒体库 `/library` ✅（2026-10-12 B2 批次完成）
 
 | 原型元素 | 状态 | 缺口 / 所需接口 |
 |---|---|---|

@@ -208,7 +208,11 @@
         },
         "scan": {
             "title": "扫描路径",
-            "pathTitle": "服务器路径扫描将在 B3 批次提供"
+            "pathTitle": "服务器路径扫描将在 B3 批次提供",
+            "placeholder": "服务器路径，如 /media/subtitles",
+            "scanning": "扫描中…",
+            "noneFound": "该路径下没有新的字幕文件。",
+            "failed": "路径扫描失败：{message}"
         },
         "hint": {
             "title": "导入即任务",
@@ -305,6 +309,9 @@
             "none": "保持原样",
             "simplified": "转为简体",
             "traditional": "转为繁體"
+        },
+        "bilingual": {
+            "follow": "跟随全局"
         }
     },
     "dashboard": {

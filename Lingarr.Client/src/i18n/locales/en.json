@@ -208,7 +208,11 @@
         },
         "scan": {
             "title": "Scan path",
-            "pathTitle": "Server-path scanning arrives with the B3 batch"
+            "pathTitle": "Server-path scanning arrives with the B3 batch",
+            "placeholder": "Server path, e.g. /media/subtitles",
+            "scanning": "Scanning…",
+            "noneFound": "No new subtitle files found at that path.",
+            "failed": "Path scan failed: {message}"
         },
         "hint": {
             "title": "Import as task",
@@ -305,6 +309,9 @@
             "none": "Keep as-is",
             "simplified": "Convert to Simplified",
             "traditional": "Convert to Traditional"
+        },
+        "bilingual": {
+            "follow": "Follow global"
         }
     },
     "dashboard": {

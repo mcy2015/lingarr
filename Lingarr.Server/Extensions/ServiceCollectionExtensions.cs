@@ -179,6 +179,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IIntegrationService, IntegrationService>();
         builder.Services.AddScoped<IMediaLibraryService, MediaLibraryService>();
         builder.Services.AddScoped<ICostService, CostService>();
+        builder.Services.AddScoped<IGlossaryService, GlossaryService>();
         builder.Services.AddScoped<IMediaService, MediaService>();
         builder.Services.AddScoped<IProgressService, ProgressService>();
         builder.Services.AddScoped<IRadarrService, RadarrService>();
