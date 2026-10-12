@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-const { classes = 'cursor-pointer text-primary-content border-accent bg-secondary' } = defineProps<{
+const { classes = 'text-secondary-content border-line bg-tertiary' } = defineProps<{
     classes?: string
 }>()
 </script>

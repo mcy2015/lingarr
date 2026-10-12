@@ -21,7 +21,7 @@
                 </div>
 
                 <div>
-                    <div class="border-accent grid grid-cols-12 border-b font-bold">
+                    <div class="border-line grid grid-cols-12 border-b font-bold">
                         <div class="col-span-7 px-4 py-2 md:col-span-4">
                             {{ t('settings.users.username') }}
                         </div>
@@ -34,7 +34,7 @@
                     </div>
                     <div v-if="authStore.isCreatingUser">
                         <div
-                            class="hover:bg-accent/5 bg-accent/10 border-accent grid grid-cols-12 border-b">
+                            class="hover:bg-accent/5 bg-accent/10 border-line grid grid-cols-12 border-b">
                             <div class="col-span-7 flex items-center px-4 py-2 md:col-span-4">
                                 <div class="w-full">
                                     <InputComponent
@@ -48,7 +48,7 @@
                                 </div>
                             </div>
                             <div
-                                class="col-span-3 hidden items-center px-4 py-2 text-sm text-gray-400 md:flex">
+                                class="col-span-3 hidden items-center px-4 py-2 text-sm text-secondary-content/60 md:flex">
                                 -
                             </div>
                             <div
@@ -73,7 +73,7 @@
                                 </ButtonComponent>
                             </div>
                         </div>
-                        <div class="bg-accent/5 border-accent grid grid-cols-1 border-b">
+                        <div class="bg-accent/5 border-line grid grid-cols-1 border-b">
                             <div class="col-span-1 px-4 py-2">
                                 <div class="space-y-2">
                                     <InputComponent
@@ -107,7 +107,7 @@
                     </div>
                     <!-- Existing Users -->
                     <div v-for="user in authStore.users" :key="user.id">
-                        <div class="hover:bg-accent/5 border-accent grid grid-cols-12 border-b">
+                        <div class="hover:bg-accent/5 border-line grid grid-cols-12 border-b">
                             <div class="col-span-7 flex items-center px-4 py-2 md:col-span-4">
                                 <div v-if="authStore.editingUserId === user.id" class="w-full">
                                     <InputComponent
@@ -172,7 +172,7 @@
                         </div>
                         <div
                             v-if="authStore.editingUserId === user.id"
-                            class="bg-accent/5 border-accent grid grid-cols-1 border-b">
+                            class="bg-accent/5 border-line grid grid-cols-1 border-b">
                             <div class="col-span-1 px-4 py-2">
                                 <div class="space-y-2">
                                     <InputComponent
@@ -207,7 +207,7 @@
 
                     <div
                         if="authStore.users.length === 0 && !authStore.createUser"
-                        class="py-8 text-center text-gray-400">
+                        class="py-8 text-center text-secondary-content/60">
                         {{ t('settings.users.noUsers') }}
                     </div>
                 </div>

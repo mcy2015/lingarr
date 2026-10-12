@@ -8,29 +8,33 @@
         <!-- Aside -->
         <aside
             :class="isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
-            class="border-accent bg-secondary fixed top-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r transition-transform duration-300 ease-in-out md:sticky">
+            class="border-line bg-secondary fixed top-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r transition-transform duration-300 ease-in-out md:sticky">
             <TimesIcon
                 class="absolute top-1 right-1 block h-6 w-6 cursor-pointer md:hidden"
                 @click="isOpen = false" />
-            <div class="flex h-16 items-center justify-center">
-                <h1 class="text-xl font-bold">Lingarr</h1>
+            <div class="flex h-16 items-center border-b border-line px-5">
+                <h1 class="text-lg font-bold tracking-wide">LINGARR<span class="text-accent">_</span></h1>
             </div>
             <!-- Navigation -->
-            <nav class="grow overflow-y-auto p-6">
-                <ul class="space-y-4">
+            <nav class="grow overflow-y-auto px-3 py-4">
+                <ul class="space-y-1">
                     <li v-for="(item, index) in menuItems" :key="index">
                         <router-link
                             :to="{ name: item.route }"
-                            class="flex w-full items-center justify-start hover:brightness-150"
-                            :class="{ 'brightness-150': isActive(item) }"
+                            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors"
+                            :class="
+                                isActive(item)
+                                    ? 'bg-tertiary text-primary-content shadow-[inset_2px_0_0_0_var(--accent)]'
+                                    : 'text-secondary-content/70 hover:bg-tertiary/50 hover:text-primary-content'
+                            "
                             @click="isOpen = false">
-                            <component :is="item.icon" class="mr-2 h-4 w-4" />
+                            <component :is="item.icon" class="h-4 w-4 flex-none" />
                             <div class="relative">
                                 {{ t(item.label) }}
 
-                                <span
+                                    <span
                                     v-if="item.route == 'translations' && activeRequests > 0"
-                                    class="bg-accent text-secondary-content absolute -top-1 -right-4 inline-flex items-center justify-center rounded-full px-1 py-0.5 text-xs leading-none font-bold">
+                                    class="bg-accent text-accent-content absolute -top-1 -right-5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 font-mono text-xs leading-none font-bold">
                                     {{ activeRequests }}
                                 </span>
                             </div>
@@ -50,12 +54,12 @@
                     class="absolute right-0 bottom-0 flex w-full justify-center p-4">
                     <BadgeComponent
                         v-if="instanceStore.getVersion.isDevelopment"
-                        classes="text-white border-amber-200 bg-amber-500/50">
+                        classes="text-warning-content border-warning/40 bg-warning/50">
                         {{ t('version.development') }}
                     </BadgeComponent>
                     <BadgeComponent
                         v-else-if="instanceStore.getVersion.newVersion"
-                        classes="text-white border-green-200 bg-green-500/50">
+                        classes="text-success-content border-success/40 bg-success/50">
                         {{
                             t('version.updateAvailable', {
                                 version: instanceStore.getVersion.latestVersion

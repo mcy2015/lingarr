@@ -9,7 +9,7 @@
                 </template>
 
                 <template v-else-if="error">
-                    <div class="flex h-64 items-center justify-center text-red-500">
+                    <div class="flex h-64 items-center justify-center text-danger">
                         {{ error }}
                     </div>
                 </template>

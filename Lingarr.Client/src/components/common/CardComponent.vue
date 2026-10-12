@@ -1,6 +1,6 @@
 ﻿<template>
-    <div class="bg-linear-to-br relative rounded-md from-secondary to-tertiary p-6 shadow-md">
-        <h2 v-if="title" class="mb-2 text-2xl font-bold text-primary-content">{{ title }}</h2>
+    <div class="relative rounded-md border border-line bg-secondary p-6">
+        <h2 v-if="title" class="mb-2 text-lg font-semibold text-primary-content">{{ title }}</h2>
         <p class="text-secondary-content/80 mb-6"><slot name="description"></slot></p>
 
         <div class="space-y-4">

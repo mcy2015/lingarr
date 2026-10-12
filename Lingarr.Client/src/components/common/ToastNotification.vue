@@ -8,28 +8,30 @@
         leave-to-class="opacity-0">
         <div
             v-if="isVisible"
-            class="ring-opacity-5 pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg shadow-lg ring-1 ring-black">
+            class="border-line bg-secondary pointer-events-auto w-full max-w-sm overflow-hidden rounded-md shadow-lg">
             <div class="p-4">
                 <div class="flex items-start">
                     <div class="shrink-0">
                         <CheckMarkCircleIcon
                             v-if="type === 'success'"
-                            class="h-6 w-6 text-green-400" />
+                            class="h-6 w-6 text-success" />
                         <TimesCircleIcon
                             v-else-if="type === 'error'"
-                            class="h-6 w-6 text-red-400" />
-                        <ExclamationIcon v-else class="h-6 w-6 text-blue-400" />
+                            class="h-6 w-6 text-danger" />
+                        <ExclamationIcon v-else class="h-6 w-6 text-info" />
                     </div>
                     <div class="ml-3 w-0 flex-1 pt-0.5">
-                        <p class="text-sm font-medium text-gray-900">
+                        <p class="text-sm font-medium text-primary-content">
                             {{ title }}
                         </p>
-                        <p class="mt-1 text-sm text-gray-500">
+                        <p class="mt-1 text-sm text-secondary-content/60">
                             {{ message }}
                         </p>
                     </div>
                     <div class="ml-4 flex shrink-0">
-                        <button class="inline-flex rounded-md bg-white" @click="close">
+                        <button
+                            class="text-secondary-content/60 hover:text-primary-content inline-flex rounded-md"
+                            @click="close">
                             <span class="sr-only">{{ t('common.close') }}</span>
                             <TimesIcon class="h-5 w-5" />
                         </button>
@@ -39,9 +41,9 @@
             <div
                 class="h-1 transition-all duration-300 ease-out"
                 :class="{
-                    'bg-green-500': type === 'success',
-                    'bg-red-500': type === 'error',
-                    'bg-blue-500': type === 'info'
+                    'bg-success': type === 'success',
+                    'bg-danger': type === 'error',
+                    'bg-info': type === 'info'
                 }"
                 :style="{ width: `${progress}%` }"></div>
         </div>

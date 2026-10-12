@@ -61,7 +61,7 @@
         </div>
 
         <div class="w-full px-4">
-            <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+            <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
                 <div :class="isSelectMode ? 'col-span-4' : 'col-span-5'" class="px-4 py-2">
                     {{ t('movies.title') }}
                 </div>
@@ -78,7 +78,7 @@
             </div>
             <div v-for="item in movies.items" :key="item.id">
                 <div
-                    class="border-accent hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:py-0">
+                    class="border-line hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:py-0">
                     <div
                         :class="isSelectMode ? 'md:col-span-4' : 'md:col-span-5'"
                         class="flex w-full items-center gap-2 md:w-auto md:px-4 md:py-2">

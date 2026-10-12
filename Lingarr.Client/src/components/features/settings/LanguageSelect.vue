@@ -2,9 +2,9 @@
     <div class="relative">
         <div
             ref="excludeClickOutside"
-            class="border-accent flex min-h-12 cursor-pointer items-center justify-between rounded-md border px-4 py-2"
+            class="border-line flex min-h-12 cursor-pointer items-center justify-between rounded-md border px-4 py-2"
             @click="toggleDropdown">
-            <span v-if="selectedItems.length === 0" class="text-gray-400">
+            <span v-if="selectedItems.length === 0" class="text-secondary-content/60">
                 {{ t('settings.languageSelect.placeholder') }}
             </span>
             <div v-else class="flex flex-1 flex-wrap items-center gap-2">
@@ -25,7 +25,7 @@
         <ul
             v-show="isOpen"
             ref="clickOutside"
-            class="border-accent bg-primary absolute z-10 max-h-60 w-full overflow-auto rounded-md border shadow-lg"
+            class="border-line bg-primary absolute z-10 max-h-60 w-full overflow-auto rounded-md border shadow-lg"
             :class="openUpward ? 'bottom-full mb-1' : 'top-full mt-1'">
             <li v-if="!options?.length" class="p-3">
                 {{ t('settings.languageSelect.selectSourceFirst') }}
@@ -34,7 +34,7 @@
                 <input
                     ref="searchInput"
                     v-model="searchTerm"
-                    class="border-accent relative w-full border-b bg-transparent p-2 outline-hidden"
+                    class="border-line relative w-full border-b bg-transparent p-2 outline-hidden"
                     :placeholder="t('settings.languageSelect.search')" />
 
                 <span

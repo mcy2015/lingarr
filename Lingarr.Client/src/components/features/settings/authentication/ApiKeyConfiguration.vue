@@ -4,8 +4,8 @@
         <template #content>
             <div class="flex flex-col space-y-2 pb-4">
                 <div>
-                    <h2 class="mb-4 text-xl font-semibold text-white">{{ title }}</h2>
-                    <p class="mb-6 text-sm text-gray-400">
+                    <h2 class="mb-4 text-xl font-semibold text-primary-content">{{ title }}</h2>
+                    <p class="mb-6 text-sm text-secondary-content/60">
                         {{ t('settings.apiKey.description') }}
                     </p>
                 </div>
@@ -19,31 +19,31 @@
                         }}
                     </ButtonComponent>
 
-                    <div class="rounded-lg bg-gray-900 p-4">
+                    <div class="rounded-lg bg-tertiary p-4">
                         <div class="mb-2 flex items-center justify-between">
-                            <label class="text-sm font-medium text-gray-400">
+                            <label class="text-sm font-medium text-secondary-content/60">
                                 {{ t('settings.apiKey.label') }}
                             </label>
                         </div>
                         <code
-                            class="block rounded bg-gray-800 p-3 font-mono text-sm break-all text-green-400">
+                            class="block rounded bg-secondary p-3 font-mono text-sm break-all text-success">
                             {{ apiKey }}
                         </code>
                     </div>
 
-                    <div class="rounded-lg border border-gray-700 bg-gray-900 p-6">
-                        <h3 class="mb-3 text-lg font-semibold text-white">
+                    <div class="rounded-lg border border-line bg-tertiary p-6">
+                        <h3 class="mb-3 text-lg font-semibold text-primary-content">
                             {{ t('settings.apiKey.howToUse') }}
                         </h3>
-                        <p class="mb-3 text-sm text-gray-400">
+                        <p class="mb-3 text-sm text-secondary-content/60">
                             {{ t('settings.apiKey.headerIntro') }}
-                            <code class="rounded bg-gray-800 px-2 py-1 text-green-400">
+                            <code class="rounded bg-secondary px-2 py-1 text-success">
                                 X-Api-Key
                             </code>
                             {{ t('settings.apiKey.headerSuffix') }}
                         </p>
                         <code
-                            class="block rounded bg-gray-800 p-3 font-mono text-xs break-all text-green-400">
+                            class="block rounded bg-secondary p-3 font-mono text-xs break-all text-success">
                             curl -H "X-Api-Key: {{ apiKey || 'API-KEY' }}"
                             http://lingarr:9876/api/endpoint
                         </code>

@@ -2,14 +2,14 @@
     <div v-if="activeTranslations.length > 0" class="flex items-center gap-1">
         <BadgeComponent
             v-if="inProgressCount > 0"
-            classes="border-accent bg-tertiary text-primary-content"
+            classes="border-line bg-tertiary text-primary-content"
             :title="t('common.activeTranslations.inProgressTitle', inProgressCount)">
             <template v-if="inProgressCount > 1">{{ inProgressCount }}&nbsp;</template>
             {{ t('common.activeTranslations.running') }}
         </BadgeComponent>
         <BadgeComponent
             v-if="pendingCount > 0"
-            classes="border-accent bg-secondary text-primary-content"
+            classes="border-line bg-secondary text-primary-content"
             :title="t('common.activeTranslations.pendingTitle', pendingCount)">
             <template v-if="pendingCount > 1">{{ pendingCount }}&nbsp;</template>
             {{ t('common.activeTranslations.pending') }}

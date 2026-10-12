@@ -15,8 +15,8 @@
                         class="flex items-center gap-3 rounded-md border p-3"
                         :class="
                             index === configuringIndex
-                                ? 'border-accent bg-accent/10'
-                                : 'border-accent/30'
+                                ? 'border-line bg-accent/10'
+                                : 'border-line'
                         ">
                         <span
                             class="bg-accent/20 text-accent-content shrink-0 rounded px-2 py-0.5 text-xs font-semibold tracking-wider uppercase"
@@ -92,7 +92,7 @@
                     v-if="configuringManifest"
                     :manifest="configuringManifest"
                     @save="saveNotification?.show()" />
-                <p v-else-if="manifestError" class="text-sm text-red-500">{{ manifestError }}</p>
+                <p v-else-if="manifestError" class="text-sm text-danger">{{ manifestError }}</p>
             </div>
 
             <div v-if="configuringManifest?.hasRequestTemplate" class="mt-6">

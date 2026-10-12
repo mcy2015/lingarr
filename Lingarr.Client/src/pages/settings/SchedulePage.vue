@@ -5,7 +5,7 @@
         </div>
 
         <div class="w-full px-4">
-            <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+            <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
                 <div class="col-span-5 px-4 py-2">{{ t('settings.schedule.jobName') }}</div>
                 <div class="col-span-2 px-4 py-2">{{ t('settings.schedule.state') }}</div>
                 <div class="col-span-2 px-4 py-2">{{ t('settings.schedule.lastExecution') }}</div>
@@ -16,7 +16,7 @@
             <div
                 v-for="job in jobs"
                 :key="job.id"
-                class="border-accent flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 md:grid md:grid-cols-12 md:gap-0 md:py-0">
+                class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 md:grid md:grid-cols-12 md:gap-0 md:py-0">
                 <div class="flex w-full items-center gap-2 md:col-span-5 md:w-auto md:px-4 md:py-2">
                     <span class="min-w-0 flex-1 md:flex-none">{{ job.id }}</span>
                     <span class="ml-auto flex-none md:hidden">

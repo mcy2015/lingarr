@@ -17,7 +17,7 @@
                 :is-invalid="isInvalid"
                 class="absolute top-3 right-3" />
         </div>
-        <p v-if="missingPlaceholders.length > 0" class="mt-1 text-sm text-red-600">
+        <p v-if="missingPlaceholders.length > 0" class="mt-1 text-sm text-danger">
             {{
                 t('common.requiredPlaceholdersMissing', {
                     placeholders: missingPlaceholders.join(' and ')
@@ -78,10 +78,10 @@ const isInvalid = ref(false)
 const missingPlaceholders = ref<string[]>([])
 
 const textareaClasses = computed(() => [
-    'w-full resize-y rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200',
-    { 'border-green-500': isValid.value },
-    { 'border-red-500': isInvalid.value },
-    { 'border-accent': !isValid.value && !isInvalid.value },
+    'w-full resize-y rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200 focus:border-accent',
+    { 'border-success': isValid.value },
+    { 'border-danger': isInvalid.value },
+    { 'border-line': !isValid.value && !isInvalid.value },
     'pr-10'
 ])
 

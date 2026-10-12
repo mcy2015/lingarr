@@ -1,5 +1,5 @@
 <template>
-    <div class="border-accent/30 bg-primary/50 rounded-md border p-3">
+    <div class="border-line bg-primary/50 rounded-md border p-3">
         <div v-if="parseError" class="mb-3">
             <StatusMessage :message="parseError" type="error" />
         </div>
@@ -19,7 +19,7 @@
                 {{ t('services.template.addProperty') }}
             </ButtonComponent>
         </div>
-        <div class="border-accent/20 mt-3 flex flex-wrap gap-3 border-t pt-3" @mousedown.prevent>
+        <div class="border-line mt-3 flex flex-wrap gap-3 border-t pt-3" @mousedown.prevent>
             <PlaceholderButton
                 v-for="item in placeholders"
                 :key="item.placeholder"

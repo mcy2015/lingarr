@@ -60,7 +60,7 @@
 
         <div class="w-full px-4">
             <!-- Shows -->
-            <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+            <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
                 <div :class="isSelectMode ? 'col-span-7' : 'col-span-8'" class="px-4 py-2">
                     {{ t('shows.title') }}
                 </div>
@@ -76,7 +76,7 @@
             </div>
             <div v-for="item in shows.items" :key="item.id">
                 <div
-                    class="border-accent flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 md:grid md:grid-cols-12 md:gap-0 md:py-0"
+                    class="border-line flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 md:grid md:grid-cols-12 md:gap-0 md:py-0"
                     @click="toggleShow(item)">
                     <div
                         :class="isSelectMode ? 'md:col-span-7' : 'md:col-span-8'"

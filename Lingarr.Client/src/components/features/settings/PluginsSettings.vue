@@ -11,7 +11,7 @@
             <div v-if="isLoading" class="text-sm opacity-60">
                 {{ t('services.plugins.loading') }}
             </div>
-            <div v-else-if="loadError" class="text-sm text-red-500">{{ loadError }}</div>
+            <div v-else-if="loadError" class="text-sm text-danger">{{ loadError }}</div>
             <div v-else-if="plugins.length === 0" class="text-sm opacity-60">
                 {{ t('services.plugins.noPluginsPrefix') }}
                 <CodeSnippet>PLUGINS_PATH</CodeSnippet>
@@ -21,7 +21,7 @@
                 <li
                     v-for="plugin in plugins"
                     :key="plugin.provider"
-                    class="border-accent/40 rounded-md border p-3">
+                    class="border-line rounded-md border p-3">
                     <span class="font-semibold">{{ plugin.displayName }}</span>
                     <div v-if="plugin.description" class="mt-1 text-xs opacity-60">
                         {{ plugin.description }}

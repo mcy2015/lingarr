@@ -14,7 +14,7 @@
         <div
             v-for="episode in episodes"
             :key="episode.id"
-            class="border-accent/20 hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:border-b-0 md:px-0 md:py-0">
+            class="border-line hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:border-b-0 md:px-0 md:py-0">
             <div class="hidden px-4 py-2 md:col-span-1 md:block">
                 {{ episode.episodeNumber }}
             </div>

@@ -5,7 +5,7 @@
             type="checkbox"
             :checked="modelValue"
             :disabled="disabled"
-            class="relative h-4 w-4 cursor-pointer appearance-none rounded border border-accent bg-secondary checked:bg-accent focus:outline-none focus:ring-1 focus:ring-accent focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+            class="relative h-4 w-4 cursor-pointer appearance-none rounded border border-line bg-secondary checked:bg-accent focus:outline-none focus:ring-1 focus:ring-accent focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
             @change="updateValue($event)" />
         <CheckMarkIcon
             class="pointer-events-none absolute h-4 w-4 fill-none text-primary-content"

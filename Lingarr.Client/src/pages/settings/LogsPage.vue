@@ -20,12 +20,12 @@
 
                     <div class="flex space-x-2">
                         <button
-                            class="hover:bg-accent/80 bg-accent cursor-pointer rounded px-3 py-1 text-sm font-medium text-white transition"
+                            class="hover:bg-accent/80 bg-accent cursor-pointer rounded px-3 py-1 text-sm font-medium text-primary-content transition"
                             @click="exportLogs">
                             {{ t('settings.logs.export') }}
                         </button>
                         <button
-                            class="bg-warning hover:bg-warning/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-white transition"
+                            class="bg-warning hover:bg-warning/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-primary-content transition"
                             @click="toggleAutoScroll">
                             {{
                                 autoScroll
@@ -34,7 +34,7 @@
                             }}
                         </button>
                         <button
-                            class="bg-error hover:bg-error/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-white transition"
+                            class="bg-danger hover:bg-danger/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-primary-content transition"
                             @click="clearLogs">
                             {{ t('settings.logs.clear') }}
                         </button>
@@ -55,7 +55,7 @@
             ref="logContainer"
             class="bg-primary text-accent-content h-[70vh] overflow-y-auto font-mono text-sm">
             <div v-if="filteredLogs.length === 0" class="flex h-full items-center justify-center">
-                <div class="text-center text-gray-500">
+                <div class="text-center text-secondary-content/60">
                     <div class="mb-2 text-lg">📋</div>
                     <div>{{ t('settings.logs.waiting') }}</div>
                 </div>
@@ -65,7 +65,7 @@
             <div v-for="(log, index) in filteredLogs" :key="index" class="log-entry">
                 <div
                     class="hover:bg-secondary/20 border-secondary/30 grid grid-cols-12 border-b py-2 transition-colors">
-                    <div class="col-span-1 px-4 text-gray-400">
+                    <div class="col-span-1 px-4 text-secondary-content/60">
                         {{ formatTime(log.timestamp) }}
                     </div>
                     <div class="col-span-1 px-4">
@@ -75,7 +75,7 @@
                             {{ log.logLevel.toUpperCase() }}
                         </span>
                     </div>
-                    <div class="col-span-3 px-4 text-blue-300">
+                    <div class="col-span-3 px-4 text-info">
                         {{ log.formattedSource }}
                     </div>
                     <div
@@ -85,7 +85,7 @@
 
                 <div
                     v-if="log.stackTrace"
-                    class="border-secondary/30 bg-error/5 ml-6 border-b py-2 pr-4 pl-12 text-xs">
+                    class="border-secondary/30 bg-danger/5 ml-6 border-b py-2 pr-4 pl-12 text-xs">
                     <pre class="whitespace-pre-wrap">{{ log.stackTrace }}</pre>
                 </div>
             </div>
@@ -136,8 +136,8 @@ const filteredLogs = computed(() => {
 const formatLogMessage = (message: string): string => {
     // Replace color tags
     let formattedMessage = message
-        .replace(/\|Green\|([^|]+)\|\/Green\|/g, '<span class="text-green-500">$1</span>')
-        .replace(/\|Red\|([^|]+)\|\/Red\|/g, '<span class="text-red-500">$1</span>')
+        .replace(/\|Green\|([^|]+)\|\/Green\|/g, '<span class="text-success">$1</span>')
+        .replace(/\|Red\|([^|]+)\|\/Red\|/g, '<span class="text-danger">$1</span>')
         .replace(/\|Orange\|([^|]+)\|\/Orange\|/g, '<span class="text-orange-500">$1</span>')
 
     // Highlight environment variables
@@ -151,9 +151,9 @@ const formatLogMessage = (message: string): string => {
 
 const getLogLevelBadgeClass = (level: string): string => {
     const levelLower = level.toLowerCase()
-    if (levelLower.includes('error')) return 'bg-red-500/20 text-red-500'
+    if (levelLower.includes('error')) return 'bg-danger/20 text-danger'
     if (levelLower.includes('warning')) return 'bg-orange-500/20 text-orange-500'
-    if (levelLower.includes('information')) return 'bg-green-500/20 text-green-500'
+    if (levelLower.includes('information')) return 'bg-success/20 text-success'
     return 'bg-info/20 text-info'
 }
 

@@ -1,6 +1,6 @@
 <template>
-    <div class="border-accent/30 bg-primary overflow-hidden rounded-md border">
-        <div class="border-accent/20 bg-tertiary/50 flex items-center border-b px-3 py-2">
+    <div class="border-line bg-primary overflow-hidden rounded-md border">
+        <div class="border-line bg-tertiary/50 flex items-center border-b px-3 py-2">
             <span class="text-secondary-content/50 text-xs font-medium tracking-wider uppercase">
                 {{ t('services.template.preview') }}
             </span>

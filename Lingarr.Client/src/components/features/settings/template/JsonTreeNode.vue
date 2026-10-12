@@ -80,7 +80,7 @@
             v-if="
                 (node.type === NODE_TYPE.OBJECT || node.type === NODE_TYPE.ARRAY) && node.expanded
             "
-            class="border-accent/15 ml-2 border-l"
+            class="border-line ml-2 border-l"
             :style="{ marginLeft: `${depth * 1.25 + 0.5}rem` }">
             <JsonTreeNode
                 v-for="(child, index) in node.children"

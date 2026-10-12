@@ -1,7 +1,7 @@
 ﻿<template>
     <div
         v-if="translateStore.hasLanguagesError"
-        class="border-accent bg-primary mb-4 rounded-md border p-4">
+        class="border-line bg-primary mb-4 rounded-md border p-4">
         <div class="flex items-start">
             <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -21,7 +21,7 @@
                     {{ t('services.sourceAndTarget.errorMessage') }}
                 </p>
                 <button
-                    class="border-accent hover:bg-accent mt-3 cursor-pointer justify-end rounded border px-3 py-2 transition-colors hover:text-white"
+                    class="border-line hover:bg-accent mt-3 cursor-pointer justify-end rounded border px-3 py-2 transition-colors hover:text-primary-content"
                     :disabled="translateStore.isLanguagesLoading"
                     @click="retryLoadLanguages">
                     <span v-if="translateStore.isLanguagesLoading">{{ t('common.loading') }}</span>

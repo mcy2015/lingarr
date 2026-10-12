@@ -37,28 +37,28 @@ const emit = defineEmits<{
 const variantClasses = computed(() => {
     switch (props.variant) {
         case 'primary':
-            return 'bg-accent text-accent-content border border-accent hover:border-accent/80 hover:shadow-md'
+            return 'bg-accent text-accent-content border border-accent hover:bg-accent/90'
         case 'secondary':
-            return 'bg-secondary text-secondary-content border border-accent hover:border-accent/80 hover:shadow-sm'
+            return 'bg-secondary text-secondary-content border border-line hover:border-accent/60 hover:text-primary-content'
         case 'accent':
-            return 'bg-transparent text-accent-content border-2 border-accent hover:bg-accent/10 hover:border-accent/80 hover:shadow-md'
+            return 'bg-transparent text-accent border-2 border-accent hover:bg-accent/10'
         case 'ghost':
-            return 'bg-transparent text-accent-content hover:bg-accent/10 border border-transparent hover:border-accent/50'
+            return 'bg-transparent text-secondary-content border border-transparent hover:bg-tertiary hover:text-primary-content'
         default:
-            return 'bg-accent text-accent-content border border-accent hover:border-accent/80 hover:shadow-md'
+            return 'bg-accent text-accent-content border border-accent hover:bg-accent/90'
     }
 })
 
 const sizeClasses = computed(() => {
     switch (props.size) {
         case 'xs':
-            return 'px-4 py-1 text-xs'
+            return 'px-3 py-1 text-xs'
         case 'sm':
-            return 'px-5 py-1.5 text-xs'
+            return 'px-4 py-1.5 text-xs'
         case 'md':
-            return 'px-6 py-2 text-sm'
+            return 'min-h-10 px-5 py-2 text-sm'
         case 'lg':
-            return 'px-8 py-3 text-base'
+            return 'min-h-11 px-6 py-2.5 text-base'
         default:
             return 'px-6 py-2 text-sm'
     }

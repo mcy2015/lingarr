@@ -10,7 +10,7 @@
         <div
             v-show="isOpen"
             ref="excludeClickOutside"
-            class="border-accent bg-primary absolute top-8 right-0 z-10 w-56 rounded-md border bg-clip-border shadow-lg">
+            class="border-line bg-primary absolute top-8 right-0 z-10 w-56 rounded-md border bg-clip-border shadow-lg">
             <div class="px-3 py-1" role="menu" aria-orientation="vertical">
                 <span class="text-xs" role="menuitem">{{ t('common.translateTo') }}</span>
                 <div

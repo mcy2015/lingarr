@@ -1,23 +1,52 @@
+@import '@fontsource-variable/archivo';
+@import '@fontsource-variable/jetbrains-mono';
 @import 'tailwindcss';
 @config '../../tailwind.config.mjs';
 
-/* Default Lingarr theme */
+/* Default Lingarr theme — "Timeline" design system, see docs/DESIGN.md */
 @layer base {
     :root {
-        --primary: #1a202c;
-        --primary-content: #c0c8d2;
-        --secondary: #242d3c;
-        --secondary-content: #d2d7dc;
-        --tertiary: #1f2734;
-        --tertiary-content: #c0c8d2;
-        --accent: #466e8c;
-        --accent-content: #c0c8d2;
+        --primary: #151619;
+        --primary-content: #d8dbdf;
+        --secondary: #1c1e22;
+        --secondary-content: #c7ccd2;
+        --tertiary: #22252a;
+        --tertiary-content: #c7ccd2;
+        --accent: #e8833a;
+        --accent-content: #20130a;
+
+        /* Neutral hairlines */
+        --line: #2e3238;
+
+        /* Status tokens (content = text on solid status bg) */
+        --success: #6fbf73;
+        --success-content: #0c1a0e;
+        --warning: #e5b567;
+        --warning-content: #1c1408;
+        --danger: #e25c4a;
+        --danger-content: #1f0d09;
+        --info: #5b9bd5;
+        --info-content: #0d1826;
+
+        /* Track colors (subtitle track metaphor) */
+        --track-a: #5b9bd5;
+        --track-b: #e8833a;
 
         /* Syntax highlighting */
         --syntax-key: #7eb8da;
         --syntax-string: #a8d4a0;
         --syntax-number: #e0a870;
         --syntax-keyword: #c4a0d8;
+    }
+
+    body {
+        font-family:
+            'Archivo Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+            'Noto Sans SC', system-ui, sans-serif;
+    }
+
+    ::selection {
+        background: color-mix(in srgb, var(--accent) 35%, transparent);
     }
 }
 
@@ -216,17 +245,77 @@
     --syntax-keyword: #35c5f0;
 }
 
+/* Status + line token overrides per theme (others inherit the defaults above) */
+.solarized-light {
+    --line: #ddd6c1;
+    --success: #859900;
+    --success-content: #fdf6e3;
+    --warning: #b58900;
+    --warning-content: #fdf6e3;
+    --danger: #dc322f;
+    --danger-content: #fdf6e3;
+    --info: #268bd2;
+    --info-content: #fdf6e3;
+}
+.solarized-dark {
+    --success: #859900;
+    --warning: #b58900;
+    --danger: #dc322f;
+    --info: #268bd2;
+}
+.dracula {
+    --line: #44475a;
+    --success: #50fa7b;
+    --success-content: #1b2430;
+    --warning: #f1fa8c;
+    --warning-content: #282a36;
+    --danger: #ff5555;
+    --danger-content: #282a36;
+    --info: #8be9fd;
+    --info-content: #282a36;
+    --track-a: #8be9fd;
+    --track-b: #bd93f9;
+}
+.nord {
+    --line: #434c5e;
+    --success: #a3be8c;
+    --success-content: #2e3440;
+    --warning: #ebcb8b;
+    --warning-content: #2e3440;
+    --danger: #bf616a;
+    --danger-content: #2e3440;
+    --info: #88c0d0;
+    --info-content: #2e3440;
+    --track-a: #88c0d0;
+}
+.gruvbox {
+    --line: #3c3836;
+    --success: #b8bb26;
+    --success-content: #1d2021;
+    --warning: #fabd2f;
+    --warning-content: #1d2021;
+    --danger: #fb4934;
+    --danger-content: #1d2021;
+    --info: #83a598;
+    --info-content: #1d2021;
+    --track-a: #83a598;
+}
+
 *::-webkit-scrollbar {
     @apply h-2 w-1;
 }
 
 *::-webkit-scrollbar-track {
-    @apply bg-primary;
+    @apply bg-transparent;
 }
 
 *::-webkit-scrollbar-thumb {
-    @apply bg-accent rounded-md;
+    @apply bg-line rounded-md;
     @apply h-2 w-2;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--line) 60%, var(--primary-content));
 }
 
 .shell-scroll::-webkit-scrollbar {
@@ -238,7 +327,7 @@
 }
 
 .shell-scroll::-webkit-scrollbar-thumb {
-    background: #242d3c;
+    background: var(--line);
 }
 
 .fade-enter-active,

@@ -3,9 +3,9 @@
         :class="[`${instanceStore.getTheme}`, 'flex min-h-screen bg-primary text-primary-content']">
         <AsideNavigation />
 
-        <div class="flex w-full flex-col drop-shadow-xl">
+        <div class="flex w-full flex-col">
             <!-- Header -->
-            <header class="bg-secondary px-4 py-2 shadow-lg sm:px-6 lg:px-8">
+            <header class="border-line bg-secondary px-4 py-2.5 sm:px-6 lg:px-8">
                 <div class="flex w-full items-center justify-between space-x-2 md:justify-end">
                     <div class="md:hidden">
                         <MenuIcon class="block h-5 w-5 cursor-pointer" @click="isOpen = !isOpen" />
@@ -25,7 +25,7 @@
                                     <button
                                         v-for="theme in Object.values(THEMES)"
                                         :key="theme"
-                                        class="hover:bg-secondary-focus block w-full cursor-pointer px-4 py-2 text-left text-sm capitalize text-secondary-content"
+                                        class="hover:bg-tertiary block w-full cursor-pointer px-4 py-2 text-left text-sm capitalize text-secondary-content"
                                         @click="setTheme(theme)">
                                         {{ theme }}
                                     </button>

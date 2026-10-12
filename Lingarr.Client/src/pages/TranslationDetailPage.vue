@@ -42,7 +42,7 @@
                             <span class="font-semibold">{{ t('translations.detail.source') }}</span>
                             <div class="mt-1">
                                 <BadgeComponent
-                                    classes="text-primary-content border-accent bg-secondary">
+                                    classes="font-mono text-secondary-content border-line bg-tertiary">
                                     {{ detail.sourceLanguage.toUpperCase() }}
                                 </BadgeComponent>
                             </div>
@@ -51,7 +51,7 @@
                             <span class="font-semibold">{{ t('translations.detail.target') }}</span>
                             <div class="mt-1">
                                 <BadgeComponent
-                                    classes="text-primary-content border-accent bg-secondary">
+                                    classes="font-mono text-secondary-content border-line bg-tertiary">
                                     {{ detail.targetLanguage.toUpperCase() }}
                                 </BadgeComponent>
                             </div>
@@ -64,8 +64,8 @@
                                 <BadgeComponent
                                     :classes="
                                         detail.isBilingual
-                                            ? 'text-white border-green-200 bg-green-500/50'
-                                            : 'text-primary-content/70 border-accent bg-secondary'
+                                            ? 'text-success-content border-success/40 bg-success/50'
+                                            : 'text-primary-content/70 border-line bg-secondary'
                                     ">
                                     {{
                                         detail.isBilingual
@@ -108,15 +108,15 @@
                     </div>
                     <div
                         v-if="detail.errorMessage"
-                        class="rounded-md border border-red-700/50 bg-red-900/20 p-4">
-                        <div class="text-sm text-red-400">{{ detail.errorMessage }}</div>
+                        class="rounded-md border border-danger/40 bg-danger/15 p-4">
+                        <div class="text-sm text-danger">{{ detail.errorMessage }}</div>
                         <details v-if="detail.stackTrace" class="mt-3">
                             <summary
-                                class="cursor-pointer text-sm text-red-400/70 hover:text-red-400">
+                                class="cursor-pointer text-sm text-danger/70 hover:text-danger">
                                 {{ t('translations.detail.stackTrace') }}
                             </summary>
                             <pre
-                                class="mt-2 rounded bg-black/30 p-3 text-xs break-all whitespace-pre-wrap text-red-300/80"
+                                class="mt-2 rounded bg-black/30 p-3 text-xs break-all whitespace-pre-wrap text-danger/80"
                                 >{{ detail.stackTrace }}</pre>
                         </details>
                     </div>
@@ -133,7 +133,7 @@
                 v-if="reversedLines.length > 0"
                 :title="t('translations.detail.translatedLines')">
                 <template #content>
-                    <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+                    <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
                         <div class="col-span-1 px-4 py-2 text-sm">#</div>
                         <div class="col-span-4 px-4 py-2 text-sm">
                             {{ t('translations.detail.source') }}
@@ -149,7 +149,7 @@
                         <div
                             v-for="line in reversedLines"
                             :key="line.position"
-                            class="border-accent/30 grid grid-cols-1 gap-1 border-b transition-colors duration-500 last:border-b-0 md:grid-cols-12 md:gap-0"
+                            class="border-line grid grid-cols-1 gap-1 border-b transition-colors duration-500 last:border-b-0 md:grid-cols-12 md:gap-0"
                             :class="
                                 line.position === latestPosition
                                     ? 'bg-accent/10'
@@ -157,7 +157,7 @@
                                       ? 'bg-accent/5'
                                       : ''
                             ">
-                            <div class="text-primary-content px-4 py-2 text-xs md:col-span-1">
+                            <div class="text-secondary-content/60 px-4 py-2 font-mono text-xs tabular-nums md:col-span-1">
                                 {{ line.position }}
                             </div>
                             <div class="text-primary-content px-4 py-2 text-sm md:col-span-4">
@@ -261,7 +261,7 @@
                                     </template>
                                     <span
                                         v-else-if="proofreadState[line.position].error"
-                                        class="text-red-400">
+                                        class="text-danger">
                                         {{ proofreadState[line.position].error }}
                                     </span>
                                 </div>

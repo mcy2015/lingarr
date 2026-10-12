@@ -7,7 +7,7 @@
                 class="flex w-full flex-col gap-2 md:w-fit md:flex-row md:justify-between md:space-x-2">
                 <button
                     v-if="isSelectMode"
-                    class="hover:text-primary-content/50 border-accent text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
+                    class="hover:text-primary-content/50 border-line text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="handleDelete">
                     {{
                         t('translations.list.deleteWithCount', {
@@ -17,12 +17,12 @@
                 </button>
                 <button
                     v-if="!isSelectMode"
-                    class="hover:text-primary-content/50 border-accent text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
+                    class="hover:text-primary-content/50 border-line text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="handleBatchConvert">
                     {{ t('translations.list.batchConvert') }}
                 </button>
                 <button
-                    class="hover:text-primary-content/50 border-accent text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
+                    class="hover:text-primary-content/50 border-line text-primary-content cursor-pointer rounded-md border px-2 py-1 transition-colors"
                     @click="toggleSelectMode">
                     {{
                         isSelectMode ? t('translations.list.cancel') : t('translations.list.select')
@@ -51,7 +51,7 @@
         </div>
 
         <div class="w-full px-4">
-            <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+            <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
                 <div class="col-span-4 px-4 py-2">{{ t('translations.columns.title') }}</div>
                 <div class="col-span-1 px-4 py-2">{{ t('translations.columns.source') }}</div>
                 <div class="col-span-1 px-4 py-2">{{ t('translations.columns.target') }}</div>
@@ -72,7 +72,7 @@
             <div
                 v-for="item in translationRequests.items"
                 :key="item.id"
-                class="border-accent hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:py-0">
+                class="border-line hover:bg-accent/5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 transition-colors md:grid md:grid-cols-12 md:gap-0 md:py-0">
                 <div class="flex w-full items-center gap-2 md:col-span-4 md:w-auto md:px-4 md:py-2">
                     <span
                         v-if="item.mediaType === MEDIA_TYPE.EPISODE"
@@ -99,21 +99,21 @@
                     </span>
                 </div>
                 <div class="flex items-center md:col-span-1 md:px-4 md:py-2">
-                    <BadgeComponent classes="text-primary-content border-accent bg-secondary">
+                    <BadgeComponent classes="font-mono text-secondary-content border-line bg-tertiary">
                         {{ item.sourceLanguage.toUpperCase() }}
                     </BadgeComponent>
                 </div>
                 <div class="flex items-center gap-2 md:col-span-1 md:px-4 md:py-2">
                     <span class="text-primary-content/50 md:hidden">→</span>
-                    <BadgeComponent classes="text-primary-content border-accent bg-secondary">
+                    <BadgeComponent classes="font-mono text-secondary-content border-line bg-tertiary">
                         {{ item.targetLanguage.toUpperCase() }}
                     </BadgeComponent>
                     <BadgeComponent
                         v-if="item.status === TRANSLATION_STATUS.COMPLETED"
                         :classes="
                             item.isBilingual
-                                ? 'text-white border-green-200 bg-green-500/50'
-                                : 'text-primary-content/70 border-accent bg-secondary'
+                                ? 'text-success-content border-success/40 bg-success/50'
+                                : 'text-primary-content/70 border-line bg-secondary'
                         ">
                         {{
                             item.isBilingual

@@ -20,7 +20,7 @@
                             {{ preset.label }}
                         </ButtonComponent>
                     </div>
-                    <div class="border-accent/30 inline-flex overflow-hidden rounded-md border">
+                    <div class="border-line inline-flex overflow-hidden rounded-md border">
                         <button
                             class="cursor-pointer px-3 py-1 text-xs font-medium transition-colors duration-200"
                             :class="
@@ -32,7 +32,7 @@
                             {{ t('services.template.builder') }}
                         </button>
                         <button
-                            class="border-accent/30 cursor-pointer border-l px-3 py-1 text-xs font-medium transition-colors duration-200"
+                            class="border-line cursor-pointer border-l px-3 py-1 text-xs font-medium transition-colors duration-200"
                             :class="
                                 mode === 'json'
                                     ? 'bg-accent text-accent-content'

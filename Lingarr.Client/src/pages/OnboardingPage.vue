@@ -6,8 +6,8 @@
                 <template #content>
                     <div
                         v-if="error"
-                        class="mb-6 rounded-md border border-red-700/50 bg-red-900/20 p-4">
-                        <p class="text-sm text-red-400">{{ error }}</p>
+                        class="mb-6 rounded-md border border-danger/40 bg-danger/15 p-4">
+                        <p class="text-sm text-danger">{{ error }}</p>
                     </div>
 
                     <ProgressionComponent

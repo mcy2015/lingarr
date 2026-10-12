@@ -1,10 +1,10 @@
 <template>
     <div class="space-y-6">
         <div>
-            <h2 class="mb-4 text-xl font-semibold text-white">
+            <h2 class="mb-4 text-xl font-semibold text-primary-content">
                 {{ t('onboarding.account.title') }}
             </h2>
-            <p class="mb-6 text-sm text-gray-400">
+            <p class="mb-6 text-sm text-secondary-content/60">
                 {{ t('onboarding.account.description') }}
             </p>
         </div>

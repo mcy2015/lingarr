@@ -1,10 +1,10 @@
 <template>
     <div class="space-y-6">
         <div>
-            <h2 class="mb-4 text-xl font-semibold text-white">
+            <h2 class="mb-4 text-xl font-semibold text-primary-content">
                 {{ t('onboarding.choose.title') }}
             </h2>
-            <p class="mb-6 text-sm text-gray-400">
+            <p class="mb-6 text-sm text-secondary-content/60">
                 {{ t('onboarding.choose.description') }}
             </p>
         </div>
@@ -13,15 +13,15 @@
             class="rounded-lg border-2 p-6 transition-colors"
             :class="
                 enableAuth == 'true'
-                    ? 'border-gray-700 bg-gray-900'
+                    ? 'border-line bg-tertiary'
                     : 'bg-primary/10 border-primary'
             ">
             <div class="flex items-start">
                 <div class="ml-4 flex-1">
-                    <h3 class="text-lg font-semibold text-white">
+                    <h3 class="text-lg font-semibold text-primary-content">
                         {{ t('onboarding.choose.enableAuthTitle') }}
                     </h3>
-                    <p class="mt-1 text-sm text-gray-400">
+                    <p class="mt-1 text-sm text-secondary-content/60">
                         {{ t('onboarding.choose.enableAuthDescription') }}
                     </p>
                 </div>
@@ -29,8 +29,8 @@
             </div>
         </div>
 
-        <div class="rounded-md border border-yellow-700/50 bg-yellow-900/20 p-4">
-            <p class="text-sm text-yellow-400">
+        <div class="rounded-md border border-warning/40 bg-warning/15 p-4">
+            <p class="text-sm text-warning">
                 {{ t('onboarding.choose.warning') }}
             </p>
         </div>

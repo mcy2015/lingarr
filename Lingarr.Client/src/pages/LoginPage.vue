@@ -5,8 +5,8 @@
                 <template #content>
                     <div
                         v-if="error"
-                        class="mb-6 rounded-md border border-red-700/50 bg-red-900/20 p-4">
-                        <p class="text-sm text-red-400">{{ error }}</p>
+                        class="mb-6 rounded-md border border-danger/40 bg-danger/15 p-4">
+                        <p class="text-sm text-danger">{{ error }}</p>
                     </div>
 
                     <form class="space-y-6" @submit.prevent="handleLogin">
@@ -20,7 +20,7 @@
                                 type="text"
                                 autocomplete="username"
                                 :placeholder="t('login.usernamePlaceholder')"
-                                class="border-accent w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
+                                class="border-line w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
                                 required />
                         </div>
 
@@ -34,12 +34,12 @@
                                 type="password"
                                 autocomplete="current-password"
                                 :placeholder="t('login.passwordPlaceholder')"
-                                class="border-accent w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
+                                class="border-line w-full rounded-md border bg-transparent px-4 py-2 outline-hidden transition-colors duration-200"
                                 required />
                         </div>
 
                         <div class="flex w-full items-center justify-end">
-                            <ButtonComponent type="submit" :disabled="loading" variant="secondary">
+                            <ButtonComponent type="submit" :disabled="loading" variant="primary">
                                 <LoaderCircleIcon
                                     v-if="loading"
                                     class="mr-2 h-4 w-4 animate-spin" />

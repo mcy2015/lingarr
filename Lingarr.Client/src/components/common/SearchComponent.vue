@@ -4,7 +4,7 @@
             :value="modelValue.searchQuery"
             type="text"
             :placeholder="t('common.searchMedia')"
-            class="placeholder-primary/60 border-accent bg-primary text-primary-content block w-full rounded-md border px-8 py-1 text-sm outline-hidden"
+            class="placeholder-primary/60 border-line bg-primary text-primary-content block w-full rounded-md border px-8 py-1 text-sm outline-hidden"
             @input="search" />
         <SearchIcon
             class="text-accent-content absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 transform" />

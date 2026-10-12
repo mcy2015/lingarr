@@ -41,10 +41,10 @@
                         class="rounded-full px-2 py-1 text-xs font-medium"
                         :class="[
                             item.status === 'Completed'
-                                ? 'bg-green-500 text-green-100'
+                                ? 'bg-success text-success-content'
                                 : item.status === 'In Progress'
-                                  ? 'bg-blue-500 text-blue-100'
-                                  : 'bg-gray-600 text-gray-100',
+                                  ? 'bg-info text-info-content'
+                                  : 'bg-tertiary text-primary-content',
                             item.fade ? 'brightness-50' : ''
                         ]">
                         {{ t(statusLabels[item.status]) }}

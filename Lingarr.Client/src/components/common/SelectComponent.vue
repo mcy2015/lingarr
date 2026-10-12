@@ -5,10 +5,10 @@
         </label>
         <div
             ref="excludeClickOutside"
-            class="border-accent flex cursor-pointer items-center justify-between rounded-md border"
+            class="border-line flex cursor-pointer items-center justify-between rounded-md border transition-colors focus:border-accent"
             :class="size === 'sm' ? 'h-6 px-1.5 py-0.5 text-xs' : 'h-12 px-4 py-2'"
             @click="toggleDropdown">
-            <span v-if="!selected" class="text-gray-400">
+            <span v-if="!selected" class="text-secondary-content/60">
                 {{ placeholder || t('common.selectItems') }}
             </span>
             <span v-else-if="size === 'sm'" class="truncate">{{ displaySelectedLabel }}</span>
@@ -28,7 +28,7 @@
         <ul
             v-show="isOpen"
             ref="clickOutside"
-            class="border-accent bg-primary absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border shadow-lg">
+            class="border-line bg-primary absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border shadow-lg">
             <li v-if="!sortedOptions.length" :class="size === 'sm' ? 'p-1.5 text-xs' : 'p-3'">
                 {{ noOptions || t('common.selectSourceLanguageFirst') }}
             </li>

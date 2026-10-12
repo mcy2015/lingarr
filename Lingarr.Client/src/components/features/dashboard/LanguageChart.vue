@@ -66,7 +66,7 @@ const colors = computed(() => {
         },
         card: {
             background: getCssVariable('--primary'),
-            border: getCssVariable('--accent')
+            border: getCssVariable('--line')
         }
     }
 })
@@ -137,10 +137,10 @@ const chartOptions: ChartOptions<'bar'> = {
         y: {
             beginAtZero: true,
             grid: {
-                color: '#466e8c20'
+                color: getCssVariable('--line')
             },
             ticks: {
-                color: '#c0c8d2',
+                color: getCssVariable('--primary-content'),
                 font: {
                     size: 11
                 },
@@ -156,7 +156,7 @@ const chartOptions: ChartOptions<'bar'> = {
                 display: false
             },
             ticks: {
-                color: '#c0c8d2',
+                color: getCssVariable('--primary-content'),
                 font: {
                     size: 11
                 },
@@ -174,7 +174,7 @@ const chartOptions: ChartOptions<'bar'> = {
         legend: {
             position: 'top' as const,
             labels: {
-                color: '#c0c8d2',
+                color: getCssVariable('--primary-content'),
                 font: {
                     size: 12
                 },
@@ -188,8 +188,8 @@ const chartOptions: ChartOptions<'bar'> = {
             borderColor: colors.value.card.border,
             borderWidth: 1,
             padding: 12,
-            titleColor: '#c0c8d2',
-            bodyColor: '#c0c8d2',
+            titleColor: getCssVariable('--primary-content'),
+            bodyColor: getCssVariable('--primary-content'),
             titleFont: {
                 size: 13
             },

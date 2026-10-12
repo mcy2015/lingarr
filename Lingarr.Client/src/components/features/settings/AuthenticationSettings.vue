@@ -16,7 +16,7 @@
                         </span>
                     </ToggleButton>
                 </div>
-                <div v-if="authEnabled === 'false'" class="text-sm text-gray-400">
+                <div v-if="authEnabled === 'false'" class="text-sm text-secondary-content/60">
                     {{ t('settings.authentication.note') }}
                 </div>
             </div>

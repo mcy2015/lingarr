@@ -1,6 +1,6 @@
 ﻿<template>
     <select
-        class="border-accent bg-primary text-primary-content focus:border-accent focus:ring-accent block w-full rounded-md border px-2 py-1 text-sm focus:ring-2 md:w-auto"
+        class="border-line bg-primary text-primary-content focus:border-line focus:ring-accent block w-full rounded-md border px-2 py-1 text-sm focus:ring-2 md:w-auto"
         :value="modelValue.sortBy"
         @change="sortBy">
         <option

@@ -3,7 +3,7 @@
         <template v-if="field.type === PLUGIN_SETTING_TYPE.REMOTE_DROPDOWN">
             <label class="mb-1 block text-sm font-semibold" :for="field.key">
                 {{ field.label }}
-                <span v-if="field.required" class="text-red-500" aria-hidden="true">*</span>
+                <span v-if="field.required" class="text-danger" aria-hidden="true">*</span>
             </label>
             <SelectComponent
                 ref="remoteSelect"

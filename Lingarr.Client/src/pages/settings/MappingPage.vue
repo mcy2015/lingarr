@@ -4,7 +4,7 @@
             {{ t('services.mapping.title') }}
             <div class="flex space-x-4">
                 <button
-                    class="text-blue-500 transition duration-300 hover:text-blue-600"
+                    class="text-info transition duration-300 hover:text-info"
                     @click="addMapping">
                     <PlusIcon class="h-5 w-5" />
                 </button>
@@ -14,7 +14,7 @@
         </div>
 
         <div class="w-full px-4">
-            <div class="border-accent hidden border-b font-bold md:grid md:grid-cols-12">
+            <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
                 <div class="col-span-4 px-4 py-2">{{ t('services.mapping.source') }}</div>
                 <div class="col-span-4 px-4 py-2">{{ t('services.mapping.target') }}</div>
                 <div class="col-span-3 px-4 py-2">{{ t('services.mapping.mediaType') }}</div>
@@ -23,10 +23,10 @@
             <div
                 v-for="(pair, index) in mappingStore.mappings"
                 :key="`pair-${index}`"
-                class="md:border-accent rounded-lg py-4 shadow-sm md:grid md:grid-cols-12 md:rounded-none md:border-b md:bg-transparent md:p-0 md:shadow-none">
+                class="md:border-line rounded-lg py-4 shadow-sm md:grid md:grid-cols-12 md:rounded-none md:border-b md:bg-transparent md:p-0 md:shadow-none">
                 <div class="float-right md:hidden">
                     <TimesIcon
-                        class="h-5 w-5 cursor-pointer text-red-500 transition duration-300 hover:text-red-600"
+                        class="h-5 w-5 cursor-pointer text-danger transition duration-300 hover:text-danger"
                         @click="removeMapping(index)" />
                 </div>
                 <div class="mb-2 md:col-span-4 md:mb-0 md:px-4 md:py-2">
@@ -89,7 +89,7 @@
                 <div
                     class="hidden items-center justify-between md:col-span-1 md:flex md:justify-end md:px-4 md:py-2">
                     <TimesIcon
-                        class="h-5 w-5 cursor-pointer text-red-500 transition duration-300 hover:text-red-600"
+                        class="h-5 w-5 cursor-pointer text-danger transition duration-300 hover:text-danger"
                         @click="removeMapping(index)" />
                 </div>
             </div>
