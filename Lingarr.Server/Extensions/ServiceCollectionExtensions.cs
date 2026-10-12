@@ -98,9 +98,9 @@ public static class ServiceCollectionExtensions
     private static void AddLogProviders(ILoggingBuilder logging)
     {
         logging.AddProvider(new CustomLogFormatter(Options.Create(new CustomLogFormatterOptions())));
-        #if !DEBUG
+        // Backs the /api/logs viewer. Bounded ring buffer (1000 entries) — safe to
+        // enable in Debug too, so the dev log page isn't silently empty.
         logging.AddProvider(new InMemoryLoggerProvider());
-        #endif
     }
 
     private static void ConfigureDatabase(this WebApplicationBuilder builder)
