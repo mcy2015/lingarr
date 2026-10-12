@@ -47,9 +47,5 @@ public class DirectoryController : ControllerBase
         {
             return Forbid($"Access denied to directory: {path}");
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred while browsing the directory: {ex.Message}");
-        }
     }
 }

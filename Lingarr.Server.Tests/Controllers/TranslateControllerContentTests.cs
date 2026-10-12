@@ -620,23 +620,21 @@ public class TranslateControllerContentTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateContent_NoUsableServices_ReturnsServerError()
+    public async Task TranslateContent_NoUsableServices_PropagatesForGlobalHandler()
     {
         _translationServiceFactoryMock
             .Setup(factory => factory.CreateTranslationServices(It.IsAny<IReadOnlyList<string>>()))
             .Returns(new List<TranslationServiceEntry>());
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<TranslationException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            CancellationToken.None);
+            CancellationToken.None));
 
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
         Assert.Empty(await _context.TranslationRequests.ToListAsync());
     }
 
     [Fact]
-    public async Task TranslateContent_BatchServiceFails_ReturnsServerErrorAndMarksRequestFailed()
+    public async Task TranslateContent_BatchServiceFails_PropagatesAndMarksRequestFailed()
     {
         _batchTranslationServiceMock
             .Setup(batchService => batchService.TranslateBatchAsync(
@@ -646,12 +644,9 @@ public class TranslateControllerContentTests : IDisposable
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("provider is down"));
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<TranslationException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            CancellationToken.None);
-
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
+            CancellationToken.None));
 
         var translationRequest = await _context.TranslationRequests.SingleAsync();
         Assert.Equal(TranslationStatus.Failed, translationRequest.Status);
@@ -660,7 +655,7 @@ public class TranslateControllerContentTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateContent_CancelledToken_ReturnsServerErrorAndMarksRequestCancelled()
+    public async Task TranslateContent_CancelledToken_PropagatesAndMarksRequestCancelled()
     {
         using var cancellationTokenSource = new CancellationTokenSource();
         _batchTranslationServiceMock
@@ -676,12 +671,9 @@ public class TranslateControllerContentTests : IDisposable
                 return new Dictionary<int, string>();
             });
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<OperationCanceledException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            cancellationTokenSource.Token);
-
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
+            cancellationTokenSource.Token));
 
         var translationRequest = await _context.TranslationRequests.SingleAsync();
         Assert.Equal(TranslationStatus.Cancelled, translationRequest.Status);
@@ -689,7 +681,7 @@ public class TranslateControllerContentTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateContent_UnsupportedLanguagePair_ReturnsServerErrorAndMarksRequestFailed()
+    public async Task TranslateContent_UnsupportedLanguagePair_PropagatesAndMarksRequestFailed()
     {
         _translationServiceMock
             .Setup(translationService => translationService.GetLanguagePair(
@@ -698,12 +690,9 @@ public class TranslateControllerContentTests : IDisposable
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((LanguagePair?)null);
 
-        var response = await _controller.TranslateContent(
+        await Assert.ThrowsAsync<TranslationException>(() => _controller.TranslateContent(
             NewContent("First line", "Second line"),
-            CancellationToken.None);
-
-        var errorResult = Assert.IsType<ObjectResult>(response.Result);
-        Assert.Equal(500, errorResult.StatusCode);
+            CancellationToken.None));
 
         var translationRequest = await _context.TranslationRequests.SingleAsync();
         Assert.Equal(TranslationStatus.Failed, translationRequest.Status);

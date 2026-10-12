@@ -17,6 +17,8 @@ public static class ApplicationBuilderExtensions
             app.UsePathBase(basePath);
         }
 
+        app.UseMiddleware<Middleware.GlobalExceptionMiddleware>();
+
         app.UseRouting();
 
         app.MapHubs();
@@ -59,16 +61,16 @@ public static class ApplicationBuilderExtensions
     {
         try
         {
-            Console.WriteLine("Applying migrations...");
+            app.Logger.LogInformation("Applying migrations...");
             MigrationConfiguration.RunMigrations(
                 app.Services,
                 DatabaseConfiguration.GetDbConnection(),
                 DatabaseConfiguration.GetConnectionString());
-            Console.WriteLine("Migrations applied successfully.");
+            app.Logger.LogInformation("Migrations applied successfully.");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"An error occurred while applying migrations: {ex}");
+            app.Logger.LogError(ex, "An error occurred while applying migrations.");
             throw;
         }
 
@@ -109,7 +111,7 @@ public static class ApplicationBuilderExtensions
             catch
             {
                 await settingService.SetEncryptedSetting(key, value);
-                Console.WriteLine($"Migrated '{key}' to encrypted storage.");
+                app.Logger.LogInformation("Migrated '{Key}' to encrypted storage.", key);
             }
         }
     }

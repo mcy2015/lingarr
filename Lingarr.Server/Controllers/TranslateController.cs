@@ -63,15 +63,8 @@ public class TranslateController : ControllerBase
     [HttpPost("bulk")]
     public async Task<ActionResult> BulkTranslate([FromBody] BulkTranslateRequest request)
     {
-        try
-        {
-            await _translationRequestService.CreateBulkRequest(request);
-            return Ok();
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { Error = ex.Message });
-        }
+        await _translationRequestService.CreateBulkRequest(request);
+        return Ok();
     }
 
     /// <summary>
@@ -110,15 +103,8 @@ public class TranslateController : ControllerBase
         [FromBody] TranslateAbleSubtitleContent translateAbleSubtitleContent,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var results = await _translationRequestService.TranslateContentAsync(translateAbleSubtitleContent, cancellationToken);
-            return Ok(results);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { Error = ex.Message });
-        }
+        var results = await _translationRequestService.TranslateContentAsync(translateAbleSubtitleContent, cancellationToken);
+        return Ok(results);
     }
 
     /// <summary>

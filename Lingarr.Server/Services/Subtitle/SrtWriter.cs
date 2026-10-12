@@ -95,9 +95,9 @@ public class SrtWriter : ISubtitleWriter
 
             await writer.FlushAsync();
         }
-        catch (IOException ex)
+        catch (IOException)
         {
-            Console.Error.WriteLine($"Error writing to stream: {ex.Message}");
+            // Propagate: callers (SubtitleService/jobs) own failure handling and logging.
             throw;
         }
     }
