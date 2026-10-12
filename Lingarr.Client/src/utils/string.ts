@@ -61,6 +61,10 @@ String.prototype.addParams = function (params: {
         })
         .join('&')
 
+    if (!queryString) {
+        return urlString
+    }
+
     if (hasQueryString) {
         return `${urlString}&${queryString}`
     } else {
