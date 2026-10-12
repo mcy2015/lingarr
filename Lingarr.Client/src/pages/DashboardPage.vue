@@ -1,7 +1,9 @@
 <template>
-    <div class="w-full space-y-5">
+    <!-- Viewport-fit layout: pipeline/KPI rows keep fixed height, the two
+         content rows split the remaining space and scroll inside their cards. -->
+    <div class="w-full flex h-full min-h-0 flex-col gap-5 overflow-hidden p-4 lg:p-6">
         <!-- ═══ 管线条带：媒体库 → 缺字幕 → 队列(hot) → 服务 → 写回 ═══ -->
-        <div class="flex flex-wrap items-stretch gap-2">
+        <div class="flex flex-wrap items-stretch gap-2 shrink-0">
             <template v-for="(node, index) in pipelineNodes" :key="node.key">
                 <div v-if="index > 0" class="link hidden self-center md:block"></div>
                 <div
@@ -17,88 +19,98 @@
         </div>
 
         <!-- ═══ KPI 条 ═══ -->
-        <div class="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <div class="grid grid-cols-2 gap-2.5 shrink-0 lg:grid-cols-4">
             <div v-for="kpi in kpis" :key="kpi.label" class="rounded-md border border-line bg-secondary px-4 py-3">
                 <div class="mono text-2xl font-semibold" :class="kpi.cls ?? ''">{{ kpi.value }}</div>
                 <div class="text-secondary-content mt-0.5 text-xs">{{ kpi.label }}</div>
             </div>
         </div>
 
-        <!-- ═══ 活跃任务 + 服务健康 ═══ -->
-        <div class="grid items-start gap-3.5 lg:grid-cols-[1.6fr_1fr]">
-            <div class="rounded-md border border-line bg-secondary">
-                <div class="flex items-center gap-2.5 border-b border-line px-4 py-3">
+        <!-- ═══ 活跃任务 + 服务健康（弹性行，卡内滚动） ═══ -->
+        <div class="grid min-h-[170px] flex-[1.4] gap-3.5 lg:grid-cols-[1.6fr_1fr]">
+            <div class="rounded-md border border-line bg-secondary flex min-h-0 flex-col">
+                <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
                     <h2 class="text-[13px] font-semibold">{{ t('overview.active.title') }}</h2>
                     <span class="mono text-secondary-content ml-auto text-xs">
                         {{ t('overview.active.live') }}
                     </span>
                 </div>
-                <p v-if="activeItems.length === 0" class="text-secondary-content/60 px-4 py-6 text-center text-sm">
-                    {{ t('overview.active.empty') }}
-                </p>
-                <div
-                    v-for="item in activeItems"
-                    :key="item.id"
-                    class="grid grid-cols-[minmax(0,1fr)_130px_74px] items-center gap-3.5 border-b border-line px-4 py-2.5 last:border-b-0">
-                    <div class="min-w-0">
-                        <b class="block truncate text-[13px] font-semibold" :title="item.title">{{ item.title }}</b>
-                        <span class="text-secondary-content block truncate text-[11.5px]">
-                            {{ item.sourceLanguage.toUpperCase() }} → {{ item.targetLanguage.toUpperCase() }}
-                            <template v-if="item.serviceType"> · {{ item.serviceType }}</template>
-                        </span>
-                    </div>
-                    <TranslationProgress :progress="item.progress" :status="item.status" />
-                    <div class="mono text-secondary-content text-right text-xs" :title="t('overview.active.etaHint')">
-                        {{ item.progress }}% · {{ remainingEta(item) }}
+                <div class="shell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+                    <p
+                        v-if="activeItems.length === 0"
+                        class="text-secondary-content/60 my-auto px-4 py-6 text-center text-sm">
+                        {{ t('overview.active.empty') }}
+                    </p>
+                    <div
+                        v-for="item in activeItems"
+                        :key="item.id"
+                        class="grid grid-cols-[minmax(0,1fr)_130px_74px] items-center gap-3.5 border-b border-line px-4 py-2.5 last:border-b-0">
+                        <div class="min-w-0">
+                            <b class="block truncate text-[13px] font-semibold" :title="item.title">{{ item.title }}</b>
+                            <span class="text-secondary-content block truncate text-[11.5px]">
+                                {{ item.sourceLanguage.toUpperCase() }} → {{ item.targetLanguage.toUpperCase() }}
+                                <template v-if="item.serviceType"> · {{ item.serviceType }}</template>
+                            </span>
+                        </div>
+                        <TranslationProgress :progress="item.progress" :status="item.status" />
+                        <div class="mono text-secondary-content text-right text-xs" :title="t('overview.active.etaHint')">
+                            {{ item.progress }}% · {{ remainingEta(item) }}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="rounded-md border border-line bg-secondary">
-                <div class="flex items-center gap-2.5 border-b border-line px-4 py-3">
+            <div class="rounded-md border border-line bg-secondary flex min-h-0 flex-col">
+                <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
                     <h2 class="text-[13px] font-semibold">{{ t('overview.health.title') }}</h2>
                     <span class="mono text-secondary-content ml-auto text-xs">
                         {{ t('overview.health.configuredCount', { count: configuredCount }) }}
                     </span>
                 </div>
-                <div
-                    v-for="provider in health"
-                    :key="provider.provider"
-                    class="flex items-center gap-2.5 border-b border-line px-4 py-2.5 text-[13px] last:border-b-0">
-                    <span class="h-[7px] w-[7px] shrink-0 rounded-full" :class="healthDot(provider).cls"></span>
-                    <span>{{ provider.displayName }}</span>
-                    <span
-                        class="mono text-secondary-content ml-auto max-w-[45%] truncate text-[11.5px]"
-                        :title="healthDot(provider).title">
-                        {{ healthDot(provider).text }}
-                    </span>
+                <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
+                    <div
+                        v-for="provider in health"
+                        :key="provider.provider"
+                        class="flex items-center gap-2.5 border-b border-line px-4 py-2.5 text-[13px] last:border-b-0">
+                        <span class="h-[7px] w-[7px] shrink-0 rounded-full" :class="healthDot(provider).cls"></span>
+                        <span>{{ provider.displayName }}</span>
+                        <span
+                            class="mono text-secondary-content ml-auto max-w-[45%] truncate text-[11.5px]"
+                            :title="healthDot(provider).title">
+                            {{ healthDot(provider).text }}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- ═══ 最近动态 ═══ -->
-        <div class="rounded-md border border-line bg-secondary">
-            <div class="flex items-center gap-2.5 border-b border-line px-4 py-3">
+        <!-- ═══ 最近动态（弹性行，卡内滚动） ═══ -->
+        <div class="rounded-md border border-line bg-secondary flex min-h-[150px] flex-1 flex-col">
+            <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('overview.feed.title') }}</h2>
                 <span class="mono text-secondary-content ml-auto text-xs">
                     {{ t('overview.feed.count', { count: events.length }) }}
                 </span>
             </div>
-            <p v-if="events.length === 0" class="text-secondary-content/60 px-4 py-6 text-center text-sm">
-                {{ t('overview.feed.empty') }}
-            </p>
-            <div
-                v-for="event in events"
-                :key="event.id"
-                class="flex gap-3 border-b border-line px-4 py-2 text-[12.5px] last:border-b-0">
-                <time class="mono text-secondary-content shrink-0 pt-0.5 text-[11px]">
-                    {{ formatTime(event.createdAt) }}
-                </time>
-                <span class="shrink-0" :class="feedIcon(event.status).cls">{{ feedIcon(event.status).icon }}</span>
-                <span class="min-w-0">
-                    <b>{{ event.requestTitle }}</b>
-                    <span class="text-secondary-content"> — {{ event.message ?? statusLabel(event.status) }}</span>
-                </span>
+            <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
+                <p
+                    v-if="events.length === 0"
+                    class="text-secondary-content/60 my-auto px-4 py-6 text-center text-sm">
+                    {{ t('overview.feed.empty') }}
+                </p>
+                <div
+                    v-for="event in events"
+                    :key="event.id"
+                    class="flex gap-3 border-b border-line px-4 py-2 text-[12.5px] last:border-b-0">
+                    <time class="mono text-secondary-content shrink-0 pt-0.5 text-[11px]">
+                        {{ formatTime(event.createdAt) }}
+                    </time>
+                    <span class="shrink-0" :class="feedIcon(event.status).cls">{{ feedIcon(event.status).icon }}</span>
+                    <span class="min-w-0">
+                        <b>{{ event.requestTitle }}</b>
+                        <span class="text-secondary-content"> — {{ event.message ?? statusLabel(event.status) }}</span>
+                    </span>
+                </div>
             </div>
         </div>
     </div>
@@ -122,7 +134,7 @@ import {
 
 const REFRESH_INTERVAL_MS = 30_000
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const signalR = useSignalR()
 
 const pipeline = ref<IPipelineStatistics | null>(null)
@@ -177,7 +189,12 @@ const kpis = computed(() => [
     { label: t('overview.kpi.queued'), value: pendingCount.value },
     {
         label: t('overview.kpi.cost'),
-        value: pipeline.value?.monthlyCost != null ? `$${pipeline.value.monthlyCost}` : '—',
+        value:
+            pipeline.value?.monthlyCost != null
+                ? new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD' }).format(
+                      pipeline.value.monthlyCost
+                  )
+                : '—',
         cls: 'text-secondary-content/60'
     },
     {
@@ -244,7 +261,7 @@ const statusLabel = (status: string): string => {
 }
 
 const formatTime = (createdAt: string): string =>
-    new Date(createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    new Date(createdAt).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
 
 /// Same linear estimate as the queue rows: startedAt + progress extrapolated
 /// to 100%; "—" until the job actually starts producing progress.
