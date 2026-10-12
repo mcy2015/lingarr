@@ -918,13 +918,13 @@
             "proofreadUnavailable": "该行暂不支持校对",
             "couldNotApplyChange": "无法应用更改"
         },
-        "queueFooter": "队列由 Hangfire 6 队列驱动（movies / shows / system / translation / webhook / default）· 并发由 MAX_CONCURRENT_JOBS 控制",
         "wroteBack": "写回",
         "eta": {
             "pausedHint": "已暂停，恢复后继续",
             "remainingHint": "预计剩余时间",
             "retries": "重试 {count} 次"
-        }
+        },
+        "queueFooterLive": "队列深度 {depth} · Hangfire 并发 {workers}"
     },
     "proofread": {
         "loading": "正在加载请求…",

@@ -31,4 +31,7 @@ public class PipelineStatistics
 
     /// <summary>Reserved for A5 (usage × provider pricing); rendered as "—" until then.</summary>
     public double? MonthlyCost { get; set; }
+
+    /// <summary>Hangfire worker count (MAX_CONCURRENT_JOBS), for the queue footer.</summary>
+    public int ConcurrentJobs { get; set; }
 }

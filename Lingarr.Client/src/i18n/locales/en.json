@@ -918,13 +918,13 @@
             "proofreadUnavailable": "Proofreading is not available for this line",
             "couldNotApplyChange": "Could not apply the change"
         },
-        "queueFooter": "Driven by 6 Hangfire queues (movies / shows / system / translation / webhook / default) · concurrency via MAX_CONCURRENT_JOBS",
         "wroteBack": "Wrote back",
         "eta": {
             "pausedHint": "Paused — resume to continue",
             "remainingHint": "Estimated remaining time",
             "retries": "{count} retries"
-        }
+        },
+        "queueFooterLive": "Queue depth {depth} · Hangfire workers: {workers}"
     },
     "proofread": {
         "loading": "Loading request…",
