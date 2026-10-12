@@ -74,18 +74,25 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
     }
 
     /// <inheritdoc />
-    public async Task<int> CreateImportRequest(string subtitlePath, string title, string sourceLanguage, string targetLanguage)
+    public async Task<int> CreateImportRequest(
+        string subtitlePath,
+        string title,
+        string sourceLanguage,
+        string targetLanguage,
+        int? mediaId,
+        MediaType mediaType)
     {
-        // Imports have no media binding; Movie is the neutral display bucket and
-        // Source = Import keeps them distinguishable from library media in the queue.
+        // Bound imports carry the resolved Movie/Episode id so output naming and
+        // the queue UI treat them like library media; Source = Import still marks
+        // them as manual imports.
         var translationRequest = new TranslationRequest
         {
-            MediaId = null,
+            MediaId = mediaId,
             Title = title,
             SourceLanguage = sourceLanguage,
             TargetLanguage = targetLanguage,
             SubtitleToTranslate = subtitlePath,
-            MediaType = MediaType.Movie,
+            MediaType = mediaType,
             Source = TranslationRequestSource.Import,
             Status = TranslationStatus.Pending
         };

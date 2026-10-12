@@ -26,10 +26,17 @@ public interface ITranslationRequestService
     Task<int> CreateRequest(TranslateAbleSubtitle translateAbleSubtitle);
 
     /// <summary>
-    /// Creates a translation request for a manually imported subtitle file
-    /// (no media binding, Source = Import) and enqueues it for processing.
+    /// Creates a translation request for a manually imported subtitle file and
+    /// enqueues it for processing. Unbound imports (null mediaId) get the neutral
+    /// Movie bucket; bound imports carry the resolved Movie/Episode id.
     /// </summary>
-    Task<int> CreateImportRequest(string subtitlePath, string title, string sourceLanguage, string targetLanguage);
+    Task<int> CreateImportRequest(
+        string subtitlePath,
+        string title,
+        string sourceLanguage,
+        string targetLanguage,
+        int? mediaId,
+        MediaType mediaType);
 
     /// <summary>
     /// Creates translation requests for multiple media items, handling subtitle discovery

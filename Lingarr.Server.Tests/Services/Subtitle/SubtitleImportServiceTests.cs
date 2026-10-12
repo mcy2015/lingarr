@@ -6,10 +6,13 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Lingarr.Core.Data;
+using Lingarr.Core.Entities;
+using Lingarr.Core.Enum;
 using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Subtitle;
 using Lingarr.Server.Services;
 using Lingarr.Server.Services.Subtitle;
 using Moq;
@@ -20,6 +23,7 @@ namespace Lingarr.Server.Tests.Services.Subtitle;
 public class SubtitleImportServiceTests : IDisposable
 {
     private readonly string _root;
+    private readonly LingarrDbContext _dbContext;
     private readonly Mock<ITranslationRequestQueueService> _queueService;
     private readonly SubtitleImportService _service;
 
@@ -32,21 +36,22 @@ public class SubtitleImportServiceTests : IDisposable
         environment.SetupGet(e => e.ContentRootPath).Returns(_root);
 
         _queueService = new Mock<ITranslationRequestQueueService>();
+        _dbContext = new LingarrDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
         _service = new SubtitleImportService(
             environment.Object,
             new SubtitleEncodingService(),
             _queueService.Object,
-            NullLogger());
+            _dbContext,
+            Mock.Of<ILogger<SubtitleImportService>>());
     }
 
     public void Dispose()
     {
         Directory.Delete(_root, recursive: true);
+        _dbContext.Database.EnsureDeleted();
     }
-
-    private static ILogger<SubtitleImportService> NullLogger()
-        => Mock.Of<ILogger<SubtitleImportService>>();
 
     private static IFormFile FormFile(string fileName, byte[] content)
     {
@@ -85,7 +90,7 @@ public class SubtitleImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ImportFiles_TranslateTrue_EnqueuesRequestWithStoredPath()
+    public async Task ImportFiles_TranslateTrue_EnqueuesUnboundRequest()
     {
         var results = await _service.ImportFiles(
             [FormFile("Show.S01E05.chs.srt", "1\n00:00:01,000 --> 00:00:02,000\nhi\n"u8.ToArray())],
@@ -93,12 +98,15 @@ public class SubtitleImportServiceTests : IDisposable
 
         var result = Assert.Single(results);
         Assert.True(result.Success, result.Error);
+        Assert.False(result.MediaBound);
         Assert.NotNull(result.TranslationRequestId);
         _queueService.Verify(q => q.CreateImportRequest(
             It.Is<string>(p => p != null && File.Exists(p)),
-            "Show.S01E05.chs", // title is the stored file name without extension
+            "Show.S01E05.chs",
             "en",
-            "zh"), Times.Once);
+            "zh",
+            null,
+            MediaType.Movie), Times.Once);
     }
 
     [Fact]
@@ -124,5 +132,105 @@ public class SubtitleImportServiceTests : IDisposable
         Assert.True(result.Success, result.Error);
         Assert.Equal("evil.srt", Path.GetFileName(result.SavedPath));
         Assert.Equal(Path.Combine(_root, "config", "imports"), Path.GetDirectoryName(result.SavedPath));
+    }
+
+    // ── directed imports ──────────────────────────────────────────────
+
+    private async Task SeedMediaAsync()
+    {
+        _dbContext.Movies.Add(new Movie
+        {
+            RadarrId = 1, Title = "Dune: Part Two", Path = Path.Combine(_root, "media", "dune.mkv"),
+            FileName = "dune.mkv", DateAdded = DateTimeOffset.Now
+        });
+        var show = new Show { SonarrId = 1, Title = "Shōgun", Path = Path.Combine(_root, "media", "tv", "shogun"), DateAdded = DateTimeOffset.Now };
+        var season = new Season { SeasonNumber = 1, Show = show };
+        show.Seasons.Add(season);
+        season.Episodes.Add(new Episode
+        {
+            SonarrId = 5, EpisodeNumber = 5, Title = "Broken to the Fist",
+            Path = Path.Combine(_root, "media", "tv", "shogun", "e5.mkv"), FileName = "e5.mkv", Season = season
+        });
+        season.Episodes.Add(new Episode
+        {
+            SonarrId = 6, EpisodeNumber = 6, Title = "Broken to the Fist II",
+            Path = string.Empty, FileName = string.Empty, Season = season
+        });
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task ImportFiles_DirectedMovie_StoresNextToVideoAndBindsRequest()
+    {
+        await SeedMediaAsync();
+        var movie = await _dbContext.Movies.SingleAsync();
+
+        var results = await _service.ImportFiles(
+            [FormFile("dune.chs.srt", "sub"u8.ToArray())],
+            "en", "zh", translate: true, mediaType: "Movie", mediaId: movie.Id);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success, result.Error);
+        Assert.True(result.MediaBound);
+        Assert.Equal(Path.GetDirectoryName(movie.Path), Path.GetDirectoryName(result.SavedPath));
+        _queueService.Verify(q => q.CreateImportRequest(
+            result.SavedPath!, "Dune: Part Two", "en", "zh", movie.Id, MediaType.Movie), Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportFiles_DirectedShowSeason_MatchesEpisodeByParsedNumber()
+    {
+        await SeedMediaAsync();
+        var show = await _dbContext.Shows.SingleAsync();
+        var episode = await _dbContext.Episodes.SingleAsync(e => e.EpisodeNumber == 5);
+
+        var results = await _service.ImportFiles(
+            [FormFile("Shogun.S01E05.chs.srt", "sub"u8.ToArray())],
+            "en", "zh", translate: true, mediaType: "Show", mediaId: show.Id, season: 1);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success, result.Error);
+        Assert.True(result.MediaBound);
+        Assert.Equal(Path.GetDirectoryName(episode.Path), Path.GetDirectoryName(result.SavedPath));
+        _queueService.Verify(q => q.CreateImportRequest(
+            result.SavedPath!,
+            "Shōgun - S01E05 - Broken to the Fist",
+            "en", "zh", episode.Id, MediaType.Episode), Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportFiles_DirectedShowSeason_UnmatchedFileFallsBackToImports()
+    {
+        await SeedMediaAsync();
+        var show = await _dbContext.Shows.SingleAsync();
+
+        var results = await _service.ImportFiles(
+            [FormFile("Shogun.S01E99.chs.srt", "sub"u8.ToArray())],
+            "en", "zh", translate: true, mediaType: "Show", mediaId: show.Id, season: 1);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success, result.Error);
+        Assert.False(result.MediaBound);
+        Assert.StartsWith(Path.Combine(_root, "config", "imports"), result.SavedPath);
+        _queueService.Verify(q => q.CreateImportRequest(
+            result.SavedPath!, "Shogun.S01E99.chs", "en", "zh",
+            null, MediaType.Movie), Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportFiles_DirectedShowSeason_EpisodeWithoutVideoPathFallsBack()
+    {
+        await SeedMediaAsync();
+        var show = await _dbContext.Shows.SingleAsync();
+
+        var results = await _service.ImportFiles(
+            [FormFile("Shogun.S01E06.chs.srt", "sub"u8.ToArray())],
+            "en", "zh", translate: true, mediaType: "Show", mediaId: show.Id, season: 1);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success, result.Error);
+        Assert.False(result.MediaBound);
+        Assert.StartsWith(Path.Combine(_root, "config", "imports"), result.SavedPath);
     }
 }

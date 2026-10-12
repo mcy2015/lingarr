@@ -6,7 +6,10 @@ public class ImportedSubtitleResult
     public required string FileName { get; set; }
     public bool Success { get; set; }
 
-    /// <summary>Saved UTF-8 path inside the imports directory (when the file was stored).</summary>
+    /// <summary>True when the file was stored next to its matched media video (directed import).</summary>
+    public bool MediaBound { get; set; }
+
+    /// <summary>Saved UTF-8 path (imports directory or next to media) when the file was stored.</summary>
     public string? SavedPath { get; set; }
 
     /// <summary>Created translation request id (when the file was queued for translation).</summary>

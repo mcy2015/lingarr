@@ -60,21 +60,28 @@ public class SubtitleController : ControllerBase
     }
 
     /// <summary>
-    /// Imports uploaded subtitle files: stores them (converted to UTF-8) under the
-    /// imports directory and optionally enqueues a translation request per file.
-    /// Unsupported extensions and per-file failures are reported individually.
+    /// Imports uploaded subtitle files: stores them (converted to UTF-8) next to
+    /// matched media when a binding is given, otherwise under the imports directory,
+    /// and optionally enqueues a translation request per file. Unsupported
+    /// extensions and per-file failures are reported individually.
     /// </summary>
     /// <param name="files">Subtitle files (.srt/.ass/.ssa).</param>
     /// <param name="sourceLanguage">Source language code for queued translations.</param>
     /// <param name="targetLanguage">Target language code for queued translations.</param>
     /// <param name="translate">When true, each stored file is queued for translation.</param>
+    /// <param name="mediaType">Optional binding: "Movie" or "Show".</param>
+    /// <param name="mediaId">Movie/Show id for the binding.</param>
+    /// <param name="season">Season number when binding to a show.</param>
     [HttpPost("import")]
     [RequestSizeLimit(100 * 1024 * 1024)]
     public async Task<ActionResult<ImportSubtitlesResponse>> Import(
         List<IFormFile> files,
         [FromForm] string sourceLanguage = "en",
         [FromForm] string targetLanguage = "nl",
-        [FromForm] bool translate = false)
+        [FromForm] bool translate = false,
+        [FromForm] string? mediaType = null,
+        [FromForm] int? mediaId = null,
+        [FromForm] int? season = null)
     {
         if (files.Count == 0)
         {
@@ -86,7 +93,21 @@ public class SubtitleController : ControllerBase
             return BadRequest(new { message = "Target language is required when queuing translations." });
         }
 
-        var results = await _subtitleImportService.ImportFiles(files, sourceLanguage, targetLanguage, translate);
+        if ((mediaId is not null || !string.IsNullOrEmpty(mediaType))
+            && (mediaId is null || string.IsNullOrEmpty(mediaType)
+                || (!(mediaType.Equals("Movie", StringComparison.OrdinalIgnoreCase)
+                    || mediaType.Equals("Show", StringComparison.OrdinalIgnoreCase)))))
+        {
+            return BadRequest(new { message = "mediaType must be 'Movie' or 'Show' together with mediaId." });
+        }
+
+        if (mediaType?.Equals("Show", StringComparison.OrdinalIgnoreCase) == true && mediaId is not null && season is null)
+        {
+            return BadRequest(new { message = "season is required when importing into a show." });
+        }
+
+        var results = await _subtitleImportService.ImportFiles(files, sourceLanguage, targetLanguage, translate,
+            mediaType, mediaId, season);
         return Ok(new ImportSubtitlesResponse { Results = results });
     }
 }

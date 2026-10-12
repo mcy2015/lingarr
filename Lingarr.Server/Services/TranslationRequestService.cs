@@ -43,8 +43,14 @@ public class TranslationRequestService : ITranslationRequestService
         => _queueService.CreateRequest(translateAbleSubtitle);
 
     /// <inheritdoc />
-    public Task<int> CreateImportRequest(string subtitlePath, string title, string sourceLanguage, string targetLanguage)
-        => _queueService.CreateImportRequest(subtitlePath, title, sourceLanguage, targetLanguage);
+    public Task<int> CreateImportRequest(
+        string subtitlePath,
+        string title,
+        string sourceLanguage,
+        string targetLanguage,
+        int? mediaId,
+        MediaType mediaType)
+        => _queueService.CreateImportRequest(subtitlePath, title, sourceLanguage, targetLanguage, mediaId, mediaType);
 
     /// <inheritdoc />
     public Task CreateBulkRequest(BulkTranslateRequest request)

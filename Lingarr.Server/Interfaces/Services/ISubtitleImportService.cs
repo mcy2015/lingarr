@@ -9,14 +9,19 @@ namespace Lingarr.Server.Interfaces.Services;
 public interface ISubtitleImportService
 {
     /// <summary>
-    /// Stores the uploaded subtitle files under the imports directory, converting
-    /// each to UTF-8, and optionally enqueues a translation request per file.
-    /// Unsupported extensions and failures are reported per file; one bad file
-    /// never blocks the rest of the batch.
+    /// Stores the uploaded subtitle files, converting each to UTF-8, and optionally
+    /// enqueues a translation request per file. With a media binding (mediaType
+    /// "Movie", or "Show" + season) files are stored next to the matched media's
+    /// video and requests are bound to that media; unmatched files fall back to
+    /// the imports directory. Unsupported extensions and failures are reported
+    /// per file; one bad file never blocks the rest of the batch.
     /// </summary>
     Task<List<ImportedSubtitleResult>> ImportFiles(
         List<IFormFile> files,
         string sourceLanguage,
         string targetLanguage,
-        bool translate);
+        bool translate,
+        string? mediaType = null,
+        int? mediaId = null,
+        int? season = null);
 }
