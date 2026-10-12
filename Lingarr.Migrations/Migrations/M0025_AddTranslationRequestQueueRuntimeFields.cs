@@ -29,7 +29,7 @@ public class M0025_AddTranslationRequestQueueRuntimeFields : Migration
 
         if (!Schema.Table("translation_requests").Column("started_at").Exists())
         {
-            Alter.Table("translation_requests").AddColumn("started_at").AsDateTimeOffset().Nullable();
+            Alter.Table("translation_requests").AddColumn("started_at").AsDateTime().Nullable();
         }
 
         if (!Schema.Table("translation_requests").Column("retry_count").Exists())

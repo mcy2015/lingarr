@@ -194,8 +194,9 @@ public class TranslationJob
             var translationService = run.PrimaryService;
 
             // persist the service that processed (or is processing) this request
-            // so the queue screen can show the provider badge
-            translationRequest.ServiceType = serviceType;
+            // so the queue screen can show the provider badge; note `request` is
+            // the tracked entity - the job parameter is a deserialized copy
+            request.ServiceType = serviceType;
             await _dbContext.SaveChangesAsync();
 
             if (settings[SettingKeys.Translation.FixOverlappingSubtitles] == "true")

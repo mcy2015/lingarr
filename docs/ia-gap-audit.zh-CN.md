@@ -36,9 +36,9 @@
 | 状态过滤 tab + 计数 | ✅ `GET /translationrequest/counts` + status 过滤参数 |
 | 导入徽章 | ✅ Summary.Source |
 | 轨道条进度+播放头 | ✅ TranslationProgress（签名组件既有） |
-| provider 徽章 | ❌ 需任务记录所用服务（列 + 写入点在 TranslationJob），Phase 2 |
-| ETA | ❌ 需进度持久化 + 速率计算（ProgressService 扩展），Phase 2 |
-| 暂停 | ❌ 现仅取消/重试；Hangfire 支持暂停，Phase 2 |
+| provider 徽章 | ✅ M0025 service_type + TranslationJob 管线后写入 + 前端 mono chip |
+| ETA | ✅ M0025 progress/started_at 持久化 + 前端线性估算（startedAt+progress） |
+| 暂停 | ✅ 协作式暂停（registry 门控 + 批循环检查点）+ pause/resume-paused 端点；内存门控，重启自动恢复（已注明） |
 
 ### 屏 4 · 校对台 `/proofread/:id` ❌（独立任务：双轨工作台）
 
