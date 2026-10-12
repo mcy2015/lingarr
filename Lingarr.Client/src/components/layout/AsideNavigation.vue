@@ -110,6 +110,7 @@ const menuItems: MenuItem[] = [
     { label: 'nav.movies', icon: 'movie', route: 'movies', children: [] },
     { label: 'nav.shows', icon: 'show', route: 'shows', children: [] },
     { label: 'nav.translations', icon: 'language', route: 'translations', children: [] },
+    { label: 'nav.import', icon: 'folders', route: 'import', children: [] },
     {
         label: 'nav.settings',
         icon: 'setting',

@@ -25,6 +25,7 @@ export interface Services {
     auth: IAuthService
     setting: ISettingService
     subtitle: ISubtitleService
+    import: IImportService
     translate: ITranslateService
     translationRequest: ITranslationRequestService
     version: IVersionService
@@ -89,6 +90,36 @@ export interface ISettingService {
 
 export interface ISubtitleService {
     collect<T>(path: string): Promise<T>
+}
+
+export interface IParsedSubtitleFilename {
+    fileName: string
+    season: number | null
+    episode: number | null
+    matchTier: 'Exact' | 'Guess' | 'None'
+    languageTags: string[]
+}
+
+export interface IImportedSubtitleResult {
+    fileName: string
+    success: boolean
+    savedPath?: string | null
+    translationRequestId?: number | null
+    error?: string | null
+}
+
+export interface IImportSubtitlesResponse {
+    results: IImportedSubtitleResult[]
+}
+
+export interface IImportService {
+    parseFilenames(filenames: string[]): Promise<IParsedSubtitleFilename[]>
+    importFiles(
+        files: File[],
+        sourceLanguage: string,
+        targetLanguage: string,
+        translate: boolean
+    ): Promise<IImportSubtitlesResponse>
 }
 
 export interface IVersionService {

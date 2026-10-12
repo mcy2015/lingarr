@@ -5,6 +5,7 @@ import { ApiError } from './apiError'
 import { translationRequestService } from '@/services/translationRequestService'
 import { authService } from './authService'
 import { subtitleService } from './subtitleService'
+import { importService } from './importService'
 import { translateService } from './translateService'
 import { settingService } from './settingService'
 import { mediaService } from './mediaService'
@@ -64,6 +65,7 @@ const services = (axios: AxiosStatic): Services => ({
     auth: authService(axios),
     setting: settingService(axios),
     subtitle: subtitleService(axios),
+    import: importService(axios),
     translate: translateService(axios),
     translationRequest: translationRequestService(axios),
     version: versionService(axios),

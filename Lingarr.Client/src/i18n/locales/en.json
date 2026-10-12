@@ -51,6 +51,7 @@
         "movies": "Movies",
         "shows": "TV Shows",
         "translations": "Translations",
+        "import": "Import",
         "settings": "Settings"
     },
     "version": {
@@ -124,6 +125,50 @@
         "errors": {
             "missingCredentials": "Please enter your username and password",
             "invalidCredentials": "Invalid username or password"
+        }
+    },
+    "import": {
+        "title": "Import subtitles",
+        "tabs": {
+            "free": "Free import",
+            "season": "Season pack"
+        },
+        "dropzone": {
+            "title": "Drag subtitle files here, or click to browse",
+            "formats": ".srt / .ass / .ssa — converted to UTF-8 on import"
+        },
+        "seasonHint": "File names are parsed for season/episode markers (SxxExx, 第x集). Files are stored in the import library; writing back next to media is on the roadmap.",
+        "options": {
+            "source": "Source language",
+            "target": "Target language",
+            "translate": "Queue translation after import"
+        },
+        "table": {
+            "file": "File",
+            "season": "Season",
+            "episode": "Episode",
+            "match": "Match",
+            "languages": "Languages",
+            "status": "Status"
+        },
+        "match": {
+            "Exact": "Exact",
+            "Guess": "Guess",
+            "None": "Unmatched"
+        },
+        "status": {
+            "stored": "Stored",
+            "queued": "Queued (#{id})",
+            "failed": "Failed"
+        },
+        "actions": {
+            "import": "Import files",
+            "clear": "Clear"
+        },
+        "empty": "No files selected yet.",
+        "toast": {
+            "success": "Imported {count} file(s)",
+            "failed": "Import failed: {message}"
         }
     },
     "dashboard": {

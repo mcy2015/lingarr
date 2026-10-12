@@ -51,6 +51,7 @@
         "movies": "电影",
         "shows": "剧集",
         "translations": "翻译任务",
+        "import": "导入",
         "settings": "设置"
     },
     "version": {
@@ -124,6 +125,50 @@
         "errors": {
             "missingCredentials": "请输入用户名和密码",
             "invalidCredentials": "用户名或密码无效"
+        }
+    },
+    "import": {
+        "title": "导入字幕",
+        "tabs": {
+            "free": "自由导入",
+            "season": "整季包"
+        },
+        "dropzone": {
+            "title": "拖拽字幕文件到此处，或点击选择",
+            "formats": ".srt / .ass / .ssa — 导入时自动转码为 UTF-8"
+        },
+        "seasonHint": "文件名中的季集标记（SxxExx、第x集）会被自动解析；文件存入导入库，写回媒体目录的能力在路线图中。",
+        "options": {
+            "source": "源语言",
+            "target": "目标语言",
+            "translate": "导入后加入翻译队列"
+        },
+        "table": {
+            "file": "文件",
+            "season": "季",
+            "episode": "集",
+            "match": "置信度",
+            "languages": "语言",
+            "status": "状态"
+        },
+        "match": {
+            "Exact": "精确",
+            "Guess": "猜测",
+            "None": "未匹配"
+        },
+        "status": {
+            "stored": "已入库",
+            "queued": "已排队（#{id}）",
+            "failed": "失败"
+        },
+        "actions": {
+            "import": "开始导入",
+            "clear": "清除"
+        },
+        "empty": "尚未选择文件。",
+        "toast": {
+            "success": "已导入 {count} 个文件",
+            "failed": "导入失败：{message}"
         }
     },
     "dashboard": {
