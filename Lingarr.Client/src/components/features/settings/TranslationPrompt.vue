@@ -5,7 +5,6 @@
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
-                <SaveNotification ref="saveNotification" />
                 <div class="flex flex-col space-x-2">
                     <span class="font-semibold">
                         {{ t('settings.translationPrompt.systemPrompt') }}
@@ -87,11 +86,11 @@ import CardComponent from '@/components/common/CardComponent.vue'
 import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 
 const settingsStore = useSettingStore()
 const { t } = useI18n()
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const isSystemPromptValid = ref(false)
 const isUserPromptValid = ref(false)
 const isValid = reactive({
@@ -120,7 +119,7 @@ const aiPrompt = computed({
     set: (newValue: string) => {
         settingsStore.updateSetting(SETTINGS.AI_PROMPT, newValue, isSystemPromptValid.value)
         if (isSystemPromptValid.value) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -130,7 +129,7 @@ const aiUserPrompt = computed({
     set: (newValue: string) => {
         settingsStore.updateSetting(SETTINGS.AI_USER_PROMPT, newValue, isUserPromptValid.value)
         if (isUserPromptValid.value) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -140,7 +139,7 @@ const contextBefore = computed({
     set: (newValue: string) => {
         settingsStore.updateSetting(SETTINGS.AI_CONTEXT_BEFORE, newValue, isValid.contextBefore)
         if (isValid.contextBefore) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -150,7 +149,7 @@ const contextAfter = computed({
     set: (newValue: string) => {
         settingsStore.updateSetting(SETTINGS.AI_CONTEXT_AFTER, newValue, isValid.contextAfter)
         if (isValid.contextAfter) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -159,7 +158,7 @@ const useTranslatedContext = computed({
     get: () => settingsStore.getSetting(SETTINGS.AI_CONTEXT_USE_TRANSLATED) as string,
     set: (newValue: string) => {
         settingsStore.updateSetting(SETTINGS.AI_CONTEXT_USE_TRANSLATED, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>

@@ -44,6 +44,8 @@
                 </router-view>
             </main>
         </div>
+
+        <ToastNotification />
     </div>
 </template>
 
@@ -58,6 +60,7 @@ import useTranslationRequestStore from '@/store/translationRequest'
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'
 import DropdownComponent from '@/components/common/DropdownComponent.vue'
 import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
+import ToastNotification from '@/components/common/ToastNotification.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const settingStore = useSettingStore()

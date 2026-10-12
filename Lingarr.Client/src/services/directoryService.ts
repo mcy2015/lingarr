@@ -1,10 +1,11 @@
 import { AxiosStatic } from 'axios'
 import { IDirectoryService } from '@/types'
+import { buildUrl } from '@/utils/string'
 
 const service = (http: AxiosStatic, resource = '/api/directory'): IDirectoryService => ({
     get(path: string): Promise<[]> {
         return http
-            .get(`${resource}/get`.addParams({ path: path }))
+            .get(buildUrl(`${resource}/get`, { path }))
             .then((response) => response.data)
     }
 })

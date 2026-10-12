@@ -166,107 +166,15 @@
                             <div class="text-primary-content px-4 py-2 text-sm md:col-span-5">
                                 {{ line.target }}
                             </div>
-                            <div
-                                class="text-primary-content/70 flex items-center justify-between gap-2 px-4 py-2 text-xs md:col-span-2">
-                                <span class="truncate">
-                                    {{ line.service ?? t('translations.detail.unknown') }}
-                                </span>
-                                <div class="flex shrink-0 items-center gap-2">
-                                    <button
-                                        v-if="editable"
-                                        :title="t('translations.detail.editThisLine')"
-                                        class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
-                                        @click="startEdit(line)">
-                                        <Icon name="pen" class="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        v-if="proofreadable"
-                                        :disabled="proofreadState[line.position]?.loading"
-                                        :title="t('translations.detail.proofreadThisLine')"
-                                        class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                                        @click="requestProofread(line)">
-                                        <Icon
-                                            v-if="proofreadState[line.position]?.loading"
-                                            name="loaderCircle"
-                                            class="h-4 w-4 animate-spin" />
-                                        <Icon v-else name="search" class="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </div>
-                            <div
-                                v-if="showProofreadPanel(line.position)"
-                                class="bg-accent/5 px-4 py-2 text-sm md:col-span-12">
-                                <div class="flex flex-col gap-2 md:ml-auto md:w-1/2">
-                                    <template
-                                        v-if="proofreadState[line.position].draft !== undefined">
-                                        <span class="font-semibold">
-                                            {{ t('translations.detail.editTranslation') }}
-                                        </span>
-                                        <TextAreaComponent
-                                            class="w-full"
-                                            :model-value="proofreadState[line.position].draft ?? ''"
-                                            :rows="2"
-                                            @update:model-value="
-                                                (value: string) => updateDraft(line, value)
-                                            " />
-                                        <div class="flex items-center justify-end gap-3">
-                                            <ButtonComponent
-                                                variant="ghost"
-                                                size="xs"
-                                                @click="
-                                                    applyLine(
-                                                        line,
-                                                        proofreadState[line.position].draft,
-                                                        PROOFREAD_LINE_ORIGIN.MANUAL
-                                                    )
-                                                ">
-                                                <Icon name="checkMark" class="mr-1 h-4 w-4" />
-                                                {{ t('translations.detail.accept') }}
-                                            </ButtonComponent>
-                                            <ButtonComponent
-                                                variant="ghost"
-                                                size="xs"
-                                                @click="dismissProofread(line)">
-                                                <Icon name="timesCircle" class="mr-1 h-4 w-4" />
-                                                {{ t('translations.detail.cancel') }}
-                                            </ButtonComponent>
-                                        </div>
-                                    </template>
-                                    <template v-else-if="proofreadState[line.position].suggestion">
-                                        <span class="font-semibold">
-                                            {{ t('translations.detail.proofreadSuggestion') }}
-                                        </span>
-                                        <span>{{ proofreadState[line.position].suggestion }}</span>
-                                        <div class="flex items-center justify-end gap-3">
-                                            <ButtonComponent
-                                                variant="ghost"
-                                                size="xs"
-                                                @click="
-                                                    applyLine(
-                                                        line,
-                                                        proofreadState[line.position].suggestion,
-                                                        PROOFREAD_LINE_ORIGIN.PROOFREAD
-                                                    )
-                                                ">
-                                                <Icon name="checkMark" class="mr-1 h-4 w-4" />
-                                                {{ t('translations.detail.apply') }}
-                                            </ButtonComponent>
-                                            <ButtonComponent
-                                                variant="ghost"
-                                                size="xs"
-                                                @click="dismissProofread(line)">
-                                                <Icon name="timesCircle" class="mr-1 h-4 w-4" />
-                                                {{ t('translations.detail.dismiss') }}
-                                            </ButtonComponent>
-                                        </div>
-                                    </template>
-                                    <span
-                                        v-else-if="proofreadState[line.position].error"
-                                        class="text-danger">
-                                        {{ proofreadState[line.position].error }}
-                                    </span>
-                                </div>
-                            </div>
+                            <LineProofreadPanel
+                                :line="line"
+                                :request-id="detail.id"
+                                :source-language="detail.sourceLanguage"
+                                :target-language="detail.targetLanguage"
+                                :editable="editable"
+                                :proofreadable="proofreadable"
+                                :close-signal="closeSignals[line.position] ?? 0"
+                                @applied="(target: string) => (line.target = target)" />
                         </div>
                     </div>
                 </template>
@@ -280,21 +188,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-    Hub,
     ITranslationRequestDetail,
     IRequestProgress,
     ILineTranslated,
     ILineProofread,
-    ISubtitleLineComparison,
-    ProofreadLineOrigin,
-    PROOFREAD_LINE_ORIGIN,
     TRANSLATION_STATUS
 } from '@/types'
-import { useSignalR } from '@/composables/useSignalR'
+import { useTranslationDetailHub } from '@/composables/useTranslationDetailHub'
 import { formatDateTime } from '@/utils/date'
 import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
@@ -303,31 +207,24 @@ import TranslationProgress from '@/components/common/TranslationProgress.vue'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
-import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
+import LineProofreadPanel from '@/components/features/translation/LineProofreadPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{
     id: string
 }>()
 
-interface IProofreadLineState {
-    loading: boolean
-    suggestion?: string
-    draft?: string
-    error?: string
-}
-
 const router = useRouter()
-const signalR = useSignalR()
 const translationRequestStore = useTranslationRequestStore()
 const { t } = useI18n()
 
 const detail = ref<ITranslationRequestDetail | null>(null)
 const loading = ref(true)
 const progress = ref(0)
-const hubConnection = ref<Hub>()
 const latestPosition = ref<number>(0)
-const proofreadState = reactive<Record<number, IProofreadLineState>>({})
+// Per-line counters; bumping one tells that line's LineProofreadPanel to close
+// (replaces the old delete proofreadState[position] on hub events).
+const closeSignals = reactive<Record<number, number>>({})
 
 const reversedLines = computed(() => (detail.value ? [...detail.value.lines].reverse() : []))
 
@@ -406,79 +303,11 @@ const handleLineProofread = (line: ILineProofread) => {
                 target.service = line.service
             }
         }
-        delete proofreadState[line.position]
+        closeSignals[line.position] = (closeSignals[line.position] ?? 0) + 1
     }
 }
 
-async function requestProofread(line: ISubtitleLineComparison) {
-    if (!detail.value) {
-        return
-    }
-    proofreadState[line.position] = { loading: true }
-    try {
-        const suggestion = await services.translate.proofreadLine<string>({
-            sourceLine: line.source,
-            translatedLine: line.target,
-            sourceLanguage: detail.value.sourceLanguage,
-            targetLanguage: detail.value.targetLanguage
-        })
-        proofreadState[line.position] = { loading: false, suggestion }
-    } catch {
-        proofreadState[line.position] = {
-            loading: false,
-            error: t('translations.detail.proofreadUnavailable')
-        }
-    }
-}
-
-function showProofreadPanel(position: number) {
-    const state = proofreadState[position]
-    if (!state) {
-        return false
-    }
-    return state.draft !== undefined || !!state.suggestion || !!state.error
-}
-
-function startEdit(line: ISubtitleLineComparison) {
-    proofreadState[line.position] = { loading: false, draft: line.target }
-}
-
-function updateDraft(line: ISubtitleLineComparison, value: string) {
-    const state = proofreadState[line.position]
-    if (state) {
-        state.draft = value
-    }
-}
-
-async function applyLine(
-    line: ISubtitleLineComparison,
-    target: string | undefined,
-    origin: ProofreadLineOrigin
-) {
-    if (!detail.value || !target) {
-        return
-    }
-    try {
-        await translationRequestStore.applyProofreadLine({
-            id: detail.value.id,
-            position: line.position,
-            target,
-            origin
-        })
-    } catch {
-        proofreadState[line.position] = {
-            loading: false,
-            error: t('translations.detail.couldNotApplyChange')
-        }
-        return
-    }
-    line.target = target
-    delete proofreadState[line.position]
-}
-
-function dismissProofread(line: ISubtitleLineComparison) {
-    delete proofreadState[line.position]
-}
+const { connect } = useTranslationDetailHub()
 
 onMounted(async () => {
     try {
@@ -497,19 +326,10 @@ onMounted(async () => {
 
     await translationRequestStore.fetchProofreadStatus()
 
-    hubConnection.value = await signalR.connect(
-        'TranslationRequests',
-        '/signalr/TranslationRequests'
-    )
-    await hubConnection.value.joinGroup({ group: 'TranslationRequests' })
-    hubConnection.value.on('RequestProgress', handleProgress)
-    hubConnection.value.on('LineTranslated', handleLineTranslated)
-    hubConnection.value.on('LineProofread', handleLineProofread)
-})
-
-onUnmounted(async () => {
-    hubConnection.value?.off('RequestProgress', handleProgress)
-    hubConnection.value?.off('LineTranslated', handleLineTranslated)
-    hubConnection.value?.off('LineProofread', handleLineProofread)
+    await connect({
+        onRequestProgress: handleProgress,
+        onLineTranslated: handleLineTranslated,
+        onLineProofread: handleLineProofread
+    })
 })
 </script>

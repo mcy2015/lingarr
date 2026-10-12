@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/services/apiError'
+import { buildUrl } from '@/utils/string'
 import '@/utils'
 
 describe('ApiError', () => {
@@ -23,9 +24,9 @@ describe('ApiError', () => {
     })
 })
 
-describe('String prototype helpers', () => {
-    it('addParams appends and joins query parameters', () => {
-        const result = '/api/media/movies'.addParams({
+describe('buildUrl', () => {
+    it('appends and joins query parameters', () => {
+        const result = buildUrl('/api/media/movies', {
             pageNumber: 1,
             searchQuery: 'dune',
             ascending: true
@@ -38,13 +39,19 @@ describe('String prototype helpers', () => {
         expect(result.split('?')[1].split('&')).toHaveLength(3)
     })
 
-    it('addParams returns the url unchanged without parameters', () => {
-        expect('/api/media'.addParams({})).toBe('/api/media')
+    it('returns the url unchanged without parameters', () => {
+        expect(buildUrl('/api/media', {})).toBe('/api/media')
     })
 
-    it('addParams encodes reserved characters', () => {
-        const result = '/api'.addParams({ q: 'a b&c=d' })
+    it('encodes reserved characters', () => {
+        const result = buildUrl('/api', { q: 'a b&c=d' })
 
         expect(result).toBe('/api?q=a%20b%26c%3Dd')
+    })
+
+    it('appends to an existing query string', () => {
+        const result = buildUrl('/api/media?pageNumber=1', { searchQuery: 'dune' })
+
+        expect(result).toBe('/api/media?pageNumber=1&searchQuery=dune')
     })
 })

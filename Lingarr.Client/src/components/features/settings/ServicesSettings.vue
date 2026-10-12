@@ -4,7 +4,6 @@
             {{ t('services.description') }}
         </template>
         <template #content>
-            <SaveNotification ref="saveNotification" />
 
             <div class="space-y-2">
                 <span class="font-semibold">{{ t('services.translationServices') }}</span>
@@ -91,7 +90,7 @@
                 <DynamicPluginForm
                     v-if="configuringManifest"
                     :manifest="configuringManifest"
-                    @save="saveNotification?.show()" />
+                    @save="toastStore.push({ message: t('common.saved'), type: 'success' })" />
                 <p v-else-if="manifestError" class="text-sm text-danger">{{ manifestError }}</p>
             </div>
 
@@ -118,7 +117,7 @@
                 </div>
             </div>
 
-            <SourceAndTarget @save="saveNotification?.show()" />
+            <SourceAndTarget @save="toastStore.push({ message: t('common.saved'), type: 'success' })" />
         </template>
     </CardComponent>
 </template>
@@ -133,13 +132,13 @@ import servicesApi from '@/services'
 import CardComponent from '@/components/common/CardComponent.vue'
 import SelectComponent from '@/components/common/SelectComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import DynamicPluginForm from '@/components/features/settings/DynamicPluginForm.vue'
 import SourceAndTarget from '@/components/features/settings/SourceAndTarget.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const settingsStore = useSettingStore()
 const router = useRouter()
 
@@ -179,7 +178,7 @@ function optionsForRow(index: number) {
 async function save(next: string[]) {
     services.value = next
     await settingsStore.updateSetting(SETTINGS.SERVICE_TYPE, JSON.stringify(next), true)
-    saveNotification.value?.show()
+    toastStore.push({ message: t('common.saved'), type: 'success' })
 }
 
 function createRow(index: number, value: string) {

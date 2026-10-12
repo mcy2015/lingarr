@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <CardComponent :title="t('services.template.title')">
         <template #description>
             {{ t('services.template.description') }}
@@ -79,7 +79,6 @@
                     <JsonPreview :template="templateValue" :service-type="serviceType" />
                 </div>
 
-                <SaveNotification ref="saveNotification" />
             </div>
         </template>
     </CardComponent>
@@ -94,7 +93,7 @@ import useDebounce from '@/composables/useDebounce'
 import services from '@/services'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 import JsonTreeBuilder from './JsonTreeBuilder.vue'
@@ -102,7 +101,7 @@ import JsonPreview from './JsonPreview.vue'
 
 const settingsStore = useSettingStore()
 const { t } = useI18n()
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const mode = ref<'builder' | 'json'>('builder')
 const jsonText = ref('')
 const selectedPreset = ref('')
@@ -127,7 +126,7 @@ const languageCodeFormat = computed({
         (settingsStore.getSetting(SETTINGS.LANGUAGE_CODE_FORMAT) as string) ?? 'false',
     set: (value: string) => {
         settingsStore.updateSetting(SETTINGS.LANGUAGE_CODE_FORMAT, value, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -180,7 +179,7 @@ const jsonModel = computed({
 
 const debouncedSave = useDebounce((key: keyof ISettings, value: string) => {
     settingsStore.updateSetting(key, value, true)
-    saveNotification.value?.show()
+    toastStore.push({ message: t('common.saved'), type: 'success' })
 }, 500)
 
 function onTemplateChange(value: string) {
@@ -241,7 +240,7 @@ function loadPreset(presetKey: string) {
     }
     selectedPreset.value = presetKey
     settingsStore.updateSetting(key, template, true)
-    saveNotification.value?.show()
+    toastStore.push({ message: t('common.saved'), type: 'success' })
     if (mode.value === 'json') {
         syncJsonText()
     }

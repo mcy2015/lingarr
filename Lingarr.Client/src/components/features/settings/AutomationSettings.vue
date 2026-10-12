@@ -1,10 +1,9 @@
-﻿<template>
+<template>
     <CardComponent :title="t('settings.automation.indexingTitle')">
         <template #description>
             {{ t('settings.automation.indexingDescription') }}
         </template>
         <template #content>
-            <SaveNotification ref="saveNotification" />
             <div class="flex flex-col space-y-2 pb-4">
                 <span class="font-semibold">{{ t('settings.automation.movieIndexer') }}</span>
                 <InputComponent
@@ -95,9 +94,9 @@ import { INPUT_TYPE, INPUT_VALIDATION_TYPE, SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const maxTranslationsPerRunIsValid = ref(false)
 const movieAgeThresholdIsValid = ref(false)
 const showAgeThresholdIsValid = ref(false)
@@ -112,7 +111,7 @@ const automationEnabled = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.AUTOMATION_ENABLED) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.AUTOMATION_ENABLED, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 const movieSchedule = computed({
@@ -120,7 +119,7 @@ const movieSchedule = computed({
     set: (newValue: string): void => {
         if (movieScheduleIsValid.value) {
             settingsStore.updateSetting(SETTINGS.MOVIE_SCHEDULE, newValue, true)
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -129,7 +128,7 @@ const showSchedule = computed({
     set: (newValue: string): void => {
         if (showScheduleIsValid.value) {
             settingsStore.updateSetting(SETTINGS.SHOW_SCHEDULE, newValue, true)
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -138,7 +137,7 @@ const translationSchedule = computed({
     set: (newValue: string): void => {
         if (translationScheduleIsValid.value) {
             settingsStore.updateSetting(SETTINGS.TRANSLATION_SCHEDULE, newValue, true)
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -146,7 +145,7 @@ const maxTranslationsPerRun = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.MAX_TRANSLATIONS_PER_RUN) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.MAX_TRANSLATIONS_PER_RUN, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -154,7 +153,7 @@ const movieAgeThreshold = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.MOVIE_AGE_THRESHOLD) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.MOVIE_AGE_THRESHOLD, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -162,7 +161,7 @@ const showAgeThreshold = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.SHOW_AGE_THRESHOLD) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.SHOW_AGE_THRESHOLD, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>

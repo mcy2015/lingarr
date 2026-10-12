@@ -1,10 +1,9 @@
-﻿<template>
+<template>
     <CardComponent :title="t('settings.translation.title')">
         <template #description>
             {{ t('settings.translation.description') }}
         </template>
         <template #content>
-            <SaveNotification ref="saveNotification" />
 
             <template
                 v-if="
@@ -95,16 +94,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
 import { INPUT_VALIDATION_TYPE, SERVICE_TYPE, SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import InputComponent from '@/components/common/InputComponent.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const settingsStore = useSettingStore()
 const { t } = useI18n()
 const isValid = reactive({
@@ -129,7 +128,7 @@ const useBatchTranslation = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.USE_BATCH_TRANSLATION) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.USE_BATCH_TRANSLATION, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -137,7 +136,7 @@ const maxBatchSize = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.MAX_BATCH_SIZE) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.MAX_BATCH_SIZE, newValue, isValid.maxBatchSize)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -145,7 +144,7 @@ const requestTimeout = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.REQUEST_TIMEOUT) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.REQUEST_TIMEOUT, newValue, isValid.requestTimeout)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -153,7 +152,7 @@ const maxRetries = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.MAX_RETRIES) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.MAX_RETRIES, newValue, isValid.maxRetries)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -161,7 +160,7 @@ const retryDelay = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.RETRY_DELAY) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.RETRY_DELAY, newValue, isValid.retryDelay)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -173,7 +172,7 @@ const retryDelayMultiplier = computed({
             newValue,
             isValid.retryDelayMultiplier
         )
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>

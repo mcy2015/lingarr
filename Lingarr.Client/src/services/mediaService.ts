@@ -1,5 +1,6 @@
 import { AxiosStatic } from 'axios'
 import { IMediaService, IIncludeSummary, MediaType } from '@/types'
+import { buildUrl } from '@/utils/string'
 
 const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => ({
     movies<T>(
@@ -10,7 +11,7 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
     ): Promise<T> {
         return http
             .get(
-                `${resource}/movies`.addParams({
+                buildUrl(`${resource}/movies`, {
                     pageNumber: pageNumber,
                     searchQuery: searchQuery,
                     orderBy: orderBy,
@@ -27,7 +28,7 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
     ): Promise<T> {
         return http
             .get(
-                `${resource}/shows`.addParams({
+                buildUrl(`${resource}/shows`, {
                     pageNumber: pageNumber,
                     searchQuery: searchQuery,
                     orderBy: orderBy,
@@ -48,7 +49,7 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
     },
     includeSummary(mediaType: MediaType): Promise<IIncludeSummary> {
         return http
-            .get(`${resource}/include/summary`.addParams({ mediaType: mediaType }))
+            .get(buildUrl(`${resource}/include/summary`, { mediaType }))
             .then((response) => response.data)
     },
     threshold<T>(mediaType: MediaType, id: number, hours: string): Promise<T> {

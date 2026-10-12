@@ -11,7 +11,7 @@
                         variant="accent"
                         size="xs"
                         :disabled="authStore.isCreating || authStore.editingUserId !== null"
-                        @click="authStore.createOrEditUser()">
+                        @click="openCreate">
                         {{ t('settings.users.create') }}
                     </ButtonComponent>
                 </div>
@@ -39,12 +39,12 @@
                                 <div class="w-full">
                                     <InputComponent
                                         id="newUsername"
-                                        v-model="authStore.editUsername"
+                                        v-model="editUsername"
                                         :placeholder="t('settings.users.username')"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :min-length="2"
                                         :error-message="t('settings.users.usernameError')"
-                                        @update:validation="authStore.setUsernameValidation" />
+                                        @update:validation="setUsernameValidity" />
                                 </div>
                             </div>
                             <div
@@ -57,7 +57,7 @@
                                     variant="accent"
                                     size="xs"
                                     :disabled="authStore.loading"
-                                    @click="authStore.cancelEdit">
+                                    @click="cancelEdit">
                                     <span class="md:hidden">X</span>
                                     <span class="hidden md:block">
                                         {{ t('settings.users.cancel') }}
@@ -66,9 +66,9 @@
                                 <ButtonComponent
                                     variant="accent"
                                     size="xs"
-                                    :disabled="!authStore.canSave || authStore.loading"
+                                    :disabled="!canSave || authStore.loading"
                                     :loading="authStore.loading"
-                                    @click="authStore.saveUser()">
+                                    @click="saveUser">
                                     {{ t('settings.users.createAction') }}
                                 </ButtonComponent>
                             </div>
@@ -78,18 +78,18 @@
                                 <div class="space-y-2">
                                     <InputComponent
                                         id="newPassword"
-                                        v-model="authStore.editPassword"
+                                        v-model="editPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
                                         :label="t('settings.users.passwordRequired')"
                                         :placeholder="t('settings.users.passwordPlaceholder')"
                                         :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
-                                        @update:validation="authStore.setPasswordValidation" />
+                                        @update:validation="setPasswordValidity" />
 
                                     <InputComponent
                                         id="newConfirmPassword"
-                                        v-model="authStore.editConfirmPassword"
+                                        v-model="editConfirmPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
                                         :label="t('settings.users.confirmPasswordRequired')"
@@ -98,9 +98,7 @@
                                         "
                                         :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
-                                        @update:validation="
-                                            authStore.setConfirmPasswordValidation
-                                        " />
+                                        @update:validation="setConfirmPasswordValidity" />
                                 </div>
                             </div>
                         </div>
@@ -112,12 +110,12 @@
                                 <div v-if="authStore.editingUserId === user.id" class="w-full">
                                     <InputComponent
                                         id="editUsername"
-                                        v-model="authStore.editUsername"
+                                        v-model="editUsername"
                                         :placeholder="t('settings.users.username')"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :min-length="2"
                                         :error-message="t('settings.users.usernameError')"
-                                        @update:validation="authStore.setUsernameValidation" />
+                                        @update:validation="setUsernameValidity" />
                                 </div>
                                 <span v-else class="text-sm">{{ user.username }}</span>
                             </div>
@@ -136,7 +134,7 @@
                                         variant="accent"
                                         size="xs"
                                         :disabled="authStore.loading"
-                                        @click="authStore.cancelEdit">
+                                        @click="cancelEdit">
                                         <span class="md:hidden">X</span>
                                         <span class="hidden md:block">
                                             {{ t('settings.users.cancel') }}
@@ -145,9 +143,9 @@
                                     <ButtonComponent
                                         variant="accent"
                                         size="xs"
-                                        :disabled="!authStore.canSave || authStore.loading"
+                                        :disabled="!canSave || authStore.loading"
                                         :loading="authStore.loading"
-                                        @click="authStore.saveUser()">
+                                        @click="saveUser">
                                         {{ t('settings.users.save') }}
                                     </ButtonComponent>
                                 </template>
@@ -155,7 +153,7 @@
                                     <ButtonComponent
                                         variant="accent"
                                         size="xs"
-                                        @click="authStore.createOrEditUser(user)">
+                                        @click="openEdit(user)">
                                         {{ t('settings.users.edit') }}
                                     </ButtonComponent>
                                     <ButtonComponent
@@ -177,18 +175,18 @@
                                 <div class="space-y-2">
                                     <InputComponent
                                         id="editPassword"
-                                        v-model="authStore.editPassword"
+                                        v-model="editPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
                                         :label="t('settings.users.newPasswordOptional')"
                                         :placeholder="t('settings.users.newPasswordPlaceholder')"
                                         :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
-                                        @update:validation="authStore.setPasswordValidation" />
+                                        @update:validation="setPasswordValidity" />
 
                                     <InputComponent
                                         id="editConfirmPassword"
-                                        v-model="authStore.editConfirmPassword"
+                                        v-model="editConfirmPassword"
                                         :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                         :type="INPUT_TYPE.PASSWORD"
                                         :label="t('settings.users.confirmNewPasswordOptional')"
@@ -197,9 +195,7 @@
                                         "
                                         :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
-                                        @update:validation="
-                                            authStore.setConfirmPasswordValidation
-                                        " />
+                                        @update:validation="setConfirmPasswordValidity" />
                                 </div>
                             </div>
                         </div>
@@ -217,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { INPUT_TYPE, INPUT_VALIDATION_TYPE, IUser } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
@@ -230,6 +226,103 @@ import { formatDateTime } from '@/utils/date'
 
 const authStore = useAuthStore()
 const { t } = useI18n()
+
+// Editor form state lives here; the store only tracks users and which row is being edited.
+const editUsername = ref('')
+const editPassword = ref('')
+const editConfirmPassword = ref('')
+const isUsernameValid = ref(false)
+const isPasswordValid = ref(true)
+const isConfirmPasswordValid = ref(true)
+
+const canSave = computed<boolean>(() => {
+    if (!isUsernameValid.value) {
+        return false
+    }
+
+    // new users, password is required
+    if (authStore.isCreating) {
+        if (!editPassword.value || !isPasswordValid.value || !isConfirmPasswordValid.value) {
+            return false
+        }
+        if (editPassword.value !== editConfirmPassword.value) {
+            return false
+        }
+    }
+
+    // existing users, password is optional
+    if (editPassword.value || editConfirmPassword.value) {
+        if (!isPasswordValid.value || !isConfirmPasswordValid.value) {
+            return false
+        }
+        if (editPassword.value !== editConfirmPassword.value) {
+            return false
+        }
+    }
+    return true
+})
+
+const resetForm = () => {
+    editUsername.value = ''
+    editPassword.value = ''
+    editConfirmPassword.value = ''
+    isUsernameValid.value = false
+    isPasswordValid.value = true
+    isConfirmPasswordValid.value = true
+}
+
+const setUsernameValidity = (valid: boolean) => {
+    isUsernameValid.value = valid
+}
+
+const setPasswordValidity = (valid: boolean) => {
+    isPasswordValid.value = valid
+}
+
+const setConfirmPasswordValidity = (valid: boolean) => {
+    isConfirmPasswordValid.value = valid
+}
+
+const openCreate = () => {
+    resetForm()
+    authStore.startCreate()
+}
+
+const openEdit = (user: IUser) => {
+    editUsername.value = user.username
+    editPassword.value = ''
+    editConfirmPassword.value = ''
+    isUsernameValid.value = true
+    isPasswordValid.value = true
+    isConfirmPasswordValid.value = true
+    authStore.startEdit(user)
+}
+
+const cancelEdit = () => {
+    authStore.cancelEdit()
+    resetForm()
+}
+
+const saveUser = async () => {
+    if (!canSave.value || authStore.loading) {
+        return
+    }
+    await authStore.saveUser({
+        username: editUsername.value,
+        password: editPassword.value
+    })
+}
+
+// The store closes the editor after a successful save; clear the fields with it.
+// On failure the editor stays open so entered values are kept.
+watch(
+    () => authStore.isCreating || authStore.editingUserId !== null,
+    (active) => {
+        if (!active) {
+            resetForm()
+        }
+    }
+)
 
 const deleteUserConfirm = async (user: IUser) => {
     if (!confirm(t('settings.users.deleteConfirm', { name: user.username }))) {

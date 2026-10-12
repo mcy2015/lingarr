@@ -5,7 +5,6 @@
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
-                <SaveNotification ref="saveNotification" />
                 <div class="flex flex-col space-x-2">
                     <span class="font-semibold">{{ t('settings.proofread.systemPrompt') }}</span>
                     {{ t('settings.proofread.systemPromptDescription') }}
@@ -41,11 +40,11 @@ import { useSettingStore } from '@/store/setting'
 import { PLACEHOLDER, SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 
 const settingsStore = useSettingStore()
 const { t } = useI18n()
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const isSystemPromptValid = ref(false)
 const isUserPromptValid = ref(false)
 
@@ -54,7 +53,7 @@ const proofreadPrompt = computed({
     set: (newValue: string) => {
         settingsStore.updateSetting(SETTINGS.PROOFREAD_PROMPT, newValue, isSystemPromptValid.value)
         if (isSystemPromptValid.value) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -68,7 +67,7 @@ const proofreadUserPrompt = computed({
             isUserPromptValid.value
         )
         if (isUserPromptValid.value) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })

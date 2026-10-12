@@ -1,5 +1,6 @@
 import { AxiosStatic } from 'axios'
 import { IProofreadLineApplyRequest, ITranslationRequest, ITranslationRequestService } from '@/types'
+import { buildUrl } from '@/utils/string'
 
 const service = (
     http: AxiosStatic,
@@ -19,7 +20,7 @@ const service = (
     ): Promise<T> {
         return http
             .get(
-                `${resource}/requests`.addParams({
+                buildUrl(`${resource}/requests`, {
                     pageNumber: pageNumber,
                     searchQuery: searchQuery,
                     orderBy: orderBy,

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <CardComponent v-if="authEnabled == 'true'" :title="t('settings.apiKey.title')">
         <template #description></template>
         <template #content>
@@ -62,7 +62,7 @@ import { useSettingStore } from '@/store/setting'
 import services from '@/services'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import CardComponent from '@/components/common/CardComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 
 const settingsStore = useSettingStore()
 const { t } = useI18n()
@@ -70,14 +70,14 @@ const { title } = defineProps<{
     title?: string
 }>()
 
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const loading = ref(false)
 
 const authEnabled = computed({
     get: () => settingsStore.getSetting(SETTINGS.AUTH_ENABLED) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.AUTH_ENABLED, newValue.toString(), true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 
@@ -85,7 +85,7 @@ const apiKey = computed({
     get: () => settingsStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY),
     set: (newValue: string): void => {
         settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY, newValue.toString())
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 

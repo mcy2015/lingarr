@@ -6,12 +6,6 @@ export interface IAuthStore {
     isCreating: boolean
     editingUserId: number | null
     deletingUserId: number | null
-    editUsername: string
-    editPassword: string
-    editConfirmPassword: string
-    isUsernameValid: boolean
-    isPasswordValid: boolean
-    isConfirmPasswordValid: boolean
 }
 
 export interface ISignupRequest {

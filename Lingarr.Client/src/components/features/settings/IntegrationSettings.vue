@@ -1,8 +1,7 @@
-﻿<template>
+<template>
     <CardComponent :title="t('services.integration.title')">
         <template #description>{{ t('services.integration.description') }}</template>
         <template #content>
-            <SaveNotification ref="saveNotification" />
             <div class="flex flex-col space-y-2">
                 <span class="font-semibold">{{ t('services.integration.radarrSettings') }}</span>
                 <InputComponent
@@ -64,10 +63,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import { INPUT_TYPE, INPUT_VALIDATION_TYPE, SETTINGS, ENCRYPTED_SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'
@@ -80,7 +79,7 @@ const isValid = reactive({
     sonarrApiKey: false
 })
 const { t } = useI18n()
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const settingsStore = useSettingStore()
 
 const radarrApiKey = computed({
@@ -93,7 +92,7 @@ const radarrApiKey = computed({
             isValid.radarrApiKey
         )
         if (isValid.radarrApiKey) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -107,7 +106,7 @@ const sonarrApiKey = computed({
             isValid.sonarrApiKey
         )
         if (isValid.sonarrApiKey) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -116,7 +115,7 @@ const radarrUrl = computed({
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.RADARR_URL, newValue, isValid.radarrUrl)
         if (isValid.radarrUrl) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -125,7 +124,7 @@ const sonarrUrl = computed({
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.SONARR_URL, newValue, isValid.sonarrUrl)
         if (isValid.sonarrUrl) {
-            saveNotification.value?.show()
+            toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
@@ -133,14 +132,14 @@ const radarrDefaultInclude = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.RADARR_DEFAULT_INCLUDE) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.RADARR_DEFAULT_INCLUDE, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 const sonarrDefaultInclude = computed({
     get: (): string => settingsStore.getSetting(SETTINGS.SONARR_DEFAULT_INCLUDE) as string,
     set: (newValue: string): void => {
         settingsStore.updateSetting(SETTINGS.SONARR_DEFAULT_INCLUDE, newValue, true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>

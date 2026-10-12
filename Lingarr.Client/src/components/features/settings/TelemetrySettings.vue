@@ -5,7 +5,6 @@
         </template>
         <template #content>
             <div class="flex flex-col space-y-4">
-                <SaveNotification ref="saveNotification" />
                 <div class="flex items-center space-x-2">
                     <span>{{ t('settings.telemetry.shareStats') }}</span>
 
@@ -39,7 +38,6 @@ import { SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 import services from '@/services'
-import SaveNotification from '@/components/common/SaveNotification.vue'
 
 const store = useSettingStore()
 const { t } = useI18n()

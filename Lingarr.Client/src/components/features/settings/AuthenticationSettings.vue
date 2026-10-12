@@ -30,14 +30,14 @@ import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
 import { SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
-import SaveNotification from '@/components/common/SaveNotification.vue'
+import { useToastStore } from '@/store/toast'
 import ToggleButton from '@/components/common/ToggleButton.vue'
 import StatusMessage from '@/components/common/StatusMessage.vue'
 import services from '@/services'
 
 const settingsStore = useSettingStore()
 const { t } = useI18n()
-const saveNotification = ref<InstanceType<typeof SaveNotification> | null>(null)
+const toastStore = useToastStore()
 const error = ref<string>('')
 
 const authEnabled = computed({
@@ -63,7 +63,7 @@ const authEnabled = computed({
 
         error.value = ''
         settingsStore.updateSetting(SETTINGS.AUTH_ENABLED, newValue.toString(), true)
-        saveNotification.value?.show()
+        toastStore.push({ message: t('common.saved'), type: 'success' })
     }
 })
 </script>
