@@ -17,6 +17,10 @@ public class TranslationRequest : BaseEntity
     /// (translated lines on top, original line below).
     /// </summary>
     public bool IsBilingual { get; set; } = false;
+    /// <summary>
+    /// Where the request originated (library media vs manually imported file).
+    /// </summary>
+    public TranslationRequestSource Source { get; set; } = TranslationRequestSource.Library;
     public required MediaType MediaType { get; set; }
     public required TranslationStatus Status { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
