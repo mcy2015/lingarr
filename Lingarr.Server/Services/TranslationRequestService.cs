@@ -3,7 +3,7 @@ using Lingarr.Core.Enum;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Models.TranslationRequests;
 
@@ -59,7 +59,7 @@ public class TranslationRequestService : ITranslationRequestService
         => _queueService.ResumeTranslationRequests();
 
     /// <inheritdoc />
-    public Task<PagedResult<TranslationRequest>> GetTranslationRequests(
+    public Task<PagedResult<TranslationRequestSummary>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending,
@@ -111,7 +111,7 @@ public class TranslationRequestService : ITranslationRequestService
         => _queueService.UpdateTranslationRequest(translationRequest, status, jobId);
 
     /// <inheritdoc />
-    public Task<BatchTranslatedLine[]> TranslateContentAsync(
+    public Task<BatchSubtitleLine[]> TranslateContentAsync(
         TranslateAbleSubtitleContent translateAbleContent,
         CancellationToken parentCancellationToken)
         => _contentTranslationService.TranslateContentAsync(translateAbleContent, parentCancellationToken);

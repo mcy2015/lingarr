@@ -74,7 +74,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("signup")]
     [AllowAnonymous]
-    public async Task<ActionResult> Signup([FromBody] SignupRequest request)
+    public async Task<ActionResult> Signup([FromBody] LoginRequest request)
     {
         try
         {

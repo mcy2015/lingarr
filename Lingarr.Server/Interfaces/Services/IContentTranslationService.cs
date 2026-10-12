@@ -1,6 +1,6 @@
 using Lingarr.Core.Enum;
 using Lingarr.Contracts.Translation;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 
 namespace Lingarr.Server.Interfaces.Services;
@@ -14,7 +14,7 @@ public interface IContentTranslationService
     /// <summary>
     /// Translate subtitle content without using jobs, Used for other Apps API Intergration (ex. Bazarr).
     /// </summary>
-    Task<BatchTranslatedLine[]> TranslateContentAsync(
+    Task<BatchSubtitleLine[]> TranslateContentAsync(
         TranslateAbleSubtitleContent translateAbleContent,
         CancellationToken parentCancellationToken);
 

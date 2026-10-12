@@ -3,7 +3,7 @@ using Lingarr.Core.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Models;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
@@ -99,7 +99,7 @@ public class TranslateController : ControllerBase
     /// <param name="cancellationToken">Token to cancel the translation operation</param>
     /// <returns>Translated subtitle content</returns>
     [HttpPost("content")]
-    public async Task<ActionResult<BatchTranslatedLine[]>> TranslateContent(
+    public async Task<ActionResult<BatchSubtitleLine[]>> TranslateContent(
         [FromBody] TranslateAbleSubtitleContent translateAbleSubtitleContent,
         CancellationToken cancellationToken)
     {

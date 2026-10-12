@@ -68,7 +68,7 @@ public class TranslationRequestController : ControllerBase
     /// <response code="500">If there was an error checking for updates</response>
     /// <returns>ActionResult containing the paginated list of translation requests</returns>
     [HttpGet("requests")]
-    public async Task<ActionResult<PagedResult<TranslationRequest>>> GetTranslationRequests(
+    public async Task<ActionResult<PagedResult<TranslationRequestSummary>>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending = true,

@@ -7,7 +7,7 @@ using Lingarr.Core.Enum;
 using Lingarr.Core.Configuration;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Services.Subtitle;
 using Lingarr.Server.Services.Translation;
@@ -55,7 +55,7 @@ public class ContentTranslationService : IContentTranslationService
     }
 
     /// <inheritdoc />
-    public async Task<BatchTranslatedLine[]> TranslateContentAsync(
+    public async Task<BatchSubtitleLine[]> TranslateContentAsync(
         TranslateAbleSubtitleContent translateAbleContent,
         CancellationToken parentCancellationToken)
     {
@@ -111,7 +111,7 @@ public class ContentTranslationService : IContentTranslationService
                     translationRequest.MediaId, translationRequest.MediaType,
                     translationRequest.Title,
                     translationRequest.SourceLanguage, translationRequest.TargetLanguage, existingId.Value);
-                return Array.Empty<BatchTranslatedLine>();
+                return Array.Empty<BatchSubtitleLine>();
             }
 
             // Add TranslationRequest
@@ -142,10 +142,10 @@ public class ContentTranslationService : IContentTranslationService
                 dispatch,
                 cancellationToken);
 
-            BatchTranslatedLine[] results;
+            BatchSubtitleLine[] results;
             if (run.UsedBatchTranslation)
             {
-                results = subtitleItems.Select(subtitle => new BatchTranslatedLine
+                results = subtitleItems.Select(subtitle => new BatchSubtitleLine
                 {
                     Position = subtitle.Position,
                     Line = string.Join(" ", subtitle.TranslatedLines)
@@ -158,7 +158,7 @@ public class ContentTranslationService : IContentTranslationService
                 results = subtitleItems.Select(subtitle =>
                 {
                     var translatedText = string.Join(" ", subtitle.TranslatedLines);
-                    return new BatchTranslatedLine
+                    return new BatchSubtitleLine
                     {
                         Position = subtitle.Position,
                         Line = run.StripSubtitleFormatting
@@ -244,7 +244,7 @@ public class ContentTranslationService : IContentTranslationService
         TranslationRequest translationRequest,
         string serviceType,
         ITranslationService translationService,
-        BatchTranslatedLine[] results,
+        BatchSubtitleLine[] results,
         CancellationToken cancellationToken)
     {
         await _statisticsService.UpdateTranslationStatisticsFromLines(translationRequest, serviceType, translationService.ModelName, results);

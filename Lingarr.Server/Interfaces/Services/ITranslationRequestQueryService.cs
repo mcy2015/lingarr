@@ -26,8 +26,9 @@ public interface ITranslationRequestQueryService
 
     /// <summary>
     /// Retrieves a paginated list of translation requests with optional filtering and sorting.
+    /// Returns list-row summaries; entity internals are not exposed.
     /// </summary>
-    Task<PagedResult<TranslationRequest>> GetTranslationRequests(
+    Task<PagedResult<TranslationRequestSummary>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending,

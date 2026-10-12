@@ -106,7 +106,7 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
     }
 
     /// <inheritdoc />
-    public async Task<PagedResult<TranslationRequest>> GetTranslationRequests(
+    public async Task<PagedResult<TranslationRequestSummary>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending,
@@ -142,9 +142,23 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
         var requests = await query
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
+            .Select(translationRequest => new TranslationRequestSummary
+            {
+                Id = translationRequest.Id,
+                Title = translationRequest.Title,
+                SourceLanguage = translationRequest.SourceLanguage,
+                TargetLanguage = translationRequest.TargetLanguage,
+                TranslatedSubtitle = translationRequest.TranslatedSubtitle,
+                IsBilingual = translationRequest.IsBilingual,
+                MediaType = translationRequest.MediaType,
+                Status = translationRequest.Status,
+                CompletedAt = translationRequest.CompletedAt,
+                ErrorMessage = translationRequest.ErrorMessage,
+                CreatedAt = translationRequest.CreatedAt
+            })
             .ToListAsync();
 
-        return new PagedResult<TranslationRequest>
+        return new PagedResult<TranslationRequestSummary>
         {
             Items = requests,
             TotalCount = totalCount,

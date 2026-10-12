@@ -3,7 +3,7 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
-using Lingarr.Server.Models.Batch.Response;
+using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Models.TranslationRequests;
 
@@ -60,9 +60,9 @@ public interface ITranslationRequestService
     /// <param name="pageNumber">Page number for pagination (1-based)</param>
     /// <param name="pageSize">Number of items per page</param>
     /// <returns>
-    /// A PagedResult containing the requested translation requests and pagination information
+    /// A PagedResult containing list-row summaries of the requested translation requests and pagination information
     /// </returns>
-    Task<PagedResult<TranslationRequest>> GetTranslationRequests(
+    Task<PagedResult<TranslationRequestSummary>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending,
@@ -185,7 +185,7 @@ public interface ITranslationRequestService
     /// <param name="translateAbleContent">The translation to translate</param>
     /// <param name="parentCancellationToken">Token to cancel the translation operation</param>
     /// <returns>The translated lines</returns>
-    Task<BatchTranslatedLine[]> TranslateContentAsync(
+    Task<BatchSubtitleLine[]> TranslateContentAsync(
         TranslateAbleSubtitleContent translateAbleContent,
         CancellationToken parentCancellationToken);
 }

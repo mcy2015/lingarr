@@ -17,7 +17,6 @@ using Lingarr.Server.Hubs;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
 using Lingarr.Server.Models;
-using Lingarr.Server.Models.Batch.Response;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Services;
 using Lingarr.Server.Services.Translation;
@@ -160,7 +159,7 @@ public class TranslateControllerContentTests : IDisposable
                 It.IsAny<TranslationRequest>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
-                It.IsAny<BatchTranslatedLine[]>()))
+                It.IsAny<BatchSubtitleLine[]>()))
             .ReturnsAsync(0);
 
         var mediaServiceMock = new Mock<IMediaService>();
@@ -259,10 +258,10 @@ public class TranslateControllerContentTests : IDisposable
             .ToList()
     };
 
-    private static BatchTranslatedLine[] AssertOk(ActionResult<BatchTranslatedLine[]> response)
+    private static BatchSubtitleLine[] AssertOk(ActionResult<BatchSubtitleLine[]> response)
     {
         var okResult = Assert.IsType<OkObjectResult>(response.Result);
-        return Assert.IsType<BatchTranslatedLine[]>(okResult.Value);
+        return Assert.IsType<BatchSubtitleLine[]>(okResult.Value);
     }
 
     private void VerifyNoBatchCall() => _batchTranslationServiceMock.Verify(
@@ -305,7 +304,7 @@ public class TranslateControllerContentTests : IDisposable
             It.IsAny<TranslationRequest>(),
             "openai",
             "test-model",
-            It.Is<BatchTranslatedLine[]>(lines => lines.Length == 2)), Times.Once);
+            It.Is<BatchSubtitleLine[]>(lines => lines.Length == 2)), Times.Once);
         _progressServiceMock.Verify(
             progressService => progressService.Emit(It.IsAny<TranslationRequest>(), 100),
             Times.AtLeastOnce);
@@ -496,7 +495,7 @@ public class TranslateControllerContentTests : IDisposable
             It.IsAny<TranslationRequest>(),
             "openai",
             "failing-model",
-            It.IsAny<BatchTranslatedLine[]>()), Times.Once);
+            It.IsAny<BatchSubtitleLine[]>()), Times.Once);
     }
 
     [Fact]
