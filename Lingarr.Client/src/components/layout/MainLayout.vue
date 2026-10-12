@@ -11,6 +11,7 @@
                         <MenuIcon class="block h-5 w-5 cursor-pointer" @click="isOpen = !isOpen" />
                     </div>
                     <div class="flex items-center justify-between">
+                        <LanguageDropdown />
                         <DropdownComponent width="medium">
                             <template #button>
                                 <ThemeIcon class="h-5 w-5" />
@@ -56,6 +57,7 @@ import useTranslationRequestStore from '@/store/translationRequest'
 
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'
 import DropdownComponent from '@/components/common/DropdownComponent.vue'
+import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
 import ThemeIcon from '@/components/icons/ThemeIcon.vue'
 import MenuIcon from '@/components/icons/MenuIcon.vue'
 

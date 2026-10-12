@@ -38,10 +38,6 @@
                     </li>
                 </ul>
             </nav>
-            <!-- Language switcher -->
-            <div class="px-6 pb-4">
-                <LanguageSwitcher />
-            </div>
             <!-- Version and media section -->
             <div class="pointer-events-none h-64 w-full">
                 <img
@@ -92,7 +88,6 @@ import ShowIcon from '@/components/icons/ShowIcon.vue'
 import SettingIcon from '@/components/icons/SettingIcon.vue'
 import TimesIcon from '@/components/icons/TimesIcon.vue'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
-import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import LanguageIcon from '@/components/icons/LanguageIcon.vue'
 
 const translationRequestStore = useTranslationRequestStore()
