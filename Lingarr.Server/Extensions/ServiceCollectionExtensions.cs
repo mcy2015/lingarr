@@ -162,7 +162,8 @@ public static class ServiceCollectionExtensions
     {
         // Register auth
         builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(
-            Environment.GetEnvironmentVariable("ENCRYPTION_KEYS")?.ToLower() ?? "/app/config/keys"
+            Environment.GetEnvironmentVariable("ENCRYPTION_KEYS")?.ToLower()
+            ?? Path.Combine(builder.Environment.ContentRootPath, "config", "keys")
             ));
         builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
         builder.Services.AddScoped<IAuthService, AuthService>();
@@ -278,17 +279,18 @@ public static class ServiceCollectionExtensions
                 .UseRecommendedSerializerSettings();
 
             var dbConnection = DatabaseConfiguration.GetDbConnection();
+            var connectionString = DatabaseConfiguration.GetConnectionString(dbConnection);
             switch (dbConnection)
             {
                 case "mysql":
-                    ConfigureMySqlStorage(configuration, tablePrefix);
+                    ConfigureMySqlStorage(configuration, connectionString, tablePrefix);
                     break;
                 case "postgres":
                 case "postgresql":
-                    ConfigurePostgresStorage(configuration, tablePrefix);
+                    ConfigurePostgresStorage(configuration, connectionString);
                     break;
                 case "sqlite":
-                    ConfigureSqLiteStorage(configuration);
+                    ConfigureSqLiteStorage(configuration, builder.Environment.ContentRootPath);
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -300,24 +302,15 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Configures Hangfire to use MySQL storage.
+    /// Configures Hangfire to use MySQL storage. Connection string comes from
+    /// <see cref="DatabaseConfiguration"/> — the single source of truth (the two
+    /// previously diverged defaults drifted apart).
     /// </summary>
     /// <param name="configuration">Hangfire global configuration</param>
+    /// <param name="connectionString">Connection string from DatabaseConfiguration</param>
     /// <param name="tablePrefix">Prefix for Hangfire tables in MySQL</param>
-    private static void ConfigureMySqlStorage(IGlobalConfiguration configuration, string tablePrefix)
+    private static void ConfigureMySqlStorage(IGlobalConfiguration configuration, string connectionString, string tablePrefix)
     {
-        var variables = new Dictionary<string, string>
-        {
-            { "DB_HOST", Environment.GetEnvironmentVariable("DB_HOST") ?? "Lingarr.Mysql" },
-            { "DB_PORT", Environment.GetEnvironmentVariable("DB_PORT") ?? "3306" },
-            { "DB_DATABASE", Environment.GetEnvironmentVariable("DB_DATABASE") ?? "Lingarr" },
-            { "DB_USERNAME", Environment.GetEnvironmentVariable("DB_USERNAME") ?? "Lingarr" },
-            { "DB_PASSWORD", Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "Secret1234" }
-        };
-
-        var connectionString =
-            $"Server={variables["DB_HOST"]};Port={variables["DB_PORT"]};Database={variables["DB_DATABASE"]};Uid={variables["DB_USERNAME"]};Pwd={variables["DB_PASSWORD"]};Allow User Variables=True";
-
         configuration.UseStorage(new MySqlStorage(connectionString, new MySqlStorageOptions
         {
             TablesPrefix = tablePrefix
@@ -328,21 +321,9 @@ public static class ServiceCollectionExtensions
     /// Configures Hangfire to use PostgreSQL storage.
     /// </summary>
     /// <param name="configuration">Hangfire global configuration</param>
-    /// <param name="tablePrefix">Prefix for Hangfire tables in PostgreSQL</param>
-    private static void ConfigurePostgresStorage(IGlobalConfiguration configuration, string tablePrefix)
+    /// <param name="connectionString">Connection string from DatabaseConfiguration</param>
+    private static void ConfigurePostgresStorage(IGlobalConfiguration configuration, string connectionString)
     {
-        var variables = new Dictionary<string, string>
-        {
-            { "DB_HOST", Environment.GetEnvironmentVariable("DB_HOST") ?? "Lingarr.Postgres" },
-            { "DB_PORT", Environment.GetEnvironmentVariable("DB_PORT") ?? "5432" },
-            { "DB_DATABASE", Environment.GetEnvironmentVariable("DB_DATABASE") ?? "Lingarr" },
-            { "DB_USERNAME", Environment.GetEnvironmentVariable("DB_USERNAME") ?? "Lingarr" },
-            { "DB_PASSWORD", Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "Secret1234" }
-        };
-
-        var connectionString =
-            $"Host={variables["DB_HOST"]};Port={variables["DB_PORT"]};Database={variables["DB_DATABASE"]};Username={variables["DB_USERNAME"]};Password={variables["DB_PASSWORD"]}";
-
         configuration.UsePostgreSqlStorage(
             options => options.UseNpgsqlConnection(connectionString),
             new PostgreSqlStorageOptions
@@ -355,9 +336,10 @@ public static class ServiceCollectionExtensions
     /// Configures Hangfire to use SQLite storage.
     /// </summary>
     /// <param name="configuration">Hangfire global configuration</param>
-    private static void ConfigureSqLiteStorage(IGlobalConfiguration configuration)
+    private static void ConfigureSqLiteStorage(IGlobalConfiguration configuration, string contentRootPath)
     {
-        var sqliteDbPath = Environment.GetEnvironmentVariable("DB_HANGFIRE_SQLITE_PATH") ?? "/app/config/Hangfire.db";
+        var sqliteDbPath = Environment.GetEnvironmentVariable("DB_HANGFIRE_SQLITE_PATH")
+            ?? Path.Combine(contentRootPath, "config", "Hangfire.db");
         var jobTimeoutMinutes = int.TryParse(Environment.GetEnvironmentVariable("JOB_TIMEOUT_MINUTES"), out var timeout) && timeout > 0
             ? timeout
             : 30;

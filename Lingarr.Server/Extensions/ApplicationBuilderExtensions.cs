@@ -60,7 +60,10 @@ public static class ApplicationBuilderExtensions
         try
         {
             Console.WriteLine("Applying migrations...");
-            MigrationConfiguration.RunMigrations(app.Services);
+            MigrationConfiguration.RunMigrations(
+                app.Services,
+                DatabaseConfiguration.GetDbConnection(),
+                DatabaseConfiguration.GetConnectionString());
             Console.WriteLine("Migrations applied successfully.");
         }
         catch (Exception ex)
