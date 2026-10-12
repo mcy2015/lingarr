@@ -113,7 +113,7 @@ const menuItems: MenuItem[] = [
     {
         label: 'nav.settings',
         icon: 'setting',
-        route: 'integration-settings',
+        route: 'settings',
         children:
             router
                 .getRoutes()
