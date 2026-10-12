@@ -18,6 +18,12 @@ public interface ITranslationRequestQueueService
     Task<int> CreateRequest(TranslateAbleSubtitle translateAbleSubtitle);
 
     /// <summary>
+    /// Creates a translation request for a manually imported subtitle file
+    /// (no media binding, Source = Import) and enqueues it for processing.
+    /// </summary>
+    Task<int> CreateImportRequest(string subtitlePath, string title, string sourceLanguage, string targetLanguage);
+
+    /// <summary>
     /// Creates translation requests for multiple media items, handling subtitle discovery
     /// and source language resolution server-side.
     /// </summary>

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
+using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
+using Lingarr.Server.Services.Subtitle;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lingarr.Server.Controllers;
@@ -12,12 +14,14 @@ namespace Lingarr.Server.Controllers;
 public class SubtitleController : ControllerBase
 {
     private readonly ISubtitleService _subtitleService;
+    private readonly ISubtitleImportService _subtitleImportService;
 
-    public SubtitleController(ISubtitleService subtitleService)
+    public SubtitleController(ISubtitleService subtitleService, ISubtitleImportService subtitleImportService)
     {
         _subtitleService = subtitleService;
+        _subtitleImportService = subtitleImportService;
     }
-    
+
     /// <summary>
     /// Retrieves a list of subtitle files located at the specified path.
     /// </summary>
@@ -29,5 +33,60 @@ public class SubtitleController : ControllerBase
     {
         var value = await _subtitleService.GetAllSubtitles(subtitlePath.Path);
         return Ok(value);
+    }
+
+    /// <summary>
+    /// Parses season/episode/language hints out of subtitle file names for the
+    /// import workbench's mapping preview. Pure filename analysis — no media lookup.
+    /// </summary>
+    [HttpPost("parse-filenames")]
+    public ActionResult<List<SubtitleFilenameParseResult>> ParseFileNames(
+        [FromBody] SubtitleFilenameParseRequest request)
+    {
+        var results = request.Filenames.Select(fileName =>
+        {
+            var info = SubtitleFilenameParser.Parse(fileName);
+            return new SubtitleFilenameParseResult
+            {
+                FileName = fileName,
+                Season = info.Season,
+                Episode = info.Episode,
+                MatchTier = info.MatchTier.ToString(),
+                LanguageTags = [.. info.LanguageTags]
+            };
+        }).ToList();
+
+        return Ok(results);
+    }
+
+    /// <summary>
+    /// Imports uploaded subtitle files: stores them (converted to UTF-8) under the
+    /// imports directory and optionally enqueues a translation request per file.
+    /// Unsupported extensions and per-file failures are reported individually.
+    /// </summary>
+    /// <param name="files">Subtitle files (.srt/.ass/.ssa).</param>
+    /// <param name="sourceLanguage">Source language code for queued translations.</param>
+    /// <param name="targetLanguage">Target language code for queued translations.</param>
+    /// <param name="translate">When true, each stored file is queued for translation.</param>
+    [HttpPost("import")]
+    [RequestSizeLimit(100 * 1024 * 1024)]
+    public async Task<ActionResult<ImportSubtitlesResponse>> Import(
+        List<IFormFile> files,
+        [FromForm] string sourceLanguage = "en",
+        [FromForm] string targetLanguage = "nl",
+        [FromForm] bool translate = false)
+    {
+        if (files.Count == 0)
+        {
+            return BadRequest(new { message = "No subtitle files provided." });
+        }
+
+        if (translate && string.IsNullOrWhiteSpace(targetLanguage))
+        {
+            return BadRequest(new { message = "Target language is required when queuing translations." });
+        }
+
+        var results = await _subtitleImportService.ImportFiles(files, sourceLanguage, targetLanguage, translate);
+        return Ok(new ImportSubtitlesResponse { Results = results });
     }
 }

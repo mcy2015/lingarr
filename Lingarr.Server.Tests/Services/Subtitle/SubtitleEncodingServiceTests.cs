@@ -69,6 +69,19 @@ public class SubtitleEncodingServiceTests
     }
 
     [Fact]
+    public void ConvertToUtf8_ShortGbkSnippet_WithMostlyAscii_StillRoundTrips()
+    {
+        // Regression: Ude names KOI8-R (0.41) for short ASCII-heavy GBK snippets;
+        // the CJK plausibility override must rescue them.
+        const string text = "1\n00:00:01,000 --> 00:00:02,000\n简体中文字幕\n";
+        var bytes = Encode(text, "gb2312");
+
+        var result = Service.ConvertToUtf8(bytes);
+
+        Assert.Equal(text, Encoding.UTF8.GetString(result));
+    }
+
+    [Fact]
     public void ConvertToUtf8_Latin1Encoded_FallsBackAndRoundTrips()
     {
         const string text = "Café résumé naïve";

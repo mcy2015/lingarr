@@ -73,6 +73,26 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
         return await EnqueueRequest(translationRequest);
     }
 
+    /// <inheritdoc />
+    public async Task<int> CreateImportRequest(string subtitlePath, string title, string sourceLanguage, string targetLanguage)
+    {
+        // Imports have no media binding; Movie is the neutral display bucket and
+        // Source = Import keeps them distinguishable from library media in the queue.
+        var translationRequest = new TranslationRequest
+        {
+            MediaId = null,
+            Title = title,
+            SourceLanguage = sourceLanguage,
+            TargetLanguage = targetLanguage,
+            SubtitleToTranslate = subtitlePath,
+            MediaType = MediaType.Movie,
+            Source = TranslationRequestSource.Import,
+            Status = TranslationStatus.Pending
+        };
+
+        return await EnqueueRequest(translationRequest);
+    }
+
     private async Task<int> EnqueueRequest(TranslationRequest translationRequest)
     {
         if (translationRequest.SubtitleToTranslate != null)
@@ -107,6 +127,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
             TargetLanguage = translationRequest.TargetLanguage,
             SubtitleToTranslate = translationRequest.SubtitleToTranslate,
             MediaType = translationRequest.MediaType,
+            Source = translationRequest.Source,
             Status = TranslationStatus.Pending,
             JobType = TranslationJobType.Translation
         };
