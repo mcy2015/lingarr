@@ -1,10 +1,10 @@
 <template>
     <div class="space-y-6">
         <div>
-            <h2 class="mb-4 text-xl font-semibold text-primary-content">
+            <h2 class="text-primary-content mb-4 text-xl font-semibold">
                 {{ t('onboarding.account.title') }}
             </h2>
-            <p class="mb-6 text-sm text-secondary-content/60">
+            <p class="text-secondary-content/60 mb-6 text-sm">
                 {{ t('onboarding.account.description') }}
             </p>
         </div>
@@ -26,7 +26,7 @@
             :validation-type="INPUT_VALIDATION_TYPE.STRING"
             :type="INPUT_TYPE.PASSWORD"
             :placeholder="t('onboarding.account.passwordPlaceholder')"
-            :min-length="4"
+            :min-length="8"
             :error-message="t('onboarding.account.passwordError')"
             @update:validation="(valid: boolean) => updateValidation('password', valid)" />
 
@@ -37,7 +37,7 @@
             :validation-type="INPUT_VALIDATION_TYPE.STRING"
             :type="INPUT_TYPE.PASSWORD"
             :placeholder="t('onboarding.account.confirmPasswordPlaceholder')"
-            :min-length="4"
+            :min-length="8"
             :error-message="t('onboarding.account.passwordError')"
             @update:validation="(valid: boolean) => updateValidation('confirmPassword', valid)" />
     </div>

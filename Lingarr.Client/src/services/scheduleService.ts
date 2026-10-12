@@ -1,63 +1,21 @@
-import { AxiosError, AxiosResponse, AxiosStatic } from 'axios'
+import { AxiosStatic } from 'axios'
 import { IScheduleService } from '@/ts'
 
 const service = (http: AxiosStatic, resource = '/api/schedule'): IScheduleService => ({
     startJob<T>(jobName: string): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/job/start`, {
-                jobName
-            })
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/job/start`, { jobName }).then((response) => response.data)
     },
     recurringJobs<T>(): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/jobs`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/jobs`).then((response) => response.data)
     },
     remove<T>(jobId: string): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.delete(`${resource}/job/remove/${jobId}`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.delete(`${resource}/job/remove/${jobId}`).then((response) => response.data)
     },
     indexShows<T>(): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/job/index/shows`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/job/index/shows`).then((response) => response.data)
     },
     indexMovies<T>(): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/job/index/movies`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/job/index/movies`).then((response) => response.data)
     }
 })
 

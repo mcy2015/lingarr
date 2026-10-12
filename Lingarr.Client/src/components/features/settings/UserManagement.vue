@@ -48,7 +48,7 @@
                                 </div>
                             </div>
                             <div
-                                class="col-span-3 hidden items-center px-4 py-2 text-sm text-secondary-content/60 md:flex">
+                                class="text-secondary-content/60 col-span-3 hidden items-center px-4 py-2 text-sm md:flex">
                                 -
                             </div>
                             <div
@@ -83,7 +83,7 @@
                                         :type="INPUT_TYPE.PASSWORD"
                                         :label="t('settings.users.passwordRequired')"
                                         :placeholder="t('settings.users.passwordPlaceholder')"
-                                        :min-length="4"
+                                        :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
                                         @update:validation="authStore.setPasswordValidation" />
 
@@ -96,7 +96,7 @@
                                         :placeholder="
                                             t('settings.users.confirmPasswordPlaceholder')
                                         "
-                                        :min-length="4"
+                                        :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
                                         @update:validation="
                                             authStore.setConfirmPasswordValidation
@@ -182,7 +182,7 @@
                                         :type="INPUT_TYPE.PASSWORD"
                                         :label="t('settings.users.newPasswordOptional')"
                                         :placeholder="t('settings.users.newPasswordPlaceholder')"
-                                        :min-length="4"
+                                        :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
                                         @update:validation="authStore.setPasswordValidation" />
 
@@ -195,7 +195,7 @@
                                         :placeholder="
                                             t('settings.users.confirmNewPasswordPlaceholder')
                                         "
-                                        :min-length="4"
+                                        :min-length="8"
                                         :error-message="t('settings.users.passwordError')"
                                         @update:validation="
                                             authStore.setConfirmPasswordValidation
@@ -207,7 +207,7 @@
 
                     <div
                         if="authStore.users.length === 0 && !authStore.createUser"
-                        class="py-8 text-center text-secondary-content/60">
+                        class="text-secondary-content/60 py-8 text-center">
                         {{ t('settings.users.noUsers') }}
                     </div>
                 </div>

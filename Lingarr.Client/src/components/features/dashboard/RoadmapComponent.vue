@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { shallowRef } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AutomationIcon from '@/components/icons/AutomationIcon.vue'
 import NotificationIcon from '@/components/icons/NotificationIcon.vue'
@@ -75,7 +75,8 @@ const statusLabels: Record<string, string> = {
     Planned: 'dashboard.roadmap.status.planned'
 }
 
-const roadmapItems = shallowRef([
+// computed so titles re-resolve when the locale changes
+const roadmapItems = computed(() => [
     {
         icon: IntegrationIcon,
         title: t('dashboard.roadmap.items.aiTranslation.title'),

@@ -1,4 +1,4 @@
-import { AxiosError, AxiosResponse, AxiosStatic } from 'axios'
+import { AxiosStatic } from 'axios'
 import { IMediaService, IIncludeSummary, MediaType } from '@/ts'
 
 const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => ({
@@ -8,8 +8,8 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
         orderBy: string,
         ascending: boolean
     ): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.get(
+        return http
+            .get(
                 `${resource}/movies`.addParams({
                     pageNumber: pageNumber,
                     searchQuery: searchQuery,
@@ -17,13 +17,7 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
                     ascending: ascending
                 })
             )
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+            .then((response) => response.data)
     },
     shows<T>(
         pageNumber: number,
@@ -31,8 +25,8 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
         orderBy: string,
         ascending: boolean
     ): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.get(
+        return http
+            .get(
                 `${resource}/shows`.addParams({
                     pageNumber: pageNumber,
                     searchQuery: searchQuery,
@@ -40,72 +34,27 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
                     ascending: ascending
                 })
             )
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+            .then((response) => response.data)
     },
     include<T>(mediaType: MediaType, id: number, include: boolean): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/include`, {
-                mediaType: mediaType,
-                id: id,
-                include: include
-            })
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http
+            .post(`${resource}/include`, { mediaType: mediaType, id: id, include: include })
+            .then((response) => response.data)
     },
     includeAll<T>(mediaType: MediaType, include: boolean): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/include/all`, {
-                mediaType: mediaType,
-                include: include
-            })
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http
+            .post(`${resource}/include/all`, { mediaType: mediaType, include: include })
+            .then((response) => response.data)
     },
     includeSummary(mediaType: MediaType): Promise<IIncludeSummary> {
-        return new Promise((resolve, reject) => {
-            http.get(
-                `${resource}/include/summary`.addParams({
-                    mediaType: mediaType
-                })
-            )
-                .then((response: AxiosResponse<IIncludeSummary>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http
+            .get(`${resource}/include/summary`.addParams({ mediaType: mediaType }))
+            .then((response) => response.data)
     },
     threshold<T>(mediaType: MediaType, id: number, hours: string): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/threshold`, {
-                mediaType: mediaType,
-                id: id,
-                hours: hours
-            })
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http
+            .post(`${resource}/threshold`, { mediaType: mediaType, id: id, hours: hours })
+            .then((response) => response.data)
     }
 })
 

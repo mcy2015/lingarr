@@ -3,7 +3,9 @@
         <div
             v-if="manifest.description"
             class="text-secondary-content/80 text-xs"
-            v-html="manifest.description" />
+        >
+            {{ manifest.description }}
+        </div>
         <div
             v-if="manifest.settings.length === 0 && !manifest.description"
             class="text-sm opacity-60">

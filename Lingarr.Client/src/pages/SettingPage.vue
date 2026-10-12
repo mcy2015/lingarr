@@ -50,6 +50,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { computed } from 'vue'
 import { MenuItem, SETTINGS } from '@/ts'
 import { useSettingStore } from '@/store/setting'
 import services from '@/services'
@@ -67,7 +68,8 @@ const router = useRouter()
 const settings = useSettingStore()
 const { t } = useI18n()
 
-const menuItems: MenuItem[] = [
+// computed so labels re-resolve when the locale changes
+const menuItems = computed<MenuItem[]>(() => [
     {
         label: t('settings.menu.integrations'),
         icon: IntegrationIcon,
@@ -112,7 +114,7 @@ const menuItems: MenuItem[] = [
         route: 'telemetry-settings',
         children: []
     }
-]
+])
 
 const handleLogout = async () => {
     try {

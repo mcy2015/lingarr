@@ -1,5 +1,5 @@
 import { ILanguage } from '@/ts/language'
-import { ILocale, ITheme } from '@/ts/store'
+import { ITheme } from '@/ts/store'
 
 export const SETTINGS = {
     RADARR_URL: 'radarr_url',
@@ -29,7 +29,6 @@ export const SETTINGS = {
     PROOFREAD_PROMPT: 'proofread_prompt',
     PROOFREAD_USER_PROMPT: 'proofread_user_prompt',
     THEME: 'theme',
-    LOCALE: 'locale',
     MOVIE_AGE_THRESHOLD: 'movie_age_threshold',
     SHOW_AGE_THRESHOLD: 'show_age_threshold',
     FIX_OVERLAPPING_SUBTITLES: 'fix_overlapping_subtitles',
@@ -108,7 +107,6 @@ export interface ISettings {
     bilingual_subtitle_output: string
     add_translator_info: string
     theme: ITheme
-    locale: ILocale
     subtitle_validation_enabled: string
     subtitle_validation_maxfilesizebytes: string
     subtitle_validation_minsubtitlelength: string
@@ -145,7 +143,6 @@ export interface ISettings {
     sonarr_default_include: string
 }
 
-
 export const ENCRYPTED_SETTINGS = {
     API_KEY: 'api_key',
     RADARR_API_KEY: 'radarr_api_key',
@@ -158,7 +155,7 @@ export const ENCRYPTED_SETTINGS = {
     XAI_API_KEY: 'xai_api_key',
     DEEPL_API_KEY: 'deepl_api_key',
     LIBRETRANSLATE_API_KEY: 'libretranslate_api_key',
-    LOCAL_AI_API_KEY: 'local_ai_api_key',
+    LOCAL_AI_API_KEY: 'local_ai_api_key'
 } as const
 
 export interface IEncryptedSettings {

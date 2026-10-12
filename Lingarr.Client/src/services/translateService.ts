@@ -1,4 +1,4 @@
-import { AxiosError, AxiosResponse, AxiosStatic } from 'axios'
+import { AxiosStatic } from 'axios'
 import { ILanguage, IProofreadLineRequest, ISubtitle, ITranslateService, MediaType } from '@/ts'
 
 const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateService => ({
@@ -9,8 +9,8 @@ const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateServ
         target: ILanguage,
         mediaType: MediaType
     ): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/file`, {
+        return http
+            .post(`${resource}/file`, {
                 mediaId: mediaId,
                 subtitlePath: subtitle.path,
                 subtitleFormat: subtitle.format,
@@ -18,66 +18,21 @@ const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateServ
                 targetLanguage: target.code,
                 mediaType: mediaType
             })
-
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+            .then((response) => response.data)
     },
-    bulkTranslate<T>(
-        mediaIds: number[],
-        targetLanguage: string,
-        mediaType: MediaType
-    ): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/bulk`, {
-                mediaIds,
-                targetLanguage,
-                mediaType
-            })
-            .then((response: AxiosResponse<T>) => {
-                resolve(response.data)
-            })
-            .catch((error: AxiosError) => {
-                reject(error.response)
-            })
-        })
+    bulkTranslate<T>(mediaIds: number[], targetLanguage: string, mediaType: MediaType): Promise<T> {
+        return http
+            .post(`${resource}/bulk`, { mediaIds, targetLanguage, mediaType })
+            .then((response) => response.data)
     },
     getLanguages<T>(): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/languages`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/languages`).then((response) => response.data)
     },
     proofreadStatus<T>(): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/proofread/status`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/proofread/status`).then((response) => response.data)
     },
     proofreadLine<T>(request: IProofreadLineRequest): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/proofread`, request)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/proofread`, request).then((response) => response.data)
     }
 })
 

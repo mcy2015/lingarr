@@ -1,4 +1,4 @@
-import { AxiosError, AxiosResponse, AxiosStatic } from 'axios'
+import { AxiosStatic } from 'axios'
 import { IRequestTemplateService } from '@/ts'
 
 const service = (
@@ -6,15 +6,7 @@ const service = (
     resource = '/api/requesttemplate'
 ): IRequestTemplateService => ({
     getDefaults<T>(): Promise<T> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/defaults`)
-                .then((response: AxiosResponse<T>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/defaults`).then((response) => response.data)
     }
 })
 

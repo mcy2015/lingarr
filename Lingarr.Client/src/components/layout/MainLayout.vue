@@ -1,6 +1,6 @@
 <template>
     <div
-        :class="[`${instanceStore.getTheme}`, 'flex min-h-screen bg-primary text-primary-content']">
+        :class="[`${instanceStore.getTheme}`, 'bg-primary text-primary-content flex min-h-screen']">
         <AsideNavigation />
 
         <div class="flex w-full flex-col">
@@ -25,7 +25,7 @@
                                     <button
                                         v-for="theme in Object.values(THEMES)"
                                         :key="theme"
-                                        class="hover:bg-tertiary block w-full cursor-pointer px-4 py-2 text-left text-sm capitalize text-secondary-content"
+                                        class="hover:bg-tertiary text-secondary-content block w-full cursor-pointer px-4 py-2 text-left text-sm capitalize"
                                         @click="setTheme(theme)">
                                         {{ theme }}
                                     </button>
@@ -65,7 +65,6 @@ const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()
 const translationRequestStore = useTranslationRequestStore()
 const signalR = useSignalR()
-const themeDropdown = ref(false)
 const settingHubConnection = ref<Hub>()
 const requestHubConnection = ref<Hub>()
 
@@ -79,7 +78,6 @@ const onActiveTranslations = (activeTranslations: IActiveTranslation[]) => {
 
 const setTheme = (theme: ITheme) => {
     instanceStore.storeTheme(theme)
-    themeDropdown.value = false
 }
 
 const isOpen = computed({

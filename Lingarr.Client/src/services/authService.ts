@@ -1,4 +1,4 @@
-import { AxiosStatic, AxiosResponse, AxiosError } from 'axios'
+import { AxiosStatic } from 'axios'
 import {
     IApiKeyResponse,
     IAuthService,
@@ -11,126 +11,48 @@ import {
 
 const service = (http: AxiosStatic, resource = '/api/auth'): IAuthService => ({
     completeOnboarding(request: IOnboardingRequest): Promise<void> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/onboarding`, {
+        return http
+            .post(`${resource}/onboarding`, {
                 enableUserAuth: request.enableUserAuth,
                 enableApiKey: request.enableApiKey
             })
-                .then((response: AxiosResponse<void>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+            .then((response) => response.data)
     },
 
     signup(request: ISignupRequest): Promise<void> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/signup`, request)
-                .then((response: AxiosResponse<void>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/signup`, request).then((response) => response.data)
     },
 
     login(request: ILoginRequest): Promise<void> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/login`, request)
-                .then((response: AxiosResponse<void>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/login`, request).then((response) => response.data)
     },
 
     authenticated(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/authenticated`)
-                .then((response: AxiosResponse<void>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/authenticated`).then((response) => response.data)
     },
 
     logout(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/logout`)
-                .then(() => {
-                    resolve()
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/logout`).then((response) => response.data)
     },
 
     generateApiKey(): Promise<IApiKeyResponse> {
-        return new Promise((resolve, reject) => {
-            http.post(`${resource}/apikey/generate`)
-                .then((response: AxiosResponse<IApiKeyResponse>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.post(`${resource}/apikey/generate`).then((response) => response.data)
     },
 
     hasAnyUsers(): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/users/any`)
-                .then((response: AxiosResponse<boolean>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/users/any`).then((response) => response.data)
     },
 
     getUsers(): Promise<IUser[]> {
-        return new Promise((resolve, reject) => {
-            http.get(`${resource}/users`)
-                .then((response: AxiosResponse<IUser[]>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.get(`${resource}/users`).then((response) => response.data)
     },
 
     updateUser(id: number, request: IUpdateUserRequest): Promise<void> {
-        return new Promise((resolve, reject) => {
-            http.put(`${resource}/users/${id}`, request)
-                .then((response: AxiosResponse<void>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.put(`${resource}/users/${id}`, request).then((response) => response.data)
     },
 
     deleteUser(id: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            http.delete(`${resource}/users/${id}`)
-                .then((response: AxiosResponse<void>) => {
-                    resolve(response.data)
-                })
-                .catch((error: AxiosError) => {
-                    reject(error.response)
-                })
-        })
+        return http.delete(`${resource}/users/${id}`).then((response) => response.data)
     }
 })
 

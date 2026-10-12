@@ -1,6 +1,7 @@
-import axios, { AxiosStatic } from 'axios'
+import axios, { AxiosError, AxiosStatic } from 'axios'
 import { Services } from '@/ts'
 import { baseUrl } from '@/utils/baseUrl'
+import { ApiError } from './apiError'
 import { translationRequestService } from '@/services/translationRequestService'
 import { authService } from './authService'
 import { subtitleService } from './subtitleService'
@@ -19,24 +20,43 @@ import { pluginService } from '@/services/pluginService'
 
 axios.defaults.baseURL = baseUrl()
 
+/**
+ * Converts any thrown value into a normalised `ApiError`.
+ * - Extends `Error`, so `instanceof Error` checks in components work.
+ * - Keeps the raw backend payload on `.data`, so `err?.data?.message`
+ *   keeps working for existing call sites.
+ */
+const toApiError = (error: unknown): unknown => {
+    if (error instanceof AxiosError) {
+        const response = error.response
+        const payload = response?.data as { message?: string } | undefined
+        return new ApiError({
+            message: payload?.message || response?.statusText || error.message,
+            status: response?.status,
+            statusText: response?.statusText,
+            data: response?.data
+        })
+    }
+    return error
+}
+
 axios.interceptors.response.use(
     (response) => response,
     (error) => {
         const prefix = baseUrl().replace(/\/$/, '')
         const loginPath = `${prefix}/auth/login`
         const onboardingPath = `${prefix}/auth/onboarding`
-        if (error.response?.status === 403 && error.response?.data?.onboardingRequired) {
+        if (error?.response?.status === 403 && error.response?.data?.onboardingRequired) {
             window.location.href = onboardingPath
-            return
-        }
-        if (error.response?.status === 401) {
+        } else if (error?.response?.status === 401) {
             const currentPath = window.location.pathname
             if (!currentPath.startsWith(loginPath) && !currentPath.startsWith(onboardingPath)) {
                 window.location.href = loginPath
-                return
             }
         }
-        return Promise.reject(error)
+        // Always reject with a normalised error — never leave the promise
+        // hanging after a redirect.
+        return Promise.reject(toApiError(error))
     }
 )
 

@@ -11,14 +11,25 @@ export default {
         }
         const [showName, episodeNumber, episodeTitle] = parts
 
-        el.innerHTML = `
-            <div class="${originalClasses} inline-flex items-center gap-1.5 overflow-hidden min-w-0 w-full " >
-                <span class="shrink-0">${showName}</span>
-                <span>-</span>
-                <span>${episodeNumber}</span>
-                <span>-</span>
-                <span class="text-primary-content/50 truncate block">${episodeTitle}</span>
-            </div>
-        `
+        // Build the layout with DOM APIs instead of innerHTML: episode
+        // titles come from Sonarr and must never be parsed as HTML.
+        const wrapper = document.createElement('div')
+        wrapper.className = `${originalClasses} inline-flex items-center gap-1.5 overflow-hidden min-w-0 w-full`
+
+        const appendSpan = (content: string, classes?: string) => {
+            const span = document.createElement('span')
+            if (classes) span.className = classes
+            span.textContent = content
+            wrapper.appendChild(span)
+        }
+
+        appendSpan(showName, 'shrink-0')
+        appendSpan('-')
+        appendSpan(episodeNumber)
+        appendSpan('-')
+        appendSpan(episodeTitle, 'text-primary-content/50 truncate block')
+
+        el.textContent = ''
+        el.appendChild(wrapper)
     }
 }
