@@ -1,13 +1,3 @@
-// TEMP DEBUG (IA migration): surface the error killing the app
-window.addEventListener('unhandledrejection', (e) => {
-    const reason = (e as PromiseRejectionEvent).reason
-    document.title = 'REJECTION: ' + String(reason?.message ?? reason)
-})
-window.addEventListener('error', (e) => {
-    document.title = 'ERROR: ' + e.message
-})
-// TEMP DEBUG END
-
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 
