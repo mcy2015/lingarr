@@ -4,7 +4,7 @@ import {
     ILineTranslated,
     IRequestProgress,
     ISettings
-} from '@/ts'
+} from '@/types'
 import type { HubConnection as SignalRHubConnection } from '@microsoft/signalr'
 
 export interface SignalRStore {

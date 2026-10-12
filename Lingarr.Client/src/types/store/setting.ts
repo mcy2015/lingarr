@@ -1,4 +1,4 @@
-import { IEncryptedSettings, ISettings } from '@/ts'
+import { IEncryptedSettings, ISettings } from '@/types'
 
 export interface IUseSettingStore {
     settings: ISettings

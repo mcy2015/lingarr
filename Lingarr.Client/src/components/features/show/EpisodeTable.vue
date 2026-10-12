@@ -62,7 +62,7 @@
 </template>
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { IEpisode, ISubtitle, MEDIA_TYPE } from '@/ts'
+import { IEpisode, ISubtitle, MEDIA_TYPE } from '@/types'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'

@@ -1,4 +1,4 @@
-import { MediaType } from '@/ts'
+import { MediaType } from '@/types'
 
 export interface IPathMapping {
     sourcePath: string

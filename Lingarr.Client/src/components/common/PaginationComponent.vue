@@ -43,7 +43,7 @@
 <script setup lang="ts">
 import { computed, ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { IFilter } from '@/ts'
+import { IFilter } from '@/types'
 
 const { t } = useI18n()
 

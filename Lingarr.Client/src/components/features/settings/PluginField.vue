@@ -47,7 +47,7 @@ import {
     LabelValue,
     PLUGIN_SETTING_TYPE,
     SelectComponentExpose
-} from '@/ts'
+} from '@/types'
 import services from '@/services'
 import { useSettingStore } from '@/store/setting'
 import InputComponent from '@/components/common/InputComponent.vue'

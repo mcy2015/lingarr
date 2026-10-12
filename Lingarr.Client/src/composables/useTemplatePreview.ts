@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { SETTINGS } from '@/ts'
+import { SETTINGS } from '@/types'
 import i18n from '@/i18n'
 import { useSettingStore } from '@/store/setting'
 

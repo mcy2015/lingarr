@@ -38,7 +38,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
-import { PLACEHOLDER, SETTINGS } from '@/ts'
+import { PLACEHOLDER, SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
 import SaveNotification from '@/components/common/SaveNotification.vue'

@@ -51,7 +51,7 @@
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
-import { MenuItem, SETTINGS } from '@/ts'
+import { MenuItem, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import services from '@/services'
 import IntegrationIcon from '@/components/icons/IntegrationIcon.vue'

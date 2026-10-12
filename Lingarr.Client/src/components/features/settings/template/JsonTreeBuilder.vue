@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { IPlaceholder } from '@/ts'
+import { IPlaceholder } from '@/types'
 import { useJsonTree } from '@/composables/useJsonTree'
 import JsonTreeNode from './JsonTreeNode.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'

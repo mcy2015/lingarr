@@ -190,7 +190,7 @@ import {
     MEDIA_TYPE,
     TRANSLATION_ACTIONS,
     TRANSLATION_STATUS
-} from '@/ts'
+} from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
 import services from '@/services'
 import { useSignalR } from '@/composables/useSignalR'

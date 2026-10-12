@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useSignalR } from '@/composables/useSignalR'
-import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/ts'
+import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import { useInstanceStore } from '@/store/instance'
 import useTranslationRequestStore from '@/store/translationRequest'

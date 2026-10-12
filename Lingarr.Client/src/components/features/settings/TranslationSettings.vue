@@ -98,7 +98,7 @@
 import { computed, ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
-import { INPUT_VALIDATION_TYPE, SERVICE_TYPE, SETTINGS } from '@/ts'
+import { INPUT_VALIDATION_TYPE, SERVICE_TYPE, SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import SaveNotification from '@/components/common/SaveNotification.vue'
 import InputComponent from '@/components/common/InputComponent.vue'

@@ -219,7 +219,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { INPUT_TYPE, INPUT_VALIDATION_TYPE, IUser } from '@/ts'
+import { INPUT_TYPE, INPUT_VALIDATION_TYPE, IUser } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'

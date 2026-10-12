@@ -32,7 +32,7 @@
 import { ref, Ref, computed, ComputedRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { IEpisode, ILanguage, IMovie, ISubtitle, MediaType, SETTINGS } from '@/ts'
+import { IEpisode, ILanguage, IMovie, ISubtitle, MediaType, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import { useTranslateStore } from '@/store/translate'
 import useClickOutside from '@/composables/useClickOutside'

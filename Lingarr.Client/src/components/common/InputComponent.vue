@@ -40,7 +40,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { InputType, INPUT_TYPE, InputValidationType } from '@/ts'
+import { InputType, INPUT_TYPE, InputValidationType } from '@/types'
 import useValidation from '@/composables/useValidation'
 import useDebounce from '@/composables/useDebounce'
 import ValidationIcon from '@/components/common/ValidationIcon.vue'

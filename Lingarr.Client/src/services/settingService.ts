@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { ISettingService, ISettings } from '@/ts'
+import { ISettingService, ISettings } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/setting'): ISettingService => ({
     getSetting<T>(key: string): Promise<T> {

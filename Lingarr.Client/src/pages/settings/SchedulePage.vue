@@ -63,7 +63,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Hub } from '@/ts'
+import { Hub } from '@/types'
 import { formatDateTime } from '@/utils/date'
 import { useSignalR } from '@/composables/useSignalR'
 import { useScheduleStore } from '@/store/schedule'

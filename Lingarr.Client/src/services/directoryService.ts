@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IDirectoryService } from '@/ts'
+import { IDirectoryService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/directory'): IDirectoryService => ({
     get(path: string): Promise<[]> {

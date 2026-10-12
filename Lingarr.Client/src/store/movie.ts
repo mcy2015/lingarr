@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { IFilter, IMovie, IPagedResult, IUseMovieStore, MediaType } from '@/ts'
+import { IFilter, IMovie, IPagedResult, IUseMovieStore, MediaType } from '@/types'
 import services from '@/services'
 
 export const useMovieStore = defineStore('movie', {

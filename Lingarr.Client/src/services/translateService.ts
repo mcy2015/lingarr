@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { ILanguage, IProofreadLineRequest, ISubtitle, ITranslateService, MediaType } from '@/ts'
+import { ILanguage, IProofreadLineRequest, ISubtitle, ITranslateService, MediaType } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateService => ({
     translateSubtitle<T>(

@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { ITelemetryService } from '@/ts'
+import { ITelemetryService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/telemetry'): ITelemetryService => ({
     preview<T>(): Promise<T> {

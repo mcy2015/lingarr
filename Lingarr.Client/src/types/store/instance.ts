@@ -1,4 +1,4 @@
-import { IVersion } from '@/ts/version'
+import { IVersion } from '@/types/version'
 
 export interface IUseInstanceStore {
     version: IVersion

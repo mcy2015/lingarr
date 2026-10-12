@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IRequestTemplateService } from '@/ts'
+import { IRequestTemplateService } from '@/types'
 
 const service = (
     http: AxiosStatic,

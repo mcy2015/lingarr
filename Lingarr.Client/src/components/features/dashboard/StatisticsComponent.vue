@@ -123,7 +123,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DailyStatistic, MEDIA_TYPE, Statistics } from '@/ts'
+import { DailyStatistic, MEDIA_TYPE, Statistics } from '@/types'
 import services from '@/services'
 import CardComponent from '@/components/common/CardComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'

@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IPathMapping, IMappingService } from '@/ts'
+import { IPathMapping, IMappingService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/mapping'): IMappingService => ({
     getMappings(): Promise<IPathMapping[]> {

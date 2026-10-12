@@ -20,7 +20,7 @@
 <script setup lang="ts">
 import { computed, ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { IActiveTranslation, IShow, MEDIA_TYPE, MediaType, TRANSLATION_STATUS } from '@/ts'
+import { IActiveTranslation, IShow, MEDIA_TYPE, MediaType, TRANSLATION_STATUS } from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
 import BadgeComponent from '@/components/common/BadgeComponent.vue'
 

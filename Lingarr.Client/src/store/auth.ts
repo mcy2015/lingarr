@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { IUser, IAuthStore } from '@/ts'
+import { IUser, IAuthStore } from '@/types'
 import services from '@/services'
 import i18n from '@/i18n'
 

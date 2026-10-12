@@ -292,7 +292,7 @@ import {
     ProofreadLineOrigin,
     PROOFREAD_LINE_ORIGIN,
     TRANSLATION_STATUS
-} from '@/ts'
+} from '@/types'
 import { useSignalR } from '@/composables/useSignalR'
 import { formatDateTime } from '@/utils/date'
 import services from '@/services'

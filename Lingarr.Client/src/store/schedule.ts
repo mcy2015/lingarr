@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { IUseScheduleStore, IRecurringJob } from '@/ts'
+import { IUseScheduleStore, IRecurringJob } from '@/types'
 import services from '@/services'
 
 export const useScheduleStore = defineStore('schedule', {

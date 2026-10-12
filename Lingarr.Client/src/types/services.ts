@@ -19,7 +19,7 @@ import {
     IPluginSummary,
     IProofreadLineApplyRequest,
     IProofreadLineRequest
-} from '@/ts'
+} from '@/types'
 
 export interface Services {
     auth: IAuthService

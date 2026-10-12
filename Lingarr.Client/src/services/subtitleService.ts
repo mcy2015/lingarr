@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { ISubtitleService } from '@/ts'
+import { ISubtitleService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/subtitle'): ISubtitleService => ({
     collect<T>(path: string): Promise<T> {

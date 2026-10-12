@@ -53,7 +53,7 @@ import { useI18n } from 'vue-i18n'
 import CaretRightIcon from '@/components/icons/CaretRightIcon.vue'
 import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'
 import useClickOutside from '@/composables/useClickOutside'
-import { ISelectOption } from '@/ts'
+import { ISelectOption } from '@/types'
 
 const { t } = useI18n()
 

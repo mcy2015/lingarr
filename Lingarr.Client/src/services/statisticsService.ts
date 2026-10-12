@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IStatisticsService } from '@/ts'
+import { IStatisticsService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/statistics'): IStatisticsService => ({
     getStatistics<T>(): Promise<T> {

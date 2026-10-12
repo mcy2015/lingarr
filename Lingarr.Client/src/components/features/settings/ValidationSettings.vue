@@ -116,7 +116,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { INPUT_VALIDATION_TYPE, SETTINGS } from '@/ts'
+import { INPUT_VALIDATION_TYPE, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 
 import CardComponent from '@/components/common/CardComponent.vue'

@@ -39,7 +39,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { IPluginSummary } from '@/ts'
+import { IPluginSummary } from '@/types'
 import services from '@/services'
 import CardComponent from '@/components/common/CardComponent.vue'
 import CodeSnippet from '@/components/common/CodeSnippet.vue'

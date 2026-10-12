@@ -1,5 +1,5 @@
-import { ILanguage } from '@/ts/language'
-import { ITheme } from '@/ts/store'
+import { ILanguage } from '@/types/language'
+import { ITheme } from '@/types/store'
 
 export const SETTINGS = {
     RADARR_URL: 'radarr_url',

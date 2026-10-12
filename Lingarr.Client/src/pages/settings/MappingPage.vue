@@ -103,7 +103,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMappingStore } from '@/store/mapping'
-import { MEDIA_TYPE } from '@/ts'
+import { MEDIA_TYPE } from '@/types'
 import SelectComponent from '@/components/common/SelectComponent.vue'
 import TimesIcon from '@/components/icons/TimesIcon.vue'
 import PlusIcon from '@/components/icons/PlusIcon.vue'

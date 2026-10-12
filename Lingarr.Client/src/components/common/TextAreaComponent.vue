@@ -40,7 +40,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { IPlaceholder } from '@/ts'
+import { IPlaceholder } from '@/types'
 import useDebounce from '@/composables/useDebounce'
 import ValidationIcon from '@/components/common/ValidationIcon.vue'
 import PlaceholderButton from '@/components/common/PlaceholderButton.vue'

@@ -160,7 +160,7 @@ import {
     IShow,
     MEDIA_TYPE,
     SETTINGS
-} from '@/ts'
+} from '@/types'
 import useDebounce from '@/composables/useDebounce'
 import { useInstanceStore } from '@/store/instance'
 import { useSettingStore } from '@/store/setting'

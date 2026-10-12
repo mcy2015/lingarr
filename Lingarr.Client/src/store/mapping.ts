@@ -1,7 +1,7 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import services from '@/services'
 import i18n from '@/i18n'
-import { IPathMapping } from '@/ts'
+import { IPathMapping } from '@/types'
 
 export const useMappingStore = defineStore('mapping', {
     state: () => ({

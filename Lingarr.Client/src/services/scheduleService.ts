@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IScheduleService } from '@/ts'
+import { IScheduleService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/schedule'): IScheduleService => ({
     startJob<T>(jobName: string): Promise<T> {

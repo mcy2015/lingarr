@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ENCRYPTED_SETTINGS, SETTINGS } from '@/ts'
+import { ENCRYPTED_SETTINGS, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import services from '@/services'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'

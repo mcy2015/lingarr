@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IProofreadLineApplyRequest, ITranslationRequest, ITranslationRequestService } from '@/ts'
+import { IProofreadLineApplyRequest, ITranslationRequest, ITranslationRequestService } from '@/types'
 
 const service = (
     http: AxiosStatic,

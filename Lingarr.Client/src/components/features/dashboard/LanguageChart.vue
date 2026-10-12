@@ -29,7 +29,7 @@ import {
 } from 'chart.js/auto'
 import { Bar } from 'vue-chartjs'
 import { useI18n } from 'vue-i18n'
-import { DailyStatistic } from '@/ts'
+import { DailyStatistic } from '@/types'
 import { formatDayLabel } from '@/utils/date'
 import { useInstanceStore } from '@/store/instance'
 

@@ -1,4 +1,4 @@
-import { ILanguage } from '@/ts'
+import { ILanguage } from '@/types'
 
 export interface IUseTranslateStore {
     languages: ILanguage[]

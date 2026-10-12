@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { IPluginManifest } from '@/ts'
+import { IPluginManifest } from '@/types'
 import PluginField from '@/components/features/settings/PluginField.vue'
 
 const { t } = useI18n()

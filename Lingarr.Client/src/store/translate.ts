@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { ILanguage, ISubtitle, IUseTranslateStore, MediaType } from '@/ts'
+import { ILanguage, ISubtitle, IUseTranslateStore, MediaType } from '@/types'
 import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
 

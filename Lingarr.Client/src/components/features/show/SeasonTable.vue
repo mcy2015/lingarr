@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { ref, Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ISeason, ISubtitle, MEDIA_TYPE } from '@/ts'
+import { ISeason, ISubtitle, MEDIA_TYPE } from '@/types'
 import EpisodeTable from '@/components/features/show/EpisodeTable.vue'
 import CaretButton from '@/components/common/CaretButton.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'

@@ -1,5 +1,5 @@
 import { ref, watch } from 'vue'
-import { NODE_TYPE, TreeNode, NodeType } from '@/ts'
+import { NODE_TYPE, TreeNode, NodeType } from '@/types'
 import i18n from '@/i18n'
 
 export function useJsonTree(emit: (event: 'update:modelValue', value: string) => void) {

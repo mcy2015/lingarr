@@ -1,6 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import services from '@/services'
-import { IFilter, IUseShowStore, IPagedResult, IShow, MEDIA_TYPE, MediaType } from '@/ts'
+import { IFilter, IUseShowStore, IPagedResult, IShow, MEDIA_TYPE, MediaType } from '@/types'
 
 export const useShowStore = defineStore('show', {
     state: (): IUseShowStore => ({

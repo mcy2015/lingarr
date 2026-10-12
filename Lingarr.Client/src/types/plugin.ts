@@ -1,4 +1,4 @@
-﻿import { LabelValue } from '@/ts'
+﻿import { LabelValue } from '@/types'
 
 export const PLUGIN_SETTING_TYPE = {
     TEXT: 'Text',

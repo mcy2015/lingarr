@@ -20,7 +20,7 @@
 </template>
 
 <script lang="ts" setup>
-import { IOptions, IFilter } from '@/ts'
+import { IOptions, IFilter } from '@/types'
 import { useI18n } from 'vue-i18n'
 import CaretUpIcon from '@/components/icons/CaretUpIcon.vue'
 import CaretDownIcon from '@/components/icons/CaretDownIcon.vue'

@@ -16,7 +16,7 @@
 </template>
 
 <script lang="ts" setup>
-import { IFilter } from '@/ts'
+import { IFilter } from '@/types'
 import { useI18n } from 'vue-i18n'
 import SearchIcon from '@/components/icons/SearchIcon.vue'
 import TimesIcon from '@/components/icons/TimesIcon.vue'

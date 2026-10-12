@@ -60,7 +60,7 @@
 <script setup lang="ts">
 import { Ref, ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ILanguage } from '@/ts'
+import { ILanguage } from '@/types'
 import CaretRightIcon from '@/components/icons/CaretRightIcon.vue'
 import TimesIcon from '@/components/icons/TimesIcon.vue'
 import useClickOutside from '@/composables/useClickOutside'

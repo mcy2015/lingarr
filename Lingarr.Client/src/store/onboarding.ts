@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { IOnboardingStore } from '@/ts'
+import { IOnboardingStore } from '@/types'
 
 export const useOnboardingStore = defineStore('onboarding', {
     state: (): IOnboardingStore => ({

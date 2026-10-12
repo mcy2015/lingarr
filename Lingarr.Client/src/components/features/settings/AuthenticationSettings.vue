@@ -28,7 +28,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/store/setting'
-import { SETTINGS } from '@/ts'
+import { SETTINGS } from '@/types'
 import CardComponent from '@/components/common/CardComponent.vue'
 import SaveNotification from '@/components/common/SaveNotification.vue'
 import ToggleButton from '@/components/common/ToggleButton.vue'

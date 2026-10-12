@@ -52,7 +52,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ITranslationRequest, TRANSLATION_ACTIONS, TRANSLATION_STATUS } from '@/ts'
+import { ITranslationRequest, TRANSLATION_ACTIONS, TRANSLATION_STATUS } from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
 import TimesIcon from '@/components/icons/TimesIcon.vue'
 import LoaderCircleIcon from '@/components/icons/LoaderCircleIcon.vue'

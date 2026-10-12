@@ -62,20 +62,20 @@ Vue 3.5 + Pinia 4 + vue-router 5 + vue-i18n 11 + axios + @microsoft/signalr；Vi
 - `main.ts` 用无意义的 `new Promise().then().then()` 链注册指令。
 - Tailwind **双通道配置**：`@tailwindcss/vite` 插件 + 残留的 `postcss.config.mjs`（`@tailwindcss/postcss`）；`tailwind.config.mjs` 是 v3 风格 JS 配置，v4 可改为 CSS-first `@theme`。`darkMode:'class'` 全项目 0 个 `dark:` 工具类，纯遗留。
 
-### 2.2 `src/ts/` 不是死代码——是契约层（命名误导）
+### 2.2 `src/types/` 不是死代码——是契约层（命名误导）
 
-`src/ts/`（1,058 LOC）实为**类型 + 常量骨干**，~90 个文件引用它：
+`src/types/`（1,058 LOC）实为**类型 + 常量骨干**，~90 个文件引用它：
 
 | 文件 | 作用 |
 |---|---|
-| `ts/media/index.ts` | 领域模型 `IShow/IMovie/ISubtitle/ITranslationRequest`、`MEDIA_TYPE`、`TRANSLATION_STATUS` |
-| `ts/setting.ts` | `SETTINGS` 65 个键常量 + `ISettings`（70 字段）+ `ENCRYPTED_SETTINGS` |
-| `ts/services.ts` | `Services` 注册表 + 15 个服务接口 |
-| `ts/store/*` | 各 Pinia store 的形状接口（真实 store 在 `src/store/`） |
-| `ts/components/*` | 输入类型/校验枚举/PLACEHOLDER 目录 |
-| `ts/composables/signalR.ts` | SignalR 事件类型映射 |
+| `types/media/index.ts` | 领域模型 `IShow/IMovie/ISubtitle/ITranslationRequest`、`MEDIA_TYPE`、`TRANSLATION_STATUS` |
+| `types/setting.ts` | `SETTINGS` 65 个键常量 + `ISettings`（70 字段）+ `ENCRYPTED_SETTINGS` |
+| `types/services.ts` | `Services` 注册表 + 15 个服务接口 |
+| `types/store/*` | 各 Pinia store 的形状接口（真实 store 在 `src/store/`） |
+| `types/components/*` | 输入类型/校验枚举/PLACEHOLDER 目录 |
+| `types/composables/signalR.ts` | SignalR 事件类型映射 |
 
-问题：① 命名让人误以为遗留垃圾，建议改名 `src/types/`（或 `contracts/`）；② 大桶导入（`@/ts`）与深路径导入混用，桶文件再导出自身形成环状卫生问题；③ 残留过时契约——`LOCALE = { ENGLISH:'en', DUTCH:'nl' }` 与 `ISettings.locale` 已无人使用（i18n 现在自管 en/zh-CN，存 `lingarr-locale`），是 zh-CN 改造前的死代码。
+问题：① 命名让人误以为遗留垃圾，建议改名 `src/types/`（或 `contracts/`）（✅ 已于 2026-10-12 落地为 `src/types/`）；② 大桶导入（`@/types`）与深路径导入混用，桶文件再导出自身形成环状卫生问题；③ 残留过时契约——`LOCALE = { ENGLISH:'en', DUTCH:'nl' }` 与 `ISettings.locale` 已无人使用（i18n 现在自管 en/zh-CN，存 `lingarr-locale`），是 zh-CN 改造前的死代码。
 
 ### 2.3 路由与页面
 
@@ -256,7 +256,7 @@ HttpClient 卫生差：`OpenAiService.cs:43`（ctor 兜底 `new HttpClient()`）
 | 10 | **拆分 TranslationRequestService**（1,047 LOC / 11 依赖 / 静态 CTS 字典） | → QueryService + QueueService（Hangfire 耦合隔离到 `IJobQueue` 后面）+ ProofreadService + ContentTranslationService | ●/◐ | 拆完才能做 #11 |
 | 11 | **统一双翻译管线** | `TranslationJob.Execute`（378）vs `TranslateContentAsync`（~250） | ●/◐ | 抽 `ITranslationPipeline` + 文件/内容两种 source 适配器；消除 resume 语义分歧 |
 | 12 | **列表页三胞胎收敛** | `MoviePage/ShowPage/TranslationPage` + `store/movie|show|translationRequest` | ●/◐ | `useMediaSelection`/`usePagedList` composable + 共享工具栏/表格脚手架 |
-| 13 | **`src/ts/` → `src/types/`** | 90 个引用文件 | ◐/○ | 重命名 + 按域拆模块 + 只许桶导入 |
+| 13 | **`src/ts/` → `src/types/`**（✅ 重命名已于 2026-10-12 完成） | 90 个引用文件 | ◐/○ | 重命名已完成；剩余：按域拆模块 + 只许桶导入 |
 | 14 | **图标收敛** | 42 个 SFC → `<Icon name>` 或 lucide-vue-next | ◐/○ | −531 LOC + 数百行 import |
 | 15 | **Auth 收拢强化** | `AuthController` 直接用 DbContext 做用户 CRUD → 移入 `IAuthService`；`LingarrAuthorizeAttribute` → `[Authorize]` policy + ApiKey AuthHandler | ●/◐ | 消除持久化双头；鉴权进框架管线（覆盖 Hub） |
 | 16 | **测试补两条命脉** | `TranslationJob`（resume/取消/统计）与 `AuthService`（哈希轮转/API key/用户规则） | ●/◐ | 现有 EF InMemory + mock HttpMessageHandler 基建可直接复用；前端引入 Vitest 先钉纯逻辑（选择机/校验/服务解包） |

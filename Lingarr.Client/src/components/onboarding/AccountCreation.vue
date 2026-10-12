@@ -46,7 +46,7 @@
 <script setup lang="ts">
 import InputComponent from '@/components/common/InputComponent.vue'
 import { useI18n } from 'vue-i18n'
-import { INPUT_TYPE, INPUT_VALIDATION_TYPE } from '@/ts'
+import { INPUT_TYPE, INPUT_VALIDATION_TYPE } from '@/types'
 
 const { t } = useI18n()
 

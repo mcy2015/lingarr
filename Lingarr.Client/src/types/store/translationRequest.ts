@@ -1,4 +1,4 @@
-import { IActiveTranslation, IFilter, IPagedResult, ITranslationRequest } from '@/ts'
+import { IActiveTranslation, IFilter, IPagedResult, ITranslationRequest } from '@/types'
 
 export interface IUseTranslationRequestStore {
     activeTranslations: IActiveTranslation[]

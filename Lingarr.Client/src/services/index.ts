@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosStatic } from 'axios'
-import { Services } from '@/ts'
+import { Services } from '@/types'
 import { baseUrl } from '@/utils/baseUrl'
 import { ApiError } from './apiError'
 import { translationRequestService } from '@/services/translationRequestService'

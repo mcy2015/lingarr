@@ -180,7 +180,7 @@ import {
     IPagedResult,
     MEDIA_TYPE,
     SETTINGS
-} from '@/ts'
+} from '@/types'
 import useDebounce from '@/composables/useDebounce'
 import { useMovieStore } from '@/store/movie'
 import { useSettingStore } from '@/store/setting'

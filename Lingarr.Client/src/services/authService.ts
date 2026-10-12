@@ -7,7 +7,7 @@ import {
     ISignupRequest,
     IUser,
     IUpdateUserRequest
-} from '@/ts'
+} from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/auth'): IAuthService => ({
     completeOnboarding(request: IOnboardingRequest): Promise<void> {

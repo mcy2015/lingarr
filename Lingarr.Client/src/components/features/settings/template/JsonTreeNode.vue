@@ -110,7 +110,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { INPUT_TYPE, NODE_TYPE, NODE_TYPE_OPTIONS, TreeNode, NodeType } from '@/ts'
+import { INPUT_TYPE, NODE_TYPE, NODE_TYPE_OPTIONS, TreeNode, NodeType } from '@/types'
 import CaretButton from '@/components/common/CaretButton.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import InputComponent from '@/components/common/InputComponent.vue'

@@ -10,7 +10,7 @@ import {
     IUseTranslationRequestStore,
     TRANSLATION_STATUS,
     TranslationStatus
-} from '@/ts'
+} from '@/types'
 import services from '@/services'
 
 export const useTranslationRequestStore = defineStore('translateRequest', {

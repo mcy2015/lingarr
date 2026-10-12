@@ -5,7 +5,7 @@ import {
     IPluginStatus,
     IPluginSummary,
     IPluginService
-} from '@/ts'
+} from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/plugin'): IPluginService => ({
     list(): Promise<IPluginSummary[]> {

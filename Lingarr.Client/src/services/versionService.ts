@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IVersionService } from '@/ts'
+import { IVersionService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/version'): IVersionService => ({
     getVersion<T>(): Promise<T> {

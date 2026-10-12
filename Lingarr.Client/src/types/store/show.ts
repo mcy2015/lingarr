@@ -1,4 +1,4 @@
-import { IFilter, IIncludeSummary, IPagedResult, IShow } from '@/ts'
+import { IFilter, IIncludeSummary, IPagedResult, IShow } from '@/types'
 
 export interface IUseShowStore {
     shows: IPagedResult<IShow>
