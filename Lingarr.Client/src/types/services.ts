@@ -104,6 +104,8 @@ export interface IImportedSubtitleResult {
     fileName: string
     success: boolean
     mediaBound?: boolean
+    duplicateOfRequestId?: number | null
+    warning?: string | null
     savedPath?: string | null
     translationRequestId?: number | null
     error?: string | null
@@ -122,7 +124,8 @@ export interface IImportService {
         translate: boolean,
         mediaType?: 'Movie' | 'Show',
         mediaId?: number,
-        season?: number
+        season?: number,
+        chineseConvert?: string
     ): Promise<IImportSubtitlesResponse>
 }
 

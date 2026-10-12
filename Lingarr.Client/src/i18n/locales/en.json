@@ -141,7 +141,8 @@
         "options": {
             "source": "Source language",
             "target": "Target language",
-            "translate": "Queue translation after import"
+            "translate": "Queue translation after import",
+            "chineseConvert": "Chinese variant"
         },
         "table": {
             "file": "File",
@@ -161,7 +162,8 @@
             "queued": "Queued (#{id})",
             "failed": "Failed",
             "bound": "Stored next to media",
-            "fallback": "Stored in import library"
+            "fallback": "Stored in import library",
+            "duplicate": "Duplicate of request #{id} — enqueue skipped"
         },
         "actions": {
             "import": "Import files",
@@ -176,6 +178,11 @@
             "show": "Show",
             "season": "Season",
             "pickShow": "Pick a show…"
+        },
+        "chinese": {
+            "none": "Keep as-is",
+            "simplified": "Convert to Simplified",
+            "traditional": "Convert to Traditional"
         }
     },
     "dashboard": {

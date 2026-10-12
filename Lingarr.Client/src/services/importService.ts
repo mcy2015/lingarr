@@ -14,13 +14,15 @@ const service = (http: AxiosStatic, resource = '/api/subtitle'): IImportService 
         translate: boolean,
         mediaType?: 'Movie' | 'Show',
         mediaId?: number,
-        season?: number
+        season?: number,
+        chineseConvert?: string
     ) => {
         const formData = new FormData()
         files.forEach((file) => formData.append('files', file))
         formData.append('sourceLanguage', sourceLanguage)
         formData.append('targetLanguage', targetLanguage)
         formData.append('translate', String(translate))
+        formData.append('chineseConvert', chineseConvert ?? 'none')
         if (mediaType && mediaId) {
             formData.append('mediaType', mediaType)
             formData.append('mediaId', String(mediaId))

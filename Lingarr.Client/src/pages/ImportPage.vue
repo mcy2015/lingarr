@@ -100,6 +100,16 @@
                 </select>
             </label>
             <label class="text-secondary-content flex items-center gap-2 text-sm">
+                {{ t('import.options.chineseConvert') }}
+                <select
+                    v-model="chineseConvert"
+                    class="border-line bg-primary text-primary-content rounded-md border px-3 py-1.5 text-sm">
+                    <option value="none">{{ t('import.chinese.none') }}</option>
+                    <option value="simplified">{{ t('import.chinese.simplified') }}</option>
+                    <option value="traditional">{{ t('import.chinese.traditional') }}</option>
+                </select>
+            </label>
+            <label class="text-secondary-content flex items-center gap-2 text-sm">
                 {{ t('import.options.translate') }}
                 <ToggleButton v-model="translate" />
             </label>
@@ -125,6 +135,9 @@
                         <td class="mono px-4 py-2">{{ item.fileName }}</td>
                         <td class="px-4 py-2">
                             <span v-if="!item.success" class="text-danger">{{ t('import.status.failed') }} — {{ item.error }}</span>
+                            <span v-else-if="item.duplicateOfRequestId" class="text-warning">
+                                {{ t('import.status.duplicate', { id: item.duplicateOfRequestId }) }}
+                            </span>
                             <span v-else-if="item.translationRequestId" class="text-success mono">
                                 {{ t('import.status.queued', { id: item.translationRequestId }) }}
                             </span>
@@ -177,6 +190,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const sourceLanguage = ref('en')
 const targetLanguage = ref('')
 const translate = ref(false)
+const chineseConvert = ref('none')
 
 // directed season import: show + season binding
 const shows = ref<IShow[]>([])
@@ -265,7 +279,8 @@ const runImport = async (): Promise<void> => {
             translate.value,
             directed ? 'Show' : undefined,
             directed ? selectedShowId.value : undefined,
-            directed ? selectedSeasonNumber.value : undefined
+            directed ? selectedSeasonNumber.value : undefined,
+            chineseConvert.value
         )
         results.value = response.results
         const succeeded = response.results.filter((item) => item.success).length
