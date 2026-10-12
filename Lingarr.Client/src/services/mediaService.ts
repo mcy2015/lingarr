@@ -28,6 +28,7 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
         mediaType?: string | null
         state?: string | null
         targetLanguage?: string | null
+        id?: number | null
     }): Promise<T> {
         return http
             .get(
@@ -38,7 +39,8 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
                     ascending: params.ascending,
                     mediaType: params.mediaType ?? '',
                     state: params.state ?? '',
-                    targetLanguage: params.targetLanguage ?? ''
+                    targetLanguage: params.targetLanguage ?? '',
+                    id: params.id ?? ''
                 })
             )
             .then((response) => response.data)

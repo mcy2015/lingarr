@@ -965,7 +965,8 @@
             "import": "Drag in files or scan a server path · transcode / convert / dedupe into the pipeline",
             "proofread": "Dual-track line review · J/K/Enter flow",
             "settings": "Four groups: services / media & automation / subtitles & quality / system",
-            "libraryLive": "{count} items · shows and movies in one view"
+            "libraryLive": "{count} items · shows and movies in one view",
+            "mediaDetail": "per-episode tracks & translation history"
         },
         "search": "⌘K 搜索",
         "searchHint": "Search the library (⌘K)",
@@ -975,5 +976,20 @@
             "process": "Start processing ▸",
             "stash": "Stash ⌘S"
         }
+    },
+    "mediaDetail": {
+        "back": "← Library",
+        "translateMissing": "Translate missing ▸",
+        "seasons": "Season",
+        "episodeTitle": "Episode",
+        "history": "Translation history",
+        "historyCount": "{count} requests",
+        "noHistory": "No translation requests for this media yet.",
+        "noEpisodes": "No episodes in this season.",
+        "noSubtitles": "No subtitle files found beside the video.",
+        "translate": "Translate ▾",
+        "showMeta": "{seasons} seasons · {episodes} episodes",
+        "movieMeta": "movie",
+        "lastActivity": "last activity {time}"
     }
 }

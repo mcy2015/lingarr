@@ -39,7 +39,7 @@
 import { ref, Ref, computed, ComputedRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { IEpisode, ILanguage, IMovie, ISubtitle, MediaType, SETTINGS } from '@/types'
+import { ILanguage, ISubtitle, MediaType, SETTINGS } from '@/types'
 import { useSettingStore } from '@/store/setting'
 import { useTranslateStore } from '@/store/translate'
 import useClickOutside from '@/composables/useClickOutside'
@@ -52,7 +52,8 @@ const emit = defineEmits<{
     (e: 'select', language: ILanguage): void
 }>()
 const { media, subtitle, mediaType } = defineProps<{
-    media?: IMovie | IEpisode
+    /// only the media id is used to queue the translation
+    media?: { id: number }
     subtitle?: ISubtitle
     mediaType?: MediaType
 }>()

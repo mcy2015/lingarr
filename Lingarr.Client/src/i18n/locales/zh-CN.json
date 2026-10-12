@@ -965,7 +965,8 @@
             "import": "拖拽上传或服务器路径 · 转码 / 转格式 / 去重后入管线",
             "proofread": "双轨逐行校对 · J/K/Enter 键盘流",
             "settings": "四组：服务 / 媒体与自动化 / 字幕与质量 / 系统",
-            "libraryLive": "{count} 项 · 剧集与电影合并视图"
+            "libraryLive": "{count} 项 · 剧集与电影合并视图",
+            "mediaDetail": "逐集字幕轨与翻译历史"
         },
         "search": "⌘K 搜索",
         "searchHint": "搜索媒体库（⌘K）",
@@ -975,5 +976,20 @@
             "process": "开始处理 ▸",
             "stash": "暂存 ⌘S"
         }
+    },
+    "mediaDetail": {
+        "back": "← 媒体库",
+        "translateMissing": "翻译缺失 ▸",
+        "seasons": "季",
+        "episodeTitle": "集标题",
+        "history": "翻译历史",
+        "historyCount": "{count} 个请求",
+        "noHistory": "该媒体还没有翻译请求。",
+        "noEpisodes": "这一季没有集。",
+        "noSubtitles": "视频旁未找到字幕文件。",
+        "translate": "翻译 ▾",
+        "showMeta": "{seasons} 季 · {episodes} 集",
+        "movieMeta": "电影",
+        "lastActivity": "最近活动 {time}"
     }
 }

@@ -150,11 +150,23 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
         bool ascending,
         int pageNumber,
         int pageSize,
-        TranslationStatus? status = null)
+        TranslationStatus? status = null,
+        string? mediaIds = null)
     {
         var query = _dbContext.TranslationRequests
             .AsSplitQuery()
             .AsQueryable();
+
+        // media detail history: requests of a show come in per-episode ids
+        var mediaIdList = mediaIds?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(int.Parse)
+            .ToList();
+        if (mediaIdList is { Count: > 0 })
+        {
+            query = query.Where(translationRequest =>
+                translationRequest.MediaId != null && mediaIdList.Contains(translationRequest.MediaId.Value));
+        }
 
         if (!string.IsNullOrEmpty(searchQuery))
         {
@@ -198,7 +210,9 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
                 Status = translationRequest.Status,
                 CompletedAt = translationRequest.CompletedAt,
                 ErrorMessage = translationRequest.ErrorMessage,
+                MediaId = translationRequest.MediaId,
                 CreatedAt = translationRequest.CreatedAt,
+                UpdatedAt = translationRequest.UpdatedAt,
                 Source = translationRequest.Source,
                 ServiceType = translationRequest.ServiceType,
                 Progress = translationRequest.Progress,

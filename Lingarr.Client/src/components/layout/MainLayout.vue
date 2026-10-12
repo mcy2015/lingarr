@@ -124,7 +124,9 @@ const pageMeta: Record<string, { title: string; sub: string }> = {
     'queue-detail': { title: t('nav.queue'), sub: t('topbar.sub.queue') },
     import: { title: t('nav.import'), sub: t('topbar.sub.import') },
     proofread: { title: t('nav.proofread'), sub: t('topbar.sub.proofread') },
-    settings: { title: t('nav.settings'), sub: t('topbar.sub.settings') }
+    settings: { title: t('nav.settings'), sub: t('topbar.sub.settings') },
+    'media-detail-show': { title: t('nav.library'), sub: t('topbar.sub.mediaDetail') },
+    'media-detail-movie': { title: t('nav.library'), sub: t('topbar.sub.mediaDetail') }
 }
 const currentMeta = computed(() => {
     const name = String(route.name ?? '')

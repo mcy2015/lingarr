@@ -6,24 +6,33 @@
         <div class="flex flex-wrap items-stretch gap-2 shrink-0">
             <template v-for="(node, index) in pipelineNodes" :key="node.key">
                 <div v-if="index > 0" class="link hidden self-center md:block"></div>
-                <div
-                    class="min-w-[150px] flex-1 rounded-md border bg-secondary px-3.5 py-3"
-                    :class="node.hot ? 'border-accent/55' : 'border-line'">
+                <button
+                    type="button"
+                    class="border-line hover:border-accent/60 min-w-[150px] flex-1 cursor-pointer rounded-md border bg-secondary px-3.5 py-3 text-left transition-colors"
+                    :class="node.hot ? 'border-accent/55' : 'border-line'"
+                    :title="node.label"
+                    @click="router.push({ name: node.route })">
                     <div class="text-secondary-content text-[11.5px]">{{ node.label }}</div>
                     <div class="mono text-[22px] font-semibold leading-tight" :class="node.hot ? 'text-accent' : ''">
                         {{ node.value
                         }}<small class="text-secondary-content ml-1 text-xs font-normal">{{ node.small }}</small>
                     </div>
-                </div>
+                </button>
             </template>
         </div>
 
         <!-- ═══ KPI 条 ═══ -->
         <div class="grid grid-cols-2 gap-2.5 shrink-0 lg:grid-cols-4">
-            <div v-for="kpi in kpis" :key="kpi.label" class="rounded-md border border-line bg-secondary px-4 py-3">
+            <button
+                v-for="kpi in kpis"
+                :key="kpi.label"
+                type="button"
+                class="border-line hover:border-accent/60 cursor-pointer rounded-md border bg-secondary px-4 py-3 text-left transition-colors"
+                :title="kpi.label"
+                @click="router.push({ name: kpi.route })">
                 <div class="mono text-2xl font-semibold" :class="kpi.cls ?? ''">{{ kpi.value }}</div>
                 <div class="text-secondary-content mt-0.5 text-xs">{{ kpi.label }}</div>
-            </div>
+            </button>
         </div>
 
         <!-- ═══ 活跃任务 + 服务健康（弹性行，卡内滚动） ═══ -->
@@ -41,10 +50,11 @@
                         class="text-secondary-content/60 my-auto px-4 py-6 text-center text-sm">
                         {{ t('overview.active.empty') }}
                     </p>
-                    <div
+                    <router-link
                         v-for="item in activeItems"
                         :key="item.id"
-                        class="grid grid-cols-[minmax(0,1fr)_130px_74px] items-center gap-3.5 border-b border-line px-4 py-2.5 last:border-b-0">
+                        :to="{ name: 'queue-detail', params: { id: item.id } }"
+                        class="hover:bg-tertiary/50 grid grid-cols-[minmax(0,1fr)_130px_74px] items-center gap-3.5 border-b border-line px-4 py-2.5 last:border-b-0">
                         <div class="min-w-0">
                             <b class="block truncate text-[13px] font-semibold" :title="item.title">{{ item.title }}</b>
                             <span class="text-secondary-content block truncate text-[11.5px]">
@@ -56,7 +66,7 @@
                         <div class="mono text-secondary-content text-right text-xs" :title="t('overview.active.etaHint')">
                             {{ item.progress }}% · {{ remainingEta(item) }}
                         </div>
-                    </div>
+                    </router-link>
                 </div>
             </div>
 
@@ -68,10 +78,11 @@
                     </span>
                 </div>
                 <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
-                    <div
+                    <router-link
                         v-for="provider in health"
                         :key="provider.provider"
-                        class="flex items-center gap-2.5 border-b border-line px-4 py-2.5 text-[13px] last:border-b-0">
+                        :to="{ name: 'settings-providers' }"
+                        class="hover:bg-tertiary/50 flex items-center gap-2.5 border-b border-line px-4 py-2.5 text-[13px] last:border-b-0">
                         <span class="h-[7px] w-[7px] shrink-0 rounded-full" :class="healthDot(provider).cls"></span>
                         <span>{{ provider.displayName }}</span>
                         <span
@@ -79,7 +90,7 @@
                             :title="healthDot(provider).title">
                             {{ healthDot(provider).text }}
                         </span>
-                    </div>
+                    </router-link>
                 </div>
             </div>
         </div>
@@ -154,18 +165,21 @@ const pendingCount = computed(() => counts.value[TRANSLATION_STATUS.PENDING] ?? 
 const pipelineNodes = computed(() => [
     {
         key: 'library',
+        route: 'library',
         label: t('overview.pipe.library'),
         value: pipeline.value?.mediaCount ?? '—',
         small: t('overview.pipe.mediaUnit')
     },
     {
         key: 'missing',
+        route: 'library',
         label: t('overview.pipe.missing'),
         value: pipeline.value?.missingSubtitles ?? '—',
         small: t('overview.pipe.trackUnit')
     },
     {
         key: 'queue',
+        route: 'queue',
         label: t('overview.pipe.queue'),
         value: pipeline.value?.queueDepth ?? '—',
         small: t('overview.pipe.queueUnit', {
@@ -176,12 +190,14 @@ const pipelineNodes = computed(() => [
     },
     {
         key: 'services',
+        route: 'settings-providers',
         label: t('overview.pipe.services'),
         value: pipeline.value?.servicesOnline ?? '—',
         small: t('overview.pipe.onlineUnit')
     },
     {
         key: 'written',
+        route: 'queue',
         label: t('overview.pipe.written'),
         value: pipeline.value?.writtenThisMonth ?? '—',
         small: t('overview.pipe.writtenUnit')
@@ -189,8 +205,8 @@ const pipelineNodes = computed(() => [
 ])
 
 const kpis = computed(() => [
-    { label: t('overview.kpi.inProgress'), value: inProgressCount.value },
-    { label: t('overview.kpi.queued'), value: pendingCount.value },
+    { label: t('overview.kpi.inProgress'), value: inProgressCount.value, route: 'queue' },
+    { label: t('overview.kpi.queued'), value: pendingCount.value, route: 'queue' },
     {
         label: t('overview.kpi.cost'),
         value:
@@ -199,7 +215,8 @@ const kpis = computed(() => [
                       pipeline.value.monthlyCost
                   )
                 : '—',
-        cls: 'text-secondary-content/60'
+        cls: 'text-secondary-content/60',
+        route: 'settings-providers'
     },
     {
         label: t('overview.kpi.successRate'),

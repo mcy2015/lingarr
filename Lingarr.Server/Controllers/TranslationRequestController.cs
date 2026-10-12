@@ -113,7 +113,8 @@ public class TranslationRequestController : ControllerBase
         bool ascending = true,
         int pageSize = 20,
         int pageNumber = 1,
-        TranslationStatus? status = null)
+        TranslationStatus? status = null,
+        string? mediaIds = null)
     {
         var value = await _translationRequestService.GetTranslationRequests(
             searchQuery,
@@ -121,7 +122,8 @@ public class TranslationRequestController : ControllerBase
             ascending,
             pageNumber,
             pageSize,
-            status);
+            status,
+            mediaIds);
 
         return Ok(value);
     }

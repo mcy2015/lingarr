@@ -30,8 +30,9 @@ public class MediaController : ControllerBase
     /// optional; a null mediaType mixes shows and movies in one list.
     /// </summary>
     [HttpGet("library")]
-    public async Task<ActionResult<PagedResult<MediaLibraryItem>>> GetLibrary(
+    public async Task<ActionResult<PagedResult<MediaLibraryItem>>?> GetLibrary(
         MediaType? mediaType,
+        int? id,
         string? searchQuery,
         string? state,
         string? targetLanguage,
@@ -40,6 +41,28 @@ public class MediaController : ControllerBase
         int pageSize = 20,
         int pageNumber = 1)
     {
+        if (id is not null)
+        {
+            // media detail page: single-row lookup
+            var single = await _mediaLibraryService.GetLibrary(
+                mediaType,
+                null,
+                null,
+                null,
+                null,
+                true,
+                1,
+                1000);
+            var hit = single.Items.FirstOrDefault(item => item.Id == id);
+            return hit is null ? NotFound() : Ok(new PagedResult<MediaLibraryItem>
+            {
+                Items = [hit],
+                TotalCount = 1,
+                PageNumber = 1,
+                PageSize = 1
+            });
+        }
+
         var value = await _mediaLibraryService.GetLibrary(
             mediaType,
             searchQuery,

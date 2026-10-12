@@ -77,6 +77,7 @@ export interface IMediaService {
         mediaType?: string | null
         state?: string | null
         targetLanguage?: string | null
+        id?: number | null
     }): Promise<T>
     estimate<T>(items: { mediaType: string; id: number }[], targetLanguage: string): Promise<T>
     shows<T>(
@@ -220,7 +221,8 @@ export interface ITranslationRequestService {
         searchQuery: string,
         sortBy: string,
         ascending: boolean,
-        status?: string | null
+        status?: string | null,
+        mediaIds?: string | null
     ): Promise<T>
     statusCounts(): Promise<Record<string, number>>
     getRecentEvents(take: number): Promise<ITranslationRequestEventSummary[]>

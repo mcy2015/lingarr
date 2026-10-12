@@ -140,48 +140,9 @@
                                     <button
                                         type="button"
                                         class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
-                                        :aria-expanded="expandedKey === rowKey(item)"
-                                        @click="toggleExpand(item)">
+                                        @click="goDetail(item)">
                                         {{ t('library.action.detail') }}
                                     </button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr v-if="expandedKey === rowKey(item)" class="bg-tertiary/30">
-                            <td :class="tdClass" colspan="6">
-                                <!-- 剧集：季/集明细 -->
-                                <SeasonTable
-                                    v-if="item.mediaType === 'Show' && item.show"
-                                    :seasons="item.show.seasons" />
-                                <!-- 电影：include/延迟 + 字幕文件 -->
-                                <div v-else class="flex flex-wrap items-center gap-x-6 gap-y-2 px-1 py-1 text-[12.5px]">
-                                    <label class="text-secondary-content flex items-center gap-2">
-                                        {{ t('library.detail.include') }}
-                                        <input
-                                            type="checkbox"
-                                            class="accent-accent cursor-pointer"
-                                            :checked="item.includeInTranslation"
-                                            @change="setInclude(item, ($event.target as HTMLInputElement).checked)" />
-                                    </label>
-                                    <label class="text-secondary-content flex items-center gap-2">
-                                        {{ t('library.detail.threshold') }}
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            class="border-line bg-primary text-primary-content w-16 rounded border px-1.5 py-0.5 text-xs"
-                                            :value="item.translationAgeThreshold ?? ''"
-                                            @change="setThreshold(item, ($event.target as HTMLInputElement).value)" />
-                                    </label>
-                                    <div class="text-secondary-content flex flex-wrap items-center gap-1.5">
-                                        {{ t('library.detail.subtitles') }}
-                                        <span v-if="!item.subtitleFiles?.length" class="text-xs opacity-60">—</span>
-                                        <span
-                                            v-for="file in item.subtitleFiles ?? []"
-                                            :key="file.path"
-                                            class="mono bg-tertiary border-line text-secondary-content rounded border px-1.5 py-px text-[11px]">
-                                            {{ file.language.toUpperCase() }} · {{ file.fileName }}{{ file.format }}
-                                        </span>
-                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -239,7 +200,6 @@ import ContextMenu from '@/components/layout/ContextMenu.vue'
 import Icon from '@/components/icons/Icon.vue'
 import NoMediaNotification from '@/components/common/NoMediaNotification.vue'
 import PaginationComponent from '@/components/common/PaginationComponent.vue'
-import SeasonTable from '@/components/features/show/SeasonTable.vue'
 import services from '@/services'
 import { useSettingStore } from '@/store/setting'
 import { useTranslateStore } from '@/store/translate'
@@ -298,7 +258,6 @@ const inProgressCount = ref(0)
 
 const selection = reactive(new Map<string, IMediaLibraryItem>())
 const estimate = ref<ITranslationEstimate | null>(null)
-const expandedKey = ref<string | null>(null)
 
 const typeOptions = computed(() => [
     { label: t('library.tabs.all'), value: 'all' as LibraryType },
@@ -549,9 +508,12 @@ function stateLabel(item: IMediaLibraryItem): string {
     }
 }
 
-function toggleExpand(item: IMediaLibraryItem): void {
-    const key = rowKey(item)
-    expandedKey.value = expandedKey.value === key ? null : key
+
+function goDetail(item: IMediaLibraryItem): void {
+    router.push({
+        name: item.mediaType === 'Show' ? 'media-detail-show' : 'media-detail-movie',
+        params: { id: item.id }
+    })
 }
 
 function goImport(item: IMediaLibraryItem): void {
@@ -561,14 +523,7 @@ function goImport(item: IMediaLibraryItem): void {
     })
 }
 
-function setInclude(item: IMediaLibraryItem, include: boolean): void {
-    item.includeInTranslation = include
-    void services.media.include(MEDIA_TYPE.MOVIE, item.id, include)
-}
 
-function setThreshold(item: IMediaLibraryItem, hours: string): void {
-    void services.media.threshold(MEDIA_TYPE.MOVIE, item.id, hours)
-}
 
 // ── formatting ─────────────────────────────────────────────────
 /// prototype shows activity times as HH:MM in the matrix column

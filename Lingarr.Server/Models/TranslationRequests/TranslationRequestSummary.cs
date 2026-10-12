@@ -5,8 +5,9 @@ namespace Lingarr.Server.Models.TranslationRequests;
 /// <summary>
 /// List-row projection of a translation request returned by the paged list endpoint.
 /// Carries exactly the fields the SPA reads from list rows; entity internals the list
-/// view never consumes (StackTrace, JobId, JobType, MediaId, SubtitleToTranslate,
-/// UpdatedAt) are deliberately excluded. The single-item detail endpoint keeps
+/// view never consumes (StackTrace, JobId, JobType, SubtitleToTranslate) are
+/// deliberately excluded. MediaId/UpdatedAt back the media detail screen's
+/// per-episode latest-state mapping. The single-item detail endpoint keeps
 /// returning <see cref="TranslationRequestDetail"/>.
 /// </summary>
 public class TranslationRequestSummary
@@ -26,5 +27,7 @@ public class TranslationRequestSummary
     public int RetryCount { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
+    public int? MediaId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }

@@ -329,6 +329,19 @@
   .switch.on::after{left:auto;right:2px;background:var(--accent-content)}
   .panel{display:none}.panel.on{display:block}
 
+  /* ── 媒体详情 ─────────────────────────── */
+  .ep-num{font-family:var(--font-mono);font-size:11px;color:var(--secondary-content);white-space:nowrap}
+  .ep-title b{font-weight:600}
+  .hist-row{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .hist-row:last-child{border-bottom:0}
+  .hist-row .t{min-width:0;flex:1}
+  .hist-row .t b{display:block;font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hist-row .t span{font-size:11.5px;color:var(--secondary-content)}
+  .pipe-node{cursor:pointer}
+  .pipe-node:hover{border-color:var(--accent)}
+  .kpi{cursor:pointer}
+  .kpi:hover{border-color:var(--accent)}
+
   /* ── 导入与转换 ─────────────────────────── */
   .import-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start}
   .drop{
@@ -407,22 +420,22 @@
       <!-- ═══ 1 概览 ═══ -->
       <section class="screen on" data-screen="overview">
         <div class="pipe" role="img" aria-label="翻译管线：媒体库到写回">
-          <div class="pipe-node"><div class="lab">媒体库</div><div class="val">1 284<small>部</small></div></div>
+          <div class="pipe-node" title="打开媒体库" onclick="location.hash='library'"><div class="lab">媒体库</div><div class="val">1 284<small>部</small></div></div>
           <div class="pipe-link"></div>
-          <div class="pipe-node"><div class="lab">缺字幕检测</div><div class="val">63<small>条</small></div></div>
+          <div class="pipe-node" title="查看缺字幕媒体" onclick="location.hash='library'"><div class="lab">缺字幕检测</div><div class="val">63<small>条</small></div></div>
           <div class="pipe-link"></div>
-          <div class="pipe-node hot"><div class="lab">翻译队列</div><div class="val">14<small>= 2 进行 + 12 排队</small></div></div>
+          <div class="pipe-node hot" title="打开任务队列" onclick="location.hash='queue'"><div class="lab">翻译队列</div><div class="val">14<small>= 2 进行 + 12 排队</small></div></div>
           <div class="pipe-link"></div>
-          <div class="pipe-node"><div class="lab">翻译服务</div><div class="val">3<small>在线</small></div></div>
+          <div class="pipe-node" title="服务健康与费率" onclick="location.hash='settings'"><div class="lab">翻译服务</div><div class="val">3<small>在线</small></div></div>
           <div class="pipe-link"></div>
-          <div class="pipe-node"><div class="lab">本月写回</div><div class="val">212<small>条</small></div></div>
+          <div class="pipe-node" title="已完成任务" onclick="location.hash='queue'"><div class="lab">本月写回</div><div class="val">212<small>条</small></div></div>
         </div>
 
         <div class="kpis">
-          <div class="kpi"><div class="n">2</div><div class="l">进行中任务</div></div>
-          <div class="kpi"><div class="n">12</div><div class="l">排队等待</div></div>
-          <div class="kpi"><div class="n">$3.56</div><div class="l">本月 API 成本</div></div>
-          <div class="kpi"><div class="n">98.2%</div><div class="l">30 天任务成功率</div></div>
+          <div class="kpi" title="队列：进行中" onclick="location.hash='queue'"><div class="n">2</div><div class="l">进行中任务</div></div>
+          <div class="kpi" title="队列：排队" onclick="location.hash='queue'"><div class="n">12</div><div class="l">排队等待</div></div>
+          <div class="kpi" title="服务与费率设置" onclick="location.hash='settings'"><div class="n">$3.56</div><div class="l">本月 API 成本</div></div>
+          <div class="kpi" title="队列：失败" onclick="location.hash='queue'"><div class="n">98.2%</div><div class="l">30 天任务成功率</div></div>
         </div>
 
         <div class="cols">
@@ -484,42 +497,42 @@
                 <td class="title"><span class="badge show">剧集</span><b>Shōgun</b> <span class="meta">2024 · S01 · 10 集</span></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip part">ZH ◐ 3/10</span><span class="chip dim">JA ·</span></div></td>
                 <td class="state part">◐ 翻译中</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">15:41</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm">详情</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
               </tr>
               <tr>
                 <td><input type="checkbox" aria-label="选择 The Bear"></td>
                 <td class="title"><span class="badge show">剧集</span><b>The Bear</b> <span class="meta">2022 · S03 · 10 集</span></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip ok">ZH ✓</span></div></td>
                 <td class="state done">✓ 10/10 完成</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">15:41</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm">详情</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
               </tr>
               <tr>
                 <td><input type="checkbox" checked aria-label="选择 Dune Part Two"></td>
                 <td class="title"><span class="badge movie">电影</span><b>Dune: Part Two</b> <span class="meta">2024 · 166 min</span></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip busy">ZH ⏳ 38%</span></div></td>
                 <td class="state part">⏳ 队列中</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">15:40</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm">详情</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
               </tr>
               <tr>
                 <td><input type="checkbox" checked aria-label="选择 True Detective"></td>
                 <td class="title"><span class="badge show">剧集</span><b>True Detective</b> <span class="meta">2014 · S04 · 6 集</span></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ✗ 5/6</span></div></td>
                 <td class="state" style="color:var(--danger)">✗ 1 集失败</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">15:29</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm">详情</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
               </tr>
               <tr>
                 <td><input type="checkbox" checked aria-label="选择 Past Lives"></td>
                 <td class="title"><span class="badge movie">电影</span><b>Past Lives</b> <span class="meta">2023 · 105 min</span></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH · 无字幕</span></div></td>
                 <td class="state none">· 未排队</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm">详情</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
               </tr>
               <tr>
                 <td><input type="checkbox" aria-label="选择 3 Body Problem"></td>
                 <td class="title"><span class="badge show">剧集</span><b>3 Body Problem</b> <span class="meta">2024 · S01 · 8 集</span></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip part">ZH ◐ 待校对 E02</span></div></td>
                 <td class="state part">◐ 待校对</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">15:02</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm">详情</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import';setImportTab('season')">整季导入</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
               </tr>
             </tbody>
           </table>
@@ -610,6 +623,87 @@
         <p style="margin-top:12px;font-size:12px;color:var(--secondary-content)">
           队列由 Hangfire 6 队列驱动（movies / shows / system / translation / webhook / default）· 并发 <b class="mono">MAX_CONCURRENT_JOBS=2</b>
         </p>
+      </section>
+
+
+      <!-- ═══ 7 媒体详情（下钻屏） ═══ -->
+      <section class="screen" data-screen="media-detail">
+        <div class="pb-head">
+          <button class="btn sm" onclick="location.hash='library'">← 媒体库</button>
+          <div>
+            <b style="font-size:15px">Shōgun</b>
+            <div class="mono" style="font-size:11.5px;color:var(--secondary-content)">2024 · 1 季 · 10 集 · EN → ZH · 缺 7 集中文字幕</div>
+          </div>
+          <span style="flex:1"></span>
+          <button class="btn sm" onclick="location.hash='import';setImportTab('season')">⇪ 整季导入</button>
+          <button class="btn sm primary">翻译缺失 EN → ZH ▸</button>
+        </div>
+
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="季">
+            <button aria-pressed="true">S01</button><button>S02</button>
+          </div>
+          <span class="chips" style="gap:5px">
+            <span class="chip ok">EN ✓</span><span class="chip part">ZH ◐ 3/10</span><span class="chip dim">JA ·</span>
+          </span>
+          <span class="mono" style="margin-left:auto;font-size:12px;color:var(--secondary-content)">最近活动 15:41</span>
+        </div>
+
+        <div class="card" style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th style="width:44px">#</th><th>集标题</th><th>字幕轨</th><th>状态</th><th>最近活动</th><th style="width:150px"></th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td class="ep-num">E01</td>
+                <td class="ep-title"><b>Anjin</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip ok">ZH ✓</span></div></td>
+                <td class="state done">✓ 已完成</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">15:41</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='proofread'">校对</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E05</td>
+                <td class="ep-title"><b>Broken to the Fist</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
+                <td class="state part">◐ 翻译中 72%</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">15:39</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm">翻译 ▾</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E06</td>
+                <td class="ep-title"><b>Ladies of the Willow World</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
+                <td class="state none">· 未排队</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm">翻译 ▾</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="card-h"><h2>翻译历史</h2><span class="meta mono">近期 5 / 24 个请求</span></div>
+          <div class="hist-row">
+            <div class="t"><b>Shōgun — S01E05「Broken to the Fist」</b><span>EN → ZH · 72% · 剩 04:12</span></div>
+            <span class="chip">openai · gpt-4o-mini</span>
+            <div class="track" style="width:110px"><div class="fill" style="width:72%"></div><div class="head" style="left:72%"></div></div>
+            <button class="btn sm" onclick="location.hash='queue'">详情</button>
+          </div>
+          <div class="hist-row">
+            <div class="t"><b>Shōgun — S01E01「Anjin」</b><span>写回 Shogun.S01E01.zh.srt · 512 行</span></div>
+            <span class="chip">deepl · api-free</span>
+            <span class="state done" style="white-space:nowrap">✓ 完成</span>
+            <button class="btn sm" onclick="location.hash='queue'">详情</button>
+          </div>
+          <div class="hist-row">
+            <div class="t"><b>Shōgun — S01E04「The Eightfold Fence」</b><span>Gemini 429 · 自动降级失败</span></div>
+            <span class="chip" style="color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,var(--line))">gemini · 2.5-flash</span>
+            <span class="state" style="color:var(--danger);white-space:nowrap">✗ 失败</span>
+            <button class="btn sm" onclick="location.hash='queue'">详情</button>
+          </div>
+        </div>
       </section>
 
       <!-- ═══ 4 导入与转换 ═══ -->
@@ -949,9 +1043,10 @@
     queue:['任务队列','实时 · SignalR 推送'],
     import:['导入与转换','拖拽上传或服务器路径 · 转码 / 转格式 / 去重后入管线'],
     proofread:['校对台','3 Body Problem S01E02 · 128/486 行'],
-    settings:['设置','四组：服务 / 媒体与自动化 / 字幕与质量 / 系统']
+    settings:['设置','四组：服务 / 媒体与自动化 / 字幕与质量 / 系统'],
+    'media-detail':['媒体详情','Shōgun · S01 · 逐集字幕轨与翻译历史']
   };
-  const ctas={overview:'⇪ 导入字幕',library:'翻译所选 ▸',queue:'＋ 新建任务',import:'开始处理 ▸',proofread:'暂存 ⌘S',settings:'保存全部'};
+  const ctas={overview:'⇪ 导入字幕',library:'翻译所选 ▸',queue:'＋ 新建任务',import:'开始处理 ▸',proofread:'暂存 ⌘S',settings:'保存全部','media-detail':'翻译缺失 ▸'};
   const ctaGo={overview:'import'};
   function go(name){
     document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.dataset.screen===name));

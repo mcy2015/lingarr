@@ -59,6 +59,19 @@ const routes: RouteRecordRaw[] = [
                 props: true
             },
             {
+                // media detail drill-downs from the library matrix
+                path: '/library/show/:id',
+                component: () => import('@/pages/MediaDetailPage.vue'),
+                name: 'media-detail-show',
+                props: (route) => ({ type: 'show', id: String(route.params.id) })
+            },
+            {
+                path: '/library/movie/:id',
+                component: () => import('@/pages/MediaDetailPage.vue'),
+                name: 'media-detail-movie',
+                props: (route) => ({ type: 'movie', id: String(route.params.id) })
+            },
+            {
                 // legacy paths -> new IA (bookmarks kept alive)
                 path: '/shows',
                 redirect: '/library?type=show'
