@@ -724,6 +724,8 @@
             "converting": "转换中…",
             "proofreadUnavailable": "该行暂不支持校对",
             "couldNotApplyChange": "无法应用更改"
-        }
+        },
+        "queueFooter": "队列由 Hangfire 6 队列驱动（movies / shows / system / translation / webhook / default）· 并发由 MAX_CONCURRENT_JOBS 控制",
+        "wroteBack": "写回"
     }
 }
