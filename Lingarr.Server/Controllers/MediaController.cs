@@ -1,9 +1,9 @@
 ﻿using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
-using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lingarr.Server.Controllers;
@@ -14,10 +14,54 @@ namespace Lingarr.Server.Controllers;
 public class MediaController : ControllerBase
 {
     private readonly IMediaService _mediaService;
+    private readonly IMediaLibraryService _mediaLibraryService;
 
-    public MediaController(IMediaService mediaService)
+    public MediaController(
+        IMediaService mediaService,
+        IMediaLibraryService mediaLibraryService)
     {
         _mediaService = mediaService;
+        _mediaLibraryService = mediaLibraryService;
+    }
+
+    /// <summary>
+    /// Matrix rows for the library screen (A4): subtitle track coverage,
+    /// translation state and last activity per media item, paged. All params
+    /// optional; a null mediaType mixes shows and movies in one list.
+    /// </summary>
+    [HttpGet("library")]
+    public async Task<ActionResult<PagedResult<MediaLibraryItem>>> GetLibrary(
+        MediaType? mediaType,
+        string? searchQuery,
+        string? state,
+        string? targetLanguage,
+        string? orderBy,
+        bool ascending = true,
+        int pageSize = 20,
+        int pageNumber = 1)
+    {
+        var value = await _mediaLibraryService.GetLibrary(
+            mediaType,
+            searchQuery,
+            state,
+            targetLanguage,
+            orderBy,
+            ascending,
+            pageNumber,
+            pageSize);
+        return Ok(value);
+    }
+
+    /// <summary>
+    /// Rough cost estimate for translating the selected media into a target
+    /// language (A5): uncovered episodes' source subtitle bytes priced at the
+    /// default provider's rate.
+    /// </summary>
+    [HttpPost("estimate")]
+    public async Task<ActionResult<TranslationEstimate>> Estimate([FromBody] LibraryEstimateRequest request)
+    {
+        var value = await _mediaLibraryService.Estimate(request.Items, request.TargetLanguage);
+        return Ok(value);
     }
     
     /// <summary>

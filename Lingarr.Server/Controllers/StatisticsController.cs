@@ -1,6 +1,7 @@
 ﻿using Lingarr.Core.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Interfaces.Services;
+using Lingarr.Server.Models.Api;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lingarr.Server.Controllers;
@@ -11,10 +12,14 @@ namespace Lingarr.Server.Controllers;
 public class StatisticsController : ControllerBase
 {
     private readonly IStatisticsService _statisticsService;
+    private readonly ICostService _costService;
 
-    public StatisticsController(IStatisticsService statisticsService)
+    public StatisticsController(
+        IStatisticsService statisticsService,
+        ICostService costService)
     {
         _statisticsService = statisticsService;
+        _costService = costService;
     }
 
     [HttpGet]
@@ -27,12 +32,22 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Overview pipeline strip payload (gap-audit A2): media count, missing
     /// subtitle tracks, Hangfire queue depth, online providers, write-backs
-    /// this month, 30-day success rate. Monthly cost is null until A5.
+    /// this month, 30-day success rate, monthly cost (A5).
     /// </summary>
     [HttpGet("pipeline")]
     public async Task<ActionResult<Models.Api.PipelineStatistics>> GetPipelineStatistics()
     {
         return Ok(await _statisticsService.GetPipelineStatistics());
+    }
+
+    /// <summary>
+    /// Monthly cost rollup (A5): per-provider usage priced via the rate
+    /// settings; defaults to the current month.
+    /// </summary>
+    [HttpGet("cost")]
+    public async Task<ActionResult<CostSummary>> GetCostSummary([FromQuery] int? year, [FromQuery] int? month)
+    {
+        return Ok(await _costService.GetCostSummary(year, month));
     }
 
     [HttpGet("daily/{days}")]

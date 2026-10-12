@@ -70,6 +70,7 @@ public class TranslationHealthService : ITranslationHealthService
     {
         using var scope = _scopeFactory.CreateScope();
         var settings = scope.ServiceProvider.GetRequiredService<ISettingService>();
+        var costService = scope.ServiceProvider.GetRequiredService<ICostService>();
 
         var health = new List<TranslationServiceHealth>();
         foreach (var plugin in _registry.All)
@@ -101,7 +102,8 @@ public class TranslationHealthService : ITranslationHealthService
                 SuccessRate = snapshot?.SuccessRate,
                 LastError = snapshot?.LastError,
                 LastRequestAt = snapshot?.LastRequestAt,
-                SampleCount = snapshot?.SampleCount ?? 0
+                SampleCount = snapshot?.SampleCount ?? 0,
+                MonthlyCost = await costService.GetProviderMonthlyCostAsync(plugin.Manifest.Provider)
             });
         }
 

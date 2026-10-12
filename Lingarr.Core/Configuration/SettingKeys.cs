@@ -14,6 +14,16 @@ public static class SettingKeys
         public const string SonarrSettingsCompleted = "sonarr_settings_completed";
     }
 
+    public static class Cost
+    {
+        /// <summary>
+        /// JSON map of provider -> USD per 1M source characters, e.g.
+        /// {"openai": 2.5, "deepl": 25.0}. Providers without an entry are
+        /// priced as unknown (null) rather than free.
+        /// </summary>
+        public const string ProviderRates = "provider_rates";
+    }
+
     public static class Translation
     {
         public const string ServiceType = "service_type";

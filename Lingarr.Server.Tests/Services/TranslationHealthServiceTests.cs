@@ -30,6 +30,7 @@ public class TranslationHealthServiceTests
         // real scope factory, so tests provide one backed by a minimal provider
         var services = new ServiceCollection();
         services.AddSingleton(settings.Object);
+        services.AddSingleton(new Mock<ICostService>().Object);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         return new TranslationHealthService(registry.Object, scopeFactory);

@@ -44,4 +44,10 @@ public class TranslationRequest : BaseEntity
     /// import workbench duplicate detection; null for library requests.
     /// </summary>
     public string? ContentHash { get; set; }
+
+    /// <summary>
+    /// Source characters translated by this request, recorded at completion
+    /// and priced via the per-provider rate table for the cost rollups (A5).
+    /// </summary>
+    public int? CharactersTranslated { get; set; }
 }

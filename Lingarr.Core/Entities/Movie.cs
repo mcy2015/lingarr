@@ -1,5 +1,7 @@
 ﻿using Lingarr.Core.Interfaces;
 
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 namespace Lingarr.Core.Entities;
 
 public class Movie : BaseEntity, IMedia
@@ -13,4 +15,20 @@ public class Movie : BaseEntity, IMedia
     public List<Image> Images { get; set; } = new();
     public bool IncludeInTranslation { get; set; } = true;
     public int? TranslationAgeThreshold { get; set; }
+    public string? SubtitleCoverageJson { get; set; }
+
+    /// <summary>
+    /// Language -> subtitle coverage, written by the statistics scan; null
+    /// until the first scan after the coverage migration.
+    /// </summary>
+    [NotMapped]
+    public Dictionary<string, MediaLanguageCoverage>? SubtitleCoverage
+    {
+        get => SubtitleCoverageJson == null
+            ? null
+            : JsonSerializer.Deserialize<Dictionary<string, MediaLanguageCoverage>>(SubtitleCoverageJson);
+        set => SubtitleCoverageJson = value == null
+            ? null
+            : JsonSerializer.Serialize(value);
+    }
 }

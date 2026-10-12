@@ -1,4 +1,6 @@
-﻿namespace Lingarr.Core.Entities;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
+namespace Lingarr.Core.Entities;
 
 public class Show : BaseEntity
 {
@@ -10,4 +12,20 @@ public class Show : BaseEntity
     public List<Season> Seasons { get; set; } = new();
     public bool IncludeInTranslation { get; set; } = true;
     public int? TranslationAgeThreshold { get; set; }
+    public string? SubtitleCoverageJson { get; set; }
+
+    /// <summary>
+    /// Language -> subtitle coverage, written by the statistics scan; null
+    /// until the first scan after the coverage migration.
+    /// </summary>
+    [NotMapped]
+    public Dictionary<string, MediaLanguageCoverage>? SubtitleCoverage
+    {
+        get => SubtitleCoverageJson == null
+            ? null
+            : JsonSerializer.Deserialize<Dictionary<string, MediaLanguageCoverage>>(SubtitleCoverageJson);
+        set => SubtitleCoverageJson = value == null
+            ? null
+            : JsonSerializer.Serialize(value);
+    }
 }

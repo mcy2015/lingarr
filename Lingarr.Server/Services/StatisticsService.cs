@@ -17,6 +17,7 @@ public class StatisticsService : IStatisticsService
     private readonly LingarrDbContext _dbContext;
     private readonly ISettingService _settingService;
     private readonly ITranslationHealthService _translationHealthService;
+    private readonly ICostService _costService;
 
     private static DateOnly Today =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneConfiguration.Current).DateTime);
@@ -24,11 +25,13 @@ public class StatisticsService : IStatisticsService
     public StatisticsService(
         LingarrDbContext dbContext,
         ISettingService settingService,
-        ITranslationHealthService translationHealthService)
+        ITranslationHealthService translationHealthService,
+        ICostService costService)
     {
         _dbContext = dbContext;
         _settingService = settingService;
         _translationHealthService = translationHealthService;
+        _costService = costService;
     }
 
     public async Task<Statistics> GetStatistics()
@@ -86,7 +89,7 @@ public class StatisticsService : IStatisticsService
             SuccessRate30Days = completed30 + failed30 > 0
                 ? Math.Round(completed30 / (double)(completed30 + failed30) * 100, 1)
                 : null,
-            MonthlyCost = null
+            MonthlyCost = await _costService.GetCurrentMonthTotalCostAsync()
         };
     }
 
@@ -167,6 +170,14 @@ public class StatisticsService : IStatisticsService
     {
         var stats = await GetOrCreateStatistics();
         var today = Today;
+
+        // Per-request character count feeds the cost rollups (A5); FindAsync
+        // reuses the tracked instance when the caller shares this scope.
+        var trackedRequest = await _dbContext.TranslationRequests.FindAsync(request.Id);
+        if (trackedRequest != null)
+        {
+            trackedRequest.CharactersTranslated = totalCharacters;
+        }
 
         // Update total counts
         stats.TotalLinesTranslated += totalLines;
