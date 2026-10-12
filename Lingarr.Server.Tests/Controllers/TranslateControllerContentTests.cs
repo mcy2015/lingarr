@@ -183,18 +183,52 @@ public class TranslateControllerContentTests : IDisposable
             .Setup(hubContext => hubContext.Clients)
             .Returns(hubClientsMock.Object);
 
-        _translationRequestService = new TranslationRequestService(
+        var asyncTranslationRegistry = new AsyncTranslationRegistry();
+        var eventServiceMock = new Mock<ITranslationRequestEventService>();
+        var queryService = new TranslationRequestQueryService(
             _context,
-            new Mock<IBackgroundJobClient>().Object,
             hubContextMock.Object,
-            _translationServiceFactoryMock.Object,
-            _progressServiceMock.Object,
-            _statisticsServiceMock.Object,
+            eventServiceMock.Object);
+        var contentService = new ContentTranslationService(
+            _context,
+            asyncTranslationRegistry,
+            queryService,
             mediaServiceMock.Object,
             _settingServiceMock.Object,
+            _translationServiceFactoryMock.Object,
+            eventServiceMock.Object,
+            _progressServiceMock.Object,
+            _statisticsServiceMock.Object,
+            NullLogger<ContentTranslationService>.Instance);
+        var jobQueue = new JobQueue(new Mock<IBackgroundJobClient>().Object);
+        var queueService = new TranslationRequestQueueService(
+            _context,
+            jobQueue,
+            asyncTranslationRegistry,
+            queryService,
+            contentService,
+            eventServiceMock.Object,
+            _progressServiceMock.Object,
+            _settingServiceMock.Object,
             new Mock<ISubtitleService>().Object,
-            new Mock<ITranslationRequestEventService>().Object,
-            NullLogger<TranslationRequestService>.Instance);
+            NullLogger<TranslationRequestQueueService>.Instance);
+        var proofreadService = new ProofreadRequestService(
+            _context,
+            jobQueue,
+            queueService,
+            queryService,
+            eventServiceMock.Object,
+            _progressServiceMock.Object,
+            _settingServiceMock.Object,
+            new Mock<ISubtitleService>().Object,
+            _translationServiceFactoryMock.Object,
+            NullLogger<ProofreadRequestService>.Instance);
+
+        _translationRequestService = new TranslationRequestService(
+            queryService,
+            queueService,
+            proofreadService,
+            contentService);
 
         _controller = new TranslateController(
             _translationServiceFactoryMock.Object,
