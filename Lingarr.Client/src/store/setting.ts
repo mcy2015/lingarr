@@ -1,6 +1,7 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import {
     IEncryptedSettings,
+    ILanguage,
     IPluginSettingField,
     ISettings,
     IUseSettingStore,
@@ -20,8 +21,8 @@ export const useSettingStore = defineStore('setting', {
         getSettings: (state: IUseSettingStore): ISettings => {
             return {
                 ...state.settings,
-                source_languages: JSON.parse(state.settings.source_languages as string),
-                target_languages: JSON.parse(state.settings.target_languages as string)
+                source_languages: parseLanguages(state.settings.source_languages),
+                target_languages: parseLanguages(state.settings.target_languages)
             }
         },
         getSetting: (state: IUseSettingStore) => (key: keyof ISettings) => state.settings[key],
@@ -107,6 +108,21 @@ export const useSettingStore = defineStore('setting', {
         }
     }
 })
+
+function parseLanguages(value: string | ILanguage[] | undefined): ILanguage[] {
+    // applySettingsOnLoad stores these already parsed; other load paths (e.g.
+    // setPluginSettings) leave raw JSON strings. Accept both — JSON.parsing the
+    // parsed array once crashed the whole /import page on render.
+    if (Array.isArray(value)) return value
+    if (typeof value === 'string' && value !== '') {
+        try {
+            return JSON.parse(value)
+        } catch {
+            return []
+        }
+    }
+    return []
+}
 
 function allKeysHaveValues(values: string | boolean | unknown[]) {
     // If values is not an array, return false immediately
