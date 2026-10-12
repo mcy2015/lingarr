@@ -14,7 +14,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BCrypt.Net-Next" />
     <PackageReference Include="DeepL.net" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="GTranslate" />
@@ -23,7 +22,6 @@
     <PackageReference Include="Hangfire.MySqlStorage" />
     <PackageReference Include="Hangfire.PostgreSql" />
     <PackageReference Include="Hangfire.Storage.SQLite" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.AspNetCore.SpaProxy" />
     <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

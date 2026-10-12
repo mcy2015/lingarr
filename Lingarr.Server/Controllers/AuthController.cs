@@ -93,9 +93,9 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Username must be at least 2 characters long" });
             }
 
-            if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 4)
+            if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
             {
-                return BadRequest(new { message = "Password must be at least 4 characters long" });
+                return BadRequest(new { message = "Password must be at least 8 characters long" });
             }
 
             // Create user and sign in
@@ -269,9 +269,9 @@ public class AuthController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(request.Password))
         {
-            if (request.Password.Length < 4)
+            if (request.Password.Length < 8)
             {
-                return BadRequest(new { message = "Password must be at least 4 characters long" });
+                return BadRequest(new { message = "Password must be at least 8 characters long" });
             }
 
             user.PasswordHash = _authService.HashPassword(request.Password);

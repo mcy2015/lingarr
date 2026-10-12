@@ -20,6 +20,7 @@ public class XAiService : BaseLanguageService, ITranslationService, IBatchTransl
     private string? _apiKey;
     private string? _requestTemplate;
     private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IRequestTemplateService _requestTemplateService;
     private bool _initialized;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -35,12 +36,14 @@ public class XAiService : BaseLanguageService, ITranslationService, IBatchTransl
     public XAiService(
         ISettingService settings,
         HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         ILogger<XAiService> logger,
         LanguageCodeService languageCodeService,
         IRequestTemplateService requestTemplateService)
         : base(settings, logger, languageCodeService)
     {
         _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _requestTemplateService = requestTemplateService;
     }
 
@@ -437,7 +440,7 @@ public class XAiService : BaseLanguageService, ITranslationService, IBatchTransl
 
         try
         {
-            var client = new HttpClient();
+            using var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             client.DefaultRequestHeaders.Add("Accept", "application/json");
 

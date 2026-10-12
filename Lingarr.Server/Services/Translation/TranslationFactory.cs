@@ -75,7 +75,9 @@ public class TranslationFactory : ITranslationServiceFactory
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<ILogger<OpenAiService>>(),
                 languageCodeService,
-                _serviceProvider.GetRequiredService<IRequestTemplateService>()
+                _serviceProvider.GetRequiredService<IRequestTemplateService>(),
+                _serviceProvider.GetRequiredService<HttpClient>(),
+                _serviceProvider.GetRequiredService<IHttpClientFactory>()
             ),
 
             "anthropic" => new AnthropicService(
@@ -105,6 +107,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "mistral" => new MistralService(
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<HttpClient>(),
+                _serviceProvider.GetRequiredService<IHttpClientFactory>(),
                 _serviceProvider.GetRequiredService<ILogger<MistralService>>(),
                 languageCodeService,
                 _serviceProvider.GetRequiredService<IRequestTemplateService>()
@@ -113,6 +116,7 @@ public class TranslationFactory : ITranslationServiceFactory
             "xai" => new XAiService(
                 _serviceProvider.GetRequiredService<ISettingService>(),
                 _serviceProvider.GetRequiredService<HttpClient>(),
+                _serviceProvider.GetRequiredService<IHttpClientFactory>(),
                 _serviceProvider.GetRequiredService<ILogger<XAiService>>(),
                 languageCodeService,
                 _serviceProvider.GetRequiredService<IRequestTemplateService>()

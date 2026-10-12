@@ -11,6 +11,7 @@ using Lingarr.Core;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Logging;
+using Lingarr.Server.Authorization;
 using Lingarr.Server.Filters;
 using Lingarr.Server.Interfaces.Providers;
 using Lingarr.Server.Interfaces.Services;
@@ -18,6 +19,7 @@ using Lingarr.Server.Interfaces.Services.Integration;
 using Lingarr.Server.Interfaces.Services.Subtitle;
 using Lingarr.Server.Interfaces.Services.Sync;
 using Lingarr.Server.Interfaces.Services.Translation;
+using Microsoft.AspNetCore.Authorization;
 using Lingarr.Server.Listener;
 using Lingarr.Server.Providers;
 using Lingarr.Server.Services;
@@ -135,7 +137,12 @@ public static class ServiceCollectionExtensions
             };
         });
         
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy("LingarrHubAccess", policy =>
+                policy.Requirements.Add(new LingarrHubAccessRequirement()));
+        });
+        builder.Services.AddSingleton<IAuthorizationHandler, LingarrHubAccessHandler>();
     }
 
     private static void ConfigureProviders(this WebApplicationBuilder builder)
@@ -173,9 +180,9 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IMappingService, MappingService>();
 
         // Register subtitle services
-        builder.Services.AddScoped<ISubtitleParser, SrtParser>();
-        builder.Services.AddScoped<ISubtitleWriter, SrtWriter>();
-        builder.Services.AddScoped<ISubtitleWriter, SsaWriter>();
+        // Note: SrtParser/SsaParser/SrtWriter/SsaWriter are instantiated directly
+        // by SubtitleService per file extension — no DI consumers exist, so no
+        // (conflicting) registrations are needed.
         
         // Register translate services
         builder.Services.AddScoped<ITranslationServiceFactory, TranslationFactory>();

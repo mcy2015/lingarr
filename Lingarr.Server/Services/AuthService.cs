@@ -48,7 +48,7 @@ public class AuthService : IAuthService
                 iterationCount: 100000,
                 numBytesRequested: 256 / 8));
 
-            return hashToVerify == storedHash;
+            return FixedTimeEquals(hashToVerify, storedHash);
         }
         catch
         {
@@ -89,7 +89,20 @@ public class AuthService : IAuthService
             return false;
         }
 
-        return apiKey == storedApiKey;
+        return FixedTimeEquals(apiKey, storedApiKey);
+    }
+
+    /// <summary>
+    /// Compares two strings in constant time to prevent timing attacks
+    /// (e.g. against the shared API key). The length check is unavoidable
+    /// but does not reveal content.
+    /// </summary>
+    private static bool FixedTimeEquals(string a, string b)
+    {
+        var bytesA = System.Text.Encoding.UTF8.GetBytes(a);
+        var bytesB = System.Text.Encoding.UTF8.GetBytes(b);
+        return bytesA.Length == bytesB.Length
+               && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(bytesA, bytesB);
     }
 
     public string HashPassword(string password)

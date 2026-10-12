@@ -39,6 +39,7 @@ public static class ApplicationBuilderExtensions
         }
 
         app.UseAuthentication();
+        app.UseAuthorization();
         app.MapControllers();
         app.UseStaticFiles();
         app.ConfigureSpa(basePath);
@@ -46,9 +47,12 @@ public static class ApplicationBuilderExtensions
 
     private static void MapHubs(this WebApplication app)
     {
-        app.MapHub<TranslationRequestsHub>("/signalr/TranslationRequests");
-        app.MapHub<SettingUpdatesHub>("/signalr/SettingUpdates");
-        app.MapHub<JobProgressHub>("/signalr/JobProgress");
+        app.MapHub<TranslationRequestsHub>("/signalr/TranslationRequests")
+            .RequireAuthorization("LingarrHubAccess");
+        app.MapHub<SettingUpdatesHub>("/signalr/SettingUpdates")
+            .RequireAuthorization("LingarrHubAccess");
+        app.MapHub<JobProgressHub>("/signalr/JobProgress")
+            .RequireAuthorization("LingarrHubAccess");
     }
 
     private static Task ApplyMigrations(this WebApplication app)

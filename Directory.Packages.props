@@ -4,8 +4,6 @@
     </PropertyGroup>
     <ItemGroup>
         <!-- Auth -->
-        <PackageVersion Include="BCrypt.Net-Next" Version="4.2.0" />
-        <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
         <!-- .NET -->
         <PackageVersion Include="Microsoft.AspNetCore.SpaProxy" Version="10.0.12" />
         <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />

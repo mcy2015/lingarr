@@ -30,70 +30,84 @@ public class SettingChangedListener
         _logger = logger;
     }
 
-    public async void OnSettingChanged(SettingService settingService, string setting)
+    public void OnSettingChanged(SettingService settingService, string setting)
     {
-        var settingGroups = new Dictionary<string, (string actionType, string actionName, string[] keys)>
-        {
-            {
-                "radarr", ("Job", "Radarr", [
-                    SettingKeys.Integration.RadarrApiKey,
-                    SettingKeys.Integration.RadarrUrl
-                ])
-            },
-            {
-                "sonarr", ("Job", "Sonarr", [
-                    SettingKeys.Integration.SonarrApiKey,
-                    SettingKeys.Integration.SonarrUrl
-                ])
-            },
-            {
-                "automation", ("Job", "Automation", [
-                    SettingKeys.Automation.AutomationEnabled,
-                    SettingKeys.Automation.TranslationSchedule,
-                    SettingKeys.Automation.MaxTranslationsPerRun
-                ])
-            },
-            {
-                "telemetry", ("Job", "Telemetry", [
-                    SettingKeys.Telemetry.TelemetryEnabled
-                ])
-            },
-            {
-                "clearHash", ("Action", "ClearHash", [
-                    SettingKeys.Translation.SourceLanguages
-                ])
-            },
-            {
-                "schedule", ("Action", "Schedule", [
-                    SettingKeys.Automation.MovieSchedule,
-                    SettingKeys.Automation.ShowSchedule
-                ])
-            },
-            {
-                "serviceType", ("Action", "ServiceType", [
-                    SettingKeys.Translation.ServiceType
-                ])
-            }
-        };
+        // Fire-and-forget, but observed: an async void event handler would
+        // crash the process on any unhandled exception.
+        _ = HandleSettingChangedAsync(settingService, setting);
+    }
 
-        // Find and execute the appropriate action for the changed setting
-        foreach (var group in settingGroups)
+    private async Task HandleSettingChangedAsync(SettingService settingService, string setting)
+    {
+        try
         {
-            // Check if the changed setting belongs to this configuration group based on it's *keys*
-            if (group.Value.keys.Contains(setting))
+            var settingGroups = new Dictionary<string, (string actionType, string actionName, string[] keys)>
             {
-                switch (group.Value.actionType)
                 {
-                    case "Job":
-                        await RunJob(group.Value.actionName, group.Value.keys);
-                        break;
-                    case "Action":
-                        await RunAction(group.Value.actionName, group.Value.keys);
-                        break;
+                    "radarr", ("Job", "Radarr", [
+                        SettingKeys.Integration.RadarrApiKey,
+                        SettingKeys.Integration.RadarrUrl
+                    ])
+                },
+                {
+                    "sonarr", ("Job", "Sonarr", [
+                        SettingKeys.Integration.SonarrApiKey,
+                        SettingKeys.Integration.SonarrUrl
+                    ])
+                },
+                {
+                    "automation", ("Job", "Automation", [
+                        SettingKeys.Automation.AutomationEnabled,
+                        SettingKeys.Automation.TranslationSchedule,
+                        SettingKeys.Automation.MaxTranslationsPerRun
+                    ])
+                },
+                {
+                    "telemetry", ("Job", "Telemetry", [
+                        SettingKeys.Telemetry.TelemetryEnabled
+                    ])
+                },
+                {
+                    "clearHash", ("Action", "ClearHash", [
+                        SettingKeys.Translation.SourceLanguages
+                    ])
+                },
+                {
+                    "schedule", ("Action", "Schedule", [
+                        SettingKeys.Automation.MovieSchedule,
+                        SettingKeys.Automation.ShowSchedule
+                    ])
+                },
+                {
+                    "serviceType", ("Action", "ServiceType", [
+                        SettingKeys.Translation.ServiceType
+                    ])
                 }
+            };
 
-                break;
+            // Find and execute the appropriate action for the changed setting
+            foreach (var group in settingGroups)
+            {
+                // Check if the changed setting belongs to this configuration group based on it's *keys*
+                if (group.Value.keys.Contains(setting))
+                {
+                    switch (group.Value.actionType)
+                    {
+                        case "Job":
+                            await RunJob(group.Value.actionName, group.Value.keys);
+                            break;
+                        case "Action":
+                            await RunAction(group.Value.actionName, group.Value.keys);
+                            break;
+                    }
+
+                    break;
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to handle setting change for {Setting}", setting);
         }
     }
 
