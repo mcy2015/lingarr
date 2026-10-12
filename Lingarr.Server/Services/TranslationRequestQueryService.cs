@@ -6,6 +6,7 @@ using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.TranslationRequests;
 using Microsoft.AspNetCore.SignalR;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lingarr.Server.Services;
@@ -111,7 +112,8 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
         string? orderBy,
         bool ascending,
         int pageNumber,
-        int pageSize)
+        int pageSize,
+        TranslationStatus? status = null)
     {
         var query = _dbContext.TranslationRequests
             .AsSplitQuery()
@@ -120,6 +122,11 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
         if (!string.IsNullOrEmpty(searchQuery))
         {
             query = query.Where(translationRequest => translationRequest.Title.ToLower().Contains(searchQuery.ToLower()));
+        }
+
+        if (status is not null)
+        {
+            query = query.Where(translationRequest => translationRequest.Status == status);
         }
 
         query = orderBy switch
@@ -154,7 +161,8 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
                 Status = translationRequest.Status,
                 CompletedAt = translationRequest.CompletedAt,
                 ErrorMessage = translationRequest.ErrorMessage,
-                CreatedAt = translationRequest.CreatedAt
+                CreatedAt = translationRequest.CreatedAt,
+                Source = translationRequest.Source
             })
             .ToListAsync();
 
@@ -165,5 +173,14 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
             PageNumber = pageNumber,
             PageSize = pageSize
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<TranslationStatus, int>> GetStatusCounts()
+    {
+        return await _dbContext.TranslationRequests
+            .GroupBy(translationRequest => translationRequest.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(entry => entry.Status, entry => entry.Count);
     }
 }

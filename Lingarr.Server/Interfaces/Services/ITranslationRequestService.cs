@@ -81,7 +81,13 @@ public interface ITranslationRequestService
         string? orderBy,
         bool ascending,
         int pageNumber,
-        int pageSize);
+        int pageSize,
+        TranslationStatus? status = null);
+
+    /// <summary>
+    /// Request count per translation status, for the queue filter tabs.
+    /// </summary>
+    Task<Dictionary<TranslationStatus, int>> GetStatusCounts();
 
     /// <summary>
     /// Removes an existing translation request and its associated background job.

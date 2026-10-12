@@ -1,4 +1,6 @@
 ﻿using Lingarr.Core.Entities;
+using System.Collections.Generic;
+using Lingarr.Core.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Interfaces.Services;
@@ -67,20 +69,43 @@ public class TranslationRequestController : ControllerBase
     /// <response code="200">Returns the paginated list of translation requests</response>
     /// <response code="500">If there was an error checking for updates</response>
     /// <returns>ActionResult containing the paginated list of translation requests</returns>
+    /// <summary>
+    /// Returns the request count per translation status for the queue filter tabs.
+    /// </summary>
+    [HttpGet("counts")]
+    public async Task<ActionResult<Dictionary<TranslationStatus, int>>> GetStatusCounts()
+    {
+        return Ok(await _translationRequestService.GetStatusCounts());
+    }
+
+    /// <summary>
+    /// Retrieves a paginated list of translation requests with optional filtering and sorting
+    /// </summary>
+    /// <param name="searchQuery">Optional search term to filter requests</param>
+    /// <param name="orderBy">Property name to sort the results by</param>
+    /// <param name="ascending">Sort direction; true for ascending, false for descending</param>
+    /// <param name="status">Optional status filter for the queue tabs</param>
+    /// <param name="pageSize">Number of items per page</param>
+    /// <param name="pageNumber">Page number to retrieve</param>
+    /// <response code="200">Returns the paginated list of translation requests</response>
+    /// <response code="500">If there was an error checking for updates</response>
+    /// <returns>ActionResult containing the paginated list of translation requests</returns>
     [HttpGet("requests")]
     public async Task<ActionResult<PagedResult<TranslationRequestSummary>>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
         bool ascending = true,
         int pageSize = 20,
-        int pageNumber = 1)
+        int pageNumber = 1,
+        TranslationStatus? status = null)
     {
         var value = await _translationRequestService.GetTranslationRequests(
             searchQuery,
             orderBy,
             ascending,
             pageNumber,
-            pageSize);
+            pageSize,
+            status);
 
         return Ok(value);
     }

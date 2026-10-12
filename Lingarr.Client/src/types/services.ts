@@ -158,8 +158,10 @@ export interface ITranslationRequestService {
         pageNumber: number,
         searchQuery: string,
         sortBy: string,
-        ascending: boolean
+        ascending: boolean,
+        status?: string | null
     ): Promise<T>
+    statusCounts(): Promise<Record<string, number>>
     cancel<T>(translationRequest: ITranslationRequest): Promise<T>
     convert<T>(id: number, bilingual: boolean): Promise<T>
     convertAll<T>(bilingual: boolean): Promise<T>

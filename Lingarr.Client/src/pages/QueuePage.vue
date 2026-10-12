@@ -1,5 +1,23 @@
 ﻿<template>
     <div class="w-full">
+        <!-- Status filter tabs (per prototype queue screen) -->
+        <div class="mb-2 flex flex-wrap items-center gap-2">
+            <button
+                v-for="tab in statusTabs"
+                :key="tab.value ?? 'all'"
+                type="button"
+                class="cursor-pointer border-b-2 px-4 py-1.5 text-sm font-medium transition-colors"
+                :class="
+                    (filter.status ?? null) === tab.value
+                        ? 'border-accent text-primary-content'
+                        : 'text-secondary-content/60 hover:text-primary-content border-transparent'
+                "
+                @click="setStatusFilter(tab.value)">
+                {{ tab.label }}
+                <span class="mono text-xs opacity-70">{{ tab.count }}</span>
+            </button>
+        </div>
+
         <!-- Search and Filters -->
         <ListToolbar
             v-model:filter="filter"
@@ -69,6 +87,11 @@
                         class="block min-w-0 flex-1 cursor-help md:flex-none"
                         :title="item.title">
                         {{ item.title }}
+                    </span>
+                    <span
+                        v-if="item.source === 'Import'"
+                        class="border-line text-secondary-content rounded border px-1.5 py-0.5 text-xs">
+                        {{ t('translations.badges.import') }}
                     </span>
                     <span v-else class="min-w-0 flex-1 md:flex-none">
                         {{ item.title }}
@@ -161,7 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
     Hub,
@@ -188,6 +211,25 @@ const signalR = useSignalR()
 const hubConnection = ref<Hub>()
 const translationRequestStore = useTranslationRequestStore()
 const { t } = useI18n()
+
+// computed so tab labels re-resolve when the locale changes
+const statusTabs = computed(() => [
+    { label: t('translations.queueTabs.all'), value: null, count: totalAll() },
+    { label: t('translations.queueTabs.inProgress'), value: TRANSLATION_STATUS.INPROGRESS, count: statusCount(TRANSLATION_STATUS.INPROGRESS) },
+    { label: t('translations.queueTabs.pending'), value: TRANSLATION_STATUS.PENDING, count: statusCount(TRANSLATION_STATUS.PENDING) },
+    { label: t('translations.queueTabs.completed'), value: TRANSLATION_STATUS.COMPLETED, count: statusCount(TRANSLATION_STATUS.COMPLETED) },
+    { label: t('translations.queueTabs.failed'), value: TRANSLATION_STATUS.FAILED, count: statusCount(TRANSLATION_STATUS.FAILED) }
+])
+
+const statusCount = (status: string): number =>
+    translationRequestStore.getStatusCounts[status] ?? 0
+
+const totalAll = (): number =>
+    Object.values(translationRequestStore.getStatusCounts).reduce((sum, count) => sum + count, 0)
+
+const setStatusFilter = async (status: string | null): Promise<void> => {
+    await translationRequestStore.setStatusFilter(status)
+}
 
 const { items: translationRequests, filter } = usePagedList<ITranslationRequest>({
     items: () => translationRequestStore.getTranslationRequests,

@@ -26,8 +26,10 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
             searchQuery: '',
             sortBy: 'CreatedAt',
             isAscending: true,
-            pageNumber: 1
+            pageNumber: 1,
+            status: null
         },
+        statusCounts: {} as Record<string, number>,
         proofreadSupported: false
     }),
     getters: {
@@ -36,7 +38,9 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
         getTranslationRequests(): IPagedResult<ITranslationRequest> {
             return this.translationRequests
         },
-        getFilter: (state: IUseTranslationRequestStore): IFilter => state.filter
+        getFilter: (state: IUseTranslationRequestStore): IFilter => state.filter,
+        getStatusCounts: (state: IUseTranslationRequestStore): Record<string, number> =>
+            state.statusCounts
     },
     actions: {
         async setFilter(filterVal: IFilter) {
@@ -50,8 +54,14 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
                 this.filter.pageNumber,
                 this.filter.searchQuery,
                 this.filter.sortBy,
-                this.filter.isAscending
+                this.filter.isAscending,
+                this.filter.status ?? null
             )
+            this.statusCounts = await services.translationRequest.statusCounts()
+        },
+        async setStatusFilter(status: string | null) {
+            this.filter = { ...this.filter, status: status, pageNumber: 1 }
+            await this.fetch()
         },
         setActiveTranslations(activeTranslations: IActiveTranslation[]) {
             this.activeTranslations = activeTranslations

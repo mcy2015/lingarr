@@ -75,8 +75,13 @@ public class TranslationRequestService : ITranslationRequestService
         string? orderBy,
         bool ascending,
         int pageNumber,
-        int pageSize)
-        => _queryService.GetTranslationRequests(searchQuery, orderBy, ascending, pageNumber, pageSize);
+        int pageSize,
+        TranslationStatus? status = null)
+        => _queryService.GetTranslationRequests(searchQuery, orderBy, ascending, pageNumber, pageSize, status);
+
+    /// <inheritdoc />
+    public Task<Dictionary<TranslationStatus, int>> GetStatusCounts()
+        => _queryService.GetStatusCounts();
 
     /// <inheritdoc />
     public Task<string?> RemoveTranslationRequest(TranslationRequest cancelRequest)

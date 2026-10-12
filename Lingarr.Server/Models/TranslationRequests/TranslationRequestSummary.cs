@@ -19,6 +19,7 @@ public class TranslationRequestSummary
     public bool IsBilingual { get; set; }
     public required MediaType MediaType { get; set; }
     public required TranslationStatus Status { get; set; }
+    public TranslationRequestSource Source { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

@@ -687,6 +687,16 @@
             "sortByCompleted": "按完成时间排序",
             "sortByTitle": "按标题排序"
         },
+        "queueTabs": {
+            "all": "全部",
+            "inProgress": "进行中",
+            "pending": "排队",
+            "completed": "已完成",
+            "failed": "失败"
+        },
+        "badges": {
+            "import": "导入"
+        },
         "detail": {
             "status": "状态",
             "source": "源",

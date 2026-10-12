@@ -687,6 +687,16 @@
             "sortByCompleted": "Sort by Completed",
             "sortByTitle": "Sort by Title"
         },
+        "queueTabs": {
+            "all": "All",
+            "inProgress": "In progress",
+            "pending": "Queued",
+            "completed": "Completed",
+            "failed": "Failed"
+        },
+        "badges": {
+            "import": "Import"
+        },
         "detail": {
             "status": "Status",
             "source": "Source",

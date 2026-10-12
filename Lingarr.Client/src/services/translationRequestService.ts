@@ -16,7 +16,8 @@ const service = (
         pageNumber: number,
         searchQuery: string,
         orderBy: string,
-        ascending: boolean
+        ascending: boolean,
+        status?: string | null
     ): Promise<T> {
         return http
             .get(
@@ -24,10 +25,14 @@ const service = (
                     pageNumber: pageNumber,
                     searchQuery: searchQuery,
                     orderBy: orderBy,
-                    ascending: ascending
+                    ascending: ascending,
+                    status: status ?? ''
                 })
             )
             .then((response) => response.data)
+    },
+    statusCounts<T>(): Promise<T> {
+        return http.get(`${resource}/counts`).then((response) => response.data)
     },
     cancel<T>(translationRequest: ITranslationRequest): Promise<T> {
         return http.post(`${resource}/cancel`, translationRequest).then((response) => response.data)

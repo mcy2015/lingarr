@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Lingarr.Core.Entities;
+using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.TranslationRequests;
 
@@ -33,5 +35,11 @@ public interface ITranslationRequestQueryService
         string? orderBy,
         bool ascending,
         int pageNumber,
-        int pageSize);
+        int pageSize,
+        TranslationStatus? status = null);
+
+    /// <summary>
+    /// Request count per translation status, for the queue filter tabs.
+    /// </summary>
+    Task<Dictionary<TranslationStatus, int>> GetStatusCounts();
 }
