@@ -21,10 +21,6 @@ public class LibreService : BaseLanguageService
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     // retry settings
-    private int _maxRetries;
-    private TimeSpan _retryDelay;
-    private int _retryDelayMultiplier;
-
     /// <inheritdoc />
     public override string? ModelName => null;
 

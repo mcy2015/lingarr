@@ -28,11 +28,6 @@ public class OpenAiService : BaseLanguageService, ITranslationService, IBatchTra
     /// <inheritdoc />
     public override string? ModelName => _model;
 
-    // retry settings
-    private int _maxRetries;
-    private TimeSpan _retryDelay;
-    private int _retryDelayMultiplier;
-
     public OpenAiService(
         ISettingService settings,
         ILogger<OpenAiService> logger,
@@ -104,16 +99,7 @@ public class OpenAiService : BaseLanguageService, ITranslationService, IBatchTra
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
 
-            _maxRetries = int.TryParse(settings[SettingKeys.Translation.MaxRetries], out var maxRetries) 
-                ? maxRetries 
-                : 5;
-            var retryDelaySeconds = int.TryParse(settings[SettingKeys.Translation.RetryDelay], out var delaySeconds) 
-                ? delaySeconds 
-                : 1;
-            _retryDelay = TimeSpan.FromSeconds(retryDelaySeconds);
-            _retryDelayMultiplier = int.TryParse(settings[SettingKeys.Translation.RetryDelayMultiplier], out var multiplier) 
-                ? multiplier 
-                : 2;
+            ApplyResilienceSettings(settings);
 
             _initialized = true;
         }
@@ -134,44 +120,13 @@ public class OpenAiService : BaseLanguageService, ITranslationService, IBatchTra
     {
         await InitializeAsync(sourceLanguage, targetLanguage);
 
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-        
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                var replacements = GetReplacements(_model!, text, contextLinesBefore, contextLinesAfter);
-                return await CompleteWithOpenAiApi(replacements, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for text: {Text}", ex.StatusCode, text);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "OpenAI", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during OpenAI translation");
-                throw new TranslationException("Failed to translate using OpenAI", ex);
-            }
-        }
-
-        throw new TranslationException("Translation failed after maximum retry attempts.");
+        var replacements = GetReplacements(_model!, text, contextLinesBefore, contextLinesAfter);
+        return await ExecuteWithRetryAsync(
+            "OpenAI",
+            "Failed to translate using OpenAI",
+            token => CompleteWithOpenAiApi(replacements, token),
+            cancellationToken,
+            text);
     }
 
     /// <inheritdoc />
@@ -184,44 +139,13 @@ public class OpenAiService : BaseLanguageService, ITranslationService, IBatchTra
     {
         await InitializeAsync(sourceLanguage, targetLanguage);
 
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                var replacements = GetProofreadReplacements(_model!, sourceText, translatedText);
-                return await CompleteWithOpenAiApi(replacements, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for text: {Text}", ex.StatusCode, translatedText);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "OpenAI", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during OpenAI proofread");
-                throw new TranslationException("Failed to proofread using OpenAI", ex);
-            }
-        }
-
-        throw new TranslationException("Proofread failed after maximum retry attempts.");
+        var replacements = GetProofreadReplacements(_model!, sourceText, translatedText);
+        return await ExecuteWithRetryAsync(
+            "OpenAI",
+            "Failed to proofread using OpenAI",
+            token => CompleteWithOpenAiApi(replacements, token),
+            cancellationToken,
+            translatedText);
     }
 
     private async Task<string> CompleteWithOpenAiApi(
@@ -278,43 +202,11 @@ public class OpenAiService : BaseLanguageService, ITranslationService, IBatchTra
     {
         await InitializeAsync(sourceLanguage, targetLanguage);
 
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-        
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                return await TranslateBatchWithOpenAiApi(subtitleBatch, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for batch translation", ex.StatusCode);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "OpenAI", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during batch translation attempt {Attempt}", attempt);
-                throw new TranslationException("Unexpected error occurred during batch translation.", ex);
-            }
-        }
-
-        throw new TranslationException("Batch translation failed after maximum retry attempts.");
+        return await ExecuteWithRetryAsync(
+            "OpenAI",
+            "Unexpected error occurred during batch translation.",
+            token => TranslateBatchWithOpenAiApi(subtitleBatch, token),
+            cancellationToken);
     }
 
     private async Task<Dictionary<int, string>> TranslateBatchWithOpenAiApi(

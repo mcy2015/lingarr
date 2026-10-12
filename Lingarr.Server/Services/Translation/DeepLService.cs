@@ -23,11 +23,7 @@ public class DeepLService : BaseTranslationService
     /// <inheritdoc />
     public override string? ModelName => null;
 
-    // retry settings
-    private int _maxRetries;
-    private TimeSpan _retryDelay;
-    private int _retryDelayMultiplier;
-    
+    // retry settings    
     public DeepLService(
         ISettingService settings,
         ILogger<DeepLService> logger,

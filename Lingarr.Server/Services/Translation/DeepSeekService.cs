@@ -61,6 +61,10 @@ public class DeepSeekService : BaseLanguageService, IProofreadService
                 SettingKeys.Translation.AiUserPrompt,
                 SettingKeys.Translation.ProofreadPrompt,
                 SettingKeys.Translation.ProofreadUserPrompt,
+                SettingKeys.Translation.RequestTimeout,
+                SettingKeys.Translation.MaxRetries,
+                SettingKeys.Translation.RetryDelay,
+                SettingKeys.Translation.RetryDelayMultiplier,
                 SettingKeys.Translation.LanguageCodeFormat
             ]);
             _model = settings[SettingKeys.Translation.DeepSeek.Model];
@@ -80,9 +84,16 @@ public class DeepSeekService : BaseLanguageService, IProofreadService
             _proofreadPrompt = settings.GetValueOrDefault(SettingKeys.Translation.ProofreadPrompt);
             _proofreadUserPrompt = settings.GetValueOrDefault(SettingKeys.Translation.ProofreadUserPrompt);
 
+            var requestTimeout = int.TryParse(settings[SettingKeys.Translation.RequestTimeout],
+                out var timeOut)
+                ? timeOut
+                : 5;
+            _httpClient.Timeout = TimeSpan.FromMinutes(requestTimeout);
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
+            ApplyResilienceSettings(settings);
 
             _initialized = true;
         }
@@ -105,7 +116,12 @@ public class DeepSeekService : BaseLanguageService, IProofreadService
 
         var replacements = GetReplacements(_model!, text, contextLinesBefore, contextLinesAfter);
 
-        return await TranslateWithChatApi(replacements, cancellationToken);
+        return await ExecuteWithRetryAsync(
+            "DeepSeek",
+            "Failed to translate using DeepSeek",
+            token => TranslateWithChatApi(replacements, token),
+            cancellationToken,
+            text);
     }
 
     /// <inheritdoc />
@@ -120,7 +136,12 @@ public class DeepSeekService : BaseLanguageService, IProofreadService
 
         var replacements = GetProofreadReplacements(_model!, sourceText, translatedText);
 
-        return await TranslateWithChatApi(replacements, cancellationToken);
+        return await ExecuteWithRetryAsync(
+            "DeepSeek",
+            "Failed to proofread using DeepSeek",
+            token => TranslateWithChatApi(replacements, token),
+            cancellationToken,
+            translatedText);
     }
 
     private async Task<string> TranslateWithChatApi(

@@ -28,11 +28,6 @@ public class LocalAiService : BaseLanguageService, ITranslationService, IBatchTr
     /// <inheritdoc />
     public override string? ModelName => _model;
 
-    // retry settings
-    private int _maxRetries;
-    private TimeSpan _retryDelay;
-    private int _retryDelayMultiplier;
-
     public LocalAiService(
         ISettingService settings,
         HttpClient httpClient,
@@ -112,16 +107,7 @@ public class LocalAiService : BaseLanguageService, ITranslationService, IBatchTr
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             }
 
-            _maxRetries = int.TryParse(settings[SettingKeys.Translation.MaxRetries], out var maxRetries) 
-                ? maxRetries 
-                : 5;
-            var retryDelaySeconds = int.TryParse(settings[SettingKeys.Translation.RetryDelay], out var delaySeconds) 
-                ? delaySeconds 
-                : 1;
-            _retryDelay = TimeSpan.FromSeconds(retryDelaySeconds);
-            _retryDelayMultiplier = int.TryParse(settings[SettingKeys.Translation.RetryDelayMultiplier], out var multiplier) 
-                ? multiplier 
-                : 2;
+            ApplyResilienceSettings(settings);
 
             _initialized = true;
         }
@@ -143,43 +129,12 @@ public class LocalAiService : BaseLanguageService, ITranslationService, IBatchTr
         await InitializeAsync(sourceLanguage, targetLanguage);
 
         var replacements = GetReplacements(_model!, text, contextLinesBefore, contextLinesAfter);
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                return await CompleteWithLocalAiApi(replacements, retry.Token);
-            }
-            catch (TranslationResponseException ex)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Too many requests. Max retries exhausted for text: {Text}", text);
-                    throw new TranslationException("Too many requests. Retry limit reached.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "429 Too Many Requests. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during translation attempt {Attempt}", attempt);
-                throw new TranslationException("Unexpected error occurred during translation.", ex);
-            }
-        }
-
-        throw new TranslationException("Translation failed after maximum retry attempts.");
+        return await ExecuteWithRetryAsync(
+            "LocalAI",
+            "Unexpected error occurred during translation.",
+            token => CompleteWithLocalAiApi(replacements, token),
+            cancellationToken,
+            text);
     }
 
     /// <inheritdoc />
@@ -193,43 +148,12 @@ public class LocalAiService : BaseLanguageService, ITranslationService, IBatchTr
         await InitializeAsync(sourceLanguage, targetLanguage);
 
         var replacements = GetProofreadReplacements(_model!, sourceText, translatedText);
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                return await CompleteWithLocalAiApi(replacements, linked.Token);
-            }
-            catch (TranslationResponseException ex)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Too many requests. Max retries exhausted for text: {Text}", translatedText);
-                    throw new TranslationException("Too many requests. Retry limit reached.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "429 Too Many Requests. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during proofread attempt {Attempt}", attempt);
-                throw new TranslationException("Unexpected error occurred during proofread.", ex);
-            }
-        }
-
-        throw new TranslationException("Proofread failed after maximum retry attempts.");
+        return await ExecuteWithRetryAsync(
+            "LocalAI",
+            "Unexpected error occurred during proofread.",
+            token => CompleteWithLocalAiApi(replacements, token),
+            cancellationToken,
+            translatedText);
     }
 
     private async Task<string> CompleteWithLocalAiApi(

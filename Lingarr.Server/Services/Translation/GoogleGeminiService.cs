@@ -26,11 +26,6 @@ public class GoogleGeminiService : BaseLanguageService, ITranslationService, IBa
     /// <inheritdoc />
     public override string? ModelName => _model;
 
-    // retry settings
-    private int _maxRetries;
-    private TimeSpan _retryDelay;
-    private int _retryDelayMultiplier;
-
     public GoogleGeminiService(
         ISettingService settings,
         HttpClient httpClient,
@@ -98,16 +93,7 @@ public class GoogleGeminiService : BaseLanguageService, ITranslationService, IBa
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
 
-            _maxRetries = int.TryParse(settings[SettingKeys.Translation.MaxRetries], out var maxRetries) 
-                ? maxRetries 
-                : 5;
-            var retryDelaySeconds = int.TryParse(settings[SettingKeys.Translation.RetryDelay], out var delaySeconds) 
-                ? delaySeconds 
-                : 1;
-            _retryDelay = TimeSpan.FromSeconds(retryDelaySeconds);
-            _retryDelayMultiplier = int.TryParse(settings[SettingKeys.Translation.RetryDelayMultiplier], out var multiplier) 
-                ? multiplier 
-                : 2;
+            ApplyResilienceSettings(settings);
 
             _initialized = true;
         }
@@ -129,43 +115,12 @@ public class GoogleGeminiService : BaseLanguageService, ITranslationService, IBa
         await InitializeAsync(sourceLanguage, targetLanguage);
 
         var replacements = GetReplacements(_model!, text, contextLinesBefore, contextLinesAfter);
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                return await TranslateWithGeminiApi(replacements, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for text: {Text}", ex.StatusCode, text);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "Gemini", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during translation attempt {Attempt}", attempt);
-                throw new TranslationException("Unexpected error occurred during translation.", ex);
-            }
-        }
-
-        throw new TranslationException("Translation failed after maximum retry attempts.");
+        return await ExecuteWithRetryAsync(
+            "Gemini",
+            "Unexpected error occurred during translation.",
+            token => TranslateWithGeminiApi(replacements, token),
+            cancellationToken,
+            text);
     }
 
     /// <inheritdoc />
@@ -179,43 +134,12 @@ public class GoogleGeminiService : BaseLanguageService, ITranslationService, IBa
         await InitializeAsync(sourceLanguage, targetLanguage);
 
         var replacements = GetProofreadReplacements(_model!, sourceText, translatedText);
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                return await TranslateWithGeminiApi(replacements, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for text: {Text}", ex.StatusCode, translatedText);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "Gemini", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during proofread attempt {Attempt}", attempt);
-                throw new TranslationException("Unexpected error occurred during proofread.", ex);
-            }
-        }
-
-        throw new TranslationException("Proofread failed after maximum retry attempts.");
+        return await ExecuteWithRetryAsync(
+            "Gemini",
+            "Unexpected error occurred during proofread.",
+            token => TranslateWithGeminiApi(replacements, token),
+            cancellationToken,
+            translatedText);
     }
 
     private async Task<string> TranslateWithGeminiApi(
@@ -349,43 +273,11 @@ public class GoogleGeminiService : BaseLanguageService, ITranslationService, IBa
     {
         await InitializeAsync(sourceLanguage, targetLanguage);
         
-        using var retry = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retry.Token);
-        
-        var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
-        {
-            try
-            {
-                return await TranslateBatchWithGeminiApi(subtitleBatch, linked.Token);
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            {
-                if (attempt == _maxRetries)
-                {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for batch translation", ex.StatusCode);
-                    throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
-                }
-
-                await Task.Delay(delay, linked.Token).ConfigureAwait(false);
-                delay = TimeSpan.FromTicks(delay.Ticks * _retryDelayMultiplier);
-
-                _logger.LogWarning(
-                    "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    "Gemini", ex.StatusCode, delay, attempt, _maxRetries);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during batch translation attempt {Attempt}", attempt);
-                throw new TranslationException("Unexpected error occurred during batch translation.", ex);
-            }
-        }
-
-        throw new TranslationException("Batch translation failed after maximum retry attempts.");
+        return await ExecuteWithRetryAsync(
+            "Gemini",
+            "Unexpected error occurred during batch translation.",
+            token => TranslateBatchWithGeminiApi(subtitleBatch, token),
+            cancellationToken);
     }
 
     private async Task<Dictionary<int, string>> TranslateBatchWithGeminiApi(
