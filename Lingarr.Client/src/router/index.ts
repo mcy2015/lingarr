@@ -97,6 +97,9 @@ const routes: RouteRecordRaw[] = [
                 path: '/settings',
                 component: () => import('@/pages/SettingPage.vue'),
                 name: 'settings',
+                // parent-level redirect: the empty-child redirect did not
+                // fire on SPA navigation, leaving the tab content empty
+                redirect: { name: 'settings-providers' },
                 children: [
                     {
                         path: '',

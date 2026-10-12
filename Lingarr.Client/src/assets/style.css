@@ -343,12 +343,10 @@
     background: var(--line);
 }
 
-.fade-enter-active,
-.fade-leave-active {
+.fade-enter-active {
     transition: opacity 0.2s;
 }
-.fade-enter-from,
-.fade-leave-to {
+.fade-enter-from {
     opacity: 0;
 }
 
@@ -360,7 +358,7 @@
     *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        transition-delay: 0ms !important;
     }
+    /* transition-duration: 0.01ms !important broke Vue's out-in page
+       transition (leave completes before the enter hooks attach) */
 }

@@ -67,8 +67,11 @@
             <!-- Main Content -->
             <main id="main-content" class="min-h-0 flex-1 overflow-y-auto">
                 <router-view v-slot="{ Component }">
-                    <transition name="fade" mode="out-in">
-                        <component :is="Component" />
+                    <!-- enter-only fade: mode="out-in" dead-locks page swaps
+                         in the embedded webview (leave hooks never settle and
+                         the next component never mounts) -->
+                    <transition name="fade">
+                        <component :is="Component" :key="String($route.name)" />
                     </transition>
                 </router-view>
             </main>
