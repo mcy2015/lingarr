@@ -20,6 +20,34 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
             )
             .then((response) => response.data)
     },
+    library<T>(params: {
+        pageNumber: number
+        searchQuery: string
+        sortBy: string
+        ascending: boolean
+        mediaType?: string | null
+        state?: string | null
+        targetLanguage?: string | null
+    }): Promise<T> {
+        return http
+            .get(
+                buildUrl(`${resource}/library`, {
+                    pageNumber: params.pageNumber,
+                    searchQuery: params.searchQuery,
+                    orderBy: params.sortBy,
+                    ascending: params.ascending,
+                    mediaType: params.mediaType ?? '',
+                    state: params.state ?? '',
+                    targetLanguage: params.targetLanguage ?? ''
+                })
+            )
+            .then((response) => response.data)
+    },
+    estimate<T>(items: { mediaType: string; id: number }[], targetLanguage: string): Promise<T> {
+        return http
+            .post(`${resource}/estimate`, { items, targetLanguage })
+            .then((response) => response.data)
+    },
     shows<T>(
         pageNumber: number,
         searchQuery: string,

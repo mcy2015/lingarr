@@ -396,6 +396,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import TabComponent from '@/components/common/TabComponent.vue'
 import ButtonComponent from '@/components/common/ButtonComponent.vue'
 import services from '@/services'
@@ -421,10 +422,11 @@ interface ImportRow {
 }
 
 const { t } = useI18n()
+const route = useRoute()
 const settingStore = useSettingStore()
 const toastStore = useToastStore()
 
-const activeTab = ref<'free' | 'season'>('free')
+const activeTab = ref<'free' | 'season'>(route.query.tab === 'season' ? 'season' : 'free')
 // labels go through t() inside a computed so switching language re-renders
 // (setup-time evaluation would freeze the labels — the P2 i18n reactivity lesson)
 const tabs = computed<ITabOption[]>(() => [
@@ -440,9 +442,12 @@ const sourceLanguage = ref('en')
 const targetLanguage = ref('')
 const chineseConvert = ref('none')
 
-// directed season import: show + season binding
+// directed season import: show + season binding (deep-linkable via
+// /import?tab=season&show=<id> from the library matrix)
 const shows = ref<IShow[]>([])
-const selectedShowId = ref<number | undefined>(undefined)
+const selectedShowId = ref<number | undefined>(
+    route.query.show ? Number(route.query.show) || undefined : undefined
+)
 const selectedSeasonNumber = ref<number | undefined>(undefined)
 
 const seasons = computed<number[]>(() => {

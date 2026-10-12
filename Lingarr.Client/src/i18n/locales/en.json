@@ -61,9 +61,67 @@
     },
     "library": {
         "tabs": {
-            "shows": "TV Shows",
+            "all": "All",
+            "group": "Type filter",
+            "shows": "Shows",
             "movies": "Movies"
-        }
+        },
+        "toolbar": {
+            "import": "⇪ Import subtitles",
+            "stats": "{items} items · {missing} missing subtitles · {inProgress} in progress"
+        },
+        "filter": {
+            "targetLanguage": "Target",
+            "state": "Status",
+            "all": "All"
+        },
+        "table": {
+            "title": "Title",
+            "tracks": "Subtitle tracks",
+            "status": "Status",
+            "lastActivity": "Last activity",
+            "selectAll": "Select all on this page",
+            "select": "Select {title}"
+        },
+        "badge": {
+            "show": "Show",
+            "movie": "Movie"
+        },
+        "meta": {
+            "show": "S{seasons} · {episodes} episodes"
+        },
+        "track": {
+            "complete": "{lang}: complete",
+            "partial": "{lang}: {have}/{total} episodes",
+            "none": "{lang}: no subtitles"
+        },
+        "state": {
+            "none": "· Not queued",
+            "queued": "⏳ Queued",
+            "inProgress": "◐ Translating",
+            "completed": "✓ Completed",
+            "completedRatio": "✓ {done}/{total} completed",
+            "failed": "✗ Failed",
+            "failedCount": "✗ {count} failed"
+        },
+        "action": {
+            "seasonImport": "Import season",
+            "import": "Import",
+            "detail": "Details"
+        },
+        "detail": {
+            "include": "Include in translation",
+            "threshold": "Delay (hours)",
+            "subtitles": "Subtitle files"
+        },
+        "tray": {
+            "selected": "{count} selected",
+            "translate": "Translate selection",
+            "clear": "Clear",
+            "estimate": "Estimated ≈ {cost} · {chars} characters",
+            "charsOnly": "≈ {chars} characters · no rate configured"
+        },
+        "empty": "No media matches the current filters."
     },
     "version": {
         "development": "Development",

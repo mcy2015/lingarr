@@ -67,6 +67,16 @@ export interface IMediaService {
         sortBy: string,
         ascending: boolean
     ): Promise<T>
+    library<T>(params: {
+        pageNumber: number
+        searchQuery: string
+        sortBy: string
+        ascending: boolean
+        mediaType?: string | null
+        state?: string | null
+        targetLanguage?: string | null
+    }): Promise<T>
+    estimate<T>(items: { mediaType: string; id: number }[], targetLanguage: string): Promise<T>
     shows<T>(
         pageNumber: number,
         searchQuery: string,
