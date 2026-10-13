@@ -1,5 +1,6 @@
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
+using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +34,73 @@ public class GlossaryService : IGlossaryService
         _dbContext.TranslationGlossaries.Add(entry);
         await _dbContext.SaveChangesAsync();
         return entry;
+    }
+
+    /// <inheritdoc />
+    public async Task<GlossaryBulkResult> BulkImport(GlossaryBulkRequest request)
+    {
+        var result = new GlossaryBulkResult();
+
+        // Case-insensitive source-term matching, consistent with FindHits.
+        // TryAdd keeps the import robust against legacy case-variant rows.
+        var stored = new Dictionary<string, TranslationGlossary>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in await _dbContext.TranslationGlossaries.ToListAsync())
+        {
+            stored.TryAdd(row.SourceTerm, row);
+        }
+        var seenInBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in request.Entries)
+        {
+            var source = entry.SourceTerm?.Trim();
+            var target = entry.TargetTerm?.Trim();
+
+            // MatchMode mirrors the existing per-entry enum: locked /
+            // context (case-insensitive); missing means advisory.
+            bool? isLocked = entry.MatchMode?.Trim().ToLowerInvariant() switch
+            {
+                null or "" => false,
+                "locked" => true,
+                "context" => false,
+                _ => null
+            };
+
+            if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(target) || isLocked is null)
+            {
+                result.Skipped++;
+                continue;
+            }
+
+            if (!seenInBatch.Add(source))
+            {
+                // Duplicate source within the batch: first row wins so the
+                // import stays deterministic; count the repeat as skipped.
+                result.Skipped++;
+                continue;
+            }
+
+            if (stored.TryGetValue(source, out var existing))
+            {
+                // Stored source term: existing update semantics — overwrite
+                // target term and lock, keep the row identity.
+                existing.TargetTerm = target;
+                existing.IsLocked = isLocked.Value;
+            }
+            else
+            {
+                _dbContext.TranslationGlossaries.Add(new TranslationGlossary
+                {
+                    SourceTerm = source,
+                    TargetTerm = target,
+                    IsLocked = isLocked.Value
+                });
+            }
+
+            result.Imported++;
+        }
+
+        await _dbContext.SaveChangesAsync();
+        return result;
     }
 
     /// <inheritdoc />

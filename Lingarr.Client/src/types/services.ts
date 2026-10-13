@@ -331,9 +331,23 @@ export interface ITranslationGlossary {
     isLocked: boolean
 }
 
+/// One row of a glossary CSV import (screen-06 C「导入 CSV」):
+/// matchMode mirrors the per-entry enum — "locked" | "context".
+export interface IGlossaryBulkEntry {
+    sourceTerm: string
+    targetTerm: string
+    matchMode: 'locked' | 'context'
+}
+
+export interface IGlossaryBulkResult {
+    imported: number
+    skipped: number
+}
+
 export interface IGlossaryService {
     getAll(): Promise<ITranslationGlossary[]>
     create<T>(entry: Partial<ITranslationGlossary>): Promise<T>
     update<T>(id: number, entry: Partial<ITranslationGlossary>): Promise<T>
     remove<T>(id: number): Promise<T>
+    bulkImport(entries: IGlossaryBulkEntry[]): Promise<IGlossaryBulkResult>
 }

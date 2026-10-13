@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 // SubtitleOutputCard (screen-06 C): every former SubtitleSettings toggle and
 // ValidationSettings control survives as a setlist row (nothing dropped), the
-// naming row is read-only, toggles write the store, and the validation rows
-// appear only when validation is on.
+// naming row previews the real subtitle_naming_template setting and edits it
+// through a modal (save/cancel/empty-validation), toggles write the store,
+// and the validation rows appear only when validation is on.
 import { describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -76,14 +77,21 @@ describe('SubtitleOutputCard · 行渲染', () => {
         }
     })
 
-    it('renders the naming row read-only (server-fixed naming, no edit control)', async () => {
+    it('renders the naming row with the default template preview and an edit control', async () => {
         const { wrapper } = await mountCard()
 
         const naming = wrapper.find('[data-test="subtitle-row-naming"]')
         expect(naming.exists()).toBe(true)
-        expect(naming.text()).toContain('{original}.{language}.srt')
-        expect(naming.findAll('button')).toHaveLength(0)
-        expect(naming.findAll('input')).toHaveLength(0)
+        expect(naming.text()).toContain('{原名}.{语言}.srt')
+        expect(naming.find('[data-test="naming-edit"]').exists()).toBe(true)
+    })
+
+    it('previews a stored custom template', async () => {
+        const { wrapper } = await mountCard({
+            [SETTINGS.SUBTITLE_NAMING_TEMPLATE]: '{原名}-sub-{语言}'
+        })
+
+        expect(wrapper.find('[data-test="subtitle-row-naming"]').text()).toContain('{原名}-sub-{语言}.srt')
     })
 
     it('shows the subtitle tag value row only while tagging is on', async () => {
@@ -146,5 +154,58 @@ describe('SubtitleOutputCard · 校验行(全量保留)', () => {
 
         const input = wrapper.find('[data-test="subtitle-row-minDurationMs"] input')
         expect((input.element as HTMLInputElement).value).toBe('250')
+    })
+})
+
+describe('SubtitleOutputCard · 命名模板编辑模态', () => {
+    it('opens the modal prefilled with the current template and saves a new one to the store', async () => {
+        const { wrapper, settingStore } = await mountCard()
+
+        await wrapper.find('[data-test="naming-edit"]').trigger('click')
+        const modal = document.querySelector('[data-test="naming-modal"]')
+        expect(modal).not.toBeNull()
+        const input = modal!.querySelector('[data-test="naming-input"]') as HTMLInputElement
+        expect(input.value).toBe('{原名}.{语言}')
+        // the variable legend explains both placeholders
+        expect(modal!.textContent).toContain('{原名}')
+        expect(modal!.textContent).toContain('{语言}')
+
+        input.value = '{原名}.{语言}.custom'
+        input.dispatchEvent(new Event('input'))
+        await flushPromises()
+        ;(modal!.querySelector('[data-test="naming-save"]') as HTMLButtonElement).click()
+        await flushPromises()
+
+        expect(settingStore.getSetting(SETTINGS.SUBTITLE_NAMING_TEMPLATE)).toBe('{原名}.{语言}.custom')
+        expect(document.querySelector('[data-test="naming-modal"]')).toBeNull()
+        // the row preview follows the saved template
+        expect(wrapper.find('[data-test="subtitle-row-naming"]').text()).toContain(
+            '{原名}.{语言}.custom.srt'
+        )
+    })
+
+    it('blocks saving an empty template and cancels without writing', async () => {
+        const { wrapper, settingStore } = await mountCard({
+            [SETTINGS.SUBTITLE_NAMING_TEMPLATE]: '{原名}.{语言}'
+        })
+
+        await wrapper.find('[data-test="naming-edit"]').trigger('click')
+        const modal = document.querySelector('[data-test="naming-modal"]')!
+        const input = modal.querySelector('[data-test="naming-input"]') as HTMLInputElement
+
+        input.value = '   '
+        input.dispatchEvent(new Event('input'))
+        await flushPromises()
+
+        // empty template: error shown and save disabled
+        expect(modal.querySelector('[data-test="naming-error"]')).not.toBeNull()
+        expect((modal.querySelector('[data-test="naming-save"]') as HTMLButtonElement).disabled).toBe(true)
+
+        // cancel leaves the setting untouched
+        ;(modal.querySelector('[data-test="naming-cancel"]') as HTMLButtonElement).click()
+        await flushPromises()
+
+        expect(settingStore.getSetting(SETTINGS.SUBTITLE_NAMING_TEMPLATE)).toBe('{原名}.{语言}')
+        expect(document.querySelector('[data-test="naming-modal"]')).toBeNull()
     })
 })

@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Text;
 using Lingarr.Contracts.Translation;
+using Lingarr.Core.Configuration;
+using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Translation;
@@ -15,13 +17,16 @@ public class SubtitleService : ISubtitleService
 
     private readonly ILogger<SubtitleService> _logger;
     private readonly LanguageCodeService _languageCodeService;
+    private readonly ISettingService _settingService;
 
     public SubtitleService(
         ILogger<SubtitleService> logger,
-        LanguageCodeService languageCodeService)
+        LanguageCodeService languageCodeService,
+        ISettingService settingService)
     {
         _logger = logger;
         _languageCodeService = languageCodeService;
+        _settingService = settingService;
     }
 
     /// <inheritdoc />
@@ -118,7 +123,7 @@ public class SubtitleService : ISubtitleService
     }
 
     /// <inheritdoc />
-    public string CreateFilePath(string originalPath, string targetLanguage, string subtitleTag)
+    public async Task<string> CreateFilePath(string originalPath, string targetLanguage, string subtitleTag)
     {
         var extension = Path.GetExtension(originalPath);
         var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(originalPath);
@@ -149,28 +154,44 @@ public class SubtitleService : ISubtitleService
             targetLanguageCode = targetLanguage;
         }
 
-        // Reconstruct base parts
-        var baseParts = reversedParts.AsEnumerable().Reverse().ToList();
-        var newParts = new List<string>(baseParts);
-        
-        if (targetLanguageCode != null)
+        // Reconstruct the cleaned base name (caption/language segments stripped)
+        var baseName = string.Join(".", reversedParts.AsEnumerable().Reverse());
+
+        // Expand the naming template: {原名} = cleaned base name, {语言} = target
+        // language tag. A missing/blank setting falls back to the historical
+        // "{base}.{language}" — no migration needed.
+        var template = await _settingService.GetSetting(SettingKeys.Translation.SubtitleNamingTemplate);
+        if (string.IsNullOrWhiteSpace(template))
         {
-            newParts.Add(targetLanguageCode.ToLowerInvariant());
+            template = SettingKeys.Translation.DefaultSubtitleNamingTemplate;
         }
+
+        var fileName = template
+            .Replace("{原名}", baseName)
+            .Replace("{语言}", targetLanguageCode?.ToLowerInvariant() ?? string.Empty);
+
+        // An empty {语言} (e.g. remove_language_tag) leaves stray dots behind.
+        while (fileName.Contains(".."))
+        {
+            fileName = fileName.Replace("..", ".");
+        }
+        fileName = fileName.Trim('.');
+
+        var newParts = new List<string> { fileName };
 
         // Add caption if present
         if (!string.IsNullOrEmpty(caption))
         {
             newParts.Add(caption);
         }
-        
+
         // Add tag if provided
         if (!string.IsNullOrEmpty(subtitleTag))
         {
             newParts.Add(subtitleTag.ToLowerInvariant());
         }
-        
-        // Build new file name and path
+
+        // Build new file name and path (extension still follows the output format)
         var newFileName = string.Join(".", newParts) + extension;
         var directory = Path.GetDirectoryName(originalPath) ?? string.Empty;
         return Path.Combine(directory, newFileName);

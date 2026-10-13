@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IGlossaryService, ITranslationGlossary } from '@/types'
+import { IGlossaryBulkEntry, IGlossaryBulkResult, IGlossaryService, ITranslationGlossary } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/glossary'): IGlossaryService => ({
     getAll(): Promise<ITranslationGlossary[]> {
@@ -13,6 +13,17 @@ const service = (http: AxiosStatic, resource = '/api/glossary'): IGlossaryServic
     },
     remove<T>(id: number): Promise<T> {
         return http.delete(`${resource}/${id}`).then((response) => response.data)
+    },
+    bulkImport(entries: IGlossaryBulkEntry[]): Promise<IGlossaryBulkResult> {
+        return http
+            .post(`${resource}/bulk`, {
+                entries: entries.map((entry) => ({
+                    sourceTerm: entry.sourceTerm,
+                    targetTerm: entry.targetTerm,
+                    matchMode: entry.matchMode
+                }))
+            })
+            .then((response) => response.data)
     }
 })
 

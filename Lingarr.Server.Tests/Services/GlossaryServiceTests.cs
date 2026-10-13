@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
+using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -115,5 +116,92 @@ public class GlossaryServiceTests : IDisposable
 
         Assert.Single(hits);
         Assert.Equal("叶文洁", hits[0].TargetTerm);
+    }
+
+    // ===== Bulk CSV import (prototype screen-06 C「导入 CSV」) =====
+
+    private static GlossaryBulkEntry Entry(string? source, string? target, string? mode = null) =>
+        new() { SourceTerm = source, TargetTerm = target, MatchMode = mode };
+
+    [Fact]
+    public async Task BulkImport_CreatesValidRowsAndMapsMatchMode()
+    {
+        var result = await CreateService().BulkImport(new GlossaryBulkRequest
+        {
+            Entries =
+            [
+                Entry("Ye Wenjie", "叶文洁", "locked"),
+                Entry("Wallfacer", "面壁者", "CONTEXT"),
+                Entry("Sophon", "智子")
+            ]
+        });
+
+        Assert.Equal(3, result.Imported);
+        Assert.Equal(0, result.Skipped);
+
+        var all = await _dbContext.TranslationGlossaries.OrderBy(g => g.SourceTerm).ToListAsync();
+        Assert.Equal(3, all.Count);
+        Assert.Contains(all, g => g.SourceTerm == "Ye Wenjie" && g.TargetTerm == "叶文洁" && g.IsLocked);
+        // match mode is case-insensitive; a missing mode means advisory
+        Assert.Contains(all, g => g.SourceTerm == "Wallfacer" && !g.IsLocked);
+        Assert.Contains(all, g => g.SourceTerm == "Sophon" && !g.IsLocked);
+    }
+
+    [Fact]
+    public async Task BulkImport_SkipsInvalidRows()
+    {
+        var result = await CreateService().BulkImport(new GlossaryBulkRequest
+        {
+            Entries =
+            [
+                Entry("  ", "target"),                 // blank source
+                Entry("source", ""),                   // blank target
+                Entry("mode term", "译名", "garbage"),  // unknown match mode
+                Entry("valid", "有效")                  // still imported
+            ]
+        });
+
+        Assert.Equal(1, result.Imported);
+        Assert.Equal(3, result.Skipped);
+        Assert.Single(await _dbContext.TranslationGlossaries.ToListAsync());
+    }
+
+    [Fact]
+    public async Task BulkImport_UpdatesStoredSourceTermsAndSkipsBatchDuplicates()
+    {
+        await SeedAsync(("Ye Wenjie", "叶文洁", false));
+
+        var result = await CreateService().BulkImport(new GlossaryBulkRequest
+        {
+            Entries =
+            [
+                Entry("ye wenjie", "叶文洁(改)", "locked"), // stored row: upsert keeps identity
+                Entry("Wallfacer", "面壁者", "locked"),
+                Entry("WALLFACER", "面壁者2", "locked")     // in-batch duplicate: skipped
+            ]
+        });
+
+        Assert.Equal(2, result.Imported);
+        Assert.Equal(1, result.Skipped);
+
+        var all = await _dbContext.TranslationGlossaries.OrderBy(g => g.SourceTerm).ToListAsync();
+        Assert.Equal(2, all.Count);
+
+        var ye = all.Single(g => g.SourceTerm == "Ye Wenjie");
+        Assert.Equal("叶文洁(改)", ye.TargetTerm);
+        Assert.True(ye.IsLocked);
+
+        // first batch row wins for the duplicated source
+        var wall = all.Single(g => g.SourceTerm == "Wallfacer");
+        Assert.Equal("面壁者", wall.TargetTerm);
+    }
+
+    [Fact]
+    public async Task BulkImport_EmptyRequest_ImportsNothing()
+    {
+        var result = await CreateService().BulkImport(new GlossaryBulkRequest());
+
+        Assert.Equal(0, result.Imported);
+        Assert.Equal(0, result.Skipped);
     }
 }

@@ -29,7 +29,70 @@ public class TranslationFactory : ITranslationServiceFactory
     {
         var languageCodeService = _serviceProvider.GetRequiredService<LanguageCodeService>();
         var name = serviceType.ToLowerInvariant();
-        ITranslationService service = name switch
+
+        // Exact key first ("libretranslate" is itself a legal key and is never
+        // mangled); only when nothing matches do we retry with the common
+        // "translator"/"translate" suffix stripped so caller-facing spellings
+        // like "bingtranslator"/"googletranslator" resolve to "bing"/"google".
+        ITranslationService? service = null;
+        var resolved = name;
+        foreach (var candidate in ServiceKeyCandidates(name))
+        {
+            service = TryCreateService(candidate, languageCodeService);
+            if (service is not null)
+            {
+                resolved = candidate;
+                break;
+            }
+        }
+
+        if (service is null)
+        {
+            throw new ArgumentException("Unsupported translation service type", nameof(serviceType));
+        }
+
+        // Feed the shared health tracker from the base retry loop; plugin ABI
+        // implementations (no base class) intentionally stay untracked. The
+        // canonical key keeps snapshots aligned with the plugin registry ids.
+        if (service is Base.BaseTranslationService builtIn)
+        {
+            builtIn.SetHealthTracking(
+                _serviceProvider.GetRequiredService<ITranslationHealthService>(),
+                resolved);
+        }
+
+        return service;
+    }
+
+    /// <summary>
+    /// Candidate service keys for one requested type: the lowercased input
+    /// first, then the input with the "translator" and "translate" suffixes
+    /// stripped (longest suffix first so "xtranslator" never loses a stray
+    /// "r"). Empty candidates are skipped.
+    /// </summary>
+    private static IEnumerable<string> ServiceKeyCandidates(string name)
+    {
+        yield return name;
+        if (name.EndsWith("translator", StringComparison.Ordinal))
+        {
+            var stripped = name[..^"translator".Length];
+            if (stripped.Length > 0)
+            {
+                yield return stripped;
+            }
+        }
+        else if (name.EndsWith("translate", StringComparison.Ordinal))
+        {
+            var stripped = name[..^"translate".Length];
+            if (stripped.Length > 0)
+            {
+                yield return stripped;
+            }
+        }
+    }
+
+    private ITranslationService? TryCreateService(string name, LanguageCodeService languageCodeService) =>
+        name switch
         {
             "libretranslate" => new LibreService(
                 _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(),
@@ -140,20 +203,7 @@ public class TranslationFactory : ITranslationServiceFactory
 
             // load any registered plugins
             _ => _serviceProvider.GetKeyedService<ITranslationService>(name)
-                 ?? throw new ArgumentException("Unsupported translation service type", nameof(serviceType))
         };
-
-        // Feed the shared health tracker from the base retry loop; plugin ABI
-        // implementations (no base class) intentionally stay untracked.
-        if (service is Base.BaseTranslationService builtIn)
-        {
-            builtIn.SetHealthTracking(
-                _serviceProvider.GetRequiredService<ITranslationHealthService>(),
-                name);
-        }
-
-        return service;
-    }
 
     /// <inheritdoc />
     public IReadOnlyList<TranslationServiceEntry> CreateTranslationServices(IReadOnlyList<string> serviceTypes)

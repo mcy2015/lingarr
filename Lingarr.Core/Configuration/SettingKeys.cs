@@ -112,6 +112,16 @@ public static class SettingKeys
         public const string RemoveLanguageTag = "remove_language_tag";
         public const string SubtitleTag = "subtitle_tag";
         public const string IgnoreCaptions = "ignore_captions";
+        public const string SubtitleNamingTemplate = "subtitle_naming_template";
+
+        /// <summary>
+        /// Fallback used when the <see cref="SubtitleNamingTemplate"/> setting is
+        /// absent or blank — reproduces the historical "{base}.{language}" naming,
+        /// so no migration is needed for instances that never customized it.
+        /// {原名} expands to the cleaned base name (caption/language segments
+        /// stripped), {语言} to the target language tag.
+        /// </summary>
+        public const string DefaultSubtitleNamingTemplate = "{原名}.{语言}";
         public const string RequestTimeout = "request_timeout";
         public const string MaxRetries = "max_retries";
         public const string RetryDelay = "retry_delay";

@@ -87,7 +87,7 @@ public class TranslationJobTests
 
         _subtitleService
             .Setup(s => s.CreateFilePath(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .Returns((string path, string _, string _) => path.Replace(".srt", ".es.srt"));
+            .ReturnsAsync((string path, string _, string _) => path.Replace(".srt", ".es.srt"));
 
         _subtitleService
             .Setup(s => s.ValidateSubtitle(It.IsAny<string>(), It.IsAny<Lingarr.Server.Models.SubtitleValidationOptions>()))

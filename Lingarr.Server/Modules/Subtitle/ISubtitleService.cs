@@ -36,13 +36,14 @@ public interface ISubtitleService
     Task WriteSubtitles(string filePath, List<SubtitleItem> subtitles, bool stripSubtitleFormatting, bool bilingual = false);
 
     /// <summary>
-    /// Creates a new file path for a subtitle file with a specified target language.
+    /// Creates a new file path for a translated subtitle file, expanding the
+    /// <c>subtitle_naming_template</c> setting (default "{原名}.{语言}").
     /// </summary>
     /// <param name="originalPath">The original path of the subtitle file.</param>
     /// <param name="targetLanguage">The target language code to be added to the file name.</param>
-    /// <param name="subtitleTag">Subtitle tag to be added to the file path</param>
-    /// <returns>A new file path with the target language code inserted before the .srt extension.</returns>
-    string CreateFilePath(string originalPath, string targetLanguage, string subtitleTag);
+    /// <param name="subtitleTag">Subtitle tag to be appended after the template.</param>
+    /// <returns>A new file path built from the naming template, with the output format extension appended.</returns>
+    Task<string> CreateFilePath(string originalPath, string targetLanguage, string subtitleTag);
     
     /// <summary>
     /// Removes overlaps between consecutive subtitles by trimming end times, start times are never shifted.

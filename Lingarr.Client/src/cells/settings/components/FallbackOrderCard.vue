@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { ITranslationServiceHealth, SETTINGS } from '@/types'
@@ -118,7 +118,9 @@ function dotFor(member: string): string {
 // ── langcap 派生(只读)──────────────────────────────────────────
 const tables = ref<Record<string, ServiceLanguageTable>>({})
 
-onMounted(fetchTables)
+/// 设置 store 异步加载完成可能晚于挂载(mount 时链常为空),immediate
+/// watch 保证链到位即取数,链增删/重排也自然刷新。
+watch(chain, () => void fetchTables(), { immediate: true })
 
 async function fetchTables(): Promise<void> {
     const members = [...new Set(chain.value)]

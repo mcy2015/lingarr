@@ -1,7 +1,7 @@
 <template>
     <!-- ═══ 字幕输出卡(原型 screen-06 C 组 setlist 行式):原 SubtitleSettings
-         8 开关 + ValidationSettings 全量转为行式,一个不砍;命名模板行只读
-         (服务端命名固定,不给假编辑)。 -->
+         8 开关 + ValidationSettings 全量转为行式,一个不砍;命名模板行编辑
+         真设置 subtitle_naming_template(服务端 CreateFilePath 展开)。 -->
     <div class="border-line bg-secondary rounded-md border" data-test="subtitle-output-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.subtitleOutput.title') }}</h2>
@@ -66,20 +66,98 @@
                 :validation-type="INPUT_VALIDATION_TYPE.NUMBER" />
         </div>
 
-        <!-- 命名模板行:只读说明(服务端命名固定) -->
+        <!-- 命名模板行:真实设置 subtitle_naming_template,编辑模态改写 -->
         <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-[13px]"
+            class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-[13px]"
             data-test="subtitle-row-naming">
             <b class="flex-none">{{ t('settings.subtitleOutput.naming') }}</b>
-            <span class="text-secondary-content mono min-w-0 flex-1 truncate text-xs">
-                {{ t('settings.subtitleOutput.namingHint') }}
+            <span class="text-secondary-content mono min-w-0 flex-1 truncate text-xs" :title="namingPreview">
+                {{ namingPreview }}
             </span>
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                data-test="naming-edit"
+                @click="openNamingEdit">
+                {{ t('settings.subtitleOutput.edit') }}
+            </button>
         </div>
+
+        <!-- 命名模板编辑模态:模板输入(mono)+ 变量说明 + 非空校验 -->
+        <Teleport to="body">
+            <Transition
+                enter-active-class="transition-opacity duration-200 ease-in-out"
+                leave-active-class="transition-opacity duration-200 ease-in-out"
+                enter-from-class="opacity-0"
+                leave-to-class="opacity-0">
+                <div
+                    v-if="namingModalOpen"
+                    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    @click="namingModalOpen = false"
+                    @keydown.escape="namingModalOpen = false">
+                    <div
+                        class="bg-secondary border-line w-full max-w-md rounded-lg border p-5"
+                        role="dialog"
+                        aria-modal="true"
+                        :aria-label="t('settings.subtitleOutput.naming')"
+                        data-test="naming-modal"
+                        @click.stop>
+                        <div class="mb-4 flex items-center gap-2.5">
+                            <h2 class="text-[15px] font-semibold">
+                                {{ t('settings.subtitleOutput.naming') }}
+                            </h2>
+                            <button
+                                type="button"
+                                class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                                data-test="naming-cancel"
+                                @click="namingModalOpen = false">
+                                {{ t('common.close') }}
+                            </button>
+                        </div>
+
+                        <label class="text-secondary-content mb-1.5 block text-xs" for="naming-template-input">
+                            {{ t('settings.subtitleOutput.namingTemplateLabel') }}
+                        </label>
+                        <input
+                            id="naming-template-input"
+                            v-model="namingDraft"
+                            type="text"
+                            class="border-line bg-primary text-primary-content mono w-full rounded-md border px-2.5 py-1.5 text-[13px] outline-none"
+                            :placeholder="DEFAULT_NAMING_TEMPLATE"
+                            data-test="naming-input" />
+                        <p class="text-secondary-content mt-2 text-[11.5px] leading-relaxed">
+                            {{ t('settings.subtitleOutput.namingVars') }}
+                        </p>
+                        <p v-if="!namingDraftValid" class="text-danger mt-2 text-xs" data-test="naming-error">
+                            {{ t('settings.subtitleOutput.namingRequired') }}
+                        </p>
+
+                        <div class="mt-4 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors"
+                                data-test="naming-cancel-secondary"
+                                @click="namingModalOpen = false">
+                                {{ t('common.close') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="!namingDraftValid"
+                                data-test="naming-save"
+                                @click="saveNaming">
+                                {{ t('common.saved') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </Transition>
+        </Teleport>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { INPUT_VALIDATION_TYPE, SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
@@ -126,6 +204,39 @@ const removeLanguageTag = bound(SETTINGS.REMOVE_LANGUAGE_TAG)
 const useSubtitleTagging = computed(() => (settingsStore.getSetting(SETTINGS.USE_SUBTITLE_TAGGING) as string) ?? 'false')
 const useSubtitleTaggingModel = bound(SETTINGS.USE_SUBTITLE_TAGGING)
 const subtitleTag = bound(SETTINGS.SUBTITLE_TAG, 'subtitleTag')
+
+// ── 命名模板(真实设置 subtitle_naming_template)──────────────────
+/// 必须与服务端 SettingKeys.Translation.DefaultSubtitleNamingTemplate 一致
+const DEFAULT_NAMING_TEMPLATE = '{原名}.{语言}'
+
+const namingTemplate = computed(
+    () =>
+        (settingsStore.getSetting(SETTINGS.SUBTITLE_NAMING_TEMPLATE) as string | undefined)?.trim() ||
+        DEFAULT_NAMING_TEMPLATE
+)
+
+/// 行文案 = 模板渲染预览 + 输出示例扩展名 + 写回位置说明
+const namingPreview = computed(
+    () => `${namingTemplate.value}.srt · ${t('settings.subtitleOutput.namingSuffix')}`
+)
+
+const namingModalOpen = ref(false)
+const namingDraft = ref('')
+
+const namingDraftValid = computed(() => namingDraft.value.trim().length > 0)
+
+function openNamingEdit(): void {
+    namingDraft.value = namingTemplate.value
+    namingModalOpen.value = true
+}
+
+async function saveNaming(): Promise<void> {
+    if (!namingDraftValid.value) return
+    await settingsStore.updateSetting(SETTINGS.SUBTITLE_NAMING_TEMPLATE, namingDraft.value.trim(), true)
+    namingModalOpen.value = false
+    toastStore.push({ message: t('common.saved'), type: 'success' })
+}
+
 const validationEnabled = bound(SETTINGS.SUBTITLE_VALIDATION_ENABLED)
 const minDurationMs = bound(SETTINGS.SUBTITLE_VALIDATION_MINDURATIONMS, 'minDurationMs')
 const maxDurationSecs = bound(SETTINGS.SUBTITLE_VALIDATION_MAXDURATIONSECS, 'maxDurationSecs')

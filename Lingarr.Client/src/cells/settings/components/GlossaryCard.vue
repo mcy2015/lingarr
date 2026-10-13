@@ -5,6 +5,21 @@
             <h2 class="text-[13px] font-semibold">{{ t('settings.glossary.title') }}</h2>
             <span class="chip">{{ t('settings.glossary.count', { count: entries.length }) }}</span>
             <span class="flex-1"></span>
+            <!-- CSV 导入(原型 screen-06 C):隐藏 file input,真解析真提交 -->
+            <input
+                ref="csvInput"
+                type="file"
+                accept=".csv,text/csv"
+                class="hidden"
+                data-test="glossary-csv-input"
+                @change="onCsvPicked" />
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                data-test="glossary-import"
+                @click="csvInput?.click()">
+                {{ t('settings.glossary.import') }}
+            </button>
             <button
                 type="button"
                 class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
@@ -114,6 +129,7 @@ import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { glossaryService } from '@/cells/app/api/glossaryService'
 import { useToastStore } from '@/cells/app/stores/toast'
+import { parseGlossaryCsv } from '@/cells/settings/services/glossaryCsv'
 import { ITranslationGlossary } from '@/types'
 
 const { t } = useI18n()
@@ -122,11 +138,51 @@ const glossaryApi = glossaryService(axios)
 
 const entries = ref<ITranslationGlossary[]>([])
 const editing = ref<Pick<ITranslationGlossary, 'id' | 'sourceTerm' | 'targetTerm' | 'isLocked'> | null>(null)
+const csvInput = ref<HTMLInputElement | null>(null)
 
 onMounted(refresh)
 
 async function refresh(): Promise<void> {
     entries.value = await glossaryApi.getAll()
+}
+
+/// CSV 导入:解析(畸形行跳过计数)→ bulk 提交 → toast 汇总 → 刷新列表。
+async function onCsvPicked(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    // reset so picking the same file again re-fires change
+    input.value = ''
+    if (!file) return
+
+    let parsed
+    try {
+        parsed = parseGlossaryCsv(await file.text())
+    } catch {
+        toastStore.push({ message: t('settings.glossary.importFailed'), type: 'error' })
+        return
+    }
+
+    if (parsed.entries.length === 0) {
+        toastStore.push({
+            message: t('settings.glossary.importResult', { imported: 0, skipped: parsed.skipped }),
+            type: 'info'
+        })
+        return
+    }
+
+    try {
+        const result = await glossaryApi.bulkImport(parsed.entries)
+        toastStore.push({
+            message: t('settings.glossary.importResult', {
+                imported: result.imported,
+                skipped: parsed.skipped + result.skipped
+            }),
+            type: 'success'
+        })
+        await refresh()
+    } catch {
+        toastStore.push({ message: t('settings.glossary.importFailed'), type: 'error' })
+    }
 }
 
 function startCreate(): void {

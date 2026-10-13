@@ -311,7 +311,7 @@ public class TranslationJob
         {
             var targetLanguage = removeLanguageTag ? "" : translationRequest.TargetLanguage;
 
-            var outputPath = _subtitleService.CreateFilePath(
+            var outputPath = await _subtitleService.CreateFilePath(
                 translationRequest.SubtitleToTranslate,
                 targetLanguage,
                 subtitleTag);

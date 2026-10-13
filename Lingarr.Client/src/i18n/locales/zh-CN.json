@@ -516,17 +516,6 @@
             "noOptionsReturned": "未返回任何选项。",
             "optionsLoadError": "加载选项出错,请重试。"
         },
-        "sourceAndTarget": {
-            "title": "源语言与目标语言",
-            "description": "选择源语言和目标语言,翻译请求会同时使用这两者。",
-            "errorTitle": "获取语言列表出错",
-            "errorMessage": "获取语言列表时发生未知错误,请确认已正确设置 API 密钥。",
-            "sourceLanguages": "源语言:",
-            "targetLanguages": "目标语言:",
-            "fallbackHintPrefix": "如果没有已配置的服务支持该语言代码,该语言将回退到最接近的可用变体(例如",
-            "fallbackHintMiddle": "可能会解析为中性的",
-            "fallbackHintSuffix": ")。"
-        },
         "webhook": {
             "title": "Webhook",
             "description": "在 Radarr 和 Sonarr 中配置 Webhook,以便在添加新媒体时自动触发翻译。",
@@ -830,7 +819,10 @@
             "locked": "锁定",
             "hint": "提示",
             "delete": "删除",
-            "saveFailed": "保存术语失败。"
+            "saveFailed": "保存术语失败。",
+            "import": "导入 CSV",
+            "importResult": "导入 {imported} 条 · 跳过 {skipped} 条",
+            "importFailed": "导入术语失败。"
         },
         "languagePolicy": {
             "title": "语言策略",
@@ -841,7 +833,15 @@
             "unknownCount": "{count} 个未知",
             "chainEmpty": "链上无服务。",
             "loading": "正在获取语言表…",
-            "noPairs": "配置源语言与目标语言后可见覆盖情况。"
+            "noPairs": "配置源语言与目标语言后可见覆盖情况。",
+            "targets": "目标语言",
+            "sources": "源语言白名单",
+            "edit": "编辑",
+            "empty": "未配置",
+            "codesField": "逗号分隔的 ISO 语言码",
+            "variantHint": "地区变体按根语言回退匹配:en-US 会按 en 匹配。",
+            "required": "请至少填写一个语言码。",
+            "coverageDerived": "派生只读 · 随回退链增删实时重算"
         },
         "fallback": {
             "title": "回退顺序",
@@ -883,7 +883,11 @@
         "subtitleOutput": {
             "title": "字幕输出",
             "naming": "文件命名",
-            "namingHint": "{'{'}原名{'}'}.{'{'}语言{'}'}.srt · 与媒体同目录写回"
+            "edit": "编辑",
+            "namingTemplateLabel": "命名模板",
+            "namingVars": "变量:{'{'}原名{'}'} = 清洗后的原名(剥离字幕/语言段)· {'{'}语言{'}'} = 目标语言标记",
+            "namingSuffix": "与媒体同目录写回",
+            "namingRequired": "命名模板不能为空。"
         },
         "system": {
             "title": "系统",

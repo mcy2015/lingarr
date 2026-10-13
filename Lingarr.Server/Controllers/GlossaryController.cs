@@ -1,6 +1,7 @@
 using Lingarr.Core.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Lingarr.Server.Models.Api;
 using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Controllers;
@@ -34,6 +35,18 @@ public class GlossaryController : ControllerBase
         }
 
         return Ok(await _glossaryService.FindHits(text));
+    }
+
+    /// <summary>
+    /// CSV glossary import (prototype screen-06 C「导入 CSV」): each row is
+    /// validated; valid rows are upserted (duplicate source terms follow the
+    /// existing update semantics), invalid rows and in-batch duplicates are
+    /// skipped and reported in the counts.
+    /// </summary>
+    [HttpPost("bulk")]
+    public async Task<ActionResult<GlossaryBulkResult>> BulkImport([FromBody] GlossaryBulkRequest request)
+    {
+        return Ok(await _glossaryService.BulkImport(request));
     }
 
     [HttpPost]
