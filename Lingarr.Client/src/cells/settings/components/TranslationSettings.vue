@@ -1,7 +1,7 @@
 <template>
     <!-- ═══ 请求与重试行式卡(原型 screen-06 A 组 setlist 形态):批量/超时/
          重试/退避全量保留,自 ServicesPage 平铺卡片迁为行式。 -->
-    <div class="border-line bg-secondary max-w-[640px] rounded-md border" data-test="requests-card">
+    <div class="border-line bg-secondary rounded-md border" data-test="requests-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.requests.title') }}</h2>
             <span class="text-secondary-content ml-auto text-[11px]">

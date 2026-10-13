@@ -2,7 +2,7 @@
     <!-- ═══ 回退顺序卡(原型 screen-06 A 组 .fb-row 形态):service_type
          JSON 数组的唯一编辑点 —— ↑↓/移除/添加全部写回数组,首位即默认服务。
          langcap chip 三态只读派生(GET /api/translate/languages/{serviceType})。 -->
-    <div class="border-line bg-secondary max-w-[640px] rounded-md border" data-test="fallback-card">
+    <div class="border-line bg-secondary rounded-md border" data-test="fallback-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.fallback.title') }}</h2>
             <span class="text-secondary-content ml-auto text-[11px]">

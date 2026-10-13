@@ -161,14 +161,14 @@
         </div>
 
         <!-- ═══ 回退顺序卡(A2):service_type 数组唯一编辑点 ═══ -->
-        <FallbackOrderCard :health="health" class="px-4" />
+        <FallbackOrderCard :health="health" class="mx-4" />
 
         <!-- ═══ 请求与重试(A3):批量/超时/重试/重试退避,全量保留(行式卡) ═══ -->
-        <TranslationSettings class="px-4" />
+        <TranslationSettings class="mx-4" />
 
         <!-- ═══ 外部插件收纳行(A3):计数 + 下钻保留页面 ═══ -->
         <div
-            class="border-line bg-secondary mx-4 flex max-w-[640px] flex-wrap items-center gap-2.5 rounded-md border px-4 py-3">
+            class="border-line bg-secondary mx-4 flex flex-wrap items-center gap-2.5 rounded-md border px-4 py-3">
             <b class="text-[13px] font-semibold">{{ t('settings.providers.externalPlugins') }}</b>
             <span
                 v-if="pluginsLoaded"
