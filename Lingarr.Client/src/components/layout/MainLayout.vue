@@ -85,7 +85,7 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useSignalR } from '@/composables/useSignalR'
+import { useSignalR } from '@/cells/app/composables/useSignalR'
 import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useInstanceStore } from '@/cells/app/stores/instance'

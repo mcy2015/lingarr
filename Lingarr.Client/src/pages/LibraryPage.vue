@@ -197,12 +197,14 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import axios from 'axios'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import NoMediaNotification from '@/components/common/NoMediaNotification.vue'
 import PaginationComponent from '@/cells/kernel/components/PaginationComponent.vue'
 import services from '@/services'
+import { statisticsService } from '@/cells/app/api/statisticsService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useTranslateStore } from '@/store/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -219,6 +221,8 @@ import {
 } from '@/types'
 
 const VISIBLE_TRACKS = 4
+
+const statisticsApi = statisticsService(axios)
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -352,7 +356,7 @@ onMounted(async () => {
     void fetchLibrary()
     // toolbar stats: pipeline missing count + live in-progress count
     const [pipeline, counts] = await Promise.allSettled([
-        services.statistics.getPipelineStatistics(),
+        statisticsApi.getPipelineStatistics(),
         services.translationRequest.statusCounts()
     ])
     if (pipeline.status === 'fulfilled') missingCount.value = pipeline.value.missingSubtitles

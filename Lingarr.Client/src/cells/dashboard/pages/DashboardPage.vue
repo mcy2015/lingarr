@@ -131,10 +131,12 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import TranslationProgress from '@/components/common/TranslationProgress.vue'
+import axios from 'axios'
+import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
 import services from '@/services'
+import { statisticsService } from '@/cells/app/api/statisticsService'
 import { useUiStore } from '@/cells/app/stores/ui'
-import { useSignalR } from '@/composables/useSignalR'
+import { useSignalR } from '@/cells/app/composables/useSignalR'
 import {
     IPagedResult,
     IPipelineStatistics,
@@ -146,6 +148,8 @@ import {
 } from '@/types'
 
 const REFRESH_INTERVAL_MS = 30_000
+
+const statisticsApi = statisticsService(axios)
 
 const { t, locale } = useI18n()
 const signalR = useSignalR()
@@ -319,7 +323,7 @@ const updateSub = (): void => {
 }
 const fetchOverview = async (): Promise<void> => {
     const [pipelineResult, countsResult, activeResult, healthResult, eventsResult] = await Promise.allSettled([
-        services.statistics.getPipelineStatistics(),
+        statisticsApi.getPipelineStatistics(),
         services.translationRequest.statusCounts(),
         services.translationRequest.requests<IPagedResult<ITranslationRequest>>(
             1,

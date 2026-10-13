@@ -25,7 +25,7 @@ const routes: RouteRecordRaw[] = [
         children: [
             {
                 path: '',
-                component: () => import('@/pages/DashboardPage.vue'),
+                component: () => import('@/cells/dashboard/pages/DashboardPage.vue'),
                 name: 'dashboard'
             },
             {

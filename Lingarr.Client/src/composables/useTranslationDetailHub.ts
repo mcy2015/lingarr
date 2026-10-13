@@ -1,6 +1,6 @@
 import { onUnmounted, ref } from 'vue'
 import { Hub, ILineProofread, ILineTranslated, IRequestProgress } from '@/types'
-import { useSignalR } from '@/composables/useSignalR'
+import { useSignalR } from '@/cells/app/composables/useSignalR'
 
 const HUB_NAME = 'TranslationRequests'
 const HUB_URL = '/signalr/TranslationRequests'

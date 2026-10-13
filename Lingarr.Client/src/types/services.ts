@@ -23,10 +23,8 @@ export interface Services {
     import: IImportService
     translate: ITranslateService
     translationRequest: ITranslationRequestService
-    version: IVersionService
     media: IMediaService
     directory: IDirectoryService
-    statistics: IStatisticsService
     glossary: IGlossaryService
 }
 

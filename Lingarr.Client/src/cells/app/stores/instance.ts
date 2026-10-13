@@ -4,11 +4,12 @@ import { IUseInstanceStore, ITheme, THEMES, IMovie, IShow, IVersion } from '@/ty
 import { useLocalStorage } from '@/cells/kernel/composables/useLocalStorage'
 import { settingService } from '@/cells/app/api/settingService'
 import { authService } from '@/cells/app/api/authService'
-import services from '@/services'
+import { versionService } from '@/cells/app/api/versionService'
 
 const localStorage = useLocalStorage()
 const settingApi = settingService(axios)
 const authApi = authService(axios)
+const versionApi = versionService(axios)
 
 export const useInstanceStore = defineStore('instance', {
     state: (): IUseInstanceStore => ({
@@ -57,7 +58,7 @@ export const useInstanceStore = defineStore('instance', {
         },
         async applyVersionOnLoad(): Promise<void> {
             let version = localStorage.getItem<IVersion>('version')
-            version = (await services.version.getVersion<IVersion>()) ?? version
+            version = (await versionApi.getVersion<IVersion>()) ?? version
             this.setVersion(version)
         },
         setVersion(version: IVersion): void {

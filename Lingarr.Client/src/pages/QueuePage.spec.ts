@@ -48,7 +48,7 @@ const signalrMocks = vi.hoisted(() => {
     return { hub, connect: vi.fn((): Promise<typeof hub> => Promise.resolve(hub)) }
 })
 
-vi.mock('@/composables/useSignalR', () => ({
+vi.mock('@/cells/app/composables/useSignalR', () => ({
     useSignalR: () => ({ state: { hubs: {} }, connect: signalrMocks.connect })
 }))
 
