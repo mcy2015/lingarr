@@ -1,105 +1,94 @@
 ﻿<template>
-    <div class="bg-secondary w-full p-4">
-        <div class="border-line bg-primary text-secondary-content mb-4 border-b-2 font-bold">
-            <div class="flex items-center justify-between px-4 py-3">
-                <h1 class="text-xl">{{ t('settings.logs.title') }}</h1>
-                <div class="flex items-center space-x-3">
-                    <!-- Filters -->
-                    <div class="flex items-center space-x-4">
-                        <select
-                            v-model="filterOptions.logLevel"
-                            class="border-line bg-tertiary text-primary-content rounded border px-2 py-1 text-sm">
-                            <option value="all">{{ t('settings.logs.allLevels') }}</option>
-                            <option value="information">
-                                {{ t('settings.logs.information') }}
-                            </option>
-                            <option value="warning">{{ t('settings.logs.warning') }}</option>
-                            <option value="error">{{ t('settings.logs.error') }}</option>
-                        </select>
-                    </div>
-
-                    <div class="flex space-x-2">
-                        <button
-                            class="hover:bg-accent/80 bg-accent cursor-pointer rounded px-3 py-1 text-sm font-medium text-accent-content transition"
-                            @click="exportLogs">
-                            {{ t('settings.logs.export') }}
-                        </button>
-                        <button
-                            class="bg-warning hover:bg-warning/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-warning-content transition"
-                            @click="toggleAutoScroll">
-                            {{
-                                autoScroll
-                                    ? t('settings.logs.disableAutoScroll')
-                                    : t('settings.logs.enableAutoScroll')
-                            }}
-                        </button>
-                        <button
-                            class="bg-danger hover:bg-danger/80 cursor-pointer rounded px-3 py-1 text-sm font-medium text-danger-content transition"
-                            @click="clearLogs">
-                            {{ t('settings.logs.clear') }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div
-            class="border-line bg-primary text-secondary-content grid grid-cols-12 border-b-2 font-bold">
-            <div class="col-span-1 px-4 py-2">{{ t('settings.logs.time') }}</div>
-            <div class="col-span-1 px-4 py-2">{{ t('settings.logs.level') }}</div>
-            <div class="col-span-3 px-4 py-2">{{ t('settings.logs.source') }}</div>
-            <div class="col-span-5 px-4 py-2 md:col-span-7">{{ t('settings.logs.message') }}</div>
-        </div>
-
-        <div
-            ref="logContainer"
-            class="bg-primary text-primary-content h-[70vh] overflow-y-auto font-mono text-sm">
-            <div v-if="filteredLogs.length === 0" class="flex h-full items-center justify-center">
-                <div class="text-center text-secondary-content/60">
-                    <div class="mb-2 text-lg">📋</div>
-                    <div>{{ t('settings.logs.waiting') }}</div>
-                </div>
-            </div>
-
-            <!-- Log Entries -->
-            <div v-for="(log, index) in filteredLogs" :key="index" class="log-entry">
+    <!-- ═══ 日志下钻屏(原型 screen-11):pb-head(级别过滤 chips + 自动滚动
+         switch + 清空次级动作)+ 日志卡(滚动收进卡内)。全部逻辑(SSE 流、
+         级别过滤、导出、清空、自动滚动)沿用原有实现,仅模板层重排。 -->
+    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
+        <PbHead
+            :back-to="{ name: 'settings-system' }"
+            :back-label="t('settings.menu.groups.system')"
+            :title="t('settings.logs.heading')"
+            :sub="t('settings.logs.subLine')">
+            <template #actions>
                 <div
-                    class="hover:bg-secondary/20 border-line/60 grid grid-cols-12 border-b py-2 transition-colors">
-                    <div class="col-span-1 px-4 text-secondary-content/60">
-                        {{ formatTime(log.timestamp) }}
-                    </div>
-                    <div class="col-span-1 px-4">
+                    class="border-line bg-secondary inline-flex overflow-hidden rounded-md border"
+                    role="group"
+                    :aria-label="t('settings.logs.levelFilter')">
+                    <button
+                        v-for="chip in levelChips"
+                        :key="chip.value"
+                        type="button"
+                        class="mono cursor-pointer border-r border-line px-2 py-1 text-[11px] transition-colors last:border-r-0"
+                        :class="
+                            filterOptions.logLevel === chip.value
+                                ? 'bg-accent text-accent-content'
+                                : 'text-secondary-content hover:bg-tertiary hover:text-primary-content'
+                        "
+                        :aria-pressed="filterOptions.logLevel === chip.value"
+                        :data-test="`log-chip-${chip.value}`"
+                        @click="filterOptions.logLevel = chip.value">
+                        {{ chip.label }} {{ chip.count }}
+                    </button>
+                </div>
+                <label
+                    class="text-secondary-content ml-1 flex cursor-pointer items-center gap-2 text-[12.5px]">
+                    {{ t('settings.logs.autoScrollLabel') }}
+                    <ToggleButton v-model="autoScroll" size="small" />
+                </label>
+                <button
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                    data-test="log-clear"
+                    @click="clearLogs">
+                    {{ t('settings.logs.clear') }}
+                </button>
+            </template>
+        </PbHead>
+
+        <div
+            class="border-line bg-secondary flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border">
+            <div
+                ref="logContainer"
+                class="shell-scroll mono min-h-0 flex-1 overflow-y-auto text-[11.5px] leading-relaxed"
+                data-test="log-list"
+                @scroll="onContainerScroll">
+                <div
+                    v-if="filteredLogs.length === 0"
+                    class="text-secondary-content/60 flex h-full items-center justify-center p-6 text-center">
+                    {{ t('settings.logs.waiting') }}
+                </div>
+
+                <!-- Log entries: three mono columns (time / level / message),
+                     single-line ellipsis on the message; warn/err rows tint
+                     the whole message cell (prototype .warnrow/.errrow). -->
+                <div v-for="(log, index) in filteredLogs" :key="index" class="log-entry">
+                    <div
+                        class="hover:bg-tertiary/50 grid grid-cols-[70px_46px_1fr] items-baseline gap-x-2 border-b border-line/60 py-1 pr-3 pl-2 transition-colors"
+                        :data-lv="levelKey(log.logLevel)">
+                        <time class="text-secondary-content/60 shrink-0 tabular-nums">
+                            {{ formatTime(log.timestamp) }}
+                        </time>
+                        <span class="shrink-0 font-semibold" :class="levelClass(log.logLevel)">
+                            {{ levelShort(log.logLevel) }}
+                        </span>
                         <span
-                            :class="getLogLevelBadgeClass(log.logLevel)"
-                            class="rounded px-2 py-1 text-xs font-medium">
-                            {{ log.logLevel.toUpperCase() }}
+                            class="min-w-0 truncate"
+                            :class="rowClass(log.logLevel)"
+                            :title="log.message">
+                            <span
+                                v-if="log.formattedSource"
+                                class="text-secondary-content/70 mr-1.5">
+                                {{ log.formattedSource }}
+                            </span>
+                            <span v-html="formatLogMessage(log.message)"></span>
                         </span>
                     </div>
-                    <div class="col-span-3 px-4 text-info">
-                        {{ log.formattedSource }}
-                    </div>
+
                     <div
-                        class="col-span-5 px-4 md:col-span-7"
-                        v-html="formatLogMessage(log.message)"></div>
+                        v-if="log.stackTrace"
+                        class="border-line/60 bg-danger/5 border-b py-1 pr-3 pl-2 text-xs text-danger/90">
+                        <pre class="whitespace-pre-wrap">{{ log.stackTrace }}</pre>
+                    </div>
                 </div>
-
-                <div
-                    v-if="log.stackTrace"
-                    class="border-line/60 bg-danger/5 ml-6 border-b py-2 pr-4 pl-12 text-xs text-danger/90">
-                    <pre class="whitespace-pre-wrap">{{ log.stackTrace }}</pre>
-                </div>
-            </div>
-        </div>
-
-        <!-- Footer Stats -->
-        <div
-            class="border-line bg-primary text-secondary-content mt-4 flex justify-between border-t-2 px-4 py-2 text-sm">
-            <div>{{ t('settings.logs.totalEntries', { count: filteredLogs.length }) }}</div>
-            <div>
-                {{ t('settings.logs.autoScroll') }}
-                <span :class="autoScroll ? 'text-success' : 'text-danger'">
-                    {{ autoScroll ? t('settings.status.enabled') : t('settings.status.disabled') }}
-                </span>
             </div>
         </div>
     </div>
@@ -111,10 +100,14 @@ import { useI18n } from 'vue-i18n'
 import { ILogEntry, IFilterOptions } from '@/types'
 import { logsService } from '@/cells/settings/services/logsService'
 import { formatDate, formatTime } from '@/cells/app/utils/date'
+import PbHead from '@/cells/app/components/PbHead.vue'
+import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
+import { useUiStore } from '@/cells/app/stores/ui'
 
 const logsApi = logsService()
 
 const { t } = useI18n()
+const uiStore = useUiStore()
 const logs = ref<ILogEntry[]>([])
 const autoScroll = ref(true)
 const logContainer = ref<HTMLElement | null>(null)
@@ -123,17 +116,63 @@ const filterOptions = ref<IFilterOptions>({
 })
 let eventSource: EventSource | null = null
 
+const levelKey = (level: string): string => {
+    const lower = level.toLowerCase()
+    if (lower.startsWith('err')) return 'error'
+    if (lower.startsWith('warn')) return 'warning'
+    if (lower.startsWith('inf')) return 'information'
+    return lower
+}
+
+const levelCount = (level: string): number =>
+    logs.value.filter((log) => levelKey(log.logLevel) === level).length
+
+/// Level chips (prototype .chips): counts are computed client-side from the
+/// streamed entries; entries outside the three buckets only count in "all".
+const levelChips = computed(() => [
+    {
+        value: 'all',
+        label: t('settings.logs.chipAll'),
+        count: logs.value.length
+    },
+    { value: 'information', label: 'INFO', count: levelCount('information') },
+    { value: 'warning', label: 'WARN', count: levelCount('warning') },
+    { value: 'error', label: 'ERROR', count: levelCount('error') }
+])
+
 const filteredLogs = computed(() => {
     return logs.value.filter((log) => {
         if (filterOptions.value.logLevel !== 'all') {
-            const logLevel = log.logLevel.toLowerCase()
-            if (logLevel !== filterOptions.value.logLevel.toLowerCase()) {
+            if (levelKey(log.logLevel) !== filterOptions.value.logLevel) {
                 return false
             }
         }
         return true
     })
 })
+
+const levelShort = (level: string): string => {
+    const key = levelKey(level)
+    if (key === 'error') return 'ERR'
+    if (key === 'warning') return 'WRN'
+    if (key === 'information') return 'INF'
+    return level.slice(0, 3).toUpperCase()
+}
+
+const levelClass = (level: string): string => {
+    const key = levelKey(level)
+    if (key === 'error') return 'text-danger'
+    if (key === 'warning') return 'text-warning'
+    if (key === 'information') return 'text-info'
+    return 'text-secondary-content'
+}
+
+const rowClass = (level: string): string => {
+    const key = levelKey(level)
+    if (key === 'error') return 'text-danger'
+    if (key === 'warning') return 'text-warning'
+    return 'text-primary-content'
+}
 
 const formatLogMessage = (message: string): string => {
     // Replace color tags
@@ -151,14 +190,6 @@ const formatLogMessage = (message: string): string => {
     return formattedMessage
 }
 
-const getLogLevelBadgeClass = (level: string): string => {
-    const levelLower = level.toLowerCase()
-    if (levelLower.includes('error')) return 'bg-danger/20 text-danger'
-    if (levelLower.includes('warning')) return 'bg-warning/20 text-warning'
-    if (levelLower.includes('information')) return 'bg-info/20 text-info'
-    return 'bg-tertiary text-secondary-content'
-}
-
 const scrollToBottom = async () => {
     if (autoScroll.value && logContainer.value) {
         await nextTick()
@@ -166,10 +197,16 @@ const scrollToBottom = async () => {
     }
 }
 
-const toggleAutoScroll = () => {
-    autoScroll.value = !autoScroll.value
-    if (autoScroll.value) {
-        scrollToBottom()
+/// Prototype screen-11: while auto-scroll is on, the view follows new
+/// entries; scrolling up to read pauses the follow (the switch reflects it).
+const onContainerScroll = () => {
+    if (!autoScroll.value || !logContainer.value) return
+    const distanceFromBottom =
+        logContainer.value.scrollHeight -
+        logContainer.value.scrollTop -
+        logContainer.value.clientHeight
+    if (distanceFromBottom > 40) {
+        autoScroll.value = false
     }
 }
 
@@ -177,6 +214,8 @@ const clearLogs = () => {
     logs.value = []
 }
 
+/// Export follows the current level filter (frozen semantics: the CTA
+/// downloads what is on screen, not the hidden rows).
 const exportLogs = () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const filename = `system-logs-${timestamp}.txt`
@@ -217,6 +256,10 @@ watch(
 )
 
 onMounted(() => {
+    // topbar CTA (prototype act table): ⇩ export of the filtered view
+    uiStore.registerCta(t('settings.logs.exportCta'), exportLogs)
+    uiStore.setSubOverride(t('settings.logs.topbarSub'))
+
     eventSource = logsApi.getStream()
 
     eventSource.onmessage = (event) => {
@@ -266,6 +309,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+    uiStore.clearCta()
+    uiStore.setSubOverride('')
     if (eventSource) {
         eventSource.close()
         eventSource = null

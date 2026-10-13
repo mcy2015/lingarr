@@ -54,6 +54,15 @@
                         @click="testConnection(card.provider)">
                         {{ testing[card.provider] ? t('settings.providers.testing') : t('settings.providers.test') }}
                     </button>
+                    <!-- 请求模版下钻入口(原型 screen-06/10):仅支持模版的服务显示 -->
+                    <button
+                        v-if="card.configured && templatedProviders.has(card.provider)"
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                        :data-test="`tpl-entry-${card.provider}`"
+                        @click="router.push({ name: 'request-template', params: { service: card.provider } })">
+                        {{ t('settings.providers.requestTemplate') }}
+                    </button>
                     <button
                         v-if="!isDefault(card.provider) && card.configured"
                         type="button"
@@ -98,20 +107,36 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import ServicesPage from './ServicesPage.vue'
 import PluginsPage from './PluginsPage.vue'
 import { translateService } from '@/cells/app/api/translateService'
+import { pluginService } from '@/cells/settings/services/pluginService'
 import { useSettingStore } from '@/cells/app/stores/setting'
-import { ITranslationServiceHealth, ITranslationTestResponse, SETTINGS } from '@/types'
+import {
+    ITranslationServiceHealth,
+    ITranslationTestResponse,
+    IPluginSummary,
+    SETTINGS
+} from '@/types'
 
 const translateApi = translateService(axios)
+const pluginApi = pluginService(axios)
 
+const router = useRouter()
 const { t, locale } = useI18n()
 const settingStore = useSettingStore()
 
 const health = ref<ITranslationServiceHealth[]>([])
+const plugins = ref<IPluginSummary[]>([])
 const expanded = ref(false)
+
+/// Providers whose request template is editable (drill-down screen 10);
+/// drives the「请求模版」entry on the provider card.
+const templatedProviders = computed(
+    () => new Set(plugins.value.filter((p) => p.hasRequestTemplate).map((p) => p.provider))
+)
 
 // ── 主动测试连接(原型 screen-06 .test-res)──────────────────────
 const testing = reactive<Record<string, boolean>>({})
@@ -166,6 +191,11 @@ onMounted(async () => {
         health.value = await translateApi.getHealth()
     } catch {
         // the forms below still work without the health glance
+    }
+    try {
+        plugins.value = await pluginApi.list()
+    } catch {
+        // the template entry simply stays hidden without the plugin list
     }
 })
 

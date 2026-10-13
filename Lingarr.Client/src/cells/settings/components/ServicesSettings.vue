@@ -107,7 +107,7 @@
                         size="md"
                         @click="
                             router.push({
-                                name: 'request-template-settings',
+                                name: 'request-template',
                                 params: { service: services[configuringIndex] }
                             })
                         ">

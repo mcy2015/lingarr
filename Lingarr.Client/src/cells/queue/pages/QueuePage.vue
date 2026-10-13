@@ -69,15 +69,17 @@
             <div
                 v-for="item in translationRequests.items"
                 :key="item.id"
-                class="border-line hover:bg-accent/5 relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-b py-2.5 pl-3 pr-4 transition-colors md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_120px_auto] md:gap-4"
-                :style="{ borderLeft: '3px solid ' + statusColor(item.status) }">
+                class="border-line hover:bg-accent/5 relative flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-b py-2.5 pl-3 pr-4 transition-colors md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_120px_auto] md:gap-4"
+                :style="{ borderLeft: '3px solid ' + statusColor(item.status) }"
+                :data-test="`queue-row-${item.id}`"
+                @click="openDetail(item)">
                 <!-- 标题块：标题 + 徽章 + 副行（原型风格：语言对/状态信息内联） -->
                 <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                    <CheckboxComponent
-                        v-if="isSelectMode"
-                        class="shrink-0"
-                        :model-value="isSelected(item)"
-                        @change="toggleSelect(item)" />
+                    <span v-if="isSelectMode" class="flex shrink-0" @click.stop>
+                        <CheckboxComponent
+                            :model-value="isSelected(item)"
+                            @change="toggleSelect(item)" />
+                    </span>
                     <span class="text-primary-content truncate font-medium" :title="item.title">
                         {{ item.title }}
                     </span>
@@ -169,7 +171,7 @@
                 </div>
 
                 <!-- 操作 -->
-                <div class="flex items-center justify-end gap-1">
+                <div class="flex items-center justify-end gap-1" @click.stop>
                     <TranslationAction
                         :item="item"
                         :on-action="(action) => handleAction(item, action)" />
@@ -204,6 +206,8 @@ import { useSignalR } from '@/cells/app/composables/useSignalR'
 import { useSelection } from '@/cells/kernel/composables/useSelection'
 import { usePagedList } from '@/cells/queue/composables/usePagedList'
 import { formatDateTime } from '@/cells/app/utils/date'
+import { formatClock, remainingMs } from '@/cells/app/utils/eta'
+import { useToastStore } from '@/cells/app/stores/toast'
 import PaginationComponent from '@/cells/kernel/components/PaginationComponent.vue'
 import ListToolbar from '@/cells/kernel/components/ListToolbar.vue'
 import TranslationStatus from '@/cells/queue/components/TranslationStatus.vue'
@@ -218,9 +222,16 @@ const translationRequestApi = translationRequestService(axios)
 const signalR = useSignalR()
 const hubConnection = ref<Hub>()
 const translationRequestStore = useTranslationRequestStore()
+const toastStore = useToastStore()
 const { t } = useI18n()
 const router = useRouter()
 const uiStore = useUiStore()
+
+/// 整行点击 → 任务详情(原型 screen-03 交互 2);行内按钮与选择模式的
+/// checkbox 区已在模板层 @click.stop 排除冒泡。
+const openDetail = (item: ITranslationRequest): void => {
+    router.push({ name: 'queue-detail', params: { id: item.id } })
+}
 
 // computed so tab labels re-resolve when the locale changes
 const statusTabs = computed(() => [
@@ -249,18 +260,13 @@ const statusColor = (status: string): string => {
     }
 }
 
-// linear ETA: elapsed / progress * remaining; only meaningful with a start
-// time and some progress, otherwise falls back to the plain percentage
+// linear ETA (prototype: same extrapolation as the request detail screen —
+// shared app util); only meaningful with a start time and some progress,
+// otherwise falls back to the plain percentage
 const remainingEta = (item: ITranslationRequest): string => {
-    if (item.startedAt && item.progress > 0) {
-        const elapsed = Date.now() - new Date(item.startedAt).getTime()
-        const remaining = (elapsed / item.progress) * (100 - item.progress)
-        if (remaining > 0 && remaining < 1000 * 60 * 60 * 24) {
-            const totalSeconds = Math.round(remaining / 1000)
-            const minutes = Math.floor(totalSeconds / 60)
-            const seconds = totalSeconds % 60
-            return `${item.progress}% · ~${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-        }
+    const remaining = remainingMs(item.startedAt, item.progress)
+    if (remaining !== null) {
+        return `${item.progress}% · ~${formatClock(remaining)}`
     }
     return `${item.progress}%`
 }
@@ -312,9 +318,13 @@ async function handleAction(translationRequest: ITranslationRequest, action: TRA
     }
 }
 
-// topbar CTA (prototype): new task — translation starts in the library
+// topbar CTA (prototype): new task — translation starts in the library,
+// with the hint toast from the prototype act table (screen 03)
 onMounted(() => {
-    uiStore.registerCta(t('topbar.cta.newTask'), () => router.push({ name: 'library' }))
+    uiStore.registerCta(t('topbar.cta.newTask'), async () => {
+        toastStore.push({ message: t('topbar.cta.newTaskHint'), type: 'info' })
+        await router.push({ name: 'library' })
+    })
 })
 onUnmounted(() => {
     uiStore.clearCta()

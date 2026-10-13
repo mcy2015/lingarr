@@ -252,6 +252,56 @@ function syncJsonText() {
     jsonText.value = prettyTemplate.value
 }
 
+/// ── pb-head actions(原型 screen-10):保存 = 立即落库当前模版并按
+/// 「新批次起生效」语义 toast(JSON 模式下未保存的合法 JSON 一并冲刷);
+/// 重置 = 恢复该服务当前模版键对应的默认预设。
+const canReset = computed(() => {
+    const key = activeTemplateKey.value
+    return !!key && !!presets.value[key]
+})
+
+function save(): boolean {
+    const key = activeTemplateKey.value
+    if (!key) {
+        return false
+    }
+    if (mode.value === 'json') {
+        try {
+            const compact = JSON.stringify(JSON.parse(jsonText.value || prettyTemplate.value))
+            settingsStore.updateSetting(key, compact, true)
+        } catch (error) {
+            toastStore.push({
+                message: t('toast.template.invalidJson', {
+                    message: error instanceof Error ? error.message : String(error)
+                }),
+                type: 'error'
+            })
+            return false
+        }
+    } else {
+        settingsStore.updateSetting(key, templateValue.value, true)
+    }
+    toastStore.push({ message: t('requestTemplate.savedToast'), type: 'success' })
+    return true
+}
+
+function resetToDefault(): boolean {
+    const key = activeTemplateKey.value
+    const preset = key ? presets.value[key] : undefined
+    if (!key || !preset) {
+        return false
+    }
+    selectedPreset.value = key
+    settingsStore.updateSetting(key, preset, true)
+    if (mode.value === 'json') {
+        syncJsonText()
+    }
+    toastStore.push({ message: t('requestTemplate.resetToast'), type: 'success' })
+    return true
+}
+
+defineExpose({ save, resetToDefault, canReset })
+
 watch(mode, (newMode) => {
     if (newMode === 'json') {
         syncJsonText()

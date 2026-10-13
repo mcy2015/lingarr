@@ -42,7 +42,8 @@
             "resume": "Resume, reuse already-translated lines",
             "resumePaused": "Resume paused",
             "proofread": "Proofread, compare against the source and correct mistranslations",
-            "retry": "Retry, start over"
+            "retry": "Retry, start over",
+            "logs": "Open the system log"
         },
         "translationStatus": {
             "inProgress": "In Progress",
@@ -624,8 +625,17 @@
             "showAgeDelay": "TV Show file age delay in 'hours'"
         },
         "schedule": {
+            "heading": "Scheduled jobs",
+            "subLine": "Hangfire · {queues} queues · {jobs} recurring jobs",
+            "subLineBase": "Hangfire recurring",
+            "openPanel": "Open panel",
+            "viewQueue": "View task queue",
             "jobName": "Job Name",
+            "cron": "Cron",
             "state": "State",
+            "stateRunning": "▸ Running",
+            "stateSucceeded": "✓ Succeeded",
+            "stateNone": "—",
             "lastExecution": "Last Execution",
             "nextExecution": "Next Execution",
             "actions": "Actions",
@@ -703,6 +713,14 @@
         },
         "logs": {
             "title": "System Logs",
+            "heading": "Logs",
+            "subLine": "Ring buffer 1,000 entries · 24 h · SSE live · Information level",
+            "topbarSub": "Ring buffer 1,000 entries · SSE live",
+            "exportCta": "⇩ Export",
+            "open": "Open logs",
+            "levelFilter": "Level filter",
+            "chipAll": "All",
+            "autoScrollLabel": "Auto-scroll",
             "allLevels": "All Levels",
             "information": "Information",
             "warning": "Warning",
@@ -742,7 +760,8 @@
             "degraded": "degraded",
             "failing": "failing",
             "test": "Test connection",
-            "testing": "◐ Testing…"
+            "testing": "◐ Testing…",
+            "requestTemplate": "Request template"
         },
         "glossary": {
             "title": "Glossary",
@@ -800,6 +819,7 @@
             "import": "Import"
         },
         "detail": {
+            "heading": "Task detail",
             "status": "Status",
             "source": "Source",
             "target": "Target",
@@ -812,6 +832,20 @@
             "translatedLines": "Translated Lines",
             "service": "Service",
             "unknown": "Unknown",
+            "proofread": "Proofread",
+            "logs": "Logs",
+            "pauseAction": "⏸ Pause",
+            "resumeAction": "▶ Resume",
+            "pauseToast": "Paused #{id} · held at the batch-loop checkpoint",
+            "resumeToast": "Resumed #{id}",
+            "subLines": "{count} lines translated",
+            "subChars": "{count} chars",
+            "topbarSub": "#{id} · {progress}% · ETA {eta}",
+            "statTranslated": "Translated",
+            "statCurrentBatch": "Current batch",
+            "statCost": "Cost (est.)",
+            "statElapsed": "Running",
+            "statRemaining": "ETA",
             "editThisLine": "Edit this line",
             "proofreadThisLine": "Proofread this line",
             "editTranslation": "Edit translation",
@@ -908,9 +942,19 @@
         "cta": {
             "translateSelected": "Translate selected ▸",
             "newTask": "＋ New task",
+            "newTaskHint": "Pick items in the library to create translation tasks",
             "process": "Start processing ▸",
             "stash": "Stash"
         }
+    },
+    "requestTemplate": {
+        "title": "Request template",
+        "topbarTail": "prompt editing & live preview",
+        "reset": "Reset to default",
+        "save": "Save template",
+        "resetToast": "Reset to the default template",
+        "savedToast": "Template saved · applies to new batches",
+        "subBatch": "batch {count} lines"
     },
     "mediaDetail": {
         "back": "← Library",

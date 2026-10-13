@@ -42,7 +42,8 @@
             "resume": "继续翻译,复用已翻译的字幕行",
             "resumePaused": "恢复",
             "proofread": "校对,对照源字幕并纠正误译",
-            "retry": "重试,从头开始"
+            "retry": "重试,从头开始",
+            "logs": "打开系统日志"
         },
         "translationStatus": {
             "inProgress": "进行中",
@@ -624,8 +625,17 @@
             "showAgeDelay": "剧集文件延迟(单位:小时)"
         },
         "schedule": {
+            "heading": "定时任务",
+            "subLine": "Hangfire · {queues} 队列 · {jobs} 个 recurring 任务",
+            "subLineBase": "Hangfire recurring",
+            "openPanel": "面板",
+            "viewQueue": "查看任务队列",
             "jobName": "任务名称",
+            "cron": "Cron",
             "state": "状态",
+            "stateRunning": "▸ 运行中",
+            "stateSucceeded": "✓ 成功",
+            "stateNone": "—",
             "lastExecution": "上次执行",
             "nextExecution": "下次执行",
             "actions": "操作",
@@ -703,6 +713,14 @@
         },
         "logs": {
             "title": "系统日志",
+            "heading": "日志",
+            "subLine": "环形缓冲 1 000 条 · 24h · SSE 实时 · Information 级",
+            "topbarSub": "环形缓冲 1 000 条 · SSE 实时",
+            "exportCta": "⇩ 导出",
+            "open": "打开日志",
+            "levelFilter": "级别过滤",
+            "chipAll": "全部",
+            "autoScrollLabel": "自动滚动",
             "allLevels": "所有级别",
             "information": "信息",
             "warning": "警告",
@@ -742,7 +760,8 @@
             "degraded": "降级中",
             "failing": "故障",
             "test": "测试连接",
-            "testing": "◐ 测试中…"
+            "testing": "◐ 测试中…",
+            "requestTemplate": "请求模版"
         },
         "glossary": {
             "title": "术语表",
@@ -800,6 +819,7 @@
             "import": "导入"
         },
         "detail": {
+            "heading": "任务详情",
             "status": "状态",
             "source": "源",
             "target": "目标",
@@ -812,6 +832,20 @@
             "translatedLines": "已翻译行",
             "service": "服务",
             "unknown": "未知",
+            "proofread": "校对",
+            "logs": "日志",
+            "pauseAction": "⏸ 暂停",
+            "resumeAction": "▶ 恢复",
+            "pauseToast": "已暂停 #{id} · 批循环检查点挂起",
+            "resumeToast": "已恢复 #{id}",
+            "subLines": "已译 {count} 行",
+            "subChars": "{count} 字符",
+            "topbarSub": "#{id} · {progress}% · 剩 {eta}",
+            "statTranslated": "已翻译",
+            "statCurrentBatch": "当前批次",
+            "statCost": "成本(估算)",
+            "statElapsed": "已运行",
+            "statRemaining": "预计剩余",
             "editThisLine": "编辑此行",
             "proofreadThisLine": "校对此行",
             "editTranslation": "编辑译文",
@@ -908,9 +942,19 @@
         "cta": {
             "translateSelected": "翻译所选 ▸",
             "newTask": "＋ 新建任务",
+            "newTaskHint": "从媒体库勾选条目即可新建翻译任务",
             "process": "开始处理 ▸",
             "stash": "暂存"
         }
+    },
+    "requestTemplate": {
+        "title": "请求模版",
+        "topbarTail": "prompt 编辑与试译预览",
+        "reset": "重置为默认",
+        "save": "保存模版",
+        "resetToast": "已重置为默认模版",
+        "savedToast": "模版已保存 · 新批次起生效",
+        "subBatch": "批 {count} 行"
     },
     "mediaDetail": {
         "back": "← 媒体库",

@@ -7,6 +7,7 @@ import { DOMWrapper, mount, VueWrapper } from '@vue/test-utils'
 import en from '@/i18n/locales/en.json'
 import QueuePage from '@/cells/queue/pages/QueuePage.vue'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
+import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { IPagedResult, ITranslationRequest, TRANSLATION_STATUS } from '@/types'
 
@@ -126,6 +127,7 @@ interface MountedQueue {
     wrapper: VueWrapper
     store: ReturnType<typeof useTranslationRequestStore>
     uiStore: ReturnType<typeof useUiStore>
+    toastStore: ReturnType<typeof useToastStore>
     router: ReturnType<typeof createRouter>
 }
 
@@ -147,7 +149,9 @@ async function mountQueuePage(): Promise<MountedQueue> {
         history: createMemoryHistory(),
         routes: [
             { path: '/queue', name: 'queue', component: QueuePage },
-            { path: '/library', name: 'library', component: { template: '<div />' } }
+            { path: '/queue/:id', name: 'queue-detail', component: { template: '<div />' } },
+            { path: '/library', name: 'library', component: { template: '<div />' } },
+            { path: '/logs', name: 'logs', component: { template: '<div />' } }
         ]
     })
     await router.push('/queue')
@@ -163,6 +167,7 @@ async function mountQueuePage(): Promise<MountedQueue> {
         wrapper,
         store: useTranslationRequestStore(pinia),
         uiStore: useUiStore(pinia),
+        toastStore: useToastStore(pinia),
         router
     }
 }
@@ -284,5 +289,35 @@ describe('QueuePage', () => {
         expect(uiStore.cta).toBeNull()
         expect(uiStore.subOverride).toBe('')
         expect(signalrMocks.hub.off).toHaveBeenCalledWith('RequestProgress', expect.anything())
+    })
+
+    it('toasts the library hint when the new-task CTA fires (prototype act table)', async () => {
+        const { uiStore, toastStore } = await mountQueuePage()
+
+        await uiStore.cta?.handler()
+
+        expect(toastStore.toasts).toHaveLength(1)
+        expect(toastStore.toasts[0].message).toBe(en.topbar.cta.newTaskHint)
+    })
+
+    // ── drill-down navigation (prototype screen-03 交互 2) ────────
+    it('opens the request detail when a row is clicked', async () => {
+        const { wrapper, router } = await mountQueuePage()
+
+        await wrapper.find('[data-test="queue-row-1"]').trigger('click')
+        await settle()
+
+        expect(router.currentRoute.value.name).toBe('queue-detail')
+        expect(router.currentRoute.value.params.id).toBe('1')
+    })
+
+    it('does not navigate when a click bubbles from the row action column', async () => {
+        const { wrapper, router } = await mountQueuePage()
+
+        const row = wrapper.find('[data-test="queue-row-1"]')
+        await row.find('.justify-end').trigger('click')
+        await settle()
+
+        expect(router.currentRoute.value.name).toBe('queue')
     })
 })

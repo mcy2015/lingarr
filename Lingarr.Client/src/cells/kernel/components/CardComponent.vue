@@ -10,7 +10,9 @@
 </template>
 
 <script setup lang="ts">
+// title is optional: drill-down pages render title-less stat containers
+// (the pb-head carries the identity).
 const { title } = defineProps<{
-    title: string
+    title?: string
 }>()
 </script>

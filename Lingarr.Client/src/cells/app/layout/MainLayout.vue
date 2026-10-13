@@ -124,12 +124,16 @@ const pageMeta: Record<string, { title: string; sub: string }> = {
     dashboard: { title: t('nav.dashboard'), sub: '' },
     library: { title: t('nav.library'), sub: t('topbar.sub.library') },
     queue: { title: t('nav.queue'), sub: '' },
-    'queue-detail': { title: t('nav.queue'), sub: '' },
+    'queue-detail': { title: t('translations.detail.heading'), sub: '' },
     import: { title: t('nav.import'), sub: '' },
     proofread: { title: t('nav.proofread'), sub: t('topbar.sub.proofread') },
     settings: { title: t('nav.settings'), sub: '' },
     'media-detail-show': { title: t('nav.library'), sub: '' },
-    'media-detail-movie': { title: t('nav.library'), sub: '' }
+    'media-detail-movie': { title: t('nav.library'), sub: '' },
+    // drill-down screens (no sidebar entry; sub/CTA come from the pages)
+    'request-template': { title: t('requestTemplate.title'), sub: '' },
+    logs: { title: t('settings.logs.heading'), sub: '' },
+    schedule: { title: t('settings.schedule.heading'), sub: '' }
 }
 const currentMeta = computed(() => {
     const name = String(route.name ?? '')

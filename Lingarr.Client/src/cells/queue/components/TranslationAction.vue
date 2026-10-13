@@ -5,7 +5,7 @@
             @click="router.push({ name: 'queue-detail', params: { id: item.id } })">
             <Icon name="eyeOn" class="h-5 w-5" />
         </button>
-        <div class="flex w-20 items-center gap-2">
+        <div class="flex w-28 items-center justify-end gap-1.5">
             <Icon v-if="loading" name="loaderCircle" class="h-5 w-5 animate-spin" />
             <button
                 v-else-if="inProgress"
@@ -22,6 +22,13 @@
                 <Icon name="start" class="h-5 w-5" />
             </button>
             <template v-else-if="removable">
+                <button
+                    v-if="item.status === TRANSLATION_STATUS.FAILED"
+                    :title="t('common.translationAction.logs')"
+                    class="hover:text-primary-content/50 text-primary-content cursor-pointer transition-colors"
+                    @click="router.push({ name: 'logs' })">
+                    <Icon name="log" class="h-5 w-5" />
+                </button>
                 <button
                     v-if="resumable"
                     :disabled="loading"

@@ -15,7 +15,8 @@ const TITLES = {
     resumePaused: 'common.translationAction.resumePaused',
     resume: 'common.translationAction.resume',
     proofread: 'common.translationAction.proofread',
-    retry: 'common.translationAction.retry'
+    retry: 'common.translationAction.retry',
+    logs: 'common.translationAction.logs'
 } as const
 
 type ActionHandler = (action: TRANSLATION_ACTIONS) => Promise<void>
@@ -69,7 +70,8 @@ async function mountAction(
         history: createMemoryHistory(),
         routes: [
             { path: '/', name: 'home', component: { template: '<div />' } },
-            { path: '/queue/:id', name: 'queue-detail', component: { template: '<div />' } }
+            { path: '/queue/:id', name: 'queue-detail', component: { template: '<div />' } },
+            { path: '/logs', name: 'logs', component: { template: '<div />' } }
         ]
     })
     await router.push('/')
@@ -95,6 +97,7 @@ interface ButtonSpec {
 }
 
 const eyeButton: ButtonSpec = { icon: 'eyeOn', title: '' }
+const logsButton: ButtonSpec = { icon: 'log', title: TITLES.logs }
 const retryButton: ButtonSpec = { icon: 'retry', title: TITLES.retry }
 const removeButton: ButtonSpec = { icon: 'trash', title: '' }
 
@@ -264,11 +267,22 @@ describe('TranslationAction', () => {
         expect(renderedButtons(unsupported.wrapper)).toEqual([eyeButton, retryButton, removeButton])
     })
 
+    it('offers logs, resume, retry and remove for a failed request', async () => {
+        const { wrapper } = await mountAction(makeItem({ status: TRANSLATION_STATUS.FAILED }))
+
+        expect(renderedButtons(wrapper)).toEqual([
+            eyeButton,
+            logsButton,
+            { icon: 'start', title: TITLES.resume },
+            retryButton,
+            removeButton
+        ])
+    })
+
     it.each([
-        TRANSLATION_STATUS.FAILED,
         TRANSLATION_STATUS.CANCELLED,
         TRANSLATION_STATUS.INTERRUPTED
-    ])('offers resume, retry and remove for a %s request', async (status) => {
+    ])('offers resume, retry and remove (no logs shortcut) for a %s request', async (status) => {
         const { wrapper } = await mountAction(makeItem({ status }))
 
         expect(renderedButtons(wrapper)).toEqual([
@@ -288,6 +302,18 @@ describe('TranslationAction', () => {
 
         expect(router.currentRoute.value.name).toBe('queue-detail')
         expect(router.currentRoute.value.params.id).toBe('42')
+        expect(onAction).not.toHaveBeenCalled()
+    })
+
+    it('routes to the logs page when the log shortcut is clicked on a failed row', async () => {
+        const { wrapper, onAction, router } = await mountAction(
+            makeItem({ status: TRANSLATION_STATUS.FAILED })
+        )
+
+        await buttonByTitle(wrapper, TITLES.logs).trigger('click')
+        await settle()
+
+        expect(router.currentRoute.value.name).toBe('logs')
         expect(onAction).not.toHaveBeenCalled()
     })
 
@@ -332,6 +358,7 @@ describe('TranslationAction', () => {
         expect(wrapper.find('icon-stub[name="loaderCircle"]').exists()).toBe(false)
         expect(renderedButtons(wrapper)).toEqual([
             eyeButton,
+            logsButton,
             { icon: 'start', title: TITLES.resume },
             retryButton,
             removeButton

@@ -87,6 +87,25 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/cells/import/pages/ImportPage.vue'),
                 name: 'import'
             },
+            // ── drill-down screens (prototype screens 09–12): top-level
+            // routes without a sidebar entry; the source screen is reached
+            // through the pb-head back button.
+            {
+                path: '/request-template/:service',
+                name: 'request-template',
+                component: () => import('@/cells/settings/pages/RequestTemplatePage.vue'),
+                props: true
+            },
+            {
+                path: '/logs',
+                name: 'logs',
+                component: () => import('@/cells/settings/pages/LogsPage.vue')
+            },
+            {
+                path: '/schedule',
+                name: 'schedule',
+                component: () => import('@/cells/settings/pages/SchedulePage.vue')
+            },
             {
                 path: '/settings',
                 component: () => import('@/cells/settings/pages/SettingPage.vue'),
@@ -120,12 +139,6 @@ const routes: RouteRecordRaw[] = [
                         component: () => import('@/cells/settings/pages/SettingsSystemPage.vue')
                     },
                     {
-                        path: 'request-template/:service',
-                        name: 'request-template-settings',
-                        component: () => import('@/cells/settings/pages/RequestTemplatePage.vue'),
-                        props: true
-                    },
-                    {
                         // legacy settings paths -> grouped panels (bookmarks kept alive)
                         path: 'services',
                         redirect: { name: 'settings-providers' }
@@ -155,12 +168,22 @@ const routes: RouteRecordRaw[] = [
                         redirect: { name: 'settings-system' }
                     },
                     {
+                        // logs / schedule were promoted from settings children
+                        // to top-level drill-down routes (screens 11/12) — the
+                        // old bookmarks follow them
                         path: 'tasks',
-                        redirect: { name: 'settings-system' }
+                        redirect: { name: 'schedule' }
                     },
                     {
                         path: 'logs',
-                        redirect: { name: 'settings-system' }
+                        redirect: { name: 'logs' }
+                    },
+                    {
+                        path: 'request-template/:service',
+                        redirect: (to) => ({
+                            name: 'request-template',
+                            params: { service: String(to.params.service) }
+                        })
                     }
                 ]
             }

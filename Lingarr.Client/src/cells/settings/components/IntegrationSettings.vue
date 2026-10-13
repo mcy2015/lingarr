@@ -54,7 +54,7 @@
             </div>
             <div>
                 {{ t('services.integration.noMediaHint') }}
-                <router-link to="/settings/tasks" class="underline">
+                <router-link to="/schedule" class="underline">
                     {{ t('services.integration.here') }}
                 </router-link>
             </div>
