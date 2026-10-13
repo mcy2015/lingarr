@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -904,6 +906,197 @@ public class SubtitleTranslationServiceTests
             service.TranslateSubtitleLine(
                 new TranslateAbleSubtitleLine { SubtitleLine = "hi", SourceLanguage = "en", TargetLanguage = "zh-TW" },
                 CancellationToken.None));
+    }
+
+    #endregion
+
+    #region Fallback visibility events (P1-2)
+
+    private static Mock<ITranslationService> MockChainService(LanguagePair pair, Func<string, string?> translate)
+    {
+        var mock = new Mock<ITranslationService>();
+        mock.Setup(service => service.GetLanguagePair(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(pair);
+        mock.Setup(service => service.TranslateAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<List<string>?>(), It.IsAny<List<string>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string text, string _, string _, List<string>? _, List<string>? _, CancellationToken _) =>
+            {
+                var result = translate(text);
+                return result ?? throw new HttpRequestException("TooManyRequests", null, HttpStatusCode.TooManyRequests);
+            });
+        mock.Setup(service => service.GetModels()).ReturnsAsync(new ModelsResponse());
+        return mock;
+    }
+
+    private static readonly LanguagePair ExactPair = new()
+    {
+        Source = "en", Target = "zh", Tier = MatchTier.Exact
+    };
+
+    private static SubtitleTranslationService ChainService(
+        ITranslationRequestEventService eventService,
+        params (string Name, Mock<ITranslationService> Mock)[] chain) => new(
+            chain.Select(entry => new TranslationServiceEntry(entry.Name, entry.Mock.Object, null)).ToList(),
+            NullLogger.Instance,
+            eventService: eventService);
+
+    [Fact]
+    public async Task DegradedFallback_RecordsProviderFailureAndDegradation()
+    {
+        var eventService = new Mock<ITranslationRequestEventService>();
+        var failing = MockChainService(ExactPair, _ => null); // always 429
+        var working = MockChainService(ExactPair, text => $"zh:{text}");
+        var service = ChainService(eventService.Object, ("gemini", failing), ("openai", working));
+
+        var result = await service.TranslateSubtitleLine(
+            new TranslateAbleSubtitleLine
+            {
+                SubtitleLine = "hello",
+                SourceLanguage = "en",
+                TargetLanguage = "zh",
+                RequestId = 2417
+            },
+            CancellationToken.None);
+
+        Assert.Equal("zh:hello", result.Translation);
+        eventService.Verify(e => e.LogTimelineEvent(
+            2417, TranslationEventType.ProviderFailed, TranslationStatus.InProgress,
+            "gemini", It.Is<string?>(message => message != null && message.Contains("429"))),
+            Times.Once);
+        eventService.Verify(e => e.LogTimelineEvent(
+            2417, TranslationEventType.Degraded, TranslationStatus.InProgress,
+            "openai", "gemini -> openai"),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PrimarySucceeds_RecordsNoFallbackEvents()
+    {
+        var eventService = new Mock<ITranslationRequestEventService>();
+        var working = MockChainService(ExactPair, text => $"zh:{text}");
+        var unused = MockChainService(ExactPair, text => $"zh2:{text}");
+        var service = ChainService(eventService.Object, ("openai", working), ("deepl", unused));
+
+        await service.TranslateSubtitleLine(
+            new TranslateAbleSubtitleLine
+            {
+                SubtitleLine = "hello",
+                SourceLanguage = "en",
+                TargetLanguage = "zh",
+                RequestId = 1
+            },
+            CancellationToken.None);
+
+        eventService.Verify(e => e.LogTimelineEvent(
+            It.IsAny<int>(), It.IsAny<TranslationEventType>(), It.IsAny<TranslationStatus>(),
+            It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Degradation_IsRecordedOncePerRequest()
+    {
+        var eventService = new Mock<ITranslationRequestEventService>();
+        var failing = MockChainService(ExactPair, _ => null);
+        var working = MockChainService(ExactPair, text => $"zh:{text}");
+        var service = ChainService(eventService.Object, ("gemini", failing), ("openai", working));
+
+        for (var line = 0; line < 3; line++)
+        {
+            await service.TranslateSubtitleLine(
+                new TranslateAbleSubtitleLine
+                {
+                    SubtitleLine = $"line {line}",
+                    SourceLanguage = "en",
+                    TargetLanguage = "zh",
+                    RequestId = 2417
+                },
+                CancellationToken.None);
+        }
+
+        // the walk retries the primary on every line; the timeline shows the
+        // degradation story once, not once per line
+        eventService.Verify(e => e.LogTimelineEvent(
+            2417, TranslationEventType.ProviderFailed, It.IsAny<TranslationStatus>(),
+            It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Once);
+        eventService.Verify(e => e.LogTimelineEvent(
+            2417, TranslationEventType.Degraded, It.IsAny<TranslationStatus>(),
+            It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task NoRequestId_NoEventsRecorded()
+    {
+        // ad-hoc API line translations carry no request timeline
+        var eventService = new Mock<ITranslationRequestEventService>();
+        var failing = MockChainService(ExactPair, _ => null);
+        var working = MockChainService(ExactPair, text => $"zh:{text}");
+        var service = ChainService(eventService.Object, ("gemini", failing), ("openai", working));
+
+        await service.TranslateSubtitleLine(
+            new TranslateAbleSubtitleLine { SubtitleLine = "hello", SourceLanguage = "en", TargetLanguage = "zh" },
+            CancellationToken.None);
+
+        eventService.Verify(e => e.LogTimelineEvent(
+            It.IsAny<int>(), It.IsAny<TranslationEventType>(), It.IsAny<TranslationStatus>(),
+            It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task TranslateSubtitlesBatch_RecordsBatchCompletedPerBatch()
+    {
+        var eventService = new Mock<ITranslationRequestEventService>();
+        var translationMock = new Mock<ITranslationService>();
+        translationMock
+            .Setup(t => t.GetLanguagePair(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ExactPair);
+        var batchMock = new Mock<IBatchTranslationService>();
+        batchMock
+            .Setup(b => b.TranslateBatchAsync(
+                It.IsAny<List<BatchSubtitleItem>>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((List<BatchSubtitleItem> items, string _, string _, CancellationToken _) =>
+                items.ToDictionary(item => item.Position, item => $"zh:{item.Line}"));
+
+        var progressMock = new Mock<IProgressService>();
+        progressMock.Setup(p => p.Emit(It.IsAny<TranslationRequest>(), It.IsAny<int>())).Returns(Task.CompletedTask);
+        progressMock.Setup(p => p.EmitLines(It.IsAny<TranslationRequest>(), It.IsAny<List<TranslatedLineData>>()))
+            .Returns(Task.CompletedTask);
+
+        var service = new SubtitleTranslationService(
+            [new TranslationServiceEntry("openai", translationMock.Object, batchMock.Object)],
+            NullLogger.Instance,
+            progressMock.Object,
+            eventService: eventService.Object);
+
+        var request = new TranslationRequest
+        {
+            Title = "t",
+            SourceLanguage = "en",
+            TargetLanguage = "zh",
+            MediaType = MediaType.Movie,
+            Status = TranslationStatus.InProgress
+        };
+
+        await service.TranslateSubtitlesBatch(
+            [Subtitle(1, "a"), Subtitle(2, "b"), Subtitle(3, "c")],
+            request,
+            stripSubtitleFormatting: false,
+            preserveLineBreaks: false,
+            batchSize: 2,
+            CancellationToken.None);
+
+        eventService.Verify(e => e.LogTimelineEvent(
+            request.Id, TranslationEventType.BatchCompleted, TranslationStatus.InProgress,
+            null, "batch 1/2 · 2/3 lines"),
+            Times.Once);
+        eventService.Verify(e => e.LogTimelineEvent(
+            request.Id, TranslationEventType.BatchCompleted, TranslationStatus.InProgress,
+            null, "batch 2/2 · 3/3 lines"),
+            Times.Once);
     }
 
     #endregion

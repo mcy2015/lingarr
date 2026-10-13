@@ -139,8 +139,14 @@
                             {{ displayProgress }}%
                         </span>
                     </div>
+
+                    <!-- ═══ 执行链(P1-2):service_type 链 chips,状态从事件推导 ═══ -->
+                    <ExecutionChain :entries="chainEntries" />
                 </template>
             </CardComponent>
+
+            <!-- ═══ 事件时间线(P1-2):落库事件按时间序 ═══ -->
+            <EventTimeline :events="timelineEvents" @refresh="fetchEvents" />
 
             <CardComponent
                 v-if="reversedLines.length > 0"
@@ -209,18 +215,24 @@ import {
     IRequestProgress,
     ILineTranslated,
     ILineProofread,
+    ITranslationRequestEvent,
+    SETTINGS,
     TRANSLATION_STATUS
 } from '@/types'
 import axios from 'axios'
 import { useTranslationDetailHub } from '@/cells/queue/composables/useTranslationDetailHub'
 import { formatDateTime } from '@/cells/app/utils/date'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
+import { deriveChainState, parseServiceChain, ChainEntry } from '@/cells/queue/services/executionChain'
+import { useSettingStore } from '@/cells/app/stores/setting'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import TranslationStatus from '@/cells/queue/components/TranslationStatus.vue'
 import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
 import BadgeComponent from '@/cells/kernel/components/BadgeComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import CardComponent from '@/cells/kernel/components/CardComponent.vue'
+import ExecutionChain from '@/cells/queue/components/ExecutionChain.vue'
+import EventTimeline from '@/cells/queue/components/EventTimeline.vue'
 import LineProofreadPanel from '@/cells/queue/components/translation/LineProofreadPanel.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
@@ -232,12 +244,14 @@ const props = defineProps<{
 
 const router = useRouter()
 const translationRequestStore = useTranslationRequestStore()
+const settingStore = useSettingStore()
 const { t } = useI18n()
 
 const detail = ref<ITranslationRequestDetail | null>(null)
 const loading = ref(true)
 const progress = ref(0)
 const latestPosition = ref<number>(0)
+const timelineEvents = ref<ITranslationRequestEvent[]>([])
 // Per-line counters; bumping one tells that line's LineProofreadPanel to close
 // (replaces the old delete proofreadState[position] on hub events).
 const closeSignals = reactive<Record<number, number>>({})
@@ -278,12 +292,42 @@ const showProgress = computed(() => {
     )
 })
 
+// ── 执行链 + 时间线(P1-2)────────────────────────────────────────
+// 链来自 service_type 设置;chip 状态从已落库事件推导。当前服务:
+// 终态请求取持久化的 serviceType;进行中取最近一条带 service 的翻译行
+// (SignalR 逐行推送),降级后取最近 Degraded 事件的 provider。
+const serviceChain = computed(() =>
+    parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string)
+)
+
+const currentService = computed(() => {
+    if (!detail.value) return null
+    if (detail.value.serviceType) return detail.value.serviceType
+    const lastServicedLine = [...detail.value.lines].reverse().find((line) => line.service)
+    return lastServicedLine?.service ?? null
+})
+
+const chainEntries = computed<ChainEntry[]>(() =>
+    deriveChainState(serviceChain.value, timelineEvents.value, currentService.value)
+)
+
+async function fetchEvents(): Promise<void> {
+    const id = Number(props.id)
+    if (!Number.isFinite(id) || id <= 0) return
+    try {
+        timelineEvents.value = await translationRequestApi.getEvents(id)
+    } catch {
+        // the card keeps its last known timeline; the reload button retries
+    }
+}
+
 const displayProgress = computed(() =>
     detail.value?.status === TRANSLATION_STATUS.COMPLETED ? 100 : progress.value
 )
 
 const handleProgress = (requestProgress: IRequestProgress) => {
     if (detail.value && requestProgress.id === detail.value.id) {
+        const statusChanged = requestProgress.status !== detail.value.status
         detail.value.status = requestProgress.status
         progress.value = requestProgress.progress
         if (requestProgress.completedAt) {
@@ -294,6 +338,11 @@ const handleProgress = (requestProgress: IRequestProgress) => {
         }
         if (requestProgress.stackTrace) {
             detail.value.stackTrace = requestProgress.stackTrace
+        }
+        // v1 刷新模型(未做事件级 SignalR 推送):状态翻转时拉取时间线,
+        // 让降级/失败/完成事件落地;批内进度靠手动刷新按钮。
+        if (statusChanged) {
+            void fetchEvents()
         }
     }
 }
@@ -334,11 +383,18 @@ onMounted(async () => {
         if (!detail.value.lines) {
             detail.value.lines = []
         }
+        if (detail.value.events) {
+            timelineEvents.value = detail.value.events
+        }
     } catch {
         detail.value = null
     } finally {
         loading.value = false
     }
+
+    // the dedicated events endpoint is the source of truth — the detail
+    // payload's embedded copy may predate late fallback events
+    await fetchEvents()
 
     await translationRequestStore.fetchProofreadStatus()
 

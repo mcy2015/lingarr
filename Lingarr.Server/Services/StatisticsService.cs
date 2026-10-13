@@ -51,6 +51,88 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
+    /// Daily write-back and cost series for the overview trend card (P1-1).
+    /// Aggregated on the fly from completed requests — smaller footprint than
+    /// extending <see cref="DailyStatistics"/> with a cost column that would
+    /// need back-filling. Days are local (TimeZoneConfiguration) and zero-filled.
+    /// </summary>
+    public async Task<DailyTrendStatistics> GetDailyTrendStatistics(int days = 14)
+    {
+        days = Math.Clamp(days, 1, 90);
+        var today = Today;
+        var startDate = today.AddDays(-days + 1);
+        var startLocal = startDate.ToDateTime(TimeOnly.MinValue);
+        var start = new DateTimeOffset(startLocal, TimeZoneConfiguration.Current.GetUtcOffset(startLocal));
+
+        var rates = await _costService.GetRates();
+        var usage = await _dbContext.TranslationRequests
+            .Where(r => r.CompletedAt >= start)
+            .Select(r => new { r.CompletedAt, r.ServiceType, r.CharactersTranslated, r.TranslatedSubtitle })
+            .ToListAsync();
+
+        var timeZone = TimeZoneConfiguration.Current;
+        var points = new Dictionary<DateOnly, DailyTrendPoint>(days);
+        var charactersByDay = new Dictionary<DateOnly, Dictionary<string, long>>(days);
+        for (var offset = 0; offset < days; offset++)
+        {
+            var date = startDate.AddDays(offset);
+            points[date] = new DailyTrendPoint { Date = date };
+            charactersByDay[date] = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        // Any provider with usage but no rate prices the whole window as unknown,
+        // mirroring CostSummary's "unknown, never $0" rule.
+        var unpricedUsage = false;
+        foreach (var request in usage)
+        {
+            if (request.CompletedAt is not { } completedAt)
+            {
+                continue;
+            }
+
+            var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(completedAt, timeZone).DateTime);
+            if (!points.TryGetValue(localDate, out var point))
+            {
+                continue;
+            }
+
+            if (request.TranslatedSubtitle != null)
+            {
+                point.WrittenCount++;
+            }
+
+            if (request.ServiceType != null && request.CharactersTranslated is { } characters)
+            {
+                var dayCharacters = charactersByDay[localDate];
+                dayCharacters[request.ServiceType] =
+                    dayCharacters.GetValueOrDefault(request.ServiceType) + characters;
+                if (!rates.ContainsKey(request.ServiceType))
+                {
+                    unpricedUsage = true;
+                }
+            }
+        }
+
+        foreach (var (date, point) in points)
+        {
+            point.Cost = unpricedUsage
+                ? null
+                : charactersByDay[date].Sum(entry =>
+                    rates.TryGetValue(entry.Key, out var rate)
+                        ? CostService.Price(entry.Value, rate)
+                        : 0);
+        }
+
+        return new DailyTrendStatistics
+        {
+            Days = [.. points.Values.OrderBy(point => point.Date)],
+            TotalWritten = points.Values.Sum(point => point.WrittenCount),
+            TotalCost = unpricedUsage ? null : points.Values.Sum(point => point.Cost ?? 0),
+            RatesConfigured = !unpricedUsage
+        };
+    }
+
+    /// <summary>
     /// Overview pipeline payload (A2). Media/subtitle figures come from the
     /// scheduled statistics scan (StatisticsJob) — counting subtitle files
     /// requires the filesystem walk that job already owns. Queue depth is live

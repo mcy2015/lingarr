@@ -1,10 +1,12 @@
 import {
     DirectoryItem,
+    IDailyTrendStatistics,
     ILanguage,
     IScannedSubtitleFile,
     ISettings,
     ISubtitle,
     ITranslationRequest,
+    ITranslationRequestEvent,
     MediaType,
     IPathMapping,
     ILoginRequest,
@@ -156,6 +158,9 @@ export interface ITranslateService {
     ): Promise<T>
     getLanguages<T>(): Promise<T>
     getHealth(): Promise<ITranslationServiceHealth[]>
+    /// Language capability of one named service (P1-3): its concrete
+    /// language table, or "unrestricted" for AI-style services with none.
+    getServiceLanguages(serviceType: string): Promise<IServiceLanguageResponse>
     proofreadStatus<T>(): Promise<T>
     proofreadLine<T>(request: IProofreadLineRequest): Promise<T>
     /// Active connection probe (PM analysis P0): one real minimal
@@ -213,6 +218,16 @@ export interface ITranslationServiceHealth {
     monthlyCost: number | null
 }
 
+/// Language capability of one service (P1-3): "restricted" = concrete
+/// language table, "unrestricted" = AI-style no gating, "unknown" = table
+/// could not be retrieved (missing key / provider offline).
+export interface IServiceLanguageResponse {
+    serviceType: string
+    status: 'restricted' | 'unrestricted' | 'unknown'
+    languages: ILanguage[]
+    message?: string | null
+}
+
 /// Overview pipeline strip payload (server gap-audit A2).
 export interface IPipelineStatistics {
     mediaCount: number
@@ -230,6 +245,8 @@ export interface ITranslationRequestEventSummary {
     requestId: number
     requestTitle: string
     status: string
+    eventType?: string | null
+    provider?: string | null
     message: string | null
     createdAt: string
 }
@@ -247,6 +264,8 @@ export interface ITranslationRequestService {
     ): Promise<T>
     statusCounts(): Promise<Record<string, number>>
     getRecentEvents(take: number): Promise<ITranslationRequestEventSummary[]>
+    /// Full typed event timeline of one request, oldest first (P1-2).
+    getEvents(id: number): Promise<ITranslationRequestEvent[]>
     pause<T>(translationRequest: ITranslationRequest): Promise<T>
     resumePaused<T>(translationRequest: ITranslationRequest): Promise<T>
     cancel<T>(translationRequest: ITranslationRequest): Promise<T>
@@ -280,6 +299,8 @@ export interface IStatisticsService {
     getStatistics<T>(): Promise<T>
     getDailyStatistics<T>(days?: number): Promise<T>
     getPipelineStatistics(): Promise<IPipelineStatistics>
+    /// Daily write-back/cost series for the overview trend card (P1-1).
+    getDailyTrendStatistics(days?: number): Promise<IDailyTrendStatistics>
     resetStatistics(): Promise<void>
 }
 

@@ -108,6 +108,7 @@ public class TranslationJobTests
                 _factory,
                 _progressService.Object,
                 new Mock<IAsyncTranslationRegistry>().Object,
+                _eventService.Object,
                 NullLogger<TranslationPipeline>.Instance),
             _translationRequestService.Object,
             _eventService.Object,

@@ -117,7 +117,8 @@
                 </div>
             </div>
 
-            <SourceAndTarget @save="toastStore.push({ message: t('common.saved'), type: 'success' })" />
+            <!-- 源/目标语言编辑已迁至 quality 面板「语言策略」卡(P1-3):
+                 单一编辑点,迁移说明见 docs/prototype-spec/screen-06。 -->
         </template>
     </CardComponent>
 </template>
@@ -135,7 +136,6 @@ import SelectComponent from '@/cells/kernel/components/SelectComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import { useToastStore } from '@/cells/app/stores/toast'
 import DynamicPluginForm from '@/cells/settings/components/DynamicPluginForm.vue'
-import SourceAndTarget from '@/cells/settings/components/SourceAndTarget.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const { t } = useI18n()

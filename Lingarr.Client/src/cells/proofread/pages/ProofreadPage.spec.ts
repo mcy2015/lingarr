@@ -98,11 +98,13 @@ interface ProofreadVm {
     approved: Set<number>
     lines: ISubtitleLineComparison[]
     approvedCount: number
+    modifiedCount: number
 }
 
 interface MountedProofread {
     wrapper: VueWrapper
     vm: ProofreadVm
+    router: ReturnType<typeof createRouter>
     uiStore: ReturnType<typeof useUiStore>
     toastStore: ReturnType<typeof useToastStore>
 }
@@ -127,7 +129,12 @@ async function mountProofreadPage(): Promise<MountedProofread> {
         history: createMemoryHistory(),
         routes: [
             { path: '/proofread/:id?', name: 'proofread', component: ProofreadPage, props: true },
-            { path: '/queue', name: 'queue', component: { template: '<div />' } }
+            { path: '/queue', name: 'queue', component: { template: '<div />' } },
+            {
+                path: '/settings/quality',
+                name: 'settings-quality',
+                component: { template: '<div />' }
+            }
         ]
     })
     await router.push('/proofread/1')
@@ -143,6 +150,7 @@ async function mountProofreadPage(): Promise<MountedProofread> {
     return {
         wrapper,
         vm: wrapper.vm as unknown as ProofreadVm,
+        router,
         uiStore: useUiStore(pinia),
         toastStore: useToastStore(pinia)
     }
@@ -358,8 +366,7 @@ describe('ProofreadPage', () => {
     })
 
     // ── topbar CTA ─────────────────────────────────────────────────
-    it('registers the stash CTA on mount and pushes a success toast on handler', async () => {
-        const { uiStore, toastStore } = await mountProofreadPage()
+    it('registers the stash CTA on mount and pushes a success toast on handler', async () => {        const { uiStore, toastStore } = await mountProofreadPage()
 
         expect(uiStore.cta).not.toBeNull()
         expect(uiStore.cta?.label).toBe(en.topbar.cta.stash)
@@ -381,5 +388,79 @@ describe('ProofreadPage', () => {
 
         expect(uiStore.cta).toBeNull()
         expect(uiStore.subOverride).toBe('')
+    })
+
+    // ── glossary backflow (P1-4) ───────────────────────────────────
+    it('hides the suggest-glossary button while no line has been modified', async () => {
+        const { wrapper, vm } = await mountProofreadPage()
+
+        expect(wrapper.find('[data-test="suggest-glossary"]').exists()).toBe(false)
+        expect(vm.modifiedCount).toBe(0)
+    })
+
+    it('counts persisted line edits and keeps one count per distinct line', async () => {
+        const { wrapper, vm } = await mountProofreadPage()
+
+        // edit line 1 with a real change — persisted through applyProofreadLine
+        press('e')
+        await settle()
+        await wrapper.find('input').setValue('你好,将军。')
+        await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+        await settle()
+
+        expect(vm.modifiedCount).toBe(1)
+        const button = wrapper.find('[data-test="suggest-glossary"]')
+        expect(button.exists()).toBe(true)
+        expect(button.text()).toContain('1')
+
+        // approving without changing text does not count as a modification
+        press('Enter')
+        await settle()
+        expect(vm.modifiedCount).toBe(1)
+
+        // a second, distinct edited line raises the count
+        press('j')
+        press('e')
+        await settle()
+        const inputs = wrapper.findAll('input')
+        await inputs[0].setValue('肯诺比!')
+        await inputs[0].trigger('keydown', { key: 'Enter' })
+        await settle()
+
+        expect(vm.modifiedCount).toBe(2)
+        expect(wrapper.find('[data-test="suggest-glossary"]').text()).toContain('2')
+    })
+
+    it('navigates to the settings quality glossary anchor on click', async () => {
+        const { wrapper, router } = await mountProofreadPage()
+
+        press('e')
+        await settle()
+        await wrapper.find('input').setValue('你好,将军。')
+        await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+        await settle()
+
+        await wrapper.find('[data-test="suggest-glossary"]').trigger('click')
+        await settle()
+
+        expect(router.currentRoute.value.name).toBe('settings-quality')
+        expect(router.currentRoute.value.hash).toBe('#glossary')
+    })
+
+    it('does not create glossary entries when jumping — only navigation happens', async () => {
+        const { wrapper } = await mountProofreadPage()
+
+        press('e')
+        await settle()
+        await wrapper.find('input').setValue('你好,将军。')
+        await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+        await settle()
+
+        await wrapper.find('[data-test="suggest-glossary"]').trigger('click')
+        await settle()
+
+        // the backflow is a jump; the glossary API module is not even imported
+        // by the page — nothing but applyProofreadLine may have been called
+        expect(applyProofreadLineMock).toHaveBeenCalledTimes(1)
     })
 })

@@ -20,6 +20,7 @@ public class TranslationPipeline : ITranslationPipeline
     private readonly ITranslationServiceFactory _translationServiceFactory;
     private readonly IProgressService _progressService;
     private readonly IAsyncTranslationRegistry _asyncTranslationRegistry;
+    private readonly ITranslationRequestEventService _eventService;
     private readonly ILogger<TranslationPipeline> _logger;
 
     public TranslationPipeline(
@@ -27,12 +28,14 @@ public class TranslationPipeline : ITranslationPipeline
         ITranslationServiceFactory translationServiceFactory,
         IProgressService progressService,
         IAsyncTranslationRegistry asyncTranslationRegistry,
+        ITranslationRequestEventService eventService,
         ILogger<TranslationPipeline> logger)
     {
         _settings = settings;
         _translationServiceFactory = translationServiceFactory;
         _progressService = progressService;
         _asyncTranslationRegistry = asyncTranslationRegistry;
+        _eventService = eventService;
         _logger = logger;
     }
 
@@ -98,7 +101,8 @@ public class TranslationPipeline : ITranslationPipeline
                 dispatch.MaxBatchSize, run.Subtitles.Count, run.Request.Id);
 
             var translator = new SubtitleTranslationService(
-                dispatch.Services, _logger, _progressService, pauseGate: _asyncTranslationRegistry);
+                dispatch.Services, _logger, _progressService, pauseGate: _asyncTranslationRegistry,
+                eventService: _eventService);
             var translated = await translator.TranslateSubtitlesBatch(
                 run.Subtitles,
                 run.Request,
@@ -122,7 +126,8 @@ public class TranslationPipeline : ITranslationPipeline
         // Content lines carry no timing information, so nothing can be stacked: the
         // caller opts out of the merge that collapses same-timed .ass layers.
         var individualTranslator = new SubtitleTranslationService(
-            dispatch.Services, _logger, _progressService, dispatch.UseTranslatedContext, run.MergeStackedLines);
+            dispatch.Services, _logger, _progressService, dispatch.UseTranslatedContext, run.MergeStackedLines,
+            eventService: _eventService);
         var translatedItems = await individualTranslator.TranslateSubtitles(
             run.Subtitles,
             run.Request,

@@ -57,6 +57,17 @@ public class StatisticsController : ControllerBase
         return Ok(stats);
     }
 
+    /// <summary>
+    /// Daily write-back/cost series for the overview trend card (PM analysis
+    /// P1-1): per-day completed write-backs plus usage priced via the provider
+    /// rate table; costs are null while any usage is unpriced.
+    /// </summary>
+    [HttpGet("trend/{days}")]
+    public async Task<ActionResult<Models.Api.DailyTrendStatistics>> GetDailyTrend(int days = 14)
+    {
+        return Ok(await _statisticsService.GetDailyTrendStatistics(days));
+    }
+
     [HttpPost("reset")]
     public async Task<ActionResult> ResetStatistics()
     {

@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IStatisticsService } from '@/types'
+import { IDailyTrendStatistics, IStatisticsService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/statistics'): IStatisticsService => ({
     getStatistics<T>(): Promise<T> {
@@ -12,6 +12,10 @@ const service = (http: AxiosStatic, resource = '/api/statistics'): IStatisticsSe
 
     getPipelineStatistics() {
         return http.get(`${resource}/pipeline`).then((response) => response.data)
+    },
+
+    getDailyTrendStatistics(days: number = 14): Promise<IDailyTrendStatistics> {
+        return http.get(`${resource}/trend/${days}`).then((response) => response.data)
     },
 
     resetStatistics(): Promise<void> {

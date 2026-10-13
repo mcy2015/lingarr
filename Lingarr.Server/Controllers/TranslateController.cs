@@ -413,4 +413,62 @@ public class TranslateController : ControllerBase
         return Ok(languageCodes);
     }
 
+    /// <summary>
+    /// Language capability of one named service (PM analysis P1-3, language
+    /// policy card): its concrete language table, or the "unrestricted"
+    /// verdict for AI-style services that ship none. An unreadable table
+    /// (missing key / provider offline) answers status "unknown" rather than
+    /// failing, so the coverage row can render it distinctly.
+    /// </summary>
+    /// <param name="serviceType">The provider to inspect, e.g. "deepl".</param>
+    /// <param name="cancellationToken">Token to cancel the language fetch.</param>
+    [HttpGet("languages/{serviceType}")]
+    public async Task<ActionResult<Models.Api.ServiceLanguageResponse>> GetServiceLanguages(
+        string serviceType,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ITranslationService service;
+        try
+        {
+            service = _translationServiceFactory.CreateTranslationService(serviceType);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new Models.Api.ServiceLanguageResponse
+            {
+                ServiceType = serviceType,
+                Status = "unknown",
+                Message = ex.Message
+            });
+        }
+
+        try
+        {
+            var languages = await service.GetLanguages();
+            return Ok(new Models.Api.ServiceLanguageResponse
+            {
+                ServiceType = serviceType,
+                // empty list = no language gating: any culture-valid pair goes
+                Status = languages.Count > 0 ? "restricted" : "unrestricted",
+                Languages = languages
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not retrieve language table for {ServiceType}.", serviceType);
+            return Ok(new Models.Api.ServiceLanguageResponse
+            {
+                ServiceType = serviceType,
+                Status = "unknown",
+                Message = ex.Message
+            });
+        }
+    }
+
 }

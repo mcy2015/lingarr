@@ -190,9 +190,15 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
 
         _dbContext.TranslationRequests.Add(translationRequestCopy);
         await _dbContext.SaveChangesAsync();
-        await _eventService.LogEvent(translationRequestCopy.Id, TranslationStatus.Pending);
+        await _eventService.LogEvent(translationRequestCopy.Id, TranslationStatus.Pending,
+            eventType: TranslationEventType.Created);
 
         var jobId = _jobQueue.EnqueueTranslationJob(translationRequestCopy);
+        await _eventService.LogTimelineEvent(
+            translationRequestCopy.Id,
+            TranslationEventType.Enqueued,
+            TranslationStatus.Pending,
+            message: jobId);
         await UpdateTranslationRequest(translationRequestCopy, TranslationStatus.Pending, jobId);
 
         await _queryService.UpdateActiveCount();

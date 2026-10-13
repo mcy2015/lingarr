@@ -116,14 +116,17 @@
                     <time class="mono text-secondary-content shrink-0 pt-0.5 text-[11px]">
                         {{ formatTime(event.createdAt) }}
                     </time>
-                    <span class="shrink-0" :class="feedIcon(event.status).cls">{{ feedIcon(event.status).icon }}</span>
+                    <span class="shrink-0" :class="feedIcon(event).cls">{{ feedIcon(event).icon }}</span>
                     <span class="min-w-0">
                         <b>{{ event.requestTitle }}</b>
-                        <span class="text-secondary-content"> — {{ event.message ?? statusLabel(event.status) }}</span>
+                        <span class="text-secondary-content"> — {{ feedText(event) }}</span>
                     </span>
                 </div>
             </div>
         </div>
+
+        <!-- ═══ 产量与成本 · 近 14 天（原型 .trend，P1-1） ═══ -->
+        <TrendCard class="shrink-0" :trend="trend" />
     </div>
 </template>
 
@@ -133,18 +136,21 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
+import TrendCard from '@/cells/dashboard/components/TrendCard.vue'
 import { statisticsService } from '@/cells/app/api/statisticsService'
 import { translateService } from '@/cells/app/api/translateService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
 import {
+    IDailyTrendStatistics,
     IPagedResult,
     IPipelineStatistics,
     IRequestProgress,
     ITranslationRequest,
     ITranslationRequestEventSummary,
     ITranslationServiceHealth,
+    TRANSLATION_EVENT_TYPE,
     TRANSLATION_STATUS
 } from '@/types'
 
@@ -164,6 +170,7 @@ const counts = ref<Record<string, number>>({})
 const activeItems = ref<ITranslationRequest[]>([])
 const health = ref<ITranslationServiceHealth[]>([])
 const events = ref<ITranslationRequestEventSummary[]>([])
+const trend = ref<IDailyTrendStatistics | null>(null)
 
 const configuredCount = computed(() => health.value.filter((provider) => provider.configured).length)
 const inProgressCount = computed(() => counts.value[TRANSLATION_STATUS.INPROGRESS] ?? 0)
@@ -276,8 +283,17 @@ const healthDot = (provider: ITranslationServiceHealth): { cls: string; text: st
     }
 }
 
-const feedIcon = (status: string): { icon: string; cls: string } => {
-    switch (status) {
+const feedIcon = (event: ITranslationRequestEventSummary): { icon: string; cls: string } => {
+    // typed timeline events (P1-2) render their finer-grained glyph first
+    switch (event.eventType) {
+        case TRANSLATION_EVENT_TYPE.PROVIDER_FAILED:
+            return { icon: '✗', cls: 'text-danger' }
+        case TRANSLATION_EVENT_TYPE.DEGRADED:
+            return { icon: '△', cls: 'text-warning' }
+        case TRANSLATION_EVENT_TYPE.WRITEBACK:
+            return { icon: '✓', cls: 'text-success' }
+    }
+    switch (event.status) {
         case TRANSLATION_STATUS.COMPLETED:
             return { icon: '✓', cls: 'text-success' }
         case TRANSLATION_STATUS.FAILED:
@@ -289,6 +305,16 @@ const feedIcon = (status: string): { icon: string; cls: string } => {
         default:
             return { icon: '·', cls: 'text-secondary-content' }
     }
+}
+
+const feedText = (event: ITranslationRequestEventSummary): string => {
+    if (event.eventType === TRANSLATION_EVENT_TYPE.DEGRADED && event.message) {
+        return t('overview.feed.degraded', { edge: event.message })
+    }
+    if (event.eventType === TRANSLATION_EVENT_TYPE.PROVIDER_FAILED && event.provider) {
+        return t('overview.feed.providerFailed', { provider: event.provider })
+    }
+    return event.message ?? statusLabel(event.status)
 }
 
 const statusLabel = (status: string): string => {
@@ -325,24 +351,27 @@ const updateSub = (): void => {
     )
 }
 const fetchOverview = async (): Promise<void> => {
-    const [pipelineResult, countsResult, activeResult, healthResult, eventsResult] = await Promise.allSettled([
-        statisticsApi.getPipelineStatistics(),
-        translationRequestApi.statusCounts(),
-        translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
-            1,
-            '',
-            'CreatedAt',
-            false,
-            'InProgress'
-        ),
-        translateApi.getHealth(),
-        translationRequestApi.getRecentEvents(20)
-    ])
+    const [pipelineResult, countsResult, activeResult, healthResult, eventsResult, trendResult] =
+        await Promise.allSettled([
+            statisticsApi.getPipelineStatistics(),
+            translationRequestApi.statusCounts(),
+            translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
+                1,
+                '',
+                'CreatedAt',
+                false,
+                'InProgress'
+            ),
+            translateApi.getHealth(),
+            translationRequestApi.getRecentEvents(20),
+            statisticsApi.getDailyTrendStatistics(14)
+        ])
     if (pipelineResult.status === 'fulfilled') pipeline.value = pipelineResult.value
     if (countsResult.status === 'fulfilled') counts.value = countsResult.value
     if (activeResult.status === 'fulfilled') activeItems.value = activeResult.value.items
     if (healthResult.status === 'fulfilled') health.value = healthResult.value
     if (eventsResult.status === 'fulfilled') events.value = eventsResult.value
+    if (trendResult.status === 'fulfilled') trend.value = trendResult.value
     lastFetchAt.value = Date.now()
     updateSub()
 }

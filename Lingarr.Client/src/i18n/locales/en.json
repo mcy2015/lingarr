@@ -377,7 +377,20 @@
         "feed": {
             "title": "Recent activity",
             "count": "{count} events",
-            "empty": "No activity yet."
+            "empty": "No activity yet.",
+            "degraded": "degraded {edge}",
+            "providerFailed": "provider {provider} failed"
+        },
+        "trend": {
+            "title": "Output & cost · last 14 days",
+            "meta": "Written {count} files · Cost {cost}",
+            "metaUnknownCost": "Written {count} files · Cost —",
+            "empty": "No write-backs in this period yet.",
+            "written": "Written (files)",
+            "cost": "Cost ($)",
+            "legendPeaks": "each series normalized to its own peak · peak {count} files / {cost}",
+            "legendPeakWritten": "each series normalized to its own peak · peak {count} files",
+            "costUnknown": "Cost unknown — a provider with usage has no rate configured."
         }
     },
     "placeholder": {
@@ -742,6 +755,17 @@
             "hint": "advisory",
             "delete": "Delete",
             "saveFailed": "Saving the term failed."
+        },
+        "languagePolicy": {
+            "title": "Language policy",
+            "meta": "Language scope of the pipeline · missing-subtitle stats and automated batches follow it",
+            "coverage": "Chain language coverage",
+            "coverageHint": "Derived read-only: fallback-chain member language capabilities ∩ (source whitelist × target languages); recomputed from the service chain and language tables",
+            "unsupported": "({services} cannot serve this pair)",
+            "unknownCount": "{count} unknown",
+            "chainEmpty": "No services in the fallback chain.",
+            "loading": "Loading language tables…",
+            "noPairs": "Configure source and target languages to see coverage."
         }
     },
     "translations": {
@@ -808,6 +832,29 @@
             "pausedHint": "Paused — resume to continue",
             "remainingHint": "Estimated remaining time",
             "retries": "{count} retries"
+        },
+        "chain": {
+            "label": "Execution chain",
+            "empty": "No services in the fallback chain.",
+            "state": {
+                "failed": "Failed for this request",
+                "current": "Currently processing",
+                "unused": "Not needed by this request"
+            }
+        },
+        "timeline": {
+            "title": "Event timeline",
+            "count": "{count} events",
+            "empty": "No events recorded yet.",
+            "created": "Request created",
+            "enqueued": "Enqueued",
+            "started": "Translation started",
+            "providerFailed": "{provider} failed",
+            "degraded": "Degraded → {provider}",
+            "batchCompleted": "Batch completed",
+            "completed": "Completed",
+            "failed": "Failed",
+            "writeback": "Subtitle written back"
         }
     },
     "proofread": {
@@ -839,7 +886,9 @@
             "rejected": "Rejected"
         },
         "openWorkbench": "Open proofreading workbench",
-        "stashed": "All edits are saved as you go."
+        "stashed": "All edits are saved as you go.",
+        "suggestGlossary": "✎ {count} edits → suggest glossary terms",
+        "suggestGlossaryHint": "Jump to the glossary in settings · subtitles & quality. Terms are not created automatically."
     },
     "topbar": {
         "sub": {

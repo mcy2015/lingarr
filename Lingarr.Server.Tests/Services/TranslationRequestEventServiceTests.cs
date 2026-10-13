@@ -74,4 +74,124 @@ public class TranslationRequestEventServiceTests : IDisposable
         Assert.Single(events);
         Assert.Equal(TranslationStatus.InProgress, events[0].Status);
     }
+
+    // ===== P1-2 typed timeline events =====
+
+    [Fact]
+    public async Task LogTimelineEvent_AlwaysWrites_RepeatedBatchEventsAreKept()
+    {
+        var request = await SeedRequestAsync();
+
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.BatchCompleted,
+            TranslationStatus.InProgress, message: "batch 1/2 · 128/256 lines");
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.BatchCompleted,
+            TranslationStatus.InProgress, message: "batch 2/2 · 256/256 lines");
+
+        var events = await _service.GetEvents(request.Id);
+        Assert.Equal(2, events.Count);
+        Assert.All(events, e => Assert.Equal(TranslationEventType.BatchCompleted, e.EventType));
+        Assert.Equal("batch 1/2 · 128/256 lines", events[0].Message);
+    }
+
+    [Fact]
+    public async Task DegradedEvent_CarriesFallbackProviderAndEdge()
+    {
+        var request = await SeedRequestAsync();
+
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.ProviderFailed,
+            TranslationStatus.InProgress, "gemini", "429 · TooManyRequests");
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.Degraded,
+            TranslationStatus.InProgress, "openai", "gemini -> openai");
+
+        var events = await _service.GetEvents(request.Id);
+        Assert.Equal(2, events.Count);
+        Assert.Equal("gemini", events[0].Provider);
+        Assert.Equal(TranslationEventType.ProviderFailed, events[0].EventType);
+        Assert.Equal("openai", events[1].Provider);
+    }
+
+    [Fact]
+    public async Task GetEvents_ReturnsOldestFirst()
+    {
+        var request = await SeedRequestAsync();
+
+        await _service.LogEvent(request.Id, TranslationStatus.Pending, eventType: TranslationEventType.Created);
+        await _service.LogEvent(request.Id, TranslationStatus.InProgress, eventType: TranslationEventType.Started);
+        await _service.LogEvent(request.Id, TranslationStatus.Completed, eventType: TranslationEventType.Completed);
+
+        var events = await _service.GetEvents(request.Id);
+
+        Assert.Equal(3, events.Count);
+        Assert.Equal(TranslationEventType.Created, events[0].EventType);
+        Assert.Equal(TranslationEventType.Started, events[1].EventType);
+        Assert.Equal(TranslationEventType.Completed, events[2].EventType);
+    }
+
+    [Fact]
+    public async Task GetRecentEvents_ExcludesBatchProgressButKeepsFallbackEvents()
+    {
+        var request = await SeedRequestAsync();
+
+        await _service.LogEvent(request.Id, TranslationStatus.Pending, eventType: TranslationEventType.Created);
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.ProviderFailed,
+            TranslationStatus.InProgress, "gemini", "429");
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.Degraded,
+            TranslationStatus.InProgress, "openai", "gemini -> openai");
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.BatchCompleted,
+            TranslationStatus.InProgress, message: "batch 1/2");
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.BatchCompleted,
+            TranslationStatus.InProgress, message: "batch 2/2");
+
+        var events = await _service.GetRecentEvents(10);
+
+        // batch rows would drown the feed; failures/degradations are the story
+        Assert.Equal(3, events.Count);
+        Assert.DoesNotContain(events, e => e.EventType == TranslationEventType.BatchCompleted);
+        Assert.Contains(events, e => e.EventType == TranslationEventType.Degraded);
+    }
+
+    [Fact]
+    public async Task LogEvent_DedupIgnoresGranularTimelineRows()
+    {
+        var request = await SeedRequestAsync();
+
+        // InProgress lifecycle event, then batch progress, then InProgress again
+        // (e.g. resume after pause) — the resume must not be suppressed by the
+        // batch row that happens to carry the same status.
+        await _service.LogEvent(request.Id, TranslationStatus.InProgress, eventType: TranslationEventType.Started);
+        await _service.LogTimelineEvent(request.Id, TranslationEventType.BatchCompleted,
+            TranslationStatus.InProgress, message: "batch 1/2");
+        await _service.LogEvent(request.Id, TranslationStatus.Paused);
+        await _service.LogEvent(request.Id, TranslationStatus.InProgress);
+
+        var events = await _service.GetEvents(request.Id);
+
+        Assert.Equal(4, events.Count);
+        Assert.Equal(TranslationStatus.InProgress, events[^1].Status);
+        Assert.Null(events[^1].EventType); // plain status transition, not typed
+    }
+
+    [Fact]
+    public async Task RequestExists_DistinguishesKnownIds()
+    {
+        var request = await SeedRequestAsync();
+
+        Assert.True(await _service.RequestExists(request.Id));
+        Assert.False(await _service.RequestExists(request.Id + 4242));
+    }
+
+    private async Task<TranslationRequest> SeedRequestAsync()
+    {
+        var request = new TranslationRequest
+        {
+            Title = "Shōgun — S01E05",
+            SourceLanguage = "en",
+            TargetLanguage = "zh",
+            MediaType = MediaType.Episode,
+            Status = TranslationStatus.InProgress
+        };
+        _dbContext.TranslationRequests.Add(request);
+        await _dbContext.SaveChangesAsync();
+        return request;
+    }
 }

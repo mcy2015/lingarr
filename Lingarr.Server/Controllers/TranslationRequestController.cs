@@ -1,5 +1,6 @@
 ﻿using Lingarr.Core.Entities;
 using System.Collections.Generic;
+using System.Linq;
 using Lingarr.Core.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -39,6 +40,34 @@ public class TranslationRequestController : ControllerBase
     {
         var effectiveTake = Math.Clamp(take, 1, 100);
         return Ok(await _eventService.GetRecentEvents(effectiveTake));
+    }
+
+    /// <summary>
+    /// Full event timeline of one request, oldest first (PM analysis P1-2):
+    /// lifecycle transitions plus fallback degradations, provider failures
+    /// and batch completions recorded while the job runs.
+    /// </summary>
+    /// <param name="id">The translation request id.</param>
+    /// <response code="200">The ordered timeline events</response>
+    /// <response code="404">If the translation request was not found</response>
+    [HttpGet("{id}/events")]
+    public async Task<ActionResult<IEnumerable<TranslationRequestEventDetail>>> GetRequestEvents(int id)
+    {
+        if (!await _eventService.RequestExists(id))
+        {
+            return NotFound();
+        }
+
+        var events = await _eventService.GetEvents(id);
+        return Ok(events.Select(translationRequestEvent => new TranslationRequestEventDetail
+        {
+            Id = translationRequestEvent.Id,
+            Status = translationRequestEvent.Status,
+            EventType = translationRequestEvent.EventType,
+            Provider = translationRequestEvent.Provider,
+            Message = translationRequestEvent.Message,
+            CreatedAt = translationRequestEvent.CreatedAt
+        }));
     }
 
     /// <summary>

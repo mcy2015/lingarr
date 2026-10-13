@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -5,6 +6,7 @@ using Lingarr.Contracts.Exceptions;
 using Lingarr.Contracts.Models;
 using Lingarr.Contracts.Models.Batch;
 using Lingarr.Core.Entities;
+using Lingarr.Core.Enum;
 using Lingarr.Server.Extensions;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
@@ -49,17 +51,24 @@ public class SubtitleTranslationService
     private readonly IReadOnlyList<TranslationServiceEntry> _services;
     private readonly IProgressService? _progressService;
     private readonly Lingarr.Server.Interfaces.Services.IRequestPauseGate? _pauseGate;
+    private readonly ITranslationRequestEventService? _eventService;
     private readonly ILogger _logger;
     private readonly bool _useTranslatedContext;
     private readonly bool _mergeStackedLines;
     private readonly Dictionary<int, (string Service, LanguagePair Pair)> _translationByPosition = [];
     private readonly HashSet<string> _loggedSkips = [];
     private readonly HashSet<TranslationCandidate> _loggedFallbacks = [];
+    /// <summary>Providers whose failure was already recorded for this request (P1-2).</summary>
+    private readonly HashSet<string> _recordedProviderFailures = [];
+    /// <summary>Degradation edges (from → to) already recorded for this request.</summary>
+    private readonly HashSet<(string From, string To)> _recordedDegradations = [];
     private readonly Dictionary<(string Source, string Target), IReadOnlyList<TranslationCandidate>> _candidatesByPair = [];
 
     /// <param name="services">Ordered translation service chain; the first entry is the primary, the rest are fallbacks.</param>
     /// <param name="logger">Logger for progress and fallback diagnostics.</param>
     /// <param name="progressService">Progress reporter, required by <see cref="TranslateSubtitles"/> and <see cref="TranslateSubtitlesBatch"/>.</param>
+    /// <param name="pauseGate">Cooperative pause gate consulted between lines and batches.</param>
+    /// <param name="eventService">Optional timeline recorder for fallback visibility (P1-2); null for ad-hoc translations without a request.</param>
     /// <param name="useTranslatedContext">
     /// When true, context lines are passed as one JSON object per line carrying the position and
     /// line text, plus the translation for lines that already have one.
@@ -76,7 +85,8 @@ public class SubtitleTranslationService
         IProgressService? progressService = null,
         bool useTranslatedContext = false,
         bool mergeStackedLines = true,
-        Lingarr.Server.Interfaces.Services.IRequestPauseGate? pauseGate = null)
+        Lingarr.Server.Interfaces.Services.IRequestPauseGate? pauseGate = null,
+        ITranslationRequestEventService? eventService = null)
     {
         if (services.Count == 0)
         {
@@ -85,6 +95,7 @@ public class SubtitleTranslationService
         _services = services;
         _progressService = progressService;
         _pauseGate = pauseGate;
+        _eventService = eventService;
         _logger = logger;
         _useTranslatedContext = useTranslatedContext;
         _mergeStackedLines = mergeStackedLines;
@@ -191,7 +202,8 @@ public class SubtitleTranslationService
                     SourceLanguage = translationRequest.SourceLanguage,
                     TargetLanguage = translationRequest.TargetLanguage,
                     ContextLinesBefore = contextLinesBefore.Count > 0 ? contextLinesBefore : null,
-                    ContextLinesAfter = contextLinesAfter.Count > 0 ? contextLinesAfter : null
+                    ContextLinesAfter = contextLinesAfter.Count > 0 ? contextLinesAfter : null,
+                    RequestId = translationRequest.Id
                 }, cancellationToken);
                 if (_mergeStackedLines)
                 {
@@ -250,6 +262,7 @@ public class SubtitleTranslationService
         }
 
         Exception? lastError = null;
+        string? failedProvider = null;
         foreach (var candidate in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -263,6 +276,7 @@ public class SubtitleTranslationService
                     translateAbleSubtitle.ContextLinesAfter,
                     cancellationToken);
                 LogFallback(candidate, translateAbleSubtitle.SourceLanguage, translateAbleSubtitle.TargetLanguage);
+                await RecordDegradationAsync(translateAbleSubtitle.RequestId, failedProvider, candidate.Entry.Name);
                 return (translated, candidate.Entry.Name, candidate.Pair);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -272,7 +286,9 @@ public class SubtitleTranslationService
             catch (Exception ex)
             {
                 lastError = ex;
+                failedProvider = candidate.Entry.Name;
                 _logger.LogWarning(ex, "Translation service {Service} failed.", candidate.Entry.Name);
+                await RecordProviderFailureAsync(translateAbleSubtitle.RequestId, candidate.Entry.Name, ex);
             }
         }
 
@@ -340,6 +356,70 @@ public class SubtitleTranslationService
     }
 
     /// <summary>
+    /// Persists a provider failure on the request timeline (P1-2), once per
+    /// provider per request — the walk retries the primary on every line, so
+    /// unthrottled rows would drown the timeline. The message carries the
+    /// HTTP status when the failure chain exposes one.
+    /// </summary>
+    private async Task RecordProviderFailureAsync(int? requestId, string provider, Exception exception)
+    {
+        if (_eventService is null || requestId is not { } id || !_recordedProviderFailures.Add(provider))
+        {
+            return;
+        }
+
+        var status = ExtractHttpStatus(exception);
+        var message = status is { } code ? $"{code} · {exception.Message}" : exception.Message;
+        await _eventService.LogTimelineEvent(
+            id,
+            TranslationEventType.ProviderFailed,
+            TranslationStatus.InProgress,
+            provider,
+            message);
+    }
+
+    /// <summary>
+    /// Persists a degradation (failed provider → fallback that succeeded) on
+    /// the request timeline (P1-2), once per edge per request.
+    /// </summary>
+    private async Task RecordDegradationAsync(int? requestId, string? failedProvider, string succeededProvider)
+    {
+        if (_eventService is null || requestId is not { } id || failedProvider is null)
+        {
+            return;
+        }
+        if (!_recordedDegradations.Add((failedProvider, succeededProvider)))
+        {
+            return;
+        }
+
+        await _eventService.LogTimelineEvent(
+            id,
+            TranslationEventType.Degraded,
+            TranslationStatus.InProgress,
+            succeededProvider,
+            $"{failedProvider} -> {succeededProvider}");
+    }
+
+    /// <summary>
+    /// Provider HTTP status from a failure, walking the inner-exception chain —
+    /// the shared retry pipeline wraps HttpRequestExceptions inside
+    /// TranslationException, so the outermost exception alone loses 429/503.
+    /// </summary>
+    private static int? ExtractHttpStatus(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is HttpRequestException { StatusCode: not null } httpException)
+            {
+                return (int)httpException.StatusCode!;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Translates subtitles in batch mode.
     /// </summary>
     public async Task<List<SubtitleItem>> TranslateSubtitlesBatch(
@@ -387,7 +467,8 @@ public class SubtitleTranslationService
                 translationRequest.TargetLanguage,
                 stripSubtitleFormatting,
                 preserveLineBreaks,
-                cancellationToken);
+                cancellationToken,
+                translationRequest.Id);
 
             if (newlyTranslated.Count > 0)
             {
@@ -407,6 +488,14 @@ public class SubtitleTranslationService
             }
 
             processedSubtitles += currentBatch.Count;
+            if (_eventService is not null && newlyTranslated.Count > 0)
+            {
+                await _eventService.LogTimelineEvent(
+                    translationRequest.Id,
+                    TranslationEventType.BatchCompleted,
+                    TranslationStatus.InProgress,
+                    message: $"batch {batchIndex + 1}/{totalBatches} · {processedSubtitles}/{subtitles.Count} lines");
+            }
             await EmitProgress(translationRequest, processedSubtitles, subtitles.Count);
         }
 
@@ -424,7 +513,8 @@ public class SubtitleTranslationService
         string targetLanguage,
         bool stripSubtitleFormatting,
         bool preserveLineBreaks,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? requestId = null)
     {
         var toTranslate = currentBatch.Where(subtitle => subtitle.TranslatedLines.Count == 0).ToList();
         if (toTranslate.Count == 0)
@@ -447,6 +537,7 @@ public class SubtitleTranslationService
         }
 
         Exception? lastError = null;
+        string? failedProvider = null;
         foreach (var candidate in capableCandidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -459,6 +550,7 @@ public class SubtitleTranslationService
                     preserveLineBreaks,
                     cancellationToken);
                 LogFallback(candidate, sourceLanguage, targetLanguage);
+                await RecordDegradationAsync(requestId, failedProvider, candidate.Entry.Name);
                 return toTranslate;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -468,7 +560,9 @@ public class SubtitleTranslationService
             catch (Exception ex)
             {
                 lastError = ex;
+                failedProvider = candidate.Entry.Name;
                 _logger.LogWarning(ex, "Batch translation service {Service} failed.", candidate.Entry.Name);
+                await RecordProviderFailureAsync(requestId, candidate.Entry.Name, ex);
             }
         }
 

@@ -41,6 +41,9 @@ const service = (
             .get(buildUrl(`${resource}/events`, { take }))
             .then((response) => response.data)
     },
+    getEvents(id: number) {
+        return http.get(`${resource}/${id}/events`).then((response) => response.data)
+    },
     pause<T>(translationRequest: ITranslationRequest): Promise<T> {
         return http.post(`${resource}/pause`, translationRequest).then((response) => response.data)
     },

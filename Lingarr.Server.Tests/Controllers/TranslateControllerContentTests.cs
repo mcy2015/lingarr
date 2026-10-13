@@ -200,6 +200,7 @@ public class TranslateControllerContentTests : IDisposable
                 _translationServiceFactoryMock.Object,
                 _progressServiceMock.Object,
                 new Mock<IAsyncTranslationRegistry>().Object,
+                eventServiceMock.Object,
                 NullLogger<TranslationPipeline>.Instance),
             eventServiceMock.Object,
             _progressServiceMock.Object,

@@ -124,6 +124,17 @@
                 <span><kbd>E</kbd> {{ t('proofread.keys.edit') }}</span>
             </div>
             <span class="flex-1"></span>
+            <!-- 术语回流(P1-4):N = 本次会话真实保存过修改的行数,0 时隐藏。
+                 只做跳转定位,不自动创建术语(产品语义待定)。 -->
+            <button
+                v-if="modifiedCount > 0"
+                type="button"
+                data-test="suggest-glossary"
+                class="border-warning/50 text-warning hover:bg-warning/10 cursor-pointer rounded-md border px-3 py-1 text-xs transition-colors"
+                :title="t('proofread.suggestGlossaryHint')"
+                @click="suggestGlossary">
+                {{ t('proofread.suggestGlossary', { count: modifiedCount }) }}
+            </button>
             <button
                 type="button"
                 class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-3 py-1 text-xs transition-colors"
@@ -179,6 +190,9 @@ const editingPosition = ref<number | null>(null)
 const draft = ref('')
 const approved = ref(new Set<number>())
 const rejected = ref(new Set<number>())
+// 本次会话真实落库过修改的行(P1-4 术语回流计数):applyDraft 成功后追加
+const modifiedPositions = ref(new Set<number>())
+const modifiedCount = computed(() => modifiedPositions.value.size)
 
 const lines = computed<ISubtitleLineComparison[]>(() => detail.value?.lines ?? [])
 const approvedCount = computed(() => approved.value.size)
@@ -302,11 +316,18 @@ async function applyDraft(line: ISubtitleLineComparison): Promise<void> {
             origin: PROOFREAD_LINE_ORIGIN.MANUAL
         })
         line.target = draft.value
+        modifiedPositions.value.add(line.position)
         await approveLine(line)
         cancelEdit()
     } catch {
         // keep the editor open on failure; the workbench marks nothing saved
     }
+}
+
+/// 术语回流(P1-4):带修改计数跳到 settings quality 面板的术语表区。
+/// 只跳转定位 —— 是否把修改沉淀为术语由用户在术语表里决定。
+function suggestGlossary(): void {
+    router.push({ name: 'settings-quality', hash: '#glossary' })
 }
 
 function rejectLine(line: ISubtitleLineComparison): void {

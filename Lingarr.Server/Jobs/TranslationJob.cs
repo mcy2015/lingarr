@@ -87,7 +87,8 @@ public class TranslationJob
                 jobId);
             request.StartedAt = DateTimeOffset.UtcNow;
             await _dbContext.SaveChangesAsync();
-            await _eventService.LogEvent(request.Id, TranslationStatus.InProgress);
+            await _eventService.LogEvent(request.Id, TranslationStatus.InProgress,
+                eventType: TranslationEventType.Started);
             await _translationRequestService.UpdateActiveCount();
 
             _logger.LogInformation("TranslateJob started for subtitle: |Green|{filePath}|/Green|",
@@ -286,8 +287,9 @@ public class TranslationJob
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
-            
-            await _eventService.LogEvent(translationRequest.Id, TranslationStatus.Failed, ex.Message);
+
+            await _eventService.LogEvent(translationRequest.Id, TranslationStatus.Failed, ex.Message,
+                eventType: TranslationEventType.Failed);
             await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
             await _translationRequestService.UpdateActiveCount();
             await _progressService.Emit(translationRequest, 0);
@@ -315,6 +317,11 @@ public class TranslationJob
             translationRequest.TranslatedSubtitle = outputPath;
             translationRequest.IsBilingual = bilingual;
             await _dbContext.SaveChangesAsync();
+            await _eventService.LogTimelineEvent(
+                translationRequest.Id,
+                TranslationEventType.Writeback,
+                TranslationStatus.InProgress,
+                message: outputPath);
 
             _logger.LogInformation("TranslateJob completed and created subtitle: |Green|{filePath}|/Green|",
                 outputPath);
@@ -334,7 +341,8 @@ public class TranslationJob
         translationRequest.CompletedAt = DateTimeOffset.UtcNow;
         translationRequest.Status = TranslationStatus.Completed;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _eventService.LogEvent(translationRequest.Id, TranslationStatus.Completed);
+        await _eventService.LogEvent(translationRequest.Id, TranslationStatus.Completed,
+            eventType: TranslationEventType.Completed);
         await _translationRequestService.UpdateActiveCount();
         await _progressService.Emit(translationRequest, 100);
         await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
