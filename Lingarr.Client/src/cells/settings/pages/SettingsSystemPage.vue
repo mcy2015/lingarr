@@ -3,7 +3,7 @@
          chip 派生 + 管理下钻)、日志/定时任务下钻行(批次 1 已建,归卡)、
          卡头 meta 为实例 store 真实版本。 -->
     <div class="space-y-2">
-        <div class="border-line bg-secondary mx-4 max-w-[640px] rounded-md border" data-test="system-card">
+        <div class="border-line bg-secondary mx-4 rounded-md border" data-test="system-card">
             <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('settings.system.title') }}</h2>
                 <span

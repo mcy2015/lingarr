@@ -2,7 +2,7 @@
     <!-- ═══ 媒体源卡(原型 screen-06 B 组 setlist 形态):Sonarr/Radarr 行
          (dot + mono 地址 + 同步计数 + 重新同步 + 编辑模态)、Webhook 折叠说明、
          媒体源同步 cron 行组(原 Indexing 卡)、路径映射行下钻。 -->
-    <div class="border-line bg-secondary max-w-[640px] rounded-md border" data-test="media-sources-card">
+    <div class="border-line bg-secondary rounded-md border" data-test="media-sources-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.sources.title') }}</h2>
             <span class="text-secondary-content ml-auto text-[11px]">

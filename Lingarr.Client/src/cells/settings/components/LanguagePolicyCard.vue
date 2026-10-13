@@ -1,7 +1,7 @@
 <template>
     <!-- 语言策略卡(原型 screen-06 C 组,P1-3):目标语言 / 源语言白名单的
          唯一编辑点(自 providers 页迁移)+ 派生只读「链上语言覆盖」行。 -->
-    <div class="border-line bg-secondary max-w-[640px] rounded-md border">
+    <div class="border-line bg-secondary rounded-md border">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.languagePolicy.title') }}</h2>
             <span class="text-secondary-content ml-auto text-[11px]">{{ t('settings.languagePolicy.meta') }}</span>

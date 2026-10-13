@@ -2,7 +2,7 @@
     <!-- ═══ 字幕输出卡(原型 screen-06 C 组 setlist 行式):原 SubtitleSettings
          8 开关 + ValidationSettings 全量转为行式,一个不砍;命名模板行只读
          (服务端命名固定,不给假编辑)。 -->
-    <div class="border-line bg-secondary max-w-[640px] rounded-md border" data-test="subtitle-output-card">
+    <div class="border-line bg-secondary rounded-md border" data-test="subtitle-output-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.subtitleOutput.title') }}</h2>
             <span class="text-secondary-content ml-auto text-[11px]">

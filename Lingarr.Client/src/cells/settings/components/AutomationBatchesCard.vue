@@ -2,7 +2,7 @@
     <!-- ═══ 自动化批次卡(原型 screen-06 B 组 setlist 行式):每日补缺行
          (cron + 限额 + 新片延迟的「编辑」模态,参数与开关解耦)+ switch。
          「每周全库巡检」服务端不存在,不显示。 -->
-    <div class="border-line bg-secondary max-w-[640px] rounded-md border" data-test="batches-card">
+    <div class="border-line bg-secondary rounded-md border" data-test="batches-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.automation.batchesTitle') }}</h2>
             <span class="text-secondary-content mono ml-auto text-[11px]">

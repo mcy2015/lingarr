@@ -1,6 +1,6 @@
 <template>
     <!-- 术语表卡（原型屏 6 · 字幕与质量）：CRUD 直连 /api/glossary -->
-    <div class="border-line bg-secondary max-w-[640px] rounded-md border">
+    <div class="border-line bg-secondary rounded-md border">
         <div class="border-line flex items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.glossary.title') }}</h2>
             <span class="chip">{{ t('settings.glossary.count', { count: entries.length }) }}</span>

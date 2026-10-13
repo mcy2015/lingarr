@@ -1,9 +1,9 @@
 <template>
-    <div class="space-y-3">
+    <div class="grid grid-cols-1 items-stretch gap-3 px-4 lg:grid-cols-2 2xl:grid-cols-3">
         <!-- 字幕输出行式卡(原 SubtitleSettings + ValidationSettings 全量收纳) -->
-        <SubtitleOutputCard class="px-4" />
-        <GlossaryCard id="glossary" class="px-4 scroll-mt-24" />
-        <LanguagePolicyCard class="px-4" />
+        <SubtitleOutputCard />
+        <GlossaryCard id="glossary" class="scroll-mt-24" />
+        <LanguagePolicyCard />
     </div>
 </template>
 

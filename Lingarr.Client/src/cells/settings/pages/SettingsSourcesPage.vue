@@ -1,9 +1,9 @@
 <template>
-    <div class="space-y-3">
+    <div class="grid grid-cols-1 items-stretch gap-3 px-4 lg:grid-cols-2">
         <!-- 媒体源卡:Sonarr/Radarr 行 + Webhook 折叠 + 媒体源同步 cron + 路径映射行 -->
-        <MediaSourcesCard class="px-4" />
+        <MediaSourcesCard />
         <!-- 自动化批次卡:每日补缺行(参数与开关解耦) -->
-        <AutomationBatchesCard class="px-4" />
+        <AutomationBatchesCard />
     </div>
 </template>
 
