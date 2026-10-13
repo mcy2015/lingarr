@@ -1,7 +1,7 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
-using Lingarr.Server.Providers;
 using Microsoft.AspNetCore.Mvc;
+using Lingarr.Server.Modules.Infrastructure;
 
 namespace Lingarr.Server.Controllers;
 

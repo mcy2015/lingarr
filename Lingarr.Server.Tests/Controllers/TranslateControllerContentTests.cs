@@ -14,12 +14,9 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Translation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.Sqlite;
@@ -27,6 +24,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
+using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Statistics;
+using Lingarr.Server.Modules.Subtitle;
 
 namespace Lingarr.Server.Tests.Controllers;
 

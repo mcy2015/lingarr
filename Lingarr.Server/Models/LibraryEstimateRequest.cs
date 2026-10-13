@@ -1,5 +1,5 @@
 using Lingarr.Core.Enum;
-using Lingarr.Server.Interfaces.Services;
+using Lingarr.Server.Modules.Media;
 
 namespace Lingarr.Server.Models;
 

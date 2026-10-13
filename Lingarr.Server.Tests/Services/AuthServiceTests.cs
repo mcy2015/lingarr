@@ -4,11 +4,11 @@ using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Services;
 using Lingarr.Server.Models;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Lingarr.Server.Modules.Auth;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Tests.Services;
 

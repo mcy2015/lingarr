@@ -1,9 +1,4 @@
-using Lingarr.Server.Interfaces.Providers;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Integration;
-using Lingarr.Server.Providers;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Integration;
+using Lingarr.Server.Modules.Integration;
 
 namespace Lingarr.Server.Modules.Integration;
 

@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
-using Lingarr.Server.Services;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services;
 

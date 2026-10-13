@@ -1,6 +1,4 @@
-using Lingarr.Server.Interfaces.Services.Sync;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Sync;
+using Lingarr.Server.Modules.Sync;
 
 namespace Lingarr.Server.Modules.Sync;
 

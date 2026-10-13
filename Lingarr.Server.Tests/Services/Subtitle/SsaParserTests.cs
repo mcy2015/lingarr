@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text;
 using Lingarr.Server.Models.FileSystem;
-using Lingarr.Server.Services.Subtitle;
+using Lingarr.Server.Modules.Subtitle;
 using Xunit;
 
 namespace Lingarr.Server.Tests.Services.Subtitle;

@@ -1,9 +1,10 @@
-﻿using Hangfire;
+using Hangfire;
 using Lingarr.Core;
 using Lingarr.Core.Configuration;
 using Lingarr.Migrations;
 using Lingarr.Server.Hubs;
-using Lingarr.Server.Interfaces.Services;
+using Lingarr.Server.Modules.Auth;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Extensions;
 

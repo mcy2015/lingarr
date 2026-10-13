@@ -11,9 +11,6 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Logging;
 using Lingarr.Migrations;
 using Lingarr.Server.Filters;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Providers;
-using Lingarr.Server.Services;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 

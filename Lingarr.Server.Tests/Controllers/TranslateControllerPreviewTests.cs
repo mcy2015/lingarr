@@ -8,15 +8,14 @@ using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Controllers;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
-using Lingarr.Server.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Tests.Controllers;
 

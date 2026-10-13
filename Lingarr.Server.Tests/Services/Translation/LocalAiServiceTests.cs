@@ -10,13 +10,12 @@ using Lingarr.Contracts.Exceptions;
 using Lingarr.Contracts.Models.Batch;
 using Lingarr.Core.Configuration;
 using Lingarr.Server.Exceptions;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Translation;
+using Lingarr.Server.Modules.Translation;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Tests.Services.Translation;
 

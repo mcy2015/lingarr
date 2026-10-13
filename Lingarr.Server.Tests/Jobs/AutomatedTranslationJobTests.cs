@@ -8,14 +8,15 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Core.Interfaces;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Jobs;
 using Lingarr.Server.Models;
-using Lingarr.Server.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Settings;
+using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Jobs;
 

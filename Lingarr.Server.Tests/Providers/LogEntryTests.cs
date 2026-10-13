@@ -1,6 +1,6 @@
-using Lingarr.Server.Providers;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using Lingarr.Server.Modules.Infrastructure;
 
 namespace Lingarr.Server.Tests.Providers;
 

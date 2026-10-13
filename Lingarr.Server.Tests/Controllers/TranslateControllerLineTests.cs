@@ -8,13 +8,12 @@ using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Controllers;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models.FileSystem;
-using Lingarr.Server.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Tests.Controllers;
 

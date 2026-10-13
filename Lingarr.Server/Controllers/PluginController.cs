@@ -1,11 +1,11 @@
-﻿using Lingarr.Contracts.Models;
+using Lingarr.Contracts.Models;
 using Lingarr.Contracts.Plugins;
 using Microsoft.AspNetCore.Authorization;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models.Api;
-using Lingarr.Server.Services.Plugins;
+using Lingarr.Server.Modules.Translation.Plugins;
 using Microsoft.AspNetCore.Mvc;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Controllers;
 

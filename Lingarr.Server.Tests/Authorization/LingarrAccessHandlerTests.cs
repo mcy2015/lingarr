@@ -2,12 +2,12 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
-using Lingarr.Server.Authorization;
-using Lingarr.Server.Interfaces.Services;
+using Lingarr.Server.Modules.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Tests.Authorization;
 

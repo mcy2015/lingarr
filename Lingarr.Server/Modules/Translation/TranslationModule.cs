@@ -1,12 +1,9 @@
 using Lingarr.Contracts.Interfaces.Plugins;
 using Lingarr.Contracts.Settings;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Modules.Infrastructure;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Plugins;
-using Lingarr.Server.Services.Plugins.Manifests;
-using Lingarr.Server.Services.Translation;
+using Lingarr.Server.Modules.Translation.Plugins;
+using Lingarr.Server.Modules.Translation.Plugins.Manifests;
 
 namespace Lingarr.Server.Modules.Translation;
 

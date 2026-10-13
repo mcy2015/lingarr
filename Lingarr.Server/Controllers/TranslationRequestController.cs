@@ -1,12 +1,13 @@
-﻿using Lingarr.Core.Entities;
+using Lingarr.Core.Entities;
 using System.Collections.Generic;
 using System.Linq;
 using Lingarr.Core.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.TranslationRequests;
+using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Controllers;
 

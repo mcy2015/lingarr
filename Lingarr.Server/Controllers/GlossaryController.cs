@@ -1,7 +1,7 @@
 using Lingarr.Core.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Lingarr.Server.Interfaces.Services;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Controllers;
 

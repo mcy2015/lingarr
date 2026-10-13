@@ -1,9 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Lingarr.Core;
 using Lingarr.Core.Models;
 using Microsoft.AspNetCore.Authorization;
-using Lingarr.Server.Interfaces.Services;
-using Microsoft.AspNetCore.Authorization;
+using Lingarr.Server.Modules.Integration;
 
 namespace Lingarr.Server.Controllers;
 

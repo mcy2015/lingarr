@@ -3,8 +3,8 @@ using System.IO;
 using System.Linq;
 using Lingarr.Contracts.Models;
 using Lingarr.Server.Models;
-using Lingarr.Server.Services;
 using Xunit;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services;
 

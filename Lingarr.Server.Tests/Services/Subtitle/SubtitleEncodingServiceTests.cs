@@ -1,6 +1,6 @@
 using System.Linq;
 using System.Text;
-using Lingarr.Server.Services.Subtitle;
+using Lingarr.Server.Modules.Subtitle;
 using Xunit;
 
 namespace Lingarr.Server.Tests.Services.Subtitle;

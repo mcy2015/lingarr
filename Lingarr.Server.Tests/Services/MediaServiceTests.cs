@@ -5,14 +5,15 @@ using System.Collections.Generic;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using System.Net.Http;
-using Lingarr.Server.Interfaces.Services.Integration;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Sync;
-using Lingarr.Server.Services;
+using Lingarr.Server.Modules.Integration;
+using Lingarr.Server.Modules.Sync;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
+using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Subtitle;
 
 namespace Lingarr.Server.Tests.Services;
 

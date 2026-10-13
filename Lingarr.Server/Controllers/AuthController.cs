@@ -1,12 +1,13 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Lingarr.Core.Configuration;
 
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Lingarr.Server.Modules.Auth;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Controllers;
 

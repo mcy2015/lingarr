@@ -7,13 +7,14 @@ using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using Lingarr.Server.Modules.Auth;
+using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Tests.Services;
 

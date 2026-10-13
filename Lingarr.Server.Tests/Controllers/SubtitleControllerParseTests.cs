@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using Lingarr.Server.Controllers;
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models.Api;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Subtitle;
 
 namespace Lingarr.Server.Tests.Controllers;
 

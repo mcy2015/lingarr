@@ -5,13 +5,13 @@ using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
-using Lingarr.Server.Services;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services;
 

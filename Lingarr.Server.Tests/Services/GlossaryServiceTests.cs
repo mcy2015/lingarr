@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Models.FileSystem;
-using Lingarr.Server.Services;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services;
 

@@ -9,12 +9,10 @@ using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Models;
 using Lingarr.Contracts.Models.Batch;
 using Lingarr.Server.Models.FileSystem;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models.Api;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Translation;
-using Lingarr.Server.Services.Translation.Base;
+using Lingarr.Server.Modules.Translation.Base;
+using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Controllers;
 

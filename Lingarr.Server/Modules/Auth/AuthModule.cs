@@ -1,6 +1,4 @@
-using Lingarr.Server.Authorization;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Services;
+using Lingarr.Server.Modules.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;

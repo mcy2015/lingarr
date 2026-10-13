@@ -1,4 +1,4 @@
-using Lingarr.Server.Services.Subtitle;
+using Lingarr.Server.Modules.Subtitle;
 
 namespace Lingarr.Server.Models.Api;
 

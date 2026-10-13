@@ -12,11 +12,10 @@ using Microsoft.Extensions.Logging;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Subtitle;
+using Lingarr.Server.Modules.Subtitle;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services.Subtitle;
 

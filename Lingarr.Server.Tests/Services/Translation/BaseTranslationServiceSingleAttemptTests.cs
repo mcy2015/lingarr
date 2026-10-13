@@ -7,12 +7,12 @@ using System.Threading.Tasks;
 using Lingarr.Contracts.Exceptions;
 using Lingarr.Contracts.Models;
 using Lingarr.Contracts.Translation;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Translation.Base;
+using Lingarr.Server.Modules.Translation.Base;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services.Translation;
 

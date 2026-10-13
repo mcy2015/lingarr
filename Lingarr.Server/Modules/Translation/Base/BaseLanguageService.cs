@@ -1,0 +1,232 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Lingarr.Contracts.Models;
+using Lingarr.Contracts.Models.Batch;
+using Lingarr.Server.Models;
+using Lingarr.Server.Modules.Settings;
+
+namespace Lingarr.Server.Modules.Translation.Base;
+
+public abstract class BaseLanguageService : BaseTranslationService
+{
+    private static readonly Regex PlaceholderPattern = new(@"\{(\w+)\}", RegexOptions.Compiled);
+
+    private readonly string? _languageFilePath;
+    private Task<List<SourceLanguage>>? _cachedLanguages;
+    protected string? _prompt;
+    protected string? _userPrompt;
+    protected string? _proofreadPrompt;
+    protected string? _proofreadUserPrompt;
+    protected Dictionary<string, string> _replacements;
+
+    protected BaseLanguageService(
+        ISettingService settings,
+        ILogger logger,
+        LanguageCodeService languageCodeService,
+        string? languageFilePath = null) : base(settings, logger, languageCodeService)
+    {
+        _languageFilePath = languageFilePath;
+        _replacements = new Dictionary<string, string>();
+    }
+
+    protected static string ReplacePlaceholders(string? template, Dictionary<string, string> replacements)
+    {
+        if (string.IsNullOrEmpty(template))
+        {
+            return string.Empty;
+        }
+
+        return PlaceholderPattern.Replace(template, match =>
+            replacements.TryGetValue(match.Groups[1].Value, out var value) ? value : match.Value);
+    }
+
+    protected Dictionary<string, string> GetReplacements(
+        string model,
+        string lineToTranslate,
+        List<string>? contextLinesBefore,
+        List<string>? contextLinesAfter)
+    {
+        var replacements = new Dictionary<string, string>(_replacements)
+        {
+            ["model"] = model,
+            ["lineToTranslate"] = lineToTranslate,
+            ["contextBefore"] = string.Join("\n", contextLinesBefore ?? []),
+            ["contextAfter"] = string.Join("\n", contextLinesAfter ?? [])
+        };
+        var systemPrompt = ReplacePlaceholders(_prompt, replacements);
+        var userMessage = string.IsNullOrEmpty(_userPrompt)
+            ? lineToTranslate
+            : ReplacePlaceholders(_userPrompt, replacements);
+        replacements["systemPrompt"] = systemPrompt;
+        replacements["userMessage"] = userMessage;
+        return replacements;
+    }
+
+    protected Dictionary<string, string> GetBatchReplacements(string model, string serializedBatch)
+    {
+        var replacements = new Dictionary<string, string>(_replacements)
+        {
+            ["model"] = model,
+            ["lineToTranslate"] = string.Empty,
+            ["contextBefore"] = string.Empty,
+            ["contextAfter"] = string.Empty
+        };
+        replacements["systemPrompt"] = ReplacePlaceholders(_prompt, replacements);
+        replacements["userMessage"] = serializedBatch;
+        return replacements;
+    }
+
+    protected Dictionary<string, string> GetProofreadReplacements(
+        string model,
+        string sourceLine,
+        string translatedLine)
+    {
+        var replacements = new Dictionary<string, string>(_replacements)
+        {
+            ["model"] = model,
+            ["sourceLine"] = sourceLine,
+            ["translatedLine"] = translatedLine,
+            ["lineToTranslate"] = string.Empty,
+            ["contextBefore"] = string.Empty,
+            ["contextAfter"] = string.Empty
+        };
+        var systemPrompt = ReplacePlaceholders(_proofreadPrompt, replacements);
+        var userMessage = string.IsNullOrEmpty(_proofreadUserPrompt)
+            ? translatedLine
+            : ReplacePlaceholders(_proofreadUserPrompt, replacements);
+        replacements["systemPrompt"] = systemPrompt;
+        replacements["userMessage"] = userMessage;
+        return replacements;
+    }
+
+    /// <inheritdoc />
+    public override async Task<LanguagePair?> GetLanguagePair(
+        string requestedSource,
+        string requestedTarget,
+        CancellationToken cancellationToken)
+    {
+        List<SourceLanguage> languages;
+        try
+        {
+            languages = await GetLanguages();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogDebug(exception, "Could not retrieve supported languages, treating as unsupported pair.");
+            return null;
+        }
+
+        // Services without a language list, accept any culture-valid pair.
+        if (languages.Count > 0)
+        {
+            return await base.GetLanguagePair(requestedSource, requestedTarget, cancellationToken);
+        }
+
+        if (!_languageCodeService.Validate(requestedSource) || !_languageCodeService.Validate(requestedTarget))
+        {
+            return null;
+        }
+
+        return new LanguagePair
+        {
+            Source = requestedSource,
+            Target = requestedTarget,
+            Tier = MatchTier.Exact
+        };
+    }
+
+    /// <inheritdoc />
+    public sealed override Task<List<SourceLanguage>> GetLanguages() => _cachedLanguages ??= GetServiceLanguages();
+
+    /// <summary>
+    /// Produces the supported-languages list for this service.
+    /// </summary>
+    protected virtual async Task<List<SourceLanguage>> GetServiceLanguages()
+    {
+        if (_languageFilePath is null)
+        {
+            return [];
+        }
+
+        _logger.LogInformation($"Retrieving |Green|{_languageFilePath}|/Green| languages");
+        var sourceLanguages = await GetJson(_languageFilePath);
+
+        var languageCodes = sourceLanguages.Select(l => l.Code).ToHashSet();
+        return sourceLanguages
+            .Select(lang => new SourceLanguage
+            {
+                Code = lang.Code,
+                Name = lang.Name,
+                Targets = languageCodes
+                    .Where(code => code != lang.Code)
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Reads and deserializes the language configuration from a JSON file.
+    /// </summary>
+    /// <returns>A list of language configurations from the JSON file</returns>
+    /// <exception cref="JsonException">Thrown when deserialization of the JSON file fails</exception>
+    /// <exception cref="IOException">Thrown when the file cannot be read</exception>
+    private async Task<List<JsonLanguage>> GetJson(string languageFilePath)
+    {
+        string jsonContent = await File.ReadAllTextAsync(languageFilePath);
+        var sourceLanguages = JsonSerializer.Deserialize<List<JsonLanguage>>(jsonContent);
+        if (sourceLanguages == null)
+        {
+            throw new JsonException($"Failed to deserialize {languageFilePath}");
+        }
+
+        return sourceLanguages;
+    }
+
+    /// <inheritdoc />
+    public override async Task<ModelsResponse> GetModels()
+    {
+        return await Task.FromResult(new ModelsResponse());
+    }
+    
+    private protected static Dictionary<int, string> MergeByPosition(List<StructuredBatchResponse> items) =>
+        items
+            .GroupBy(item => item.Position)
+            .ToDictionary(
+                group => group.Key,
+                group => string.Join("\n", group.Select(i => i.Line).Where(l => !string.IsNullOrWhiteSpace(l))));
+
+    protected void SetLanguageReplacements(string sourceLanguage, string targetLanguage, string languageCodeFormatSetting)
+    {
+        var useLanguageCodes = languageCodeFormatSetting == "true";
+        _replacements = new Dictionary<string, string>
+        {
+            ["sourceLanguage"] = useLanguageCodes ? sourceLanguage : GetFullLanguageName(sourceLanguage),
+            ["targetLanguage"] = useLanguageCodes ? targetLanguage : GetFullLanguageName(targetLanguage)
+        };
+    }
+    
+    /// <summary>
+    /// Converts a language code to its full culture name in English.
+    /// </summary>
+    /// <param name="languageCode">The language code to convert (e.g., "en", "pt-BR", "zh-TW").</param>
+    /// <returns>The full language name or the original code if no match is found.</returns>
+    private string GetFullLanguageName(string languageCode)
+    {
+        if (string.IsNullOrWhiteSpace(languageCode))
+            return languageCode;
+
+        try
+        {
+            return _languageCodeService.GetCultureName(languageCode);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid language code: {LanguageCode}", languageCode);
+            return languageCode;
+        }
+    }
+}

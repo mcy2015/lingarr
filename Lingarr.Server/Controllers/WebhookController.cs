@@ -1,8 +1,8 @@
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
-using Lingarr.Server.Jobs;
 using Lingarr.Server.Models.Webhooks;
 using Microsoft.AspNetCore.Mvc;
+using Lingarr.Server.Modules.Integration;
 
 namespace Lingarr.Server.Controllers;
 

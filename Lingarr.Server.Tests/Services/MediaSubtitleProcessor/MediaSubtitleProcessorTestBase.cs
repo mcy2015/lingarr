@@ -6,12 +6,15 @@ using Lingarr.Contracts.Models;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Lingarr.Server.Modules.Settings;
+using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services.MediaSubtitleProcessor;
 
@@ -25,7 +28,7 @@ public abstract class MediaSubtitleProcessorTestBase : IDisposable
     protected readonly Mock<ISubtitleService> SubtitleServiceMock;
     protected readonly Mock<ISettingService> SettingServiceMock;
     protected readonly LingarrDbContext DbContext;
-    protected readonly Lingarr.Server.Services.MediaSubtitleProcessor Processor;
+    protected readonly Lingarr.Server.Modules.Media.MediaSubtitleProcessor Processor;
 
     protected MediaSubtitleProcessorTestBase()
     {
@@ -68,7 +71,7 @@ public abstract class MediaSubtitleProcessorTestBase : IDisposable
                 };
             });
 
-        Processor = new Lingarr.Server.Services.MediaSubtitleProcessor(
+        Processor = new Lingarr.Server.Modules.Media.MediaSubtitleProcessor(
             TranslationRequestServiceMock.Object,
             LoggerMock.Object,
             SettingServiceMock.Object,

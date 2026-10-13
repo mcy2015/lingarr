@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
-using Lingarr.Server.Services.Subtitle;
+using Lingarr.Server.Modules.Subtitle;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lingarr.Server.Controllers;

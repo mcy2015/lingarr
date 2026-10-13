@@ -2,11 +2,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
-using Lingarr.Server.Services;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Settings;
+using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Services;
 

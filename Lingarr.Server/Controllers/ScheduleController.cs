@@ -1,9 +1,10 @@
-﻿using Hangfire;
+using Hangfire;
 using Microsoft.AspNetCore.Authorization;
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Jobs;
 using Lingarr.Server.Models;
 using Microsoft.AspNetCore.Mvc;
+using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Sync;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Controllers;
 

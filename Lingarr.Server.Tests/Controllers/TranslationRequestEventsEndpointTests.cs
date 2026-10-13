@@ -4,12 +4,13 @@ using System.Threading.Tasks;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Controllers;
-using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.TranslationRequests;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Controllers;
 

@@ -7,6 +7,7 @@ using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Media;
 
 namespace Lingarr.Server.Tests.Services.MediaSubtitleProcessor;
 

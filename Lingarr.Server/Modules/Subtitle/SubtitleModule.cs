@@ -1,7 +1,4 @@
-using Lingarr.Server.Interfaces.Services;
-using Lingarr.Server.Interfaces.Services.Subtitle;
-using Lingarr.Server.Services;
-using Lingarr.Server.Services.Subtitle;
+using Lingarr.Server.Modules.Subtitle;
 
 namespace Lingarr.Server.Modules.Subtitle;
 
