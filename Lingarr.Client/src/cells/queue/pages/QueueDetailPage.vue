@@ -293,9 +293,10 @@ const showProgress = computed(() => {
 })
 
 // ── 执行链 + 时间线(P1-2)────────────────────────────────────────
-// 链来自 service_type 设置;chip 状态从已落库事件推导。当前服务:
-// 终态请求取持久化的 serviceType;进行中取最近一条带 service 的翻译行
-// (SignalR 逐行推送),降级后取最近 Degraded 事件的 provider。
+// 链来自 service_type 设置;chip 状态从已落库事件推导。当前服务优先级
+// (deriveChainState):最近一条 Degraded 事件的 provider(降级后接管者,
+// 事件优先于 request.serviceType,兼容旧数据把主服务落库的行)>
+// 持久化的 serviceType > 最近一条带 service 的翻译行(SignalR 逐行推送)。
 const serviceChain = computed(() =>
     parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string)
 )

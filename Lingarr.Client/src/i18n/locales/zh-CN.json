@@ -385,6 +385,8 @@
             "title": "产量与成本 · 近 14 天",
             "meta": "写回 {count} 条 · 成本 {cost}",
             "metaUnknownCost": "写回 {count} 条 · 成本 —",
+            "monthMeta": "本月累计 {count} 条 / {cost}",
+            "monthMetaUnknownCost": "本月累计 {count} 条 / —",
             "empty": "该时段还没有写回数据。",
             "written": "写回(条)",
             "cost": "成本($)",

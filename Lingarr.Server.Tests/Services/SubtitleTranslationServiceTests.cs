@@ -910,6 +910,209 @@ public class SubtitleTranslationServiceTests
 
     #endregion
 
+    #region Producing-service derivation (P1 fix: cost/chain attribution)
+
+    private static Mock<IProgressService> ProgressMock()
+    {
+        var progress = new Mock<IProgressService>();
+        progress.Setup(p => p.Emit(It.IsAny<TranslationRequest>(), It.IsAny<int>())).Returns(Task.CompletedTask);
+        progress.Setup(p => p.EmitLine(
+                It.IsAny<TranslationRequest>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string?>(), It.IsAny<LanguagePair?>()))
+            .Returns(Task.CompletedTask);
+        progress.Setup(p => p.EmitLines(It.IsAny<TranslationRequest>(), It.IsAny<List<TranslatedLineData>>()))
+            .Returns(Task.CompletedTask);
+        return progress;
+    }
+
+    [Fact]
+    public async Task ResolveProducingService_ReturnsSoleProvider_WhenItProducedEverything()
+    {
+        // Arrange
+        var harness = CreatePerLineHarness(text => $"tr:{text}");
+        var subtitles = new List<SubtitleItem> { Subtitle(1, "a"), Subtitle(2, "b"), Subtitle(3, "c") };
+
+        // Act
+        await harness.Service.TranslateSubtitles(subtitles, NewRequest(),
+            stripSubtitleFormatting: false,
+            preserveLineBreaks: false,
+            contextBefore: 0,
+            contextAfter: 0,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal("test", harness.Service.ResolveProducingService());
+    }
+
+    [Fact]
+    public async Task ResolveProducingService_ReturnsFallback_WhenFallbackProducedAllLines()
+    {
+        // Arrange - the primary fails on every line, the fallback takes over
+        var failing = MockChainService(ExactPair, _ => null);
+        var working = MockChainService(ExactPair, text => $"zh:{text}");
+        var service = new SubtitleTranslationService(
+            [
+                new TranslationServiceEntry("gemini", failing.Object, null),
+                new TranslationServiceEntry("openai", working.Object, null)
+            ],
+            NullLogger.Instance,
+            ProgressMock().Object);
+
+        var subtitles = new List<SubtitleItem> { Subtitle(1, "a"), Subtitle(2, "b") };
+
+        // Act
+        await service.TranslateSubtitles(subtitles, NewRequest(),
+            stripSubtitleFormatting: false,
+            preserveLineBreaks: false,
+            contextBefore: 0,
+            contextAfter: 0,
+            CancellationToken.None);
+
+        // Assert - the run reports the provider that actually produced it,
+        // not the configured primary
+        Assert.Equal("openai", service.ResolveProducingService());
+    }
+
+    [Fact]
+    public async Task ResolveProducingService_MajorityWins_TiesBreakToTheMostRecentProducer()
+    {
+        // Arrange - primary produces positions 1-2, then fails; fallback
+        // produces positions 3-4: a 2:2 tie resolved towards the provider of
+        // the highest (most recently produced) position
+        var primaryCalls = 0;
+        var primary = MockChainService(ExactPair, text =>
+        {
+            primaryCalls++;
+            return primaryCalls <= 2 ? $"p:{text}" : null;
+        });
+        var fallback = MockChainService(ExactPair, text => $"f:{text}");
+        var service = new SubtitleTranslationService(
+            [
+                new TranslationServiceEntry("primary", primary.Object, null),
+                new TranslationServiceEntry("fallback", fallback.Object, null)
+            ],
+            NullLogger.Instance,
+            ProgressMock().Object);
+
+        var subtitles = new List<SubtitleItem> { Subtitle(1, "a"), Subtitle(2, "b"), Subtitle(3, "c"), Subtitle(4, "d") };
+
+        // Act
+        await service.TranslateSubtitles(subtitles, NewRequest(),
+            stripSubtitleFormatting: false,
+            preserveLineBreaks: false,
+            contextBefore: 0,
+            contextAfter: 0,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal("fallback", service.ResolveProducingService());
+    }
+
+    [Fact]
+    public async Task ResolveProducingService_ReturnsMajorityProducer_WhenPrimaryRecoveredMidRun()
+    {
+        // Arrange - the primary fails once, then recovers and produces the
+        // remaining lines: the majority producer is reported
+        var primaryCalls = 0;
+        var primary = MockChainService(ExactPair, text =>
+        {
+            primaryCalls++;
+            return primaryCalls == 1 ? null : $"p:{text}";
+        });
+        var fallback = MockChainService(ExactPair, text => $"f:{text}");
+        var service = new SubtitleTranslationService(
+            [
+                new TranslationServiceEntry("primary", primary.Object, null),
+                new TranslationServiceEntry("fallback", fallback.Object, null)
+            ],
+            NullLogger.Instance,
+            ProgressMock().Object);
+
+        var subtitles = new List<SubtitleItem> { Subtitle(1, "a"), Subtitle(2, "b"), Subtitle(3, "c") };
+
+        // Act
+        await service.TranslateSubtitles(subtitles, NewRequest(),
+            stripSubtitleFormatting: false,
+            preserveLineBreaks: false,
+            contextBefore: 0,
+            contextAfter: 0,
+            CancellationToken.None);
+
+        // Assert - primary covered 2 of 3 positions
+        Assert.Equal("primary", service.ResolveProducingService());
+    }
+
+    [Fact]
+    public async Task ResolveProducingService_ReturnsNull_WhenNothingNewWasTranslated()
+    {
+        // Arrange - a full resume: every line already carries a persisted translation
+        var harness = CreatePerLineHarness(_ => "unused");
+        var resumed = Subtitle(1, "hello");
+        resumed.TranslatedLines = ["hola"];
+        var subtitles = new List<SubtitleItem> { resumed };
+
+        // Act
+        await harness.Service.TranslateSubtitles(subtitles, NewRequest(),
+            stripSubtitleFormatting: false,
+            preserveLineBreaks: false,
+            contextBefore: 0,
+            contextAfter: 0,
+            CancellationToken.None);
+
+        // Assert - no provenance recorded, callers keep the configured primary
+        Assert.Null(harness.Service.ResolveProducingService());
+    }
+
+    [Fact]
+    public async Task ResolveProducingService_BatchFallback_ReturnsFallback()
+    {
+        // Arrange - the primary batch-capable provider fails, the fallback batch completes
+        var failingTranslation = new Mock<ITranslationService>();
+        failingTranslation
+            .Setup(t => t.GetLanguagePair(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ExactPair);
+        var failingBatch = new Mock<IBatchTranslationService>();
+        failingBatch
+            .Setup(b => b.TranslateBatchAsync(
+                It.IsAny<List<BatchSubtitleItem>>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TranslationException("primary batch exploded"));
+
+        var workingTranslation = new Mock<ITranslationService>();
+        workingTranslation
+            .Setup(t => t.GetLanguagePair(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ExactPair);
+        var workingBatch = new Mock<IBatchTranslationService>();
+        workingBatch
+            .Setup(b => b.TranslateBatchAsync(
+                It.IsAny<List<BatchSubtitleItem>>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((List<BatchSubtitleItem> items, string _, string _, CancellationToken _) =>
+                items.ToDictionary(item => item.Position, item => $"zh:{item.Line}"));
+
+        var service = new SubtitleTranslationService(
+            [
+                new TranslationServiceEntry("gemini", failingTranslation.Object, failingBatch.Object),
+                new TranslationServiceEntry("openai", workingTranslation.Object, workingBatch.Object)
+            ],
+            NullLogger.Instance,
+            ProgressMock().Object);
+
+        var request = NewRequest();
+
+        // Act
+        await service.TranslateSubtitlesBatch(
+            [Subtitle(1, "a"), Subtitle(2, "b")],
+            request,
+            stripSubtitleFormatting: false,
+            preserveLineBreaks: false,
+            batchSize: 2,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal("openai", service.ResolveProducingService());
+    }
+
+    #endregion
+
     #region Fallback visibility events (P1-2)
 
     private static Mock<ITranslationService> MockChainService(LanguagePair pair, Func<string, string?> translate)

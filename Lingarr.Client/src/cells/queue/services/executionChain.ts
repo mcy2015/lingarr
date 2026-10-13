@@ -11,10 +11,13 @@ export { parseServiceChain } from '@/cells/app/utils/serviceChain'
 
 /// Derives the per-service chip state of the execution chain (P1-2) from the
 /// request's persisted event timeline:
-/// - failed: a ProviderFailed event names the service (and it is not the one
-///   currently producing);
-/// - current: the request's recorded service once terminal, else the provider
-///   of the most recent Degraded event (the fallback that took over);
+/// - failed: a ProviderFailed event names the service — checked first, so a
+///   provider that failed is never masked as current by a stale
+///   request.serviceType;
+/// - current: the provider of the most recent Degraded event when the walk
+///   degraded (events outrank the request's recorded service, which
+///   historically stayed the primary after a fallback completed the run);
+///   otherwise the request's recorded service;
 /// - unused: everything the walk never needed.
 export function deriveChainState(
     chain: string[],
@@ -27,20 +30,19 @@ export function deriveChainState(
             .map((event) => event.provider as string)
     )
 
-    let current: string | null = currentService ?? null
-    if (!current) {
-        const lastDegraded = [...events]
-            .reverse()
-            .find((event) => event.eventType === TRANSLATION_EVENT_TYPE.DEGRADED && event.provider)
-        current = lastDegraded?.provider ?? null
-    }
+    // Degradation is authoritative: the walk fell back to that provider, so it
+    // is the current producer regardless of what request.serviceType says.
+    const lastDegraded = [...events]
+        .reverse()
+        .find((event) => event.eventType === TRANSLATION_EVENT_TYPE.DEGRADED && event.provider)
+    const current: string | null = (lastDegraded?.provider as string) ?? currentService ?? null
 
     return chain.map((service) => {
-        if (service === current) {
-            return { service, state: 'current' as const }
-        }
         if (failedProviders.has(service)) {
             return { service, state: 'failed' as const }
+        }
+        if (service === current) {
+            return { service, state: 'current' as const }
         }
         return { service, state: 'unused' as const }
     })

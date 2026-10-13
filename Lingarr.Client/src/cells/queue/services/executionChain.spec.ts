@@ -30,6 +30,22 @@ describe('parseServiceChain', () => {
 describe('deriveChainState', () => {
     const chain = ['gemini', 'openai', 'ollama']
 
+    it('marks the failed provider failed even when it is also the current service', () => {
+        // the failure check runs first: a provider with a ProviderFailed event
+        // is never masked as current by a stale request.serviceType
+        const entries = deriveChainState(
+            chain,
+            [event(TRANSLATION_EVENT_TYPE.PROVIDER_FAILED, 'gemini'), event(TRANSLATION_EVENT_TYPE.STARTED)],
+            'gemini'
+        )
+
+        expect(entries).toEqual([
+            { service: 'gemini', state: 'failed' },
+            { service: 'openai', state: 'unused' },
+            { service: 'ollama', state: 'unused' }
+        ])
+    })
+
     it('marks the failed provider and the degradation target on a fallback run', () => {
         const entries = deriveChainState(
             chain,
@@ -65,19 +81,42 @@ describe('deriveChainState', () => {
         ])
     })
 
-    it('prefers the request service for terminal requests', () => {
+    it('prefers the last Degraded provider over the request service on a degraded completion', () => {
+        // the run degraded to openai and completed; older rows persisted the
+        // primary (gemini) as request.serviceType — the Degraded event is
+        // authoritative, so the fallback shows current and the failed primary
+        // shows failed
         const entries = deriveChainState(
             chain,
             [
+                event(TRANSLATION_EVENT_TYPE.STARTED),
                 event(TRANSLATION_EVENT_TYPE.PROVIDER_FAILED, 'gemini'),
-                event(TRANSLATION_EVENT_TYPE.DEGRADED, 'openai')
+                event(TRANSLATION_EVENT_TYPE.DEGRADED, 'openai'),
+                event(TRANSLATION_EVENT_TYPE.COMPLETED)
             ],
+            'gemini'
+        )
+
+        expect(entries).toEqual([
+            { service: 'gemini', state: 'failed' },
+            { service: 'openai', state: 'current' },
+            { service: 'ollama', state: 'unused' }
+        ])
+    })
+
+    it('uses the request service when the run never degraded', () => {
+        // no Degraded event: the request's recorded service wins
+        const entries = deriveChainState(
+            chain,
+            [event(TRANSLATION_EVENT_TYPE.STARTED), event(TRANSLATION_EVENT_TYPE.COMPLETED)],
             'openai'
         )
 
-        expect(entries[0]).toEqual({ service: 'gemini', state: 'failed' })
-        expect(entries[1]).toEqual({ service: 'openai', state: 'current' })
-        expect(entries[2]).toEqual({ service: 'ollama', state: 'unused' })
+        expect(entries).toEqual([
+            { service: 'gemini', state: 'unused' },
+            { service: 'openai', state: 'current' },
+            { service: 'ollama', state: 'unused' }
+        ])
     })
 
     it('derives current from the latest translating line when no service recorded', () => {

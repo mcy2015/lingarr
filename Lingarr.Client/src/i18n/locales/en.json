@@ -385,6 +385,8 @@
             "title": "Output & cost · last 14 days",
             "meta": "Written {count} files · Cost {cost}",
             "metaUnknownCost": "Written {count} files · Cost —",
+            "monthMeta": "Month to date {count} files / {cost}",
+            "monthMetaUnknownCost": "Month to date {count} files / —",
             "empty": "No write-backs in this period yet.",
             "written": "Written (files)",
             "cost": "Cost ($)",

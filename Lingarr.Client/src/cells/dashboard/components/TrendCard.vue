@@ -1,6 +1,7 @@
 <template>
     <!-- 产量与成本卡(原型 screen-01 .trend):双序列微柱图,纯 div 柱,
-         两序列各自按自身峰值归一 —— 图例注明峰值,数字全部来自服务端聚合。 -->
+         两序列各自按自身峰值归一 —— 图例注明峰值,数字全部来自服务端聚合。
+         meta 追加「本月累计」段(月度写回数与成本,QA P3-3),空库时为 0/$0。 -->
     <div class="rounded-md border border-line bg-secondary flex min-h-[120px] flex-col">
         <div class="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-line px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('overview.trend.title') }}</h2>
@@ -14,6 +15,17 @@
                               })
                             : t('overview.trend.metaUnknownCost', { count: trend.totalWritten })
                     }}
+                    <template v-if="month">
+                        ·
+                        {{
+                            month.cost != null
+                                ? t('overview.trend.monthMeta', {
+                                      count: month.written,
+                                      cost: formatCost(month.cost)
+                                  })
+                                : t('overview.trend.monthMetaUnknownCost', { count: month.written })
+                        }}
+                    </template>
                 </template>
                 <template v-else>—</template>
             </span>
@@ -77,6 +89,8 @@ import { buildTrendSeries, TrendBarGroup } from '@/cells/dashboard/services/tren
 
 const props = defineProps<{
     trend: IDailyTrendStatistics | null
+    /** Month-to-date totals for the meta line; null while the pipeline stats have not loaded. */
+    month?: { written: number; cost: number | null } | null
 }>()
 
 const { t, locale } = useI18n()

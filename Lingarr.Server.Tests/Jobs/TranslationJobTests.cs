@@ -233,6 +233,70 @@ public class TranslationJobTests
         Assert.Equal(TranslationStatus.Completed, request.Status);
     }
 
+    // ===== Degraded completion (P1 fix: producing-service attribution) =====
+
+    [Fact]
+    public async Task Execute_DegradedCompletion_PersistsTakeoverServiceOnRequest()
+    {
+        // Arrange - chain gemini → openai where the primary fails on every
+        // line and the fallback completes the run
+        _job = CreateJob();
+        var request = await SeedRequestAsync();
+        _provider.SourceItems = [Item(1, "hello"), Item(2, "world")];
+        var failing = new StubTranslationService
+        {
+            ThrowOnTranslate = new Contracts.Exceptions.TranslationException("gemini exploded")
+        };
+        _settings.Values[SettingKeys.Translation.ServiceType] = "[\"gemini\",\"openai\"]";
+        _factory.Entries.Insert(0, new TranslationServiceEntry("gemini", failing, failing));
+
+        // Act
+        await _job.Execute(request, CancellationToken.None);
+
+        // Assert - the request records the provider that actually produced the
+        // output, not the configured primary (which drives the queue badge and
+        // the per-provider cost rollups)
+        var stored = await _context.TranslationRequests.AsNoTracking().SingleAsync();
+        Assert.Equal(TranslationStatus.Completed, stored.Status);
+        Assert.Equal("openai", stored.ServiceType);
+
+        // statistics and cost attribution follow the takeover service
+        _statisticsService.Verify(
+            s => s.UpdateTranslationStatisticsFromSubtitles(
+                It.IsAny<TranslationRequest>(), "openai", It.IsAny<string?>(),
+                It.IsAny<List<SubtitleItem>>()),
+            Times.Once);
+
+        // the failure is visible on the timeline for the execution chain
+        _eventService.Verify(
+            e => e.LogTimelineEvent(
+                request.Id, TranslationEventType.ProviderFailed, TranslationStatus.InProgress,
+                "gemini", It.IsAny<string?>()),
+            Times.Once);
+        _eventService.Verify(
+            e => e.LogTimelineEvent(
+                request.Id, TranslationEventType.Degraded, TranslationStatus.InProgress,
+                "openai", "gemini -> openai"),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Execute_PrimaryCompletion_PersistsPrimaryService()
+    {
+        // Arrange - single-service chain: the producing service is the primary
+        _job = CreateJob();
+        var request = await SeedRequestAsync();
+        _provider.SourceItems = [Item(1, "hello")];
+
+        // Act
+        await _job.Execute(request, CancellationToken.None);
+
+        // Assert
+        var stored = await _context.TranslationRequests.AsNoTracking().SingleAsync();
+        Assert.Equal(TranslationStatus.Completed, stored.Status);
+        Assert.Equal(ServiceType, stored.ServiceType);
+    }
+
     // ===== Failure handling =====
 
     [Fact]

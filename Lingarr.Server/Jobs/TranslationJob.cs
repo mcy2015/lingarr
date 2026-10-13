@@ -197,8 +197,10 @@ public class TranslationJob
             var serviceType = run.ServiceType;
             var translationService = run.PrimaryService;
 
-            // persist the service that processed (or is processing) this request
-            // so the queue screen can show the provider badge; note `request` is
+            // persist the service that actually produced this request so the
+            // queue screen badge and the cost rollups attribute the output to
+            // the provider that really translated it — on a degraded run that
+            // is the fallback, not the configured primary. Note `request` is
             // the tracked entity - the job parameter is a deserialized copy
             request.ServiceType = serviceType;
             await _dbContext.SaveChangesAsync();

@@ -104,6 +104,37 @@ public class SubtitleTranslationService
     private readonly record struct TranslationCandidate(TranslationServiceEntry Entry, LanguagePair Pair, int ChainIndex);
 
     /// <summary>
+    /// The provider that actually produced this run's output, derived from the
+    /// per-position provenance of the walk (<c>_translationByPosition</c>):
+    /// the provider covering the majority of positions, ties broken towards
+    /// the highest position (the most recently produced line) so a provider
+    /// that took over mid-run wins against an equally-counted earlier one.
+    /// Positions carried over from a resumed run are not re-translated and do
+    /// not count. Null when this run translated nothing new (full resume /
+    /// whitespace-only content).
+    /// </summary>
+    public string? ResolveProducingService()
+    {
+        if (_translationByPosition.Count == 0)
+        {
+            return null;
+        }
+
+        return _translationByPosition
+            .GroupBy(entry => entry.Value.Service)
+            .Select(group => new
+            {
+                Service = group.Key,
+                Count = group.Count(),
+                LastPosition = group.Max(entry => entry.Key)
+            })
+            .OrderByDescending(summary => summary.Count)
+            .ThenByDescending(summary => summary.LastPosition)
+            .First()
+            .Service;
+    }
+
+    /// <summary>
     /// Translates a list of subtitle items from the source language to the target language.
     /// </summary>
     /// <param name="subtitles">The list of subtitle items to translate.</param>

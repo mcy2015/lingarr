@@ -126,7 +126,7 @@
         </div>
 
         <!-- ═══ 产量与成本 · 近 14 天（原型 .trend，P1-1） ═══ -->
-        <TrendCard class="shrink-0" :trend="trend" />
+        <TrendCard class="shrink-0" :trend="trend" :month="trendMonth" />
     </div>
 </template>
 
@@ -140,6 +140,7 @@ import TrendCard from '@/cells/dashboard/components/TrendCard.vue'
 import { statisticsService } from '@/cells/app/api/statisticsService'
 import { translateService } from '@/cells/app/api/translateService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
+import { formatDegradationEdge } from '@/cells/app/utils/degradationEdge'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
 import {
@@ -175,6 +176,14 @@ const trend = ref<IDailyTrendStatistics | null>(null)
 const configuredCount = computed(() => health.value.filter((provider) => provider.configured).length)
 const inProgressCount = computed(() => counts.value[TRANSLATION_STATUS.INPROGRESS] ?? 0)
 const pendingCount = computed(() => counts.value[TRANSLATION_STATUS.PENDING] ?? 0)
+
+/// Month-to-date meta for the trend card (QA P3-3), assembled from the
+/// pipeline statistics the page already fetches; null until they load.
+const trendMonth = computed(() =>
+    pipeline.value
+        ? { written: pipeline.value.writtenThisMonth, cost: pipeline.value.monthlyCost }
+        : null
+)
 
 const pipelineNodes = computed(() => [
     {
@@ -309,7 +318,8 @@ const feedIcon = (event: ITranslationRequestEventSummary): { icon: string; cls: 
 
 const feedText = (event: ITranslationRequestEventSummary): string => {
     if (event.eventType === TRANSLATION_EVENT_TYPE.DEGRADED && event.message) {
-        return t('overview.feed.degraded', { edge: event.message })
+        // same typographic arrow as the queue event timeline (QA P3-4)
+        return t('overview.feed.degraded', { edge: formatDegradationEdge(event.message) })
     }
     if (event.eventType === TRANSLATION_EVENT_TYPE.PROVIDER_FAILED && event.provider) {
         return t('overview.feed.providerFailed', { provider: event.provider })

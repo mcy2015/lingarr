@@ -38,6 +38,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import ReloadComponent from '@/cells/kernel/components/ReloadComponent.vue'
+import { formatDegradationEdge } from '@/cells/app/utils/degradationEdge'
 import { ITranslationRequestEvent, TRANSLATION_EVENT_TYPE } from '@/types'
 
 const props = defineProps<{
@@ -97,7 +98,7 @@ const eventLabel = (event: ITranslationRequestEvent): string => {
 /// edge, batch counters, output path) — surfaced as the row meta.
 const eventMessage = (event: ITranslationRequestEvent): string | null => {
     if (event.eventType === TRANSLATION_EVENT_TYPE.DEGRADED && event.message) {
-        return event.message.replace(' -> ', ' → ')
+        return formatDegradationEdge(event.message)
     }
     return event.message ?? null
 }

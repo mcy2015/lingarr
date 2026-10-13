@@ -111,8 +111,9 @@ public class TranslationPipeline : ITranslationPipeline
                 dispatch.MaxBatchSize,
                 cancellationToken);
 
+            var (serviceType, primaryService) = ResolveProducingService(translator, dispatch);
             return new TranslationRunResult(
-                translated, dispatch.ServiceType, dispatch.Services[0].Service,
+                translated, serviceType, primaryService,
                 UsedBatchTranslation: true, dispatch.StripSubtitleFormatting);
         }
 
@@ -142,8 +143,40 @@ public class TranslationPipeline : ITranslationPipeline
         // result is treated as success (previously only the content path did this).
         cancellationToken.ThrowIfCancellationRequested();
 
+        var (individualServiceType, individualPrimaryService) = ResolveProducingService(individualTranslator, dispatch);
         return new TranslationRunResult(
-            translatedItems, dispatch.ServiceType, dispatch.Services[0].Service,
+            translatedItems, individualServiceType, individualPrimaryService,
             UsedBatchTranslation: false, dispatch.StripSubtitleFormatting);
+    }
+
+    /// <summary>
+    /// Resolves the service identity the run actually produced with, from the
+    /// per-position provenance of the walk: a fallback that took over after a
+    /// primary failure reports the fallback, so request persistence and cost
+    /// rollups attribute the output to the provider that really translated it.
+    /// Falls back to the configured primary when the run translated nothing
+    /// new (full resume), matching the previous behaviour for that edge.
+    /// </summary>
+    private static (string ServiceType, ITranslationService Service) ResolveProducingService(
+        SubtitleTranslationService translator,
+        TranslationDispatch dispatch)
+    {
+        var producing = translator.ResolveProducingService();
+        if (producing is null)
+        {
+            return (dispatch.ServiceType, dispatch.Services[0].Service);
+        }
+
+        foreach (var entry in dispatch.Services)
+        {
+            if (string.Equals(entry.Name, producing, StringComparison.OrdinalIgnoreCase))
+            {
+                return (entry.Name, entry.Service);
+            }
+        }
+
+        // Defensive: provenance names come from the same dispatch list, so this
+        // should not happen; keep the primary rather than failing the run.
+        return (dispatch.ServiceType, dispatch.Services[0].Service);
     }
 }

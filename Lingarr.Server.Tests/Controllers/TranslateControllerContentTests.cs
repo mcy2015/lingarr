@@ -456,7 +456,7 @@ public class TranslateControllerContentTests : IDisposable
     }
 
     [Fact]
-    public async Task TranslateContent_PrimaryServiceFails_FallsBackToNextServiceButReportsPrimary()
+    public async Task TranslateContent_PrimaryServiceFails_FallsBackToNextServiceAndReportsTakeoverService()
     {
         _settings[SettingKeys.Translation.ServiceType] = "[\"openai\",\"deepl\"]";
 
@@ -496,11 +496,12 @@ public class TranslateControllerContentTests : IDisposable
             ["batch:First line", "batch:Second line"],
             results.OrderBy(result => result.Position).Select(result => result.Line));
 
-        // Statistics are keyed off the first configured service, not the one that did the work.
+        // Statistics are keyed off the service that actually produced the
+        // output (P1 fix): the fallback that took over, not the failed primary.
         _statisticsServiceMock.Verify(statisticsService => statisticsService.UpdateTranslationStatisticsFromLines(
             It.IsAny<TranslationRequest>(),
-            "openai",
-            "failing-model",
+            "deepl",
+            "test-model",
             It.IsAny<BatchSubtitleLine[]>()), Times.Once);
     }
 

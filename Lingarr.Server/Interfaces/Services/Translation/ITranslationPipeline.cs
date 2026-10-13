@@ -35,8 +35,12 @@ public sealed record TranslationDispatch(
 
 /// <summary>
 /// Outcome of a pipeline run: the translated items (mutated in place, same
-/// list reference) plus the service identity used, for statistics and
-/// translator-info stamping by the caller.
+/// list reference) plus the service identity that actually produced them,
+/// for statistics and translator-info stamping by the caller. The service is
+/// derived from the per-position provenance of the run (majority producer,
+/// most recent on ties) so a run completed by a fallback reports the
+/// fallback, not the configured primary. The primary is only reported when
+/// the run translated nothing new.
 /// </summary>
 public sealed record TranslationRunResult(
     List<SubtitleItem> TranslatedSubtitles,
