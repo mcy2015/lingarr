@@ -39,6 +39,8 @@ services:
       - LIBRE_TRANSLATE_URL=http://libretranslate:5000
       - SOURCE_LANGUAGES=[{"name":"English","code":"en"},{"name":"Dutch","code":"nl"}]
       - TARGET_LANGUAGES=[{"name":"Turkish","code":"tr"},{"name":"Dutch","code":"nl"}]
+      - LINGARR_ADMIN_USER=admin
+      - LINGARR_ADMIN_PASSWORD=admin
       - ASPNETCORE_URLS=http://+:9876
       - ASPNETCORE_HTTP_PORTS=9876
       - PLUGINS_PATH=/app/plugins # Use when plugins exist
@@ -97,20 +99,6 @@ services:
       - ./Lingarr.Client/node_modules:/app/node_modules
     tty: true
     command: /bin/sh -c "npm install && npm run dev"
-    networks:
-      - lingarr
-
-  Lingarr.Docs:
-    image: node:alpine
-    container_name: Lingarr.Docs
-    working_dir: /app
-    ports:
-      - "9879:5173"
-    volumes:
-      - ./Lingarr.Docs:/app:rw
-      - ./Lingarr.Docs/node_modules:/app/node_modules
-    tty: true
-    command: /bin/sh -c "npm install && npm run dev -- --host"
     networks:
       - lingarr
 

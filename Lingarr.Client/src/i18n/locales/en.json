@@ -38,7 +38,9 @@
             "goToSettings": "Go to Settings"
         },
         "translationAction": {
+            "pause": "Pause",
             "resume": "Resume, reuse already-translated lines",
+            "resumePaused": "Resume paused",
             "proofread": "Proofread, compare against the source and correct mistranslations",
             "retry": "Retry, start over"
         },
@@ -130,61 +132,6 @@
         "development": "Development",
         "updateAvailable": "Update {version} is available",
         "current": "Version: {version}"
-    },
-    "onboarding": {
-        "welcomeTitle": "Welcome to Lingarr",
-        "setupDescription": "Let's set up your authentication preferences",
-        "back": "Back",
-        "skip": "Skip",
-        "enable": "Enable",
-        "continue": "Continue",
-        "completing": "Completing…",
-        "goToDashboard": "Go to Dashboard",
-        "steps": {
-            "choose": "Choose",
-            "account": "Account",
-            "telemetry": "Telemetry",
-            "complete": "Complete"
-        },
-        "choose": {
-            "title": "Secure your Lingarr instance",
-            "description": "Enable authentication to protect your Lingarr instance with both session-based login and API key access, or continue without authentication.",
-            "enableAuthTitle": "Enable Authentication",
-            "enableAuthDescription": "Secure the web interface with username/password login and generate an API access. Recommended for production use.",
-            "warning": "Without authentication, anyone with access to your network can use Lingarr. This is only recommended for private, trusted networks."
-        },
-        "account": {
-            "title": "Create an account",
-            "description": "Enter your credentials to create the administrator account.",
-            "username": "Username",
-            "usernamePlaceholder": "Enter your username",
-            "usernameError": "Username must be at least 2 characters long",
-            "password": "Password",
-            "passwordPlaceholder": "Enter your password",
-            "passwordError": "Password must be at least 8 characters long and match",
-            "confirmPassword": "Confirm Password",
-            "confirmPasswordPlaceholder": "Confirm your password"
-        },
-        "telemetry": {
-            "title": "Help Improve Lingarr",
-            "description": "Share anonymous usage statistics to help us improve Lingarr.",
-            "privacyNote": "No personal information, file names, or subtitle content is ever collected.",
-            "exampleLabel": "Example of telemetry data:"
-        },
-        "completion": {
-            "title": "Setup complete!",
-            "configuration": "Your Configuration",
-            "authentication": "Authentication",
-            "telemetry": "Telemetry",
-            "enabled": "Enabled",
-            "disabled": "Disabled",
-            "userAccountNote": "User account will be created when you complete setup",
-            "apiKeyNote": "API key will be generated when you complete setup"
-        },
-        "errors": {
-            "requiredFields": "Please fill in all required fields correctly",
-            "setupFailed": "An error occurred during setup. Please try again."
-        }
     },
     "login": {
         "title": "Sign in to Lingarr",
@@ -481,52 +428,7 @@
             "description": "The existing translation being proofread"
         }
     },
-    "movies": {
-        "openDetailsOnRequest": "Open details on request",
-        "translateWithCount": "Translate ({count})",
-        "translateMultiple": "Translate multiple",
-        "cancel": "Cancel",
-        "includeAll": "Include All",
-        "excludeAll": "Exclude All",
-        "includedSummary": "{included}/{total} included",
-        "sortByTitle": "Sort by Title",
-        "sortByAdded": "Sort by Added",
-        "title": "Title",
-        "subtitles": "Subtitles",
-        "include": "Include",
-        "delay": "Delay",
-        "hours": "hours"
-    },
-    "shows": {
-        "openDetailsOnRequest": "Open details on request",
-        "translateWithCount": "Translate ({count})",
-        "translateMultiple": "Translate multiple",
-        "cancel": "Cancel",
-        "includeAll": "Include All",
-        "excludeAll": "Exclude All",
-        "includedSummary": "{included}/{total} included",
-        "sortByTitle": "Sort by Title",
-        "sortByAdded": "Sort by Added",
-        "title": "Title",
-        "subtitles": "Subtitles",
-        "include": "Include",
-        "delay": "Delay",
-        "hours": "hours",
-        "season": "Season",
-        "seasonNumber": "Season {number}",
-        "specials": "Specials",
-        "episodes": "Episodes",
-        "episodeCount": "{count} episodes"
-    },
     "toast": {
-        "user": {
-            "created": "User created successfully",
-            "updated": "User updated successfully",
-            "deleted": "User deleted successfully",
-            "createFailed": "Failed to create user",
-            "updateFailed": "Failed to update user",
-            "deleteFailed": "Failed to delete user"
-        },
         "mapping": {
             "fetchFailed": "Failed to fetch mappings",
             "saveFailed": "Failed to set mappings"
@@ -647,7 +549,6 @@
             "plugins": "Plugins",
             "tasks": "Tasks",
             "logs": "Logs",
-            "telemetry": "Telemetry",
             "logout": "Logout",
             "groups": {
                 "providers": "Translation services",
@@ -677,31 +578,6 @@
             "howToUse": "How to Use",
             "headerIntro": "Include the API key in your HTTP requests using the",
             "headerSuffix": "header:"
-        },
-        "users": {
-            "title": "User Management",
-            "create": "Create User",
-            "createAction": "Create",
-            "username": "Username",
-            "usernameError": "Username must be at least 2 characters long",
-            "lastLogin": "Last Login",
-            "never": "Never",
-            "actions": "Actions",
-            "cancel": "Cancel",
-            "save": "Save",
-            "edit": "Edit",
-            "delete": "Delete",
-            "deleteConfirm": "Are you sure you want to delete user \"{name}\"?",
-            "passwordRequired": "Password (required)",
-            "passwordPlaceholder": "Enter password",
-            "passwordError": "Password must be at least 8 characters long and match",
-            "confirmPasswordRequired": "Confirm Password (required)",
-            "confirmPasswordPlaceholder": "Confirm your password",
-            "newPasswordOptional": "New Password (optional)",
-            "newPasswordPlaceholder": "Leave blank to keep current password",
-            "confirmNewPasswordOptional": "Confirm New Password (optional)",
-            "confirmNewPasswordPlaceholder": "Confirm your new password",
-            "noUsers": "No users found"
         },
         "automation": {
             "title": "Automation",
@@ -798,12 +674,6 @@
             "systemPromptDescription": "Define the AI's behavior when comparing a translated line against its source line.",
             "userPrompt": "Proofread user prompt",
             "userPromptDescription": "Sent together with the source line and its existing translation for each proofread request."
-        },
-        "telemetry": {
-            "title": "Anonymous Telemetry",
-            "description": "Help improve Lingarr by sharing anonymous usage statistics. No personal information, file names, or subtitle content is collected.",
-            "shareStats": "Share anonymous usage statistics:",
-            "previewLabel": "Telemetry that will be sent if enabled:"
         },
         "logs": {
             "title": "System Logs",
@@ -975,7 +845,7 @@
             "translateSelected": "Translate selected ▸",
             "newTask": "＋ New task",
             "process": "Start processing ▸",
-            "stash": "Stash ⌘S"
+            "stash": "Stash"
         }
     },
     "mediaDetail": {

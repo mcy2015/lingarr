@@ -14,7 +14,6 @@ import { scheduleService } from '@/services/scheduleService'
 import { mappingService } from '@/services/mappingService'
 import { directoryService } from '@/services/directoryService'
 import { statisticsService } from '@/services/statisticsService'
-import { telemetryService } from '@/services/telemetryService'
 import { logsService } from '@/services/logsService'
 import { requestTemplateService } from '@/services/requestTemplateService'
 import { pluginService } from '@/services/pluginService'
@@ -47,12 +46,9 @@ axios.interceptors.response.use(
     (error) => {
         const prefix = baseUrl().replace(/\/$/, '')
         const loginPath = `${prefix}/auth/login`
-        const onboardingPath = `${prefix}/auth/onboarding`
-        if (error?.response?.status === 403 && error.response?.data?.onboardingRequired) {
-            window.location.href = onboardingPath
-        } else if (error?.response?.status === 401) {
+        if (error?.response?.status === 401) {
             const currentPath = window.location.pathname
-            if (!currentPath.startsWith(loginPath) && !currentPath.startsWith(onboardingPath)) {
+            if (!currentPath.startsWith(loginPath)) {
                 window.location.href = loginPath
             }
         }
@@ -76,7 +72,6 @@ const services = (axios: AxiosStatic): Services => ({
     directory: directoryService(axios),
     statistics: statisticsService(axios),
     logs: logsService(),
-    telemetry: telemetryService(axios),
     requestTemplate: requestTemplateService(axios),
     plugin: pluginService(axios),
     glossary: glossaryService(axios)

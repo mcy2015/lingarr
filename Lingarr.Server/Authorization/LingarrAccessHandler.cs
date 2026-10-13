@@ -32,14 +32,6 @@ public class LingarrAccessHandler : IAuthorizationHandler
 
         var settingService = httpContext.RequestServices.GetRequiredService<ISettingService>();
 
-        // Gate: onboarding must be completed before anything is accessible.
-        var onboardingCompleted = await settingService.GetSetting(SettingKeys.Authentication.OnboardingCompleted);
-        if (string.IsNullOrEmpty(onboardingCompleted) || onboardingCompleted != "true")
-        {
-            context.Fail(new AuthorizationFailureReason(this, "Onboarding required."));
-            return;
-        }
-
         // Authentication can be deliberately disabled — everything is open then.
         var authEnabled = await settingService.GetSetting(SettingKeys.Authentication.AuthEnabled);
         if (authEnabled == "false")

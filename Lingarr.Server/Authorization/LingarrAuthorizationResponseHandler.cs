@@ -6,8 +6,8 @@ namespace Lingarr.Server.Authorization;
 
 /// <summary>
 /// Serializes authorization failures with the same JSON bodies the old
-/// LingarrAuthorizeAttribute produced, so the SPA interceptor (onboarding
-/// redirect on 403 + onboardingRequired) and API clients keep working.
+/// LingarrAuthorizeAttribute produced, so the SPA interceptor and API
+/// clients keep working.
 /// </summary>
 public class LingarrAuthorizationResponseHandler : IAuthorizationMiddlewareResultHandler
 {
@@ -27,17 +27,6 @@ public class LingarrAuthorizationResponseHandler : IAuthorizationMiddlewareResul
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(
                 JsonSerializer.Serialize(new { message = "Authentication required", authenticated = false }, JsonOptions));
-            return;
-        }
-
-        if (authorizeResult.Forbidden
-            && authorizeResult.AuthorizationFailure?.FailureReasons.Any(r =>
-                string.Equals(r.Message, "Onboarding required.", StringComparison.Ordinal)) == true)
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(
-                JsonSerializer.Serialize(new { message = "Onboarding required", onboardingRequired = true }, JsonOptions));
             return;
         }
 

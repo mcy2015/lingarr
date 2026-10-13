@@ -46,32 +46,6 @@ public interface IAuthService
     string HashPassword(string password);
 
     /// <summary>
-    /// Returns all users.
-    /// </summary>
-    Task<List<User>> GetAllUsers();
-
-    /// <summary>
-    /// Retrieves a user by id.
-    /// </summary>
-    Task<User?> GetUserById(int id);
-
-    /// <summary>
-    /// Whether the username is already taken, optionally excluding one user id.
-    /// </summary>
-    Task<bool> IsUsernameTaken(string username, int? excludeUserId = null);
-
-    /// <summary>
-    /// Persists changes to an existing user (username/password hash/login timestamp).
-    /// </summary>
-    Task SaveUserAsync(User user);
-
-    /// <summary>
-    /// Deletes a user. Throws <see cref="InvalidOperationException"/> when attempting
-    /// to delete the last remaining user.
-    /// </summary>
-    Task DeleteUserAsync(User user);
-
-    /// <summary>
     /// Stamps the login timestamp and persists it.
     /// </summary>
     Task RecordLoginAsync(User user);

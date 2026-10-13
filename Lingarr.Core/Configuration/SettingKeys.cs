@@ -146,13 +146,5 @@ public static class SettingKeys
     {
         public const string AuthEnabled = "auth_enabled";
         public const string ApiKey = "api_key";
-        public const string OnboardingCompleted = "onboarding_completed";
-    }
-
-    public static class Telemetry
-    {
-        public const string TelemetryEnabled = "telemetry_enabled";
-        public const string LastSubmission = "telemetry_last_submission";
-        public const string InstallationId = "telemetry_installation_id";
     }
 }

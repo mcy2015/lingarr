@@ -244,7 +244,6 @@ public static class ServiceCollectionExtensions
         builder.Services.AddTransient<PathConversionService>();
         builder.Services.AddScoped<IStatisticsService, StatisticsService>();
         builder.Services.AddSingleton<ITranslationHealthService, TranslationHealthService>();
-        builder.Services.AddScoped<ITelemetryService, TelemetryService>();
         builder.Services.AddScoped<ILingarrApiService, LingarrApiService>();
 
         // Add Sync services

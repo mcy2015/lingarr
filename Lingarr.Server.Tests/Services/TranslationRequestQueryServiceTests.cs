@@ -27,9 +27,9 @@ public class TranslationRequestQueryServiceTests : IDisposable
 
         _service = new TranslationRequestQueryService(
             _dbContext,
-            new Mock<IHubContext<TranslationRequestsHub>>(,
-            new Mock<ISubtitleService>().Object).Object,
-            new Mock<ITranslationRequestEventService>().Object);
+            new Mock<IHubContext<TranslationRequestsHub>>().Object,
+            new Mock<ITranslationRequestEventService>().Object,
+            new Mock<ISubtitleService>().Object);
     }
 
     public void Dispose() => _dbContext.Database.EnsureDeleted();

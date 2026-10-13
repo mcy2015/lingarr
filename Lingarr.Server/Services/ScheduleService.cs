@@ -37,8 +37,7 @@ public class ScheduleService : IScheduleService
         var settings = await settingService.GetSettings([
             SettingKeys.Automation.MovieSchedule,
             SettingKeys.Automation.ShowSchedule,
-            SettingKeys.Automation.AutomationEnabled,
-            SettingKeys.Telemetry.TelemetryEnabled
+            SettingKeys.Automation.AutomationEnabled
         ]);
 
         if (TimeZoneConfiguration.ResolutionWarning != null)
@@ -76,16 +75,6 @@ public class ScheduleService : IScheduleService
                             new RecurringJobOptions { TimeZone = TimeZoneConfiguration.Current });
                     }
                     break;
-                case "telemetry_enabled":
-                    if (setting.Value == "true")
-                    {
-                        RecurringJob.AddOrUpdate<TelemetryJob>(
-                            "TelemetryJob",
-                            job => job.Execute(),
-                            "0 9 * * 5",
-                            new RecurringJobOptions { TimeZone = TimeZoneConfiguration.Current });
-                    }
-                    break;
             }
         }
 
@@ -120,7 +109,6 @@ public class ScheduleService : IScheduleService
         var recurringJobs = JobStorage.Current.GetConnection().GetRecurringJobs();
 
         return recurringJobs
-            .Where(job => job.Id != "TelemetryJob")
             .Select(job => MapToJobStatus(job, monitor))
             .OrderBy(j => j.Id)
             .ToList();

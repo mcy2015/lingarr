@@ -7,12 +7,8 @@ import {
     ITranslationRequest,
     MediaType,
     IPathMapping,
-    IOnboardingRequest,
-    ISignupRequest,
     ILoginRequest,
     IApiKeyResponse,
-    IUser,
-    IUpdateUserRequest,
     IIncludeSummary,
     IPluginManifest,
     IPluginOptionsResponse,
@@ -36,7 +32,6 @@ export interface Services {
     directory: IDirectoryService
     statistics: IStatisticsService
     logs: ILogsService
-    telemetry: ITelemetryService
     requestTemplate: IRequestTemplateService
     plugin: IPluginService
     glossary: IGlossaryService
@@ -50,16 +45,11 @@ export interface IPluginService {
 }
 
 export interface IAuthService {
-    completeOnboarding(request: IOnboardingRequest): Promise<void>
     authenticated(): Promise<void>
-    signup(request: ISignupRequest): Promise<void>
     login(request: ILoginRequest): Promise<void>
     logout(): Promise<void>
     generateApiKey(): Promise<IApiKeyResponse>
     hasAnyUsers(): Promise<boolean>
-    getUsers(): Promise<IUser[]>
-    updateUser(id: number, request: IUpdateUserRequest): Promise<void>
-    deleteUser(id: number): Promise<void>
 }
 
 export interface IMediaService {
@@ -264,10 +254,6 @@ export interface IStatisticsService {
 
 export interface ILogsService {
     getStream(): EventSource
-}
-
-export interface ITelemetryService {
-    preview<T>(): Promise<T>
 }
 
 export interface IRequestTemplateService {

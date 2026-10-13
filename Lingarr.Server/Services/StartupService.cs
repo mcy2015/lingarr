@@ -1,6 +1,7 @@
 ﻿using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
+using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Services.Plugins;
 using Lingarr.Server.Services.Translation;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,9 @@ namespace Lingarr.Server.Services;
 
 public class StartupService : IHostedService
 {
+    private const string AdminUserEnvVar = "LINGARR_ADMIN_USER";
+    private const string AdminPasswordEnvVar = "LINGARR_ADMIN_PASSWORD";
+
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<StartupService> _logger;
 
@@ -29,6 +33,7 @@ public class StartupService : IHostedService
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
 
+        await SeedDefaultUser(scope.ServiceProvider);
         await NormaliseServiceType(dbContext);
         await ApplySettingsFromEnvironment(dbContext);
 
@@ -48,6 +53,39 @@ public class StartupService : IHostedService
             SettingKeys.Integration.SonarrUrl,
             SettingKeys.Integration.SonarrApiKey
         ]);
+    }
+
+    /// <summary>
+    /// Creates the single admin user at startup when the database holds no users yet.
+    /// Credentials come from the LINGARR_ADMIN_USER / LINGARR_ADMIN_PASSWORD environment
+    /// variables; missing values fall back to admin/admin with a warning.
+    /// </summary>
+    /// <param name="serviceProvider">Scoped service provider used to resolve the auth service.</param>
+    private async Task SeedDefaultUser(IServiceProvider serviceProvider)
+    {
+        var authService = serviceProvider.GetRequiredService<IAuthService>();
+        if (await authService.HasAnyUsers())
+        {
+            return;
+        }
+
+        var username = Environment.GetEnvironmentVariable(AdminUserEnvVar)?.Trim();
+        var password = Environment.GetEnvironmentVariable(AdminPasswordEnvVar)?.Trim();
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            _logger.LogWarning(
+                "No users found and {UserEnv}/{PasswordEnv} are not fully set; default credentials are used. " +
+                "Set the {UserEnv} and {PasswordEnv} environment variables to override the default admin/admin account.",
+                AdminUserEnvVar,
+                AdminPasswordEnvVar,
+                AdminUserEnvVar,
+                AdminPasswordEnvVar);
+            username = string.IsNullOrEmpty(username) ? "admin" : username;
+            password = string.IsNullOrEmpty(password) ? "admin" : password;
+        }
+
+        await authService.CreateUser(username, password);
+        _logger.LogInformation("Seeded default user {Username}.", username);
     }
 
     /// <summary>
@@ -262,8 +300,7 @@ public class StartupService : IHostedService
 
             { "DEEPL_API_KEY", SettingKeys.Translation.DeepL.DeeplApiKey },
 
-            { "AUTH_ENABLED", SettingKeys.Authentication.AuthEnabled },
-            { "TELEMETRY_ENABLED", SettingKeys.Telemetry.TelemetryEnabled }
+            { "AUTH_ENABLED", SettingKeys.Authentication.AuthEnabled }
         };
 
         foreach (var (envVar, settingKey) in environmentSettings)

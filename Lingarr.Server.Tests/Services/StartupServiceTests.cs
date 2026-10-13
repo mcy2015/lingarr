@@ -7,9 +7,11 @@ using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
+using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -18,6 +20,9 @@ namespace Lingarr.Server.Tests.Services;
 [Collection("StartupServiceEnv")]
 public class StartupServiceTests : IDisposable
 {
+    private const string AdminUserEnvVar = "LINGARR_ADMIN_USER";
+    private const string AdminPasswordEnvVar = "LINGARR_ADMIN_PASSWORD";
+
     private static readonly (string EnvVar, string SettingKey)[] EnvMap =
     {
         ("RADARR_URL", SettingKeys.Integration.RadarrUrl),
@@ -47,8 +52,7 @@ public class StartupServiceTests : IDisposable
         ("XAI_MODEL", SettingKeys.Translation.XAi.Model),
         ("XAI_API_KEY", SettingKeys.Translation.XAi.ApiKey),
         ("DEEPL_API_KEY", SettingKeys.Translation.DeepL.DeeplApiKey),
-        ("AUTH_ENABLED", SettingKeys.Authentication.AuthEnabled),
-        ("TELEMETRY_ENABLED", SettingKeys.Telemetry.TelemetryEnabled)
+        ("AUTH_ENABLED", SettingKeys.Authentication.AuthEnabled)
     };
 
     private readonly string _tempDir;
@@ -184,6 +188,80 @@ public class StartupServiceTests : IDisposable
         Assert.Equal("fallback-env-value", await GetSettingValue(serviceProvider, settingKey));
     }
 
+    // ===== Default user seeding =====
+
+    [Fact]
+    public async Task SeedDefaultUser_NoUsers_CreatesUserFromEnvironment()
+    {
+        // Arrange
+        Environment.SetEnvironmentVariable(AdminUserEnvVar, "henry");
+        Environment.SetEnvironmentVariable(AdminPasswordEnvVar, "sup3r-secret-pw");
+
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: exactly one user, with a verifiable PBKDF2 hash.
+        await using (var scope = serviceProvider.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            var user = await dbContext.Users.SingleAsync();
+            Assert.Equal("henry", user.Username);
+            Assert.NotEqual("sup3r-secret-pw", user.PasswordHash);
+
+            var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
+            Assert.True(authService.VerifyPassword("sup3r-secret-pw", user.PasswordHash));
+        }
+    }
+
+    [Fact]
+    public async Task SeedDefaultUser_NoEnvironment_FallsBackToDefaultAdmin()
+    {
+        // Arrange
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var user = await dbContext.Users.SingleAsync();
+        Assert.Equal("admin", user.Username);
+
+        var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
+        Assert.True(authService.VerifyPassword("admin", user.PasswordHash));
+    }
+
+    [Fact]
+    public async Task SeedDefaultUser_UserExists_DoesNotCreateAnother()
+    {
+        // Arrange
+        Environment.SetEnvironmentVariable(AdminUserEnvVar, "henry");
+        Environment.SetEnvironmentVariable(AdminPasswordEnvVar, "sup3r-secret-pw");
+
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            seedDb.Users.Add(new User { Username = "existing", PasswordHash = "x", CreatedAt = DateTimeOffset.UtcNow });
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: the existing user is left untouched.
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var user = await dbContext.Users.SingleAsync();
+        Assert.Equal("existing", user.Username);
+    }
+
     private static void ClearEnv()
     {
         foreach (var (envVar, _) in EnvMap)
@@ -191,12 +269,18 @@ public class StartupServiceTests : IDisposable
             Environment.SetEnvironmentVariable(envVar, null);
             Environment.SetEnvironmentVariable(envVar + "_FILE", null);
         }
+
+        Environment.SetEnvironmentVariable(AdminUserEnvVar, null);
+        Environment.SetEnvironmentVariable(AdminPasswordEnvVar, null);
     }
 
     private static IServiceProvider BuildProvider()
     {
         var databaseName = Guid.NewGuid().ToString();
         var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddScoped<ISettingService, StubSettingService>();
+        services.AddScoped<IAuthService, AuthService>();
         services.AddDbContext<LingarrDbContext>(options =>
             options.UseInMemoryDatabase(databaseName));
 
@@ -223,6 +307,38 @@ public class StartupServiceTests : IDisposable
         var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
         var setting = await dbContext.Settings.FindAsync(key);
         return setting?.Value;
+    }
+
+    /// <summary>
+    /// Minimal <see cref="ISettingService"/> stand-in — the startup path only
+    /// touches settings through the database context, never through this interface.
+    /// </summary>
+    private sealed class StubSettingService : ISettingService
+    {
+        public event SettingChangedHandler? SettingChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public Task<string?> GetSetting(string key) => Task.FromResult<string?>(null);
+
+        public Task<Dictionary<string, string>> GetSettings(IEnumerable<string> keys) =>
+            Task.FromResult(new Dictionary<string, string>());
+
+        public Task<bool> SetSetting(string key, string value) => Task.FromResult(true);
+
+        public Task<bool> SetSettings(Dictionary<string, string> settings) => Task.FromResult(true);
+
+        public Task<List<T>> GetSettingAsJson<T>(string key) where T : class =>
+            Task.FromResult(new List<T>());
+
+        public Task<bool> SetEncryptedSetting(string key, string value) => Task.FromResult(true);
+
+        public Task<string?> GetEncryptedSetting(string key) => Task.FromResult<string?>(null);
+
+        public Task<Dictionary<string, string>> GetEncryptedSettings(IEnumerable<string> keys) =>
+            Task.FromResult(new Dictionary<string, string>());
     }
 }
 

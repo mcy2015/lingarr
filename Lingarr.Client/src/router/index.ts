@@ -9,12 +9,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/components/layout/AuthLayout.vue'),
         children: [
             {
-                path: '/auth/onboarding',
-                component: () => import('@/pages/OnboardingPage.vue'),
-                name: 'onboarding',
-                meta: { authenticated: false }
-            },
-            {
                 path: '/auth/login',
                 component: () => import('@/pages/LoginPage.vue'),
                 name: 'login',
@@ -166,10 +160,6 @@ const routes: RouteRecordRaw[] = [
                     },
                     {
                         path: 'logs',
-                        redirect: { name: 'settings-system' }
-                    },
-                    {
-                        path: 'telemetry',
                         redirect: { name: 'settings-system' }
                     }
                 ]

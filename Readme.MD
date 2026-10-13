@@ -223,14 +223,7 @@ user: "1000:1000"  # UID:GID
 ```
 
 ## API Integration
-Lingarr provides a RESTful API that allows you to integrate subtitle translation capabilities into your applications. You can find the complete API documentation, including a Swagger definition of all available endpoints at the 
-[Lingarr API Documentation](https://lingarr.com/docs/api/)
-
-### 🤝 Contributing:
-We welcome contributions to Lingarr! Whether it's bug reports,
-feature requests, or code contributions, please feel free to help out.
-
-Please read our [Contributing Guidelines](CONTRIBUTING.md) for development setup, coding standards, and requirements for submit pull requests.
+Lingarr provides a RESTful API that allows you to integrate subtitle translation capabilities into your applications.
 
 ### 🙏 Credits:
 Icons: [Lucide](https://lucide.dev/icons)  
