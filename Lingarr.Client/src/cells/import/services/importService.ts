@@ -1,9 +1,20 @@
 import { AxiosStatic } from 'axios'
-import { IImportService } from '@/types'
+import { IImportEstimateResponse, IImportService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/subtitle'): IImportService => ({
     scanPath: async (path: string) => {
         const response = await http.post(`${resource}/scan-path`, { path })
+        return response.data
+    },
+
+    /// Import cost estimate lives on the import controller, not the
+    /// subtitle controller — its own base path.
+    estimate: async (params: {
+        files: { name: string; characters: number }[]
+        translateCount: number
+        targetLanguage: string
+    }): Promise<IImportEstimateResponse> => {
+        const response = await http.post('/api/import/estimate', params)
         return response.data
     },
 

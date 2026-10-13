@@ -218,6 +218,8 @@
             "suffix": "加后缀不覆盖"
         },
         "estimate": "预计 {files} 项 · 共 {lines} 行 · 翻译 {translate} 项",
+        "estimateCost": "≈ {cost}",
+        "estimateUnknown": "成本未知",
         "match": {
             "Exact": "精确",
             "Guess": "猜测",
@@ -235,6 +237,8 @@
         "actions": {
             "clear": "清除",
             "importCounts": "开始导入 {files} 项 · 翻译 {translate} 项",
+            "importCountsCost": "开始导入 {files} 项 · 翻译 {translate} 项 · ≈ {cost}",
+            "importCountsUnknownCost": "开始导入 {files} 项 · 翻译 {translate} 项 · 成本未知",
             "excludeUnmatched": "排除未匹配"
         },
         "empty": "尚未选择文件。",
@@ -535,6 +539,15 @@
             "propertyCount": "{count} 个属性 | {count} 个属性",
             "itemCount": "{count} 项 | {count} 项"
         },
+        "preview": {
+            "title": "试译预览",
+            "description": "单行 · 走该服务已保存请求模版的真实请求;未保存的模版改动保存后才生效。",
+            "sample": "The Shōgun commands the Anjin to sail west.",
+            "inputLabel": "要翻译的行",
+            "run": "试译 ▸",
+            "failed": "试译失败:{message}",
+            "lockedTerm": "锁定术语 —— 每次翻译后强制执行"
+        },
         "directory": {
             "select": "选择"
         }
@@ -714,7 +727,9 @@
             "idle": "暂无请求",
             "online": "在线",
             "degraded": "降级中",
-            "failing": "故障"
+            "failing": "故障",
+            "test": "测试连接",
+            "testing": "◐ 测试中…"
         },
         "glossary": {
             "title": "术语表",

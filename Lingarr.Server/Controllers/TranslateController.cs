@@ -1,4 +1,8 @@
-﻿using Lingarr.Contracts.Models;
+using System.Diagnostics;
+using System.Net;
+using Lingarr.Contracts.Exceptions;
+using Lingarr.Contracts.Models;
+using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +27,8 @@ public class TranslateController : ControllerBase
     private readonly ISettingService _settings;
     private readonly LanguageCodeService _languageCodeService;
     private readonly ITranslationHealthService _translationHealthService;
+    private readonly IGlossaryService _glossaryService;
+    private readonly ICostService _costService;
     private readonly ILogger<TranslateController> _logger;
 
     public TranslateController(
@@ -31,6 +37,8 @@ public class TranslateController : ControllerBase
         ISettingService settings,
         LanguageCodeService languageCodeService,
         ITranslationHealthService translationHealthService,
+        IGlossaryService glossaryService,
+        ICostService costService,
         ILogger<TranslateController> logger)
     {
         _translationServiceFactory = translationServiceFactory;
@@ -38,6 +46,8 @@ public class TranslateController : ControllerBase
         _settings = settings;
         _languageCodeService = languageCodeService;
         _translationHealthService = translationHealthService;
+        _glossaryService = glossaryService;
+        _costService = costService;
         _logger = logger;
     }
 
@@ -51,6 +61,190 @@ public class TranslateController : ControllerBase
     {
         return Ok(await _translationHealthService.GetServiceHealthAsync());
     }
+
+    /// <summary>
+    /// Probe constants for the active connection test (PM analysis P0):
+    /// a minimal EN→ZH request that every provider can legally serve.
+    /// </summary>
+    private const string ProbeText = "Hello";
+    private const string ProbeSourceLanguage = "en";
+    private const string ProbeTargetLanguage = "zh";
+
+    /// <summary>
+    /// Actively tests one provider by sending a real minimal translation
+    /// request and measuring the round trip (prototype screen-06
+    /// 「测试连接」). Provider failures come back as ok=false with a
+    /// message instead of a 500 so the card can render the inline result.
+    /// </summary>
+    /// <param name="serviceType">The provider to probe, e.g. "openai".</param>
+    /// <param name="cancellationToken">Token to cancel the probe.</param>
+    [HttpPost("test/{serviceType}")]
+    public async Task<ActionResult<TranslationTestResult>> TestServiceConnection(
+        string serviceType,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ITranslationService service;
+        try
+        {
+            service = _translationServiceFactory.CreateTranslationService(serviceType);
+        }
+        catch (ArgumentException ex)
+        {
+            return Ok(new TranslationTestResult
+            {
+                Ok = false,
+                LatencyMs = 0,
+                Message = ex.Message
+            });
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var pair = await service.GetLanguagePair(ProbeSourceLanguage, ProbeTargetLanguage, cancellationToken);
+            if (pair is null)
+            {
+                return Ok(new TranslationTestResult
+                {
+                    Ok = false,
+                    LatencyMs = stopwatch.Elapsed.TotalMilliseconds,
+                    Message = $"Service does not support {ProbeSourceLanguage} -> {ProbeTargetLanguage}."
+                });
+            }
+
+            var translated = await service.TranslateAsync(
+                ProbeText, pair.Source, pair.Target, null, null, cancellationToken);
+            stopwatch.Stop();
+
+            return Ok(new TranslationTestResult
+            {
+                Ok = true,
+                Status = (int)HttpStatusCode.OK,
+                LatencyMs = stopwatch.Elapsed.TotalMilliseconds,
+                Message = $"\"{ProbeText}\" -> \"{translated}\""
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return Ok(new TranslationTestResult
+            {
+                Ok = false,
+                Status = (ex as HttpRequestException)?.StatusCode is { } statusCode ? (int)statusCode : null,
+                LatencyMs = stopwatch.Elapsed.TotalMilliseconds,
+                Message = DescribeFailure(ex)
+            });
+        }
+    }
+
+    /// <summary>
+    /// Preview endpoint for the request-template screen (prototype
+    /// screen-10 「试译预览」): translates a single line through the named
+    /// service — which renders its saved request template exactly like a
+    /// real job — and reports latency, per-call cost and glossary hits.
+    /// Failures keep the same shape with ok=false.
+    /// </summary>
+    /// <param name="request">The service, line and optional language pair.</param>
+    /// <param name="cancellationToken">Token to cancel the translation.</param>
+    [HttpPost("preview")]
+    public async Task<ActionResult<TranslationPreviewResponse>> PreviewTranslation(
+        [FromBody] TranslationPreviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            return Ok(new TranslationPreviewResponse
+            {
+                Ok = true,
+                Translated = request.Text,
+                LatencyMs = 0
+            });
+        }
+
+        ITranslationService service;
+        try
+        {
+            service = _translationServiceFactory.CreateTranslationService(request.ServiceType);
+        }
+        catch (ArgumentException ex)
+        {
+            return Ok(PreviewFailure(ex.Message, 0));
+        }
+
+        var sourceLanguage = request.SourceLanguage ?? "en";
+        var targetLanguage = request.TargetLanguage ?? "zh";
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var pair = await service.GetLanguagePair(sourceLanguage, targetLanguage, cancellationToken);
+            if (pair is null)
+            {
+                return Ok(PreviewFailure(
+                    $"Service does not support {sourceLanguage} -> {targetLanguage}.",
+                    stopwatch.Elapsed.TotalMilliseconds));
+            }
+
+            var translated = await service.TranslateAsync(
+                request.Text, pair.Source, pair.Target, null, null, cancellationToken);
+            stopwatch.Stop();
+
+            var glossaryHits = (await _glossaryService.FindHits(request.Text))
+                .Select(hit => new TranslationPreviewGlossaryHit
+                {
+                    SourceTerm = hit.SourceTerm,
+                    TargetTerm = hit.TargetTerm,
+                    IsLocked = hit.IsLocked
+                })
+                .ToList();
+
+            var rates = await _costService.GetRates();
+            var cost = rates.TryGetValue(request.ServiceType, out var rate)
+                ? CostService.Price(request.Text.Length, rate)
+                : null;
+
+            return Ok(new TranslationPreviewResponse
+            {
+                Ok = true,
+                Translated = translated,
+                LatencyMs = stopwatch.Elapsed.TotalMilliseconds,
+                Cost = cost,
+                GlossaryHits = glossaryHits
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return Ok(PreviewFailure(
+                DescribeFailure(ex),
+                stopwatch.Elapsed.TotalMilliseconds));
+        }
+    }
+
+    /// <summary>
+    /// Picks the most actionable message from a provider failure: wrapped
+    /// <see cref="TranslationException"/>s carry a concise summary, raw
+    /// exceptions often hide the cause in the inner exception.
+    /// </summary>
+    private static string DescribeFailure(Exception ex) =>
+        ex is TranslationException ? ex.Message : ex.InnerException?.Message ?? ex.Message;
+
+    private static TranslationPreviewResponse PreviewFailure(string message, double latencyMs) => new()
+    {
+        Ok = false,
+        LatencyMs = latencyMs,
+        Message = message
+    };
 
     /// <summary>
     /// Initiates a translation job for the provided subtitle data.

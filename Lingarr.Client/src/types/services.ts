@@ -124,6 +124,19 @@ export interface IImportService {
         chineseConvert?: string,
         isBilingual?: boolean
     ): Promise<IImportSubtitlesResponse>
+    /// Import cost estimate (PM analysis P0): the files queued for
+    /// translation priced at the default provider's rate. cost is null
+    /// when the provider has no rate ("unknown", not $0).
+    estimate(params: {
+        files: { name: string; characters: number }[]
+        translateCount: number
+        targetLanguage: string
+    }): Promise<IImportEstimateResponse>
+}
+
+export interface IImportEstimateResponse {
+    cost: number | null
+    currency: string
 }
 
 export interface IVersionService {
@@ -147,6 +160,45 @@ export interface ITranslateService {
     getHealth(): Promise<ITranslationServiceHealth[]>
     proofreadStatus<T>(): Promise<T>
     proofreadLine<T>(request: IProofreadLineRequest): Promise<T>
+    /// Active connection probe (PM analysis P0): one real minimal
+    /// translation per provider, measured end to end.
+    testConnection(serviceType: string): Promise<ITranslationTestResponse>
+    /// Single-line translation preview through a named service's saved
+    /// request template, with glossary hits and per-call cost.
+    previewTranslation(request: ITranslationPreviewRequest): Promise<ITranslationPreviewResponse>
+}
+
+/// Inline result of the「测试连接」probe on the settings provider cards
+/// (prototype screen-06). ok=false carries the provider failure message.
+export interface ITranslationTestResponse {
+    ok: boolean
+    status: number | null
+    latencyMs: number
+    message: string
+}
+
+export interface ITranslationPreviewRequest {
+    serviceType: string
+    text: string
+    sourceLanguage?: string
+    targetLanguage?: string
+}
+
+export interface ITranslationPreviewGlossaryHit {
+    sourceTerm: string
+    targetTerm: string
+    isLocked: boolean
+}
+
+/// Response of the「试译预览」card (prototype screen-10). Failures keep the
+/// same shape with ok=false and a message.
+export interface ITranslationPreviewResponse {
+    ok: boolean
+    translated: string | null
+    latencyMs: number
+    cost: number | null
+    glossaryHits: ITranslationPreviewGlossaryHit[]
+    message: string | null
 }
 
 /// Health row per provider for the overview card and settings provider

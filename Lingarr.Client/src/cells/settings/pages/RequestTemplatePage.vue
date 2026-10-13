@@ -24,6 +24,8 @@
 
         <div class="grid grid-flow-row auto-rows-max grid-cols-1 gap-4 px-4 pb-4">
             <RequestTemplate :service="service" />
+            <!-- ═══ 试译预览(原型 screen-10 右下卡):单行走真实请求 ═══ -->
+            <TranslationPreviewCard :service="service" />
         </div>
     </div>
 </template>
@@ -39,6 +41,7 @@ import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import TabComponent from '@/cells/kernel/components/TabComponent.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import RequestTemplate from '@/cells/settings/components/template/RequestTemplate.vue'
+import TranslationPreviewCard from '@/cells/settings/components/template/TranslationPreviewCard.vue'
 import TranslationPrompt from '@/cells/settings/components/TranslationPrompt.vue'
 import ProofreadPrompt from '@/cells/settings/components/ProofreadPrompt.vue'
 

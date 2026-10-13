@@ -47,6 +47,14 @@
                 </div>
                 <div class="mt-auto flex gap-1.5">
                     <button
+                        v-if="card.configured"
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        :disabled="testing[card.provider]"
+                        @click="testConnection(card.provider)">
+                        {{ testing[card.provider] ? t('settings.providers.testing') : t('settings.providers.test') }}
+                    </button>
+                    <button
                         v-if="!isDefault(card.provider) && card.configured"
                         type="button"
                         class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
@@ -60,6 +68,15 @@
                         @click="expanded = !expanded">
                         {{ t('library.action.detail') }}
                     </button>
+                </div>
+                <!-- ═══ 主动探测内联结果(原型 .test-res):ok 绿 / err 红,mono,含状态·延迟·消息 ═══ -->
+                <div
+                    v-if="testing[card.provider] || testResults[card.provider]"
+                    class="mono rounded border px-2 py-1 text-[11px] leading-relaxed break-words"
+                    :class="testLineClass(card.provider)"
+                    :data-test="card.provider"
+                    :data-ok="testResults[card.provider]?.ok ?? ''">
+                    {{ testLine(card.provider) }}
                 </div>
             </div>
         </div>
@@ -79,14 +96,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import ServicesPage from './ServicesPage.vue'
 import PluginsPage from './PluginsPage.vue'
 import { translateService } from '@/cells/app/api/translateService'
 import { useSettingStore } from '@/cells/app/stores/setting'
-import { ITranslationServiceHealth, SETTINGS } from '@/types'
+import { ITranslationServiceHealth, ITranslationTestResponse, SETTINGS } from '@/types'
 
 const translateApi = translateService(axios)
 
@@ -95,6 +112,48 @@ const settingStore = useSettingStore()
 
 const health = ref<ITranslationServiceHealth[]>([])
 const expanded = ref(false)
+
+// ── 主动测试连接(原型 screen-06 .test-res)──────────────────────
+const testing = reactive<Record<string, boolean>>({})
+const testResults = ref<Record<string, ITranslationTestResponse>>({})
+
+async function testConnection(provider: string): Promise<void> {
+    if (testing[provider]) return
+    testing[provider] = true
+    delete testResults.value[provider]
+    try {
+        testResults.value[provider] = await translateApi.testConnection(provider)
+    } catch (error) {
+        testResults.value[provider] = {
+            ok: false,
+            status: null,
+            latencyMs: 0,
+            message: error instanceof Error ? error.message : String(error)
+        }
+    } finally {
+        testing[provider] = false
+    }
+}
+
+function testLineClass(provider: string): string {
+    if (testing[provider]) {
+        return 'text-secondary-content border-line'
+    }
+    return testResults.value[provider]?.ok
+        ? 'text-success border-success/40 bg-success/10'
+        : 'text-danger border-danger/40 bg-danger/10'
+}
+
+function testLine(provider: string): string {
+    if (testing[provider]) {
+        return t('settings.providers.testing')
+    }
+    const result = testResults.value[provider]
+    if (!result) return ''
+    const mark = result.ok ? '✓' : '✗'
+    const status = result.status != null ? ` ${result.status}` : ''
+    return `${mark}${status} · ${Math.round(result.latencyMs)} ms · ${result.message}`
+}
 
 const cards = computed(() =>
     [...health.value].sort((a, b) => Number(b.configured) - Number(a.configured) || a.displayName.localeCompare(b.displayName))

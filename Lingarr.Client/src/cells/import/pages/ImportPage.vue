@@ -162,6 +162,12 @@
                     </span>
                     <span class="text-secondary-content ml-auto text-xs">
                         {{ t('import.estimate', { files: rows.length, lines: totalLines, translate: translateCount }) }}
+                        <template v-if="translateCount > 0 && estimatedCost != null">
+                            {{ t('import.estimateCost', { cost: formatCost(estimatedCost) }) }}
+                        </template>
+                        <template v-else-if="translateCount > 0 && estimatedCost === null">
+                            {{ t('import.estimateUnknown') }}
+                        </template>
                     </span>
                 </div>
                 <div class="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-4 py-3">
@@ -198,7 +204,7 @@
                         :loading="importing"
                         :disabled="rows.length === 0"
                         @click="runImport">
-                        {{ t('import.actions.importCounts', { files: rows.length, translate: translateCount }) }}
+                        {{ importLabel }}
                     </ButtonComponent>
                 </div>
             </div>
@@ -395,7 +401,7 @@
                         :loading="importing"
                         :disabled="rows.length === 0"
                         @click="runImport">
-                        {{ t('import.actions.importCounts', { files: rows.length, translate: translateCount }) }}
+                        {{ importLabel }}
                     </ButtonComponent>
                 </div>
             </div>
@@ -409,6 +415,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import TabComponent from '@/cells/kernel/components/TabComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
+import useDebounce from '@/cells/kernel/composables/useDebounce'
 import axios from 'axios'
 import { importService } from '@/cells/import/services/importService'
 import { mediaService } from '@/cells/app/api/mediaService'
@@ -437,7 +444,7 @@ interface ImportRow {
     result: IImportedSubtitleResult | null
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const settingStore = useSettingStore()
 const toastStore = useToastStore()
@@ -525,6 +532,70 @@ const bilingualForImport = computed<'follow' | 'on' | 'off'>(() =>
 )
 
 const translateCount = computed(() => rows.value.filter((row) => row.action === 'translate').length)
+
+// ── 导入成本预估(原型 screen-04 底条)──────────────────────────
+// 文件行变化 / 动作切换 / 目标语言变化时重算;无翻译项时隐藏。
+// estimatedCost:undefined = 不适用(无翻译项);null = 未知(无费率或请求失败,
+// B2 语义:未知 ≠ $0);number = 已定价。
+const estimatedCost = ref<number | null | undefined>(undefined)
+
+const refreshEstimate = useDebounce(async () => {
+    const translating = rows.value.filter((row) => row.action === 'translate')
+    if (translating.length === 0 || !targetLanguage.value) {
+        estimatedCost.value = undefined
+        return
+    }
+    try {
+        const result = await importApi.estimate({
+            // 服务端库侧估算同款启发式:UTF-8 字幕文件 ≈ 一半字节是可译文本
+            files: translating.map((row) => ({
+                name: row.fileName,
+                characters: Math.round((row.sizeBytes ?? 0) * 0.5)
+            })),
+            translateCount: translating.length,
+            targetLanguage: targetLanguage.value
+        })
+        estimatedCost.value = result.cost
+    } catch {
+        estimatedCost.value = null
+    }
+}, 300)
+
+watch(
+    [() => rows.value.length, translateCount, targetLanguage],
+    () => {
+        void refreshEstimate()
+    },
+    { immediate: true }
+)
+
+const importLabel = computed(() => {
+    if (translateCount.value === 0 || estimatedCost.value === undefined) {
+        return t('import.actions.importCounts', {
+            files: rows.value.length,
+            translate: translateCount.value
+        })
+    }
+    if (estimatedCost.value === null) {
+        return t('import.actions.importCountsUnknownCost', {
+            files: rows.value.length,
+            translate: translateCount.value
+        })
+    }
+    return t('import.actions.importCountsCost', {
+        files: rows.value.length,
+        translate: translateCount.value,
+        cost: formatCost(estimatedCost.value)
+    })
+})
+
+function formatCost(value: number): string {
+    return new Intl.NumberFormat(locale.value, {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 2
+    }).format(value)
+}
 
 // live topbar sub: workbench queue counts
 watch([() => rows.value.length, translateCount], ([files, translate]) => {

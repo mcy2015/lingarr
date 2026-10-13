@@ -1,5 +1,14 @@
 import { AxiosStatic } from 'axios'
-import { ILanguage, IProofreadLineRequest, ISubtitle, ITranslateService, MediaType } from '@/types'
+import {
+    ILanguage,
+    IProofreadLineRequest,
+    ISubtitle,
+    ITranslateService,
+    ITranslationPreviewRequest,
+    ITranslationPreviewResponse,
+    ITranslationTestResponse,
+    MediaType
+} from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateService => ({
     translateSubtitle<T>(
@@ -36,6 +45,12 @@ const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateServ
     },
     proofreadLine<T>(request: IProofreadLineRequest): Promise<T> {
         return http.post(`${resource}/proofread`, request).then((response) => response.data)
+    },
+    testConnection(serviceType: string): Promise<ITranslationTestResponse> {
+        return http.post(`${resource}/test/${serviceType}`).then((response) => response.data)
+    },
+    previewTranslation(request: ITranslationPreviewRequest): Promise<ITranslationPreviewResponse> {
+        return http.post(`${resource}/preview`, request).then((response) => response.data)
     }
 })
 

@@ -218,6 +218,8 @@
             "suffix": "Add suffix, never overwrite"
         },
         "estimate": "{files} items · {lines} lines · {translate} to translate",
+        "estimateCost": "≈ {cost}",
+        "estimateUnknown": "cost unknown",
         "match": {
             "Exact": "Exact",
             "Guess": "Guess",
@@ -235,6 +237,8 @@
         "actions": {
             "clear": "Clear",
             "importCounts": "Import {files} · translate {translate}",
+            "importCountsCost": "Import {files} · translate {translate} · ≈ {cost}",
+            "importCountsUnknownCost": "Import {files} · translate {translate} · cost unknown",
             "excludeUnmatched": "Exclude unmatched"
         },
         "empty": "No files selected yet.",
@@ -535,6 +539,15 @@
             "propertyCount": "{count} property | {count} properties",
             "itemCount": "{count} item | {count} items"
         },
+        "preview": {
+            "title": "Translation preview",
+            "description": "One line, sent as a real request through this service's saved template. Unsaved template edits apply after saving.",
+            "sample": "The Shōgun commands the Anjin to sail west.",
+            "inputLabel": "Line to translate",
+            "run": "Translate ▸",
+            "failed": "Preview failed: {message}",
+            "lockedTerm": "Locked term — enforced on every translation"
+        },
         "directory": {
             "select": "Select"
         }
@@ -714,7 +727,9 @@
             "idle": "idle",
             "online": "online",
             "degraded": "degraded",
-            "failing": "failing"
+            "failing": "failing",
+            "test": "Test connection",
+            "testing": "◐ Testing…"
         },
         "glossary": {
             "title": "Glossary",
