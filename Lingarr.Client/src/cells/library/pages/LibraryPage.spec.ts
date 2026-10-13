@@ -5,8 +5,7 @@ import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
-import services from '@/services'
-import LibraryPage from '@/pages/LibraryPage.vue'
+import LibraryPage from '@/cells/library/pages/LibraryPage.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -14,11 +13,11 @@ import { IMediaLibraryItem, IPagedResult, ITranslationEstimate, MEDIA_TYPE, SETT
 
 const statisticsMock = vi.hoisted(() => vi.fn())
 const statusCountsMock = vi.hoisted(() => vi.fn())
+const libraryMock = vi.hoisted(() => vi.fn())
+const estimateMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@/services', () => ({
-    default: {
-        media: { library: vi.fn(), estimate: vi.fn() }
-    }
+vi.mock('@/cells/app/api/mediaService', () => ({
+    mediaService: () => ({ library: libraryMock, estimate: estimateMock })
 }))
 
 vi.mock('@/cells/app/api/statisticsService', () => ({
@@ -28,9 +27,6 @@ vi.mock('@/cells/app/api/statisticsService', () => ({
 vi.mock('@/cells/app/api/translationRequestService', () => ({
     translationRequestService: () => ({ statusCounts: statusCountsMock })
 }))
-
-const libraryMock = vi.mocked(services.media.library)
-const estimateMock = vi.mocked(services.media.estimate)
 
 // ── fixtures (partial rows: only the fields the page reads) ──────
 const show1 = {

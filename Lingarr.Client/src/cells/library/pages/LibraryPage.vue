@@ -201,9 +201,9 @@ import axios from 'axios'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
-import NoMediaNotification from '@/components/common/NoMediaNotification.vue'
+import NoMediaNotification from '@/cells/library/components/NoMediaNotification.vue'
 import PaginationComponent from '@/cells/kernel/components/PaginationComponent.vue'
-import services from '@/services'
+import { mediaService } from '@/cells/app/api/mediaService'
 import { statisticsService } from '@/cells/app/api/statisticsService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useSettingStore } from '@/cells/app/stores/setting'
@@ -225,6 +225,7 @@ const VISIBLE_TRACKS = 4
 
 const statisticsApi = statisticsService(axios)
 const translationRequestApi = translationRequestService(axios)
+const mediaApi = mediaService(axios)
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -309,7 +310,7 @@ watch(search, () => {
 async function fetchLibrary(): Promise<void> {
     loading.value = true
     try {
-        const page = await services.media.library<IPagedResult<IMediaLibraryItem>>({
+        const page = await mediaApi.library<IPagedResult<IMediaLibraryItem>>({
             pageNumber: pagination.pageNumber,
             searchQuery: search.value,
             sortBy: 'Title',
@@ -427,7 +428,7 @@ function scheduleEstimate(): void {
 async function refreshEstimate(): Promise<void> {
     if (selection.size === 0 || !targetLanguages.value[0]) return
     try {
-        estimate.value = await services.media.estimate<ITranslationEstimate>(
+        estimate.value = await mediaApi.estimate<ITranslationEstimate>(
             [...selection.values()].map((item) => ({
                 mediaType: item.mediaType,
                 id: item.id

@@ -19,9 +19,7 @@ import {
 } from '@/types'
 
 export interface Services {
-    subtitle: ISubtitleService
     import: IImportService
-    media: IMediaService
     directory: IDirectoryService
 }
 

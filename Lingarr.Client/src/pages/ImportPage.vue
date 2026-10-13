@@ -409,7 +409,9 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import TabComponent from '@/cells/kernel/components/TabComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
+import axios from 'axios'
 import services from '@/services'
+import { mediaService } from '@/cells/app/api/mediaService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -493,7 +495,9 @@ watch(selectedShowId, () => {
     selectedSeasonNumber.value = seasons.value[0]
 })
 
-void services.media
+const mediaApi = mediaService(axios)
+
+void mediaApi
     .shows<IPagedResult<IShow>>(1, '', 'title', true)
     .then((page) => {
         shows.value = page.items

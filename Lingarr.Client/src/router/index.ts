@@ -30,7 +30,7 @@ const routes: RouteRecordRaw[] = [
             },
             {
                 path: '/library',
-                component: () => import('@/pages/LibraryPage.vue'),
+                component: () => import('@/cells/library/pages/LibraryPage.vue'),
                 name: 'library'
             },
             {
@@ -55,13 +55,13 @@ const routes: RouteRecordRaw[] = [
             {
                 // media detail drill-downs from the library matrix
                 path: '/library/show/:id',
-                component: () => import('@/pages/MediaDetailPage.vue'),
+                component: () => import('@/cells/library/pages/MediaDetailPage.vue'),
                 name: 'media-detail-show',
                 props: (route) => ({ type: 'show', id: String(route.params.id) })
             },
             {
                 path: '/library/movie/:id',
-                component: () => import('@/pages/MediaDetailPage.vue'),
+                component: () => import('@/cells/library/pages/MediaDetailPage.vue'),
                 name: 'media-detail-movie',
                 props: (route) => ({ type: 'movie', id: String(route.params.id) })
             },

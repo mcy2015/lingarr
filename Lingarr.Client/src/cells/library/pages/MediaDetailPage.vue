@@ -200,7 +200,8 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
-import services from '@/services'
+import { mediaService } from '@/cells/app/api/mediaService'
+import { subtitleService } from '@/cells/library/services/subtitleService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useTranslateStore } from '@/cells/app/stores/translate'
@@ -231,6 +232,8 @@ const router = useRouter()
 const uiStore = useUiStore()
 const translateStore = useTranslateStore()
 const translationRequestApi = translationRequestService(axios)
+const mediaApi = mediaService(axios)
+const subtitleApi = subtitleService(axios)
 
 const item = ref<IMediaLibraryItem | null>(null)
 const history = ref<ITranslationRequest[]>([])
@@ -296,7 +299,7 @@ watch([item, activeSeason], ([value]) => {
 
 async function load(): Promise<void> {
     const mediaType = isShow.value ? 'Show' : 'Movie'
-    const page = await services.media.library<IPagedResult<IMediaLibraryItem>>({
+    const page = await mediaApi.library<IPagedResult<IMediaLibraryItem>>({
         pageNumber: 1,
         searchQuery: '',
         sortBy: 'Title',
@@ -345,7 +348,7 @@ async function loadSeasonSubtitles(season: ISeason): Promise<void> {
         return
     }
     try {
-        seasonSubtitles.value = await services.subtitle.collect<ISubtitle[]>(season.path)
+        seasonSubtitles.value = await subtitleApi.collect<ISubtitle[]>(season.path)
     } catch {
         seasonSubtitles.value = []
     }

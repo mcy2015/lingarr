@@ -95,7 +95,7 @@ import { useUiStore } from '@/cells/app/stores/ui'
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'
 import DropdownComponent from '@/cells/kernel/components/DropdownComponent.vue'
 import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
-import ToastNotification from '@/components/common/ToastNotification.vue'
+import ToastNotification from '@/cells/app/components/ToastNotification.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const settingStore = useSettingStore()
