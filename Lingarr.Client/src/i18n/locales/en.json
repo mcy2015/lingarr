@@ -806,7 +806,19 @@
             "addServiceHint": "{builtin} built-in available · {plugins} plugins",
             "externalPlugins": "External plugins",
             "pluginsCount": "{count} loaded",
-            "open": "Open"
+            "open": "Open",
+            "notConfigured": "Not configured",
+            "delete": "Delete",
+            "deleteTitle": "Delete {service}?",
+            "deleteBody": "This removes {service} from the fallback chain and clears its saved configuration (API key, URL, model…). The card returns to its unconfigured state.",
+            "deleteCancel": "Cancel",
+            "deleteConfirm": "Delete service",
+            "deleting": "Deleting…",
+            "deleteDone": "{service} deleted · configuration cleared",
+            "deleteDefaultMigrated": "{service} deleted · {next} is now the default service",
+            "deleteLastGuard": "Keep at least one service on the fallback chain",
+            "deletePartial": "{service} was removed from the fallback chain, but clearing its configuration failed — check the plugin manifest.",
+            "deleteFailed": "Removing {service} from the fallback chain failed."
         },
         "glossary": {
             "title": "Glossary",

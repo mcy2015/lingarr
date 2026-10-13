@@ -806,7 +806,19 @@
             "addServiceHint": "内置 {builtin} 个可用 · 插件 {plugins} 个",
             "externalPlugins": "外部插件",
             "pluginsCount": "已加载 {count} 个",
-            "open": "打开"
+            "open": "打开",
+            "notConfigured": "未配置",
+            "delete": "删除",
+            "deleteTitle": "删除 {service}?",
+            "deleteBody": "将从回退链移除 {service},并清空其已保存的配置(API Key、URL、模型等)。卡片将回到未配置状态。",
+            "deleteCancel": "取消",
+            "deleteConfirm": "删除服务",
+            "deleting": "删除中…",
+            "deleteDone": "已删除 {service} · 配置已清空",
+            "deleteDefaultMigrated": "已删除 {service} · 新链首 {next} 自动成为默认服务",
+            "deleteLastGuard": "链上至少保留一个服务",
+            "deletePartial": "已将 {service} 移出回退链,但清空其配置失败 —— 请检查插件清单。",
+            "deleteFailed": "从回退链移除 {service} 失败。"
         },
         "glossary": {
             "title": "术语表",

@@ -13,24 +13,30 @@ import en from '@/i18n/locales/en.json'
 const getHealthMock = vi.hoisted(() => vi.fn())
 const testConnectionMock = vi.hoisted(() => vi.fn())
 const listPluginsMock = vi.hoisted(() => vi.fn())
+const getManifestMock = vi.hoisted(() => vi.fn())
 const setSettingMock = vi.hoisted(() => vi.fn())
+const setEncryptedSettingMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/translateService', () => ({
     translateService: () => ({
         getHealth: getHealthMock,
-        testConnection: testConnectionMock
+        testConnection: testConnectionMock,
+        // full mounts render FallbackOrderCard, which probes language tables and
+        // settles every rejection into the read-only "unknown" chip
+        getServiceLanguages: vi.fn().mockRejectedValue(new Error('offline'))
     })
 }))
 
 vi.mock('@/cells/settings/services/pluginService', () => ({
-    pluginService: () => ({ list: listPluginsMock })
+    pluginService: () => ({ list: listPluginsMock, getManifest: getManifestMock })
 }))
 
 vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({
         setSetting: setSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettings: vi.fn().mockResolvedValue({})
+        getEncryptedSettings: vi.fn().mockResolvedValue({}),
+        setEncryptedSetting: setEncryptedSettingMock
     })
 }))
 
@@ -56,9 +62,20 @@ const libre: ITranslationServiceHealth = {
 getHealthMock.mockResolvedValue([openai, libre])
 // no templated providers by default; the entry spec opts in per test
 listPluginsMock.mockResolvedValue([])
+getManifestMock.mockResolvedValue({
+    provider: 'openai',
+    displayName: 'OpenAI',
+    isBuiltIn: true,
+    hasRequestTemplate: false,
+    settings: []
+})
 setSettingMock.mockResolvedValue(undefined)
+setEncryptedSettingMock.mockResolvedValue(undefined)
 
-async function mountPage(serviceType = 'openai'): Promise<{
+async function mountPage(
+    serviceType = 'openai',
+    { shallow = true }: { shallow?: boolean } = {}
+): Promise<{
     wrapper: VueWrapper
     router: ReturnType<typeof createRouter>
     pinia: ReturnType<typeof createPinia>
@@ -91,7 +108,9 @@ async function mountPage(serviceType = 'openai'): Promise<{
 
     const wrapper = mount(SettingsProvidersPage, {
         global: { plugins: [pinia, i18n, router] },
-        shallow: true
+        // shallow keeps the child cards stubbed; the delete-flow specs need the
+        // teleported confirm modal, which only renders on a full mount
+        shallow
     })
     await flushPromises()
     return { wrapper, router, pinia }
@@ -344,12 +363,14 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         expect(wrapper.find('[data-test="add-service-card"]').exists()).toBe(false)
     })
 
-    it('shows the model line only when the service model or batch size is readable', async () => {
+    it('fills the always-present meta slot with model · batch info once readable, "—" before that', async () => {
         getHealthMock.mockResolvedValue([openai])
         const { wrapper, pinia } = await mountPage('["openai"]')
 
-        // nothing stored yet -> row hidden
-        expect(wrapper.find('[data-test="model-openai"]').exists()).toBe(false)
+        // configured but nothing stored yet -> the slot stays with a placeholder
+        const meta = wrapper.find('[data-test="card-meta-openai"]')
+        expect(meta.exists()).toBe(true)
+        expect(meta.text()).toBe('—')
 
         const settingStore = useSettingStore(pinia)
         settingStore.storeSetting(SETTINGS.OPENAI_MODEL, 'gpt-4o-mini')
@@ -357,9 +378,192 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         settingStore.storeSetting(SETTINGS.MAX_BATCH_SIZE, '500')
         await flushPromises()
 
-        const line = wrapper.find('[data-test="model-openai"]')
-        expect(line.exists()).toBe(true)
+        const line = wrapper.find('[data-test="card-meta-openai"]')
         expect(line.text()).toContain('gpt-4o-mini')
         expect(line.text()).toContain('500')
+    })
+})
+
+describe('SettingsProvidersPage · pcard 骨架对齐', () => {
+    it('gives every card the same four slots with ops pinned as the last block', async () => {
+        getHealthMock.mockResolvedValue([openai, libre])
+        const { wrapper } = await mountPage('["openai"]')
+
+        for (const provider of ['openai', 'libretranslate']) {
+            const slots = wrapper
+                .findAll('[data-test]')
+                .map((node) => node.attributes('data-test') ?? '')
+                .filter((name) => name.startsWith('card-') && name.endsWith(`-${provider}`))
+            expect(slots).toEqual([
+                `card-head-${provider}`,
+                `card-meta-${provider}`,
+                `card-usage-${provider}`,
+                `card-ops-${provider}`
+            ])
+        }
+    })
+
+    it('renders the meta slot on unconfigured cards with the weak copy', async () => {
+        getHealthMock.mockResolvedValue([openai, libre])
+        const { wrapper } = await mountPage('["openai"]')
+
+        expect(wrapper.find('[data-test="card-meta-libretranslate"]').text()).toBe(
+            en.settings.providers.notConfigured
+        )
+    })
+
+    it('folds the LibreTranslate URL into the meta slot instead of a dedicated row', async () => {
+        const libreConfigured = { ...libre, configured: true }
+        getHealthMock.mockResolvedValue([openai, libreConfigured])
+        const { wrapper, pinia } = await mountPage('["openai","libretranslate"]')
+
+        useSettingStore(pinia).storeSetting(
+            SETTINGS.LIBRETRANSLATE_URL,
+            'http://libretranslate:5000'
+        )
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="card-meta-libretranslate"]').text()).toContain(
+            'http://libretranslate:5000'
+        )
+    })
+})
+
+describe('SettingsProvidersPage · 删除服务', () => {
+    const deepl: ITranslationServiceHealth = {
+        ...openai,
+        provider: 'deepl',
+        displayName: 'DeepL'
+    }
+
+    it('offers delete only for chained or configured services', async () => {
+        getHealthMock.mockResolvedValue([openai, libre]) // libretranslate unconfigured & off-chain
+        const { wrapper } = await mountPage('["openai"]')
+
+        expect(wrapper.find('[data-test="delete-openai"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="delete-libretranslate"]').exists()).toBe(false)
+    })
+
+    it('offers delete for an unconfigured service that still sits on the chain', async () => {
+        getHealthMock.mockResolvedValue([openai, libre])
+        const { wrapper } = await mountPage('["openai","libretranslate"]')
+
+        expect(wrapper.find('[data-test="delete-libretranslate"]').exists()).toBe(true)
+    })
+
+    it('refuses to delete the only service on the chain and toasts the guard', async () => {
+        getHealthMock.mockResolvedValue([openai])
+        setSettingMock.mockClear()
+        setEncryptedSettingMock.mockClear()
+        const { wrapper, pinia } = await mountPage('["openai"]')
+
+        await wrapper.find('[data-test="delete-openai"]').trigger('click')
+        await flushPromises()
+
+        const toastStore = useToastStore(pinia)
+        expect(toastStore.toasts[0].message).toBe(en.settings.providers.deleteLastGuard)
+        expect(toastStore.toasts[0].type).toBe('error')
+        // the guard fires before the modal: nothing opens, nothing is written
+        expect(document.querySelector('[data-test="provider-delete-modal"]')).toBeNull()
+        expect(setSettingMock).not.toHaveBeenCalled()
+        expect(setEncryptedSettingMock).not.toHaveBeenCalled()
+    })
+
+    it('cancelling the confirm modal leaves the chain and the configuration untouched', async () => {
+        getHealthMock.mockResolvedValue([openai, deepl])
+        setSettingMock.mockClear()
+        setEncryptedSettingMock.mockClear()
+        getManifestMock.mockClear()
+        const { wrapper, pinia } = await mountPage('["openai","deepl"]', { shallow: false })
+
+        await wrapper.find('[data-test="delete-openai"]').trigger('click')
+        await flushPromises()
+        expect(document.querySelector('[data-test="provider-delete-modal"]')).not.toBeNull()
+
+        ;(document.querySelector('[data-test="provider-delete-cancel"]') as HTMLElement).click()
+        await flushPromises()
+
+        expect(document.querySelector('[data-test="provider-delete-modal"]')).toBeNull()
+        expect(setSettingMock).not.toHaveBeenCalled()
+        expect(setEncryptedSettingMock).not.toHaveBeenCalled()
+        expect(getManifestMock).not.toHaveBeenCalled()
+        expect(useSettingStore(pinia).getSetting(SETTINGS.SERVICE_TYPE)).toBe(
+            '["openai","deepl"]'
+        )
+    })
+
+    it('confirming on the default removes it from the chain, clears its settings and migrates the default', async () => {
+        getHealthMock.mockResolvedValue([openai, deepl])
+        getManifestMock.mockResolvedValue({
+            provider: 'openai',
+            displayName: 'OpenAI',
+            isBuiltIn: true,
+            hasRequestTemplate: false,
+            settings: [
+                { key: 'openai_model', label: 'Model', type: 'Text', required: false },
+                { key: 'openai_api_key', label: 'API key', type: 'Secret', required: true }
+            ]
+        })
+        setSettingMock.mockClear()
+        setEncryptedSettingMock.mockClear()
+        const { wrapper, pinia } = await mountPage('["openai","deepl"]', { shallow: false })
+        getHealthMock.mockClear()
+        getHealthMock.mockResolvedValue([deepl]) // after the deletion openai is gone
+
+        await wrapper.find('[data-test="delete-openai"]').trigger('click')
+        await flushPromises()
+        ;(document.querySelector('[data-test="provider-delete-confirm"]') as HTMLElement).click()
+        await flushPromises()
+
+        // 1) chain removal — the remaining chain is written back as JSON
+        expect(setSettingMock).toHaveBeenCalledWith('service_type', '["deepl"]')
+        // 2) configuration cleared: plain field emptied, secret emptied via the encrypted API
+        expect(setSettingMock).toHaveBeenCalledWith('openai_model', '')
+        expect(setEncryptedSettingMock).toHaveBeenCalledWith('openai_api_key', '')
+        // 3) health refreshed (chain refreshes derivatively through the store)
+        expect(getHealthMock).toHaveBeenCalledTimes(1)
+
+        const settingStore = useSettingStore(pinia)
+        expect(settingStore.getSetting(SETTINGS.SERVICE_TYPE)).toBe('["deepl"]')
+        expect(settingStore.getSetting(SETTINGS.OPENAI_MODEL)).toBe('')
+        expect(settingStore.getEncryptedSetting('openai_api_key' as never)).toBe('')
+
+        // default migrated: the toast names the removed service and the new head
+        const toastStore = useToastStore(pinia)
+        expect(toastStore.toasts[0].message).toBe(
+            en.settings.providers.deleteDefaultMigrated
+                .replace('{service}', 'OpenAI')
+                .replace('{next}', 'DeepL')
+        )
+    })
+
+    it('confirming on a non-default service keeps the chain head as default', async () => {
+        getHealthMock.mockResolvedValue([openai, deepl])
+        getManifestMock.mockResolvedValue({
+            provider: 'deepl',
+            displayName: 'DeepL',
+            isBuiltIn: true,
+            hasRequestTemplate: false,
+            settings: [
+                { key: 'deepl_api_key', label: 'API key', type: 'Secret', required: true }
+            ]
+        })
+        setSettingMock.mockClear()
+        setEncryptedSettingMock.mockClear()
+        const { wrapper, pinia } = await mountPage('["openai","deepl"]', { shallow: false })
+
+        await wrapper.find('[data-test="delete-deepl"]').trigger('click')
+        await flushPromises()
+        ;(document.querySelector('[data-test="provider-delete-confirm"]') as HTMLElement).click()
+        await flushPromises()
+
+        expect(setSettingMock).toHaveBeenCalledWith('service_type', '["openai"]')
+        expect(setEncryptedSettingMock).toHaveBeenCalledWith('deepl_api_key', '')
+        expect(useSettingStore(pinia).getSetting(SETTINGS.SERVICE_TYPE)).toBe('["openai"]')
+
+        const toastStore = useToastStore(pinia)
+        expect(toastStore.toasts[0].message).toBe(
+            en.settings.providers.deleteDone.replace('{service}', 'DeepL')
+        )
     })
 })

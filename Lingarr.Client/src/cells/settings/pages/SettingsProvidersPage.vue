@@ -1,16 +1,20 @@
 <template>
     <div class="space-y-3">
-        <!-- ═══ Provider 卡片网格(原型屏 6) ═══ -->
+        <!-- ═══ Provider 卡片网格(原型屏 6 .pcard 骨架)═══
+             每卡固定四槽 head/meta/usage/ops:meta 恒占一行(URL/model 信息或「未配置」),
+             ops 以 mt-auto 钉在卡底 —— 行内等高,统计行与按钮行跨卡对齐。 -->
         <p class="text-secondary-content px-4 text-[12.5px]">
             {{ t('settings.providers.blurb') }}
         </p>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 px-4">
+        <div
+            class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] items-stretch gap-3 px-4">
             <div
                 v-for="card in cards"
                 :key="card.provider"
                 class="rounded-md border border-line bg-secondary flex flex-col gap-2.5 p-4"
                 :class="{ 'opacity-55': !card.configured }">
-                <div class="flex items-center gap-2.5">
+                <!-- head 槽:dot + 名称 + 默认 tag + 右侧状态 -->
+                <div class="flex items-center gap-2.5" :data-test="`card-head-${card.provider}`">
                     <span class="dot" :class="dotClass(card)"></span>
                     <b class="text-[14px] font-semibold">{{ card.displayName }}</b>
                     <span
@@ -22,18 +26,26 @@
                         {{ statusText(card) }}
                     </span>
                 </div>
-                <div v-if="card.lastError" class="text-danger truncate text-xs" :title="card.lastError">
-                    {{ card.lastError }}
+                <!-- meta 槽:恒在的一行 mono 小字 —— 已配置显示 URL/model 信息,
+                     未配置显示弱化文案;LibreTranslate 的 URL 归入此槽。 -->
+                <div class="min-w-0" :data-test="`card-meta-${card.provider}`">
+                    <div
+                        class="mono text-secondary-content truncate text-xs"
+                        :class="{ 'opacity-70': !card.configured }"
+                        :title="metaLine(card)">
+                        {{ metaLine(card) }}
+                    </div>
+                    <div
+                        v-if="card.lastError"
+                        class="text-danger truncate text-xs"
+                        :title="card.lastError">
+                        {{ card.lastError }}
+                    </div>
                 </div>
-                <!-- model 行:settings store 里真实读得到才显示(model · 批大小) -->
+                <!-- usage 槽:本月/延迟/成功 三格,骨架一致 -->
                 <div
-                    v-if="modelLine(card.provider)"
-                    class="mono text-secondary-content truncate text-xs"
-                    :title="modelLine(card.provider)"
-                    :data-test="`model-${card.provider}`">
-                    {{ modelLine(card.provider) }}
-                </div>
-                <div class="text-secondary-content flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                    class="text-secondary-content flex flex-wrap gap-x-5 gap-y-1 text-xs"
+                    :data-test="`card-usage-${card.provider}`">
                     <span>
                         {{ t('settings.providers.month') }}
                         <b class="mono text-primary-content font-semibold">
@@ -53,7 +65,19 @@
                         </b>
                     </span>
                 </div>
-                <div class="mt-auto flex flex-wrap gap-1.5">
+                <!-- ═══ 主动探测内联结果(原型 .test-res):ok 绿 / err 红,mono,含状态·延迟·消息 ═══ -->
+                <div
+                    v-if="testing[card.provider] || testResults[card.provider]"
+                    class="mono rounded border px-2 py-1 text-[11px] leading-relaxed break-words"
+                    :class="testLineClass(card.provider)"
+                    :data-test="card.provider"
+                    :data-ok="testResults[card.provider]?.ok ?? ''">
+                    {{ testLine(card.provider) }}
+                </div>
+                <!-- ops 槽:mt-auto 钉卡底,按钮左对齐,数量差异不影响垂直位置 -->
+                <div
+                    class="mt-auto flex flex-wrap gap-1.5 pt-1"
+                    :data-test="`card-ops-${card.provider}`">
                     <button
                         v-if="card.configured"
                         type="button"
@@ -86,15 +110,15 @@
                         @click="openEdit(card.provider)">
                         {{ card.configured ? t('settings.providers.edit') : t('settings.providers.configure') }}
                     </button>
-                </div>
-                <!-- ═══ 主动探测内联结果(原型 .test-res):ok 绿 / err 红,mono,含状态·延迟·消息 ═══ -->
-                <div
-                    v-if="testing[card.provider] || testResults[card.provider]"
-                    class="mono rounded border px-2 py-1 text-[11px] leading-relaxed break-words"
-                    :class="testLineClass(card.provider)"
-                    :data-test="card.provider"
-                    :data-ok="testResults[card.provider]?.ok ?? ''">
-                    {{ testLine(card.provider) }}
+                    <!-- 删除(ops 行末):仅链上或已配置服务;唯一链成员另有守卫 -->
+                    <button
+                        v-if="isDeletable(card.provider)"
+                        type="button"
+                        class="border-danger/50 text-danger hover:bg-danger/10 focus-visible:ring-danger cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                        :data-test="`delete-${card.provider}`"
+                        @click="requestDelete(card.provider)">
+                        {{ t('settings.providers.delete') }}
+                    </button>
                 </div>
             </div>
 
@@ -136,7 +160,7 @@
         <!-- ═══ 回退顺序卡(A2):service_type 数组唯一编辑点 ═══ -->
         <FallbackOrderCard :health="health" class="px-4" />
 
-        <!-- ═══ 请求与重试(A3):批量/超时/重试/退避,全量保留(行式卡) ═══ -->
+        <!-- ═══ 请求与重试(A3):批量/超时/重试/重试退避,全量保留(行式卡) ═══ -->
         <TranslationSettings class="px-4" />
 
         <!-- ═══ 外部插件收纳行(A3):计数 + 下钻保留页面 ═══ -->
@@ -164,6 +188,55 @@
             :provider="editProvider ?? ''"
             :display-name="editDisplayName"
             @close="closeEdit" />
+
+        <!-- ═══ 删除服务确认模态:说明后果(移出回退链 + 清空配置)═══ -->
+        <Teleport to="body">
+            <Transition
+                enter-active-class="transition-opacity duration-200 ease-in-out"
+                leave-active-class="transition-opacity duration-200 ease-in-out"
+                enter-from-class="opacity-0"
+                leave-to-class="opacity-0">
+                <div
+                    v-if="deleteCandidate !== null"
+                    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    @click="cancelDelete"
+                    @keydown.escape="cancelDelete">
+                    <div
+                        class="bg-secondary border-line w-full max-w-md rounded-lg border p-5"
+                        role="dialog"
+                        aria-modal="true"
+                        :aria-label="t('settings.providers.deleteTitle', { service: deleteDisplayName })"
+                        data-test="provider-delete-modal"
+                        @click.stop>
+                        <div class="mb-3 flex items-center gap-2.5">
+                            <h2 class="text-[15px] font-semibold">
+                                {{ t('settings.providers.deleteTitle', { service: deleteDisplayName }) }}
+                            </h2>
+                        </div>
+                        <p class="text-secondary-content text-[13px] leading-relaxed">
+                            {{ t('settings.providers.deleteBody') }}
+                        </p>
+                        <div class="mt-5 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                                data-test="provider-delete-cancel"
+                                @click="cancelDelete">
+                                {{ t('settings.providers.deleteCancel') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="border-danger/50 text-danger hover:bg-danger/10 focus-visible:ring-danger cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                data-test="provider-delete-confirm"
+                                :disabled="deleting"
+                                @click="confirmDelete">
+                                {{ deleting ? t('settings.providers.deleting') : t('settings.providers.deleteConfirm') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </Transition>
+        </Teleport>
     </div>
 </template>
 
@@ -181,10 +254,12 @@ import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { parseServiceChain } from '@/cells/app/utils/serviceChain'
 import {
+    IEncryptedSettings,
     ISettings,
     ITranslationServiceHealth,
     ITranslationTestResponse,
     IPluginSummary,
+    PLUGIN_SETTING_TYPE,
     SETTINGS
 } from '@/types'
 
@@ -263,6 +338,14 @@ function isDefault(provider: string): boolean {
     return defaultProvider.value === provider
 }
 
+function displayNameFor(provider: string): string {
+    return (
+        plugins.value.find((p) => p.provider === provider)?.displayName ??
+        health.value.find((row) => row.provider === provider)?.displayName ??
+        provider
+    )
+}
+
 /**
  * A1(截链 bug 修复):旧实现把 service_type 写成裸字符串,多服务链被截断。
  * 现在把目标服务移到数组首位后整体写回,链保持完整。
@@ -272,10 +355,8 @@ async function setDefault(provider: string): Promise<void> {
     if (current[0] === provider) return
     const next = [provider, ...current.filter((member) => member !== provider)]
     await settingStore.updateSetting(SETTINGS.SERVICE_TYPE, JSON.stringify(next), true)
-    const displayName =
-        health.value.find((row) => row.provider === provider)?.displayName ?? provider
     toastStore.push({
-        message: t('settings.providers.defaultSwitched', { service: displayName }),
+        message: t('settings.providers.defaultSwitched', { service: displayNameFor(provider) }),
         type: 'success'
     })
 }
@@ -310,7 +391,7 @@ function statusText(card: ITranslationServiceHealth): string {
     return t('settings.providers.failing')
 }
 
-// ── model 行(A3):服务专属 model + 批大小,读不到整行隐藏 ──────────
+// ── meta 槽:服务专属 model/URL + 批大小;读不到时弱化占位 ──────────
 const modelSettingKeys: Partial<Record<string, keyof ISettings>> = {
     openai: SETTINGS.OPENAI_MODEL,
     anthropic: SETTINGS.ANTHROPIC_MODEL,
@@ -337,6 +418,13 @@ function modelLine(provider: string): string {
         parts.push(t('requestTemplate.subBatch', { count: batchSize }))
     }
     return parts.join(' · ')
+}
+
+/// 恒定一行的 meta 文案:未配置 → 弱化「未配置」;已配置 → URL/model
+/// 信息(如 gpt-4o-mini · 批 500、http://libretranslate:5000),无则「—」。
+function metaLine(card: ITranslationServiceHealth): string {
+    if (!card.configured) return t('settings.providers.notConfigured')
+    return modelLine(card.provider) || '—'
 }
 
 // ── ＋添加服务(A3):未配置内置服务 + 插件 ───────────────────────
@@ -380,6 +468,112 @@ function openEdit(provider: string): void {
 
 function closeEdit(): void {
     editProvider.value = null
+}
+
+// ── 删除服务:确认模态 → 链移除 + 配置清空 + 刷新 health ───────────
+const deleteCandidate = ref<string | null>(null)
+const deleting = ref(false)
+
+const deleteDisplayName = computed(() =>
+    deleteCandidate.value !== null ? displayNameFor(deleteCandidate.value) : ''
+)
+
+/// 已配置(健康行 configured)或在 service_type 链上的服务才可删除。
+function isDeletable(provider: string): boolean {
+    return (
+        chain.value.includes(provider) ||
+        health.value.some((row) => row.provider === provider && row.configured)
+    )
+}
+
+function requestDelete(provider: string): void {
+    // 唯一链成员守卫:删空链会让默认服务悬空
+    if (chain.value.includes(provider) && chain.value.length <= 1) {
+        toastStore.push({ message: t('settings.providers.deleteLastGuard'), type: 'error' })
+        return
+    }
+    deleteCandidate.value = provider
+}
+
+function cancelDelete(): void {
+    deleteCandidate.value = null
+}
+
+/**
+ * 执行删除:
+ * 1) 从 service_type JSON 数组移除该服务(FallbackOrderCard 同款读写);
+ * 2) 按 manifest 把该服务的全部设置写空串(Secret 走加密设置),卡片回到未配置态;
+ * 3) 重新拉取 health;链由 store 派生自动刷新。
+ * 删除链首时新链首自动成为默认服务,toast 说明。
+ */
+async function confirmDelete(): Promise<void> {
+    const provider = deleteCandidate.value
+    if (provider === null || deleting.value) return
+    deleting.value = true
+    try {
+        const wasDefault = chain.value[0] === provider
+        const nextChain = chain.value.filter((member) => member !== provider)
+        // capture names before the health refresh drops the deleted provider
+        const name = displayNameFor(provider)
+        const successorName = nextChain.length > 0 ? displayNameFor(nextChain[0]) : ''
+        if (nextChain.length !== chain.value.length) {
+            await settingStore.updateSetting(
+                SETTINGS.SERVICE_TYPE,
+                JSON.stringify(nextChain),
+                true
+            )
+        }
+
+        let clearedSettings = false
+        try {
+            const manifest = await pluginApi.getManifest(provider)
+            for (const field of manifest.settings) {
+                if (field.type === PLUGIN_SETTING_TYPE.SECRET) {
+                    await settingStore.updateEncryptedSetting(
+                        field.key as keyof IEncryptedSettings,
+                        '',
+                        true
+                    )
+                } else {
+                    await settingStore.updateSetting(field.key as keyof ISettings, '', true)
+                }
+            }
+            clearedSettings = true
+        } catch {
+            // manifest 拉不到时仍完成链移除,配置清空失败随 toast 一并说明
+        }
+
+        deleteCandidate.value = null
+        try {
+            health.value = await translateApi.getHealth()
+        } catch {
+            // keep the previous glance; the chain already reflects the removal
+        }
+
+        if (clearedSettings) {
+            if (wasDefault && nextChain.length > 0) {
+                toastStore.push({
+                    message: t('settings.providers.deleteDefaultMigrated', {
+                        service: name,
+                        next: successorName
+                    }),
+                    type: 'success'
+                })
+            } else {
+                toastStore.push({
+                    message: t('settings.providers.deleteDone', { service: name }),
+                    type: 'success'
+                })
+            }
+        } else {
+            toastStore.push({ message: t('settings.providers.deletePartial', { service: name }), type: 'error' })
+        }
+    } catch {
+        // the chain write itself failed — keep the modal open so the user can retry
+        toastStore.push({ message: t('settings.providers.deleteFailed', { service: displayNameFor(provider) }), type: 'error' })
+    } finally {
+        deleting.value = false
+    }
 }
 
 function formatCost(value: number): string {
