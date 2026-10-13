@@ -25,7 +25,6 @@ export interface Services {
     translationRequest: ITranslationRequestService
     media: IMediaService
     directory: IDirectoryService
-    glossary: IGlossaryService
 }
 
 export interface IPluginService {

@@ -6,7 +6,6 @@ import { importService } from './importService'
 import { translateService } from './translateService'
 import { mediaService } from './mediaService'
 import { directoryService } from '@/services/directoryService'
-import { glossaryService } from '@/services/glossaryService'
 // Axios assembly side effects (baseURL, ApiError normalisation, 401 → login
 // redirect) live in the app cell; importing them here keeps the barrel's
 // load-on-import behaviour identical to before the move.
@@ -18,8 +17,7 @@ const services = (axios: AxiosStatic): Services => ({
     translate: translateService(axios),
     translationRequest: translationRequestService(axios),
     media: mediaService(axios),
-    directory: directoryService(axios),
-    glossary: glossaryService(axios)
+    directory: directoryService(axios)
 })
 
 export default services(axios)

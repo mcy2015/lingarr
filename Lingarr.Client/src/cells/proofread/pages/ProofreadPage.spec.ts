@@ -10,7 +10,7 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import services from '@/services'
-import ProofreadPage from '@/pages/ProofreadPage.vue'
+import ProofreadPage from '@/cells/proofread/pages/ProofreadPage.vue'
 import en from '@/i18n/locales/en.json'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -24,6 +24,8 @@ import {
     TRANSLATION_STATUS
 } from '@/types'
 
+const glossaryGetAll = vi.hoisted(() => vi.fn())
+
 vi.mock('@/services', () => ({
     default: {
         translationRequest: {
@@ -32,13 +34,16 @@ vi.mock('@/services', () => ({
             statusCounts: vi.fn(),
             applyProofreadLine: vi.fn()
         },
-        glossary: { getAll: vi.fn() },
         translate: { proofreadStatus: vi.fn() }
     }
 }))
 
+vi.mock('@/cells/app/api/glossaryService', () => ({
+    glossaryService: () => ({ getAll: glossaryGetAll })
+}))
+
 const getMock = vi.mocked(services.translationRequest.get)
-const glossaryMock = vi.mocked(services.glossary.getAll)
+const glossaryMock = vi.mocked(glossaryGetAll)
 const applyProofreadLineMock = vi.mocked(services.translationRequest.applyProofreadLine)
 
 // ── fixtures ───────────────────────────────────────────────────────

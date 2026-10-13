@@ -144,11 +144,13 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
-import { useProofreadKeyboard } from '@/composables/useProofreadKeyboard'
+import { glossaryService } from '@/cells/app/api/glossaryService'
+import { useProofreadKeyboard } from '@/cells/proofread/composables/useProofreadKeyboard'
 import {
     IPagedResult,
     ITranslationGlossary,
@@ -165,6 +167,7 @@ const router = useRouter()
 const translationRequestStore = useTranslationRequestStore()
 const uiStore = useUiStore()
 const toastStore = useToastStore()
+const glossaryApi = glossaryService(axios)
 
 const loading = ref(true)
 const detail = ref<ITranslationRequestDetail | null>(null)
@@ -238,7 +241,7 @@ onMounted(async () => {
 
     try {
         detail.value = await services.translationRequest.get<ITranslationRequestDetail>(requestId)
-        glossary.value = await services.glossary.getAll()
+        glossary.value = await glossaryApi.getAll()
         focusLine(lines.value[0]?.position ?? 0)
     } finally {
         loading.value = false

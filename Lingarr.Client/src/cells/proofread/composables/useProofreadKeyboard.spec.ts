@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
-import { useProofreadKeyboard } from '@/composables/useProofreadKeyboard'
+import { useProofreadKeyboard } from '@/cells/proofread/composables/useProofreadKeyboard'
 
 type Handlers = Parameters<typeof useProofreadKeyboard>[0]
 

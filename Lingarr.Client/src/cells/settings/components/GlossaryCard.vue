@@ -111,12 +111,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import services from '@/services'
+import axios from 'axios'
+import { glossaryService } from '@/cells/app/api/glossaryService'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { ITranslationGlossary } from '@/types'
 
 const { t } = useI18n()
 const toastStore = useToastStore()
+const glossaryApi = glossaryService(axios)
 
 const entries = ref<ITranslationGlossary[]>([])
 const editing = ref<Pick<ITranslationGlossary, 'id' | 'sourceTerm' | 'targetTerm' | 'isLocked'> | null>(null)
@@ -124,7 +126,7 @@ const editing = ref<Pick<ITranslationGlossary, 'id' | 'sourceTerm' | 'targetTerm
 onMounted(refresh)
 
 async function refresh(): Promise<void> {
-    entries.value = await services.glossary.getAll()
+    entries.value = await glossaryApi.getAll()
 }
 
 function startCreate(): void {
@@ -145,13 +147,13 @@ async function saveEdit(): Promise<void> {
     if (!draft || !draft.sourceTerm.trim() || !draft.targetTerm.trim()) return
     try {
         if (draft.id === 0) {
-            await services.glossary.create({
+            await glossaryApi.create({
                 sourceTerm: draft.sourceTerm.trim(),
                 targetTerm: draft.targetTerm.trim(),
                 isLocked: draft.isLocked
             })
         } else {
-            await services.glossary.update(draft.id, {
+            await glossaryApi.update(draft.id, {
                 sourceTerm: draft.sourceTerm.trim(),
                 targetTerm: draft.targetTerm.trim(),
                 isLocked: draft.isLocked
@@ -165,7 +167,7 @@ async function saveEdit(): Promise<void> {
 }
 
 async function remove(entry: ITranslationGlossary): Promise<void> {
-    await services.glossary.remove(entry.id)
+    await glossaryApi.remove(entry.id)
     await refresh()
 }
 </script>

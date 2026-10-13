@@ -48,7 +48,7 @@ const routes: RouteRecordRaw[] = [
                 // :id optional — bare /proofread lands on the latest
                 // completed request (resolved by the page itself)
                 path: '/proofread/:id?',
-                component: () => import('@/pages/ProofreadPage.vue'),
+                component: () => import('@/cells/proofread/pages/ProofreadPage.vue'),
                 name: 'proofread',
                 props: true
             },
