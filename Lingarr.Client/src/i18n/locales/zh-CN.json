@@ -569,10 +569,8 @@
     },
     "settings": {
         "menu": {
-            "integrations": "集成",
             "authentication": "身份验证",
             "services": "服务",
-            "subtitle": "字幕",
             "automation": "自动化",
             "plugins": "插件",
             "tasks": "任务",
@@ -762,7 +760,7 @@
             "title": "语言策略",
             "meta": "翻译管线的语言范围 · 缺字幕统计与自动化批次均遵循此配置",
             "coverage": "链上语言覆盖",
-            "coverageHint": "派生只读:回退链成员语言能力 ∩(源白名单 × 目标语言),随服务链与语言表实时重算",
+            "coverageHint": "派生只读:回退链成员语言能力 ∩(源白名单 × 目标语言);语言匹配按根粒度(如 zh-Hans≈zh);「未知」指语言表获取失败的链上成员,不计为可用",
             "unsupported": "({services} 不支持)",
             "unknownCount": "{count} 个未知",
             "chainEmpty": "链上无服务。",
@@ -849,7 +847,7 @@
             "count": "{count} 个事件",
             "empty": "暂无事件。",
             "created": "创建请求",
-            "enqueued": "入队",
+            "enqueued": "已加入 translation 队列",
             "started": "开始翻译",
             "providerFailed": "{provider} 调用失败",
             "degraded": "自动降级 → {provider}",

@@ -195,11 +195,15 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
             eventType: TranslationEventType.Created);
 
         var jobId = _jobQueue.EnqueueTranslationJob(translationRequestCopy);
+        // QA P3-2: the Enqueued timeline row used to carry the Hangfire job id,
+        // which reads as noise in the UI. No reliable queue-position data is
+        // available (the SQLite storage's enqueued list is unordered and a
+        // worker may pick the job up immediately), so the message stays empty
+        // and the client copy names the queue instead.
         await _eventService.LogTimelineEvent(
             translationRequestCopy.Id,
             TranslationEventType.Enqueued,
-            TranslationStatus.Pending,
-            message: jobId);
+            TranslationStatus.Pending);
         await UpdateTranslationRequest(translationRequestCopy, TranslationStatus.Pending, jobId);
 
         await _queryService.UpdateActiveCount();

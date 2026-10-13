@@ -569,10 +569,8 @@
     },
     "settings": {
         "menu": {
-            "integrations": "Integrations",
             "authentication": "Authentication",
             "services": "Services",
-            "subtitle": "Subtitle",
             "automation": "Automation",
             "plugins": "Plugins",
             "tasks": "Tasks",
@@ -762,7 +760,7 @@
             "title": "Language policy",
             "meta": "Language scope of the pipeline · missing-subtitle stats and automated batches follow it",
             "coverage": "Chain language coverage",
-            "coverageHint": "Derived read-only: fallback-chain member language capabilities ∩ (source whitelist × target languages); recomputed from the service chain and language tables",
+            "coverageHint": "Derived read-only: fallback-chain member language capabilities ∩ (source whitelist × target languages); matching is root-granular (zh-Hans ≈ zh); 'unknown' counts chain members whose language tables could not be fetched — never counted as available",
             "unsupported": "({services} cannot serve this pair)",
             "unknownCount": "{count} unknown",
             "chainEmpty": "No services in the fallback chain.",
@@ -849,7 +847,7 @@
             "count": "{count} events",
             "empty": "No events recorded yet.",
             "created": "Request created",
-            "enqueued": "Enqueued",
+            "enqueued": "Enqueued on the translation queue",
             "started": "Translation started",
             "providerFailed": "{provider} failed",
             "degraded": "Degraded → {provider}",

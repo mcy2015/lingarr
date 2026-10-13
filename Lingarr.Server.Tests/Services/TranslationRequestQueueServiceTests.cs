@@ -23,6 +23,7 @@ public class TranslationRequestQueueServiceTests : IDisposable
 {
     private readonly LingarrDbContext _dbContext;
     private readonly TranslationRequestQueueService _service;
+    private readonly Mock<ITranslationRequestEventService> _eventService = new();
 
     public TranslationRequestQueueServiceTests()
     {
@@ -38,7 +39,7 @@ public class TranslationRequestQueueServiceTests : IDisposable
             new Mock<IAsyncTranslationRegistry>().Object,
             new Mock<ITranslationRequestQueryService>().Object,
             new Mock<IContentTranslationService>().Object,
-            new Mock<ITranslationRequestEventService>().Object,
+            _eventService.Object,
             new Mock<IProgressService>().Object,
             new Mock<ISettingService>().Object,
             new Mock<ISubtitleService>().Object,
@@ -61,6 +62,23 @@ public class TranslationRequestQueueServiceTests : IDisposable
         Assert.Equal(10, row.MediaId);
         Assert.Equal(MediaType.Episode, row.MediaType);
         Assert.Equal(TranslationStatus.Pending, row.Status);
+    }
+
+    [Fact]
+    public async Task EnqueueRequest_EnqueuedTimelineEventCarriesNoMessage()
+    {
+        // QA P3-2: the Enqueued row used to carry the Hangfire job id, which
+        // reads as noise in the UI. Queue-position data is unavailable, so the
+        // message must stay empty; the client copy names the queue instead.
+        await _service.CreateImportRequest("/imports/loose.srt", "loose", "en", "zh",
+            mediaId: null, mediaType: MediaType.Movie);
+
+        _eventService.Verify(e => e.LogTimelineEvent(
+            It.IsAny<int>(),
+            TranslationEventType.Enqueued,
+            TranslationStatus.Pending,
+            null,
+            null), Times.Once);
     }
 
     [Fact]

@@ -186,9 +186,10 @@
 
         <PaginationComponent
             v-if="totalCount > pageSize"
-            v-model="pagination"
+            :model-value="pagination"
             :total-count="totalCount"
-            :page-size="pageSize" />
+            :page-size="pageSize"
+            @update:model-value="onPaginationUpdate" />
     </div>
     <NoMediaNotification v-else />
 </template>
@@ -211,6 +212,7 @@ import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
 import {
+    IFilter,
     ILanguage,
     IMediaLibraryItem,
     IPagedResult,
@@ -297,6 +299,13 @@ watch(type, () => {
 })
 
 watch([type, stateFilter, targetFilter, () => pagination.pageNumber], fetchLibrary)
+
+/// v-model would reassign the whole filter object, which both warns on the
+/// const reactive binding and drops the watch's reactivity — write the page
+/// back in place instead.
+function onPaginationUpdate(value: IFilter): void {
+    Object.assign(pagination, value)
+}
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(search, () => {

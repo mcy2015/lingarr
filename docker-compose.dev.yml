@@ -20,6 +20,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - BASE_PATH=/lingarr
+      # Pin the container time zone so .NET stops warning about an unset TZ.
+      - TZ=UTC
 
       # SQLite is the single database engine. Relative paths resolve against
       # /app/config, which is persisted through the config volume below.
@@ -35,6 +37,14 @@ services:
       - ASPNETCORE_URLS=http://+:9876
       - ASPNETCORE_HTTP_PORTS=9876
       - PLUGINS_PATH=/app/plugins # Use when plugins exist
+    # The runtime image ships bash but neither curl nor wget; /dev/tcp is the
+    # zero-dependency way to check that Kestrel is accepting connections.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9876"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     volumes:
       - ../media/data/movies:/movies
       - ../media/data/tv:/tv
@@ -87,6 +97,12 @@ services:
       - ./Lingarr.Client/node_modules:/app/node_modules
     tty: true
     command: /bin/sh -c "npm install && npm run dev"
+    # The dev server proxies /api and /signalr to Lingarr.Server — wait for it
+    # to actually accept connections so cold-start page loads don't hit a
+    # proxy error while the Server is still booting.
+    depends_on:
+      Lingarr.Server:
+        condition: service_healthy
     networks:
       - lingarr
 

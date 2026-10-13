@@ -1,8 +1,7 @@
 <template>
     <div class="space-y-2">
-        <h2 class="text-secondary-content/70 px-4 pt-4 text-xs font-semibold tracking-wider uppercase">
-            {{ t('settings.menu.integrations') }}
-        </h2>
+        <!-- The integrations section is headed by the IntegrationSettings
+             card itself ("Integrations") — no extra section heading here. -->
         <IntegrationPage />
         <h2 class="text-secondary-content/70 px-4 pt-4 text-xs font-semibold tracking-wider uppercase">
             {{ t('settings.menu.automation') }}

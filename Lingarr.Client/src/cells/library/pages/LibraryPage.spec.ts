@@ -6,6 +6,7 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import LibraryPage from '@/cells/library/pages/LibraryPage.vue'
+import PaginationComponent from '@/cells/kernel/components/PaginationComponent.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -232,6 +233,29 @@ describe('LibraryPage', () => {
         expect(libraryMock).toHaveBeenCalledTimes(2)
         expect(libraryMock).toHaveBeenLastCalledWith(
             expect.objectContaining({ searchQuery: 'dune', pageNumber: 1 })
+        )
+    })
+
+    it('writes pagination updates back in place and refetches the new page', async () => {
+        // only rendered past the first page — fake a larger library
+        libraryMock.mockResolvedValueOnce({ ...libraryPage, totalCount: 60 })
+        const { wrapper } = await mountLibraryPage()
+        expect(libraryMock).toHaveBeenCalledTimes(1)
+
+        const pagination = wrapper.findComponent(PaginationComponent)
+        expect(pagination.exists()).toBe(true)
+
+        pagination.vm.$emit('update:modelValue', {
+            pageNumber: 2,
+            searchQuery: '',
+            sortBy: 'Title',
+            isAscending: true
+        })
+        await settle()
+
+        expect(libraryMock).toHaveBeenCalledTimes(2)
+        expect(libraryMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({ pageNumber: 2 })
         )
     })
 
