@@ -130,6 +130,20 @@ public static class SettingKeys
         public const string ShowSchedule = "show_schedule";
         public const string MovieAgeThreshold = "movie_age_threshold";
         public const string ShowAgeThreshold = "show_age_threshold";
+
+        /// <summary>
+        /// JSON list of user-created recurring job definitions from the schedule
+        /// screen「＋ new job」. Persisted so Initialize() can re-register them
+        /// after a restart. Each entry: { jobId, jobType, cron, enabled }.
+        /// </summary>
+        public const string CustomRecurringJobs = "custom_recurring_jobs";
+
+        /// <summary>
+        /// JSON list of built-in recurring job ids the user disabled on the
+        /// schedule screen. Initialize() skips them; an empty/missing value
+        /// means every built-in job runs (the historical default).
+        /// </summary>
+        public const string DisabledRecurringJobs = "disabled_recurring_jobs";
     }
 
     public static class SubtitleValidation

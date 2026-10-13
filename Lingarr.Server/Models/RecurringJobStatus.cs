@@ -20,4 +20,11 @@ public class RecurringJobStatus
     public string CurrentState { get; set; } = JobStatus.Planned.GetDisplayName();
     public bool IsCurrentlyRunning { get; set; }
     public string? CurrentJobId { get; set; }
+
+    /// <summary>
+    /// Whether the recurring job is registered (live in Hangfire storage).
+    /// Disabled jobs are removed from storage but still listed with
+    /// Enabled=false so the schedule screen can offer re-enabling.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 }

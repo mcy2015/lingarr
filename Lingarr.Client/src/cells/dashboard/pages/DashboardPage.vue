@@ -61,6 +61,14 @@
                         {{ t('overview.health.configuredCount', { count: configuredCount }) }}
                     </span>
                 </div>
+                <!-- 状态完备(screen-01):每个服务都离线/故障时卡内给出提示,
+                     而不是一行行重复灰点。 -->
+                <p
+                    v-if="allServicesDown"
+                    class="border-line bg-danger/10 text-danger border-b px-4 py-2 text-[12.5px]"
+                    data-test="health-all-offline">
+                    {{ t('overview.health.allOffline') }}
+                </p>
                 <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
                     <router-link
                         v-for="provider in health"
@@ -160,6 +168,17 @@ const trend = ref<IDailyTrendStatistics | null>(null)
 const configuredCount = computed(() => health.value.filter((provider) => provider.configured).length)
 const inProgressCount = computed(() => counts.value[TRANSLATION_STATUS.INPROGRESS] ?? 0)
 const pendingCount = computed(() => counts.value[TRANSLATION_STATUS.PENDING] ?? 0)
+
+/// State completeness (screen-01): every provider is offline (unconfigured)
+/// or failing — the card shows a hint instead of a wall of dead dots.
+const allServicesDown = computed(() => {
+    if (health.value.length === 0) {
+        return false
+    }
+    return health.value.every(
+        (provider) => !provider.configured || (provider.successRate != null && provider.successRate < 0.5)
+    )
+})
 
 /// Month-to-date meta for the trend card (QA P3-3), assembled from the
 /// pipeline statistics the page already fetches; null until they load.
@@ -341,10 +360,22 @@ const statusLabel = (status: string): string => {
 const formatTime = (createdAt: string): string =>
     new Date(createdAt).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
 
-// live topbar sub: pipeline state + seconds since the last refresh
+// live topbar sub: pipeline state + seconds since the last refresh.
+// State completeness (screen-01): when the live hub is down (reconnecting
+// or closed) the sub degrades to「离线 · 重连中」instead of stale counters.
 const lastFetchAt = ref(Date.now())
 const subTimer = ref<ReturnType<typeof setInterval> | undefined>(undefined)
+
+const isHubDegraded = (): boolean => {
+    const hubState = signalR.state.hubs['TranslationRequests']
+    return hubState != null && !hubState.isConnected
+}
+
 const updateSub = (): void => {
+    if (isHubDegraded()) {
+        uiStore.setSubOverride(t('topbar.sub.offlineReconnecting'))
+        return
+    }
     const running = inProgressCount.value > 0
     uiStore.setSubOverride(
         t('topbar.sub.dashboardLive', {

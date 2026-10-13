@@ -78,6 +78,9 @@
         </div>
 
         <ToastNotification />
+        <!-- ⌘K command palette (global-interactions §3): overlay modal with
+             media / tasks / settings results. -->
+        <CommandPalette ref="commandPaletteEl" />
     </div>
 </template>
 
@@ -86,6 +89,7 @@ import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
+import { useMainNavHotKeys } from '@/cells/app/composables/useMainNavHotKeys'
 import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useInstanceStore } from '@/cells/app/stores/instance'
@@ -96,6 +100,7 @@ import AsideNavigation from '@/cells/app/layout/AsideNavigation.vue'
 import DropdownComponent from '@/cells/kernel/components/DropdownComponent.vue'
 import LanguageDropdown from '@/cells/app/layout/LanguageDropdown.vue'
 import ToastNotification from '@/cells/app/components/ToastNotification.vue'
+import CommandPalette from '@/cells/app/components/CommandPalette.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const settingStore = useSettingStore()
@@ -107,6 +112,7 @@ const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const themeDropdownEl = ref<InstanceType<typeof DropdownComponent>>()
+const commandPaletteEl = ref<InstanceType<typeof CommandPalette>>()
 const settingHubConnection = ref<Hub>()
 const requestHubConnection = ref<Hub>()
 
@@ -154,20 +160,16 @@ const pageSub = computed(() => {
     return currentMeta.value.sub
 })
 
-/// ⌘K / the search button: land on the library and focus its search box.
+/// ⌘K / the search button: open the command palette (media / tasks /
+/// settings). The library page keeps its focusSearch tick so palette media
+/// results that route there can still drive its search box.
 const globalSearch = (): void => {
-    if (route.name !== 'library') {
-        void router.push({ name: 'library' })
-    }
-    uiStore.focusSearch()
+    commandPaletteEl.value?.open()
 }
 
-const onGlobalKeydown = (event: KeyboardEvent): void => {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        globalSearch()
-    }
-}
+/// Main-nav hotkeys 1-6 live in their own composable (see
+/// useMainNavHotKeys); ⌘K and ESC belong to the palette's own listener.
+useMainNavHotKeys(router)
 
 const setTheme = (theme: ITheme) => {
     instanceStore.storeTheme(theme)
@@ -180,7 +182,6 @@ const isOpen = computed({
 })
 
 onMounted(async () => {
-    window.addEventListener('keydown', onGlobalKeydown)
     await settingStore.applySettingsOnLoad()
     await instanceStore.applyVersionOnLoad()
     await translationRequestStore.fetchActiveTranslations()
@@ -198,7 +199,6 @@ onMounted(async () => {
 })
 
 onUnmounted(async () => {
-    window.removeEventListener('keydown', onGlobalKeydown)
     uiStore.clearCta()
     uiStore.setSubOverride('')
     settingHubConnection.value?.off('SettingUpdate', onSettingUpdate)

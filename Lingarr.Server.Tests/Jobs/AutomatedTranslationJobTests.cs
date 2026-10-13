@@ -148,7 +148,12 @@ public class AutomatedTranslationJobTests
     private sealed class NoOpScheduleService : IScheduleService
     {
         public Task Initialize() => Task.CompletedTask;
-        public List<RecurringJobStatus> GetRecurringJobs() => [];
+        public Task<List<RecurringJobStatus>> GetRecurringJobs() =>
+            Task.FromResult<List<RecurringJobStatus>>([]);
+        public List<QueueDepthStatus> GetQueueDepths() => [];
+        public Task<bool> SetJobEnabled(string jobId, bool enabled) => Task.FromResult(false);
+        public Task<RecurringJobStatus?> CreateRecurringJob(string jobId, string jobType, string cron) =>
+            Task.FromResult<RecurringJobStatus?>(null);
         public string GetJobState(string jobId) => string.Empty;
         public Task UpdateJobState(string jobId, string state) => Task.CompletedTask;
     }

@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IScheduleService } from '@/types'
+import { ICreateRecurringJobRequest, IScheduleService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/schedule'): IScheduleService => ({
     startJob<T>(jobName: string): Promise<T> {
@@ -16,6 +16,18 @@ const service = (http: AxiosStatic, resource = '/api/schedule'): IScheduleServic
     },
     indexMovies<T>(): Promise<T> {
         return http.post(`${resource}/job/index/movies`).then((response) => response.data)
+    },
+    depth<T>(): Promise<T> {
+        return http.get(`${resource}/depth`).then((response) => response.data)
+    },
+    enableJob<T>(jobId: string): Promise<T> {
+        return http.post(`${resource}/job/${jobId}/enable`).then((response) => response.data)
+    },
+    disableJob<T>(jobId: string): Promise<T> {
+        return http.post(`${resource}/job/${jobId}/disable`).then((response) => response.data)
+    },
+    createJob<T>(request: ICreateRecurringJobRequest): Promise<T> {
+        return http.post(`${resource}/job`, request).then((response) => response.data)
     }
 })
 

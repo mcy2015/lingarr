@@ -369,7 +369,8 @@
             "noTrafficHint": "Configured; no requests since restart",
             "healthy": "success {rate}% over recent window",
             "degraded": "degraded — success {rate}% over recent window",
-            "failing": "failing — success {rate}% over recent window"
+            "failing": "failing — success {rate}% over recent window",
+            "allOffline": "All translation services are unreachable — check the provider settings"
         },
         "feed": {
             "title": "Recent activity",
@@ -644,7 +645,40 @@
             "actions": "Actions",
             "run": "Run",
             "lastRun": "Last run",
-            "nextRun": "Next run"
+            "nextRun": "Next run",
+            "newJob": "＋ New job",
+            "customCron": "Custom cron…",
+            "createJobTitle": "New scheduled job",
+            "jobIdField": "Job ID",
+            "jobTypeField": "Job type",
+            "cronField": "Cron expression",
+            "create": "Create",
+            "createdToast": "Created {job} · {cron}",
+            "enable": "Enable",
+            "disable": "Disable",
+            "stateDisabled": "Off",
+            "enabledToast": "Enabled: {job}",
+            "disabledToast": "Disabled: {job}",
+            "toggleFailed": "Failed to change the job state",
+            "createFailed": "Failed to create the job",
+            "cronInvalid": "Invalid cron expression",
+            "jobExists": "A job with this id already exists",
+            "jobIdWhitespace": "The job id must not contain whitespace",
+            "depth": {
+                "translationQueued": "translation queued",
+                "executing": "executing",
+                "systemQueued": "system queued",
+                "mediaQueued": "movies / shows",
+                "webhookQueued": "webhook / default",
+                "successRate": "30-day success rate"
+            },
+            "preset": {
+                "automatedTranslation": "Daily gap-fill · automated translation",
+                "statistics": "Statistics snapshot",
+                "syncShow": "Media sync · Sonarr (shows)",
+                "syncMovie": "Media sync · Radarr (movies)",
+                "cleanup": "Weekly cleanup"
+            }
         },
         "subtitle": {
             "title": "Subtitle",
@@ -964,13 +998,13 @@
         "keys": {
             "navigate": "move lines",
             "approve": "approve line",
-            "edit": "edit"
+            "edit": "edit",
+            "stash": "stash"
         },
         "approve": "✓ Approve",
         "reject": "✗ Reject",
         "unsaved": "● modified, unsaved",
         "editLabel": "Edit translation",
-        "glossaryCount": "{count} terms",
         "glossaryLocked": "{source} → {target} · locked",
         "glossaryHint": "{source} → {target}",
         "export": "Export snapshot",
@@ -981,7 +1015,7 @@
             "rejected": "Rejected"
         },
         "openWorkbench": "Open proofreading workbench",
-        "stashed": "All edits are saved as you go.",
+        "stashed": "Stashed · {done}/{total} lines",
         "suggestGlossary": "✎ {count} edits → suggest glossary terms",
         "suggestGlossaryHint": "Jump to the glossary in settings · subtitles & quality. Terms are not created automatically."
     },
@@ -996,10 +1030,11 @@
             "queueLive": "{count} tasks · live via SignalR",
             "importLive": "{files} files in the workbench · {translate} to translate",
             "proofreadLive": "{title} · {done}/{total} lines reviewed",
-            "mediaDetailLive": "{title} · {seasons} seasons · {episodes} episodes"
+            "mediaDetailLive": "{title} · {seasons} seasons · {episodes} episodes",
+            "offlineReconnecting": "Offline · reconnecting"
         },
         "search": "⌘K 搜索",
-        "searchHint": "Search the library (⌘K)",
+        "searchHint": "Global search (⌘K)",
         "cta": {
             "translateSelected": "Translate selected ▸",
             "newTask": "＋ New task",
@@ -1046,6 +1081,16 @@
             "busyToast": "Translation in progress · request #{id} · {progress}%",
             "queuedToast": "Translation created · request #{id}",
             "noSource": "No source subtitle beside the video — import one first"
+        }
+    },
+    "cmdk": {
+        "ariaLabel": "Global search",
+        "placeholder": "Search media, tasks, settings…",
+        "noResults": "No results",
+        "group": {
+            "media": "Media",
+            "tasks": "Tasks",
+            "settings": "Settings"
         }
     }
 }

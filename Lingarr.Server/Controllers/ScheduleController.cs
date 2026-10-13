@@ -29,10 +29,82 @@ public class ScheduleController : ControllerBase
     /// </summary>
     /// <returns>A list of job information including status, progress, and other details.</returns>
     [HttpGet("jobs")]
-    public IActionResult RecurringJobs()
+    public async Task<IActionResult> RecurringJobs()
     {
-        var jobs = _scheduleService.GetRecurringJobs();
+        var jobs = await _scheduleService.GetRecurringJobs();
         return Ok(jobs);
+    }
+
+    /// <summary>
+    /// Live queue depth for the schedule screen strip: enqueued and
+    /// processing counts per Hangfire queue.
+    /// </summary>
+    /// <returns>One entry per configured server queue (plus any queue the storage reports).</returns>
+    [HttpGet("depth")]
+    public IActionResult QueueDepths()
+    {
+        return Ok(_scheduleService.GetQueueDepths());
+    }
+
+    /// <summary>
+    /// Enables a recurring job: re-registers it under the same id with the
+    /// cron its definition carries (built-in setting or custom cron).
+    /// </summary>
+    /// <param name="jobId">Recurring job id (built-in or user-created).</param>
+    /// <returns>200 on success; 404 when the job id is unknown.</returns>
+    [HttpPost("job/{jobId}/enable")]
+    public async Task<IActionResult> EnableJob(string jobId)
+    {
+        if (!await _scheduleService.SetJobEnabled(jobId, true))
+        {
+            return NotFound($"Recurring job '{jobId}' not found.");
+        }
+        return Ok();
+    }
+
+    /// <summary>
+    /// Disables a recurring job: removes the Hangfire registration and
+    /// persists the state so a restart keeps it off.
+    /// </summary>
+    /// <param name="jobId">Recurring job id (built-in or user-created).</param>
+    /// <returns>200 on success; 404 when the job id is unknown.</returns>
+    [HttpPost("job/{jobId}/disable")]
+    public async Task<IActionResult> DisableJob(string jobId)
+    {
+        if (!await _scheduleService.SetJobEnabled(jobId, false))
+        {
+            return NotFound($"Recurring job '{jobId}' not found.");
+        }
+        return Ok();
+    }
+
+    /// <summary>
+    /// Creates a new recurring job from one of the registered job types.
+    /// </summary>
+    /// <param name="request">Job id, job type and cron expression.</param>
+    /// <returns>
+    /// 200 with the created job status; 400 when the job type is not
+    /// registered, the cron expression is invalid or the id is malformed;
+    /// 409 when a job with the same id already exists.
+    /// </returns>
+    [HttpPost("job")]
+    public async Task<IActionResult> CreateJob([FromBody] CreateRecurringJobRequest request)
+    {
+        if (!ScheduleService.RegisteredJobTypes.Contains(request.JobType, StringComparer.Ordinal))
+        {
+            return BadRequest($"Unsupported job type '{request.JobType}'.");
+        }
+        if (!CronExpressionValidator.IsValid(request.Cron))
+        {
+            return BadRequest("Invalid cron expression.");
+        }
+
+        var status = await _scheduleService.CreateRecurringJob(request.JobId, request.JobType, request.Cron);
+        if (status == null)
+        {
+            return Conflict($"A recurring job with id '{request.JobId}' already exists.");
+        }
+        return Ok(status);
     }
 
     /// <summary>

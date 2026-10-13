@@ -17,7 +17,9 @@ import {
     IPluginStatus,
     IPluginSummary,
     IProofreadLineApplyRequest,
-    IProofreadLineRequest
+    IProofreadLineRequest,
+    ICreateRecurringJobRequest,
+    IQueueDepth
 } from '@/types'
 
 export interface IPluginService {
@@ -284,6 +286,15 @@ export interface IScheduleService {
     remove<T>(jobId: string): Promise<T>
     indexShows<T>(): Promise<T>
     indexMovies<T>(): Promise<T>
+    /// Live per-queue Hangfire depth (screen-12 qdepth strip).
+    depth(): Promise<IQueueDepth[]>
+    /// Re-register a recurring job under the same id.
+    enableJob<T>(jobId: string): Promise<T>
+    /// Remove a recurring job registration; persisted across restarts.
+    disableJob<T>(jobId: string): Promise<T>
+    /// Create a recurring job from a registered job type; 400 on invalid
+    /// cron/type, 409 when the id is taken.
+    createJob<T>(request: ICreateRecurringJobRequest): Promise<T>
 }
 
 export interface IMappingService {

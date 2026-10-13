@@ -58,3 +58,4 @@ local_nas.db
 # Ansible
 ansible_env/
 /media/
+core

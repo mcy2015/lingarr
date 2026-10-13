@@ -52,7 +52,8 @@
                 class="pline [content-visibility:auto] grid cursor-pointer grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)_34px] rounded-md border transition-colors"
                 :class="[
                     focusedPosition === line.position ? 'border-accent focus' : 'border-line',
-                    approved.has(line.position) ? 'appr' : ''
+                    approved.has(line.position) ? 'appr' : '',
+                    rejected.has(line.position) ? 'rej' : ''
                 ]"
                 tabindex="0"
                 @click="focusLine(line.position)">
@@ -66,12 +67,6 @@
                 </div>
                 <div class="src border-line relative border-r px-3.5 py-2.5 text-[13px] text-secondary-content">
                     {{ line.source }}
-                    <span
-                        v-if="glossaryHits(line).length > 0"
-                        class="gloss"
-                        :title="glossaryTitle(line)">
-                        {{ t('proofread.glossaryCount', { count: glossaryHits(line).length }) }}
-                    </span>
                 </div>
                 <div class="dst relative px-3.5 py-2.5 text-[13px]">
                     <template v-if="editingPosition === line.position">
@@ -104,7 +99,28 @@
                             </span>
                         </div>
                     </template>
-                    <span v-else class="dst-text">{{ line.target }}</span>
+                    <template v-else>
+                        <span class="dst-text">{{ line.target }}</span>
+                        <!-- 术语胶囊(原型 .gloss):词 → 译,锁定 = 绿边 -->
+                        <span
+                            v-for="entry in glossaryHits(line)"
+                            :key="entry.id"
+                            class="gloss"
+                            :class="{ locked: entry.isLocked }"
+                            :title="
+                                entry.isLocked
+                                    ? t('proofread.glossaryLocked', {
+                                          source: entry.sourceTerm,
+                                          target: entry.targetTerm
+                                      })
+                                    : t('proofread.glossaryHint', {
+                                          source: entry.sourceTerm,
+                                          target: entry.targetTerm
+                                      })
+                            ">
+                            {{ entry.sourceTerm }} → {{ entry.targetTerm }}
+                        </span>
+                    </template>
                 </div>
                 <div
                     class="mark flex items-start justify-center pt-3 text-sm"
@@ -122,6 +138,7 @@
                 <span><kbd>J</kbd><kbd>K</kbd> {{ t('proofread.keys.navigate') }}</span>
                 <span><kbd>Enter</kbd> {{ t('proofread.keys.approve') }}</span>
                 <span><kbd>E</kbd> {{ t('proofread.keys.edit') }}</span>
+                <span><kbd>⌘S</kbd> {{ t('proofread.keys.stash') }}</span>
             </div>
             <span class="flex-1"></span>
             <!-- 术语回流(P1-4):N = 本次会话真实保存过修改的行数,0 时隐藏。
@@ -213,13 +230,28 @@ function setEditRef(el: unknown): void {
     editInput.value = el instanceof HTMLInputElement ? el : null
 }
 
-// topbar CTA (prototype): 暂存 — every line edit already persisted
-onMounted(() => {
-    uiStore.registerCta(t('topbar.cta.stash'), () => {
-        toastStore.push({ message: t('proofread.stashed'), type: 'success' })
+// topbar CTA (prototype): 暂存 — every line edit already persisted; the
+// same action backs the ⌘S page-level shortcut (screen-05 keyboard table).
+function stash(): void {
+    toastStore.push({
+        message: t('proofread.stashed', { done: approvedCount.value, total: lines.value.length }),
+        type: 'success'
     })
+}
+
+const onPageKeydown = (event: KeyboardEvent): void => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        stash()
+    }
+}
+
+onMounted(() => {
+    uiStore.registerCta(t('topbar.cta.stash'), stash)
+    window.addEventListener('keydown', onPageKeydown)
 })
 onUnmounted(() => {
+    window.removeEventListener('keydown', onPageKeydown)
     uiStore.clearCta()
     uiStore.setSubOverride('')
 })
@@ -342,9 +374,16 @@ useProofreadKeyboard({
     prev: () => step(-1),
     approve: () => {
         const line = lines.value.find((l) => l.position === focusedPosition.value)
-        if (line && editingPosition.value === null) {
-            void approveLine(line)
+        if (!line || editingPosition.value !== null) {
+            return
         }
+        if (approved.value.has(line.position)) {
+            // Enter on an approved line toggles it back to pending
+            // (prototype screen-05: appr ↔ 待定); stepping only runs on approve.
+            approved.value.delete(line.position)
+            return
+        }
+        void approveLine(line)
     },
     edit: () => startEdit(focusedPosition.value)
 })
@@ -430,6 +469,13 @@ function finish(): void {
 .pline.appr .dst {
     opacity: 0.9;
 }
+/* rejected line: translation struck through (prototype .rej) */
+.pline.rej .dst-text {
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+    text-decoration-color: color-mix(in srgb, var(--danger) 75%, transparent);
+    opacity: 0.75;
+}
 .legend-swatch {
     width: 10px;
     height: 10px;
@@ -446,6 +492,12 @@ function finish(): void {
     padding: 0 5px;
     margin-left: 6px;
     vertical-align: 1px;
+}
+/* locked term chip: solid green edge (screen-05 锁定 = 绿边) */
+.gloss.locked {
+    border-style: solid;
+    border-color: color-mix(in srgb, var(--success) 60%, var(--line));
+    color: var(--success);
 }
 kbd {
     font-family: var(--font-mono, monospace);

@@ -96,6 +96,7 @@ interface ProofreadVm {
     editingPosition: number | null
     draft: string
     approved: Set<number>
+    rejected: Set<number>
     lines: ISubtitleLineComparison[]
     approvedCount: number
     modifiedCount: number
@@ -322,7 +323,7 @@ describe('ProofreadPage', () => {
         expect(vm.focusedPosition).toBe(1)
     })
 
-    it('skips already-approved lines when stepping', async () => {
+    it('Enter toggles an approved line back to pending and re-approval still skips ahead', async () => {
         const { vm } = await mountProofreadPage()
 
         press('Enter') // approve 1 → focus 2
@@ -331,6 +332,11 @@ describe('ProofreadPage', () => {
         press('k')
         press('k')
         press('k') // back on line 1 (still approved)
+
+        press('Enter') // toggle: line 1 back to pending, no stepping
+        expect(vm.approved.has(1)).toBe(false)
+        expect(vm.approvedCount).toBe(2)
+        expect(vm.focusedPosition).toBe(1)
 
         press('Enter') // re-approve 1 → first unapproved after it is 4
         expect(vm.focusedPosition).toBe(4)
@@ -349,11 +355,14 @@ describe('ProofreadPage', () => {
         expect(vm.approvedCount).toBe(4)
         expect(vm.focusedPosition).toBe(1)
 
-        press('Enter') // one more Enter on a fully approved list: stays put
+        // one more Enter on a fully approved list: the focused line
+        // toggles back to pending, focus stays put
+        press('Enter')
+        expect(vm.approvedCount).toBe(3)
         expect(vm.focusedPosition).toBe(1)
     })
 
-    it('Enter is one-way approval: pressing it on an approved line never un-approves', async () => {
+    it('Enter on an approved line toggles it back to pending without stepping', async () => {
         const { vm } = await mountProofreadPage()
 
         press('Enter') // approve 1 → focus 2
@@ -361,8 +370,9 @@ describe('ProofreadPage', () => {
         expect(vm.focusedPosition).toBe(1)
 
         press('Enter')
-        expect(vm.approved.has(1)).toBe(true)
-        expect(vm.approvedCount).toBe(1)
+        expect(vm.approved.has(1)).toBe(false)
+        expect(vm.approvedCount).toBe(0)
+        expect(vm.focusedPosition).toBe(1)
     })
 
     // ── topbar CTA ─────────────────────────────────────────────────
@@ -375,7 +385,19 @@ describe('ProofreadPage', () => {
 
         expect(toastStore.toasts).toHaveLength(1)
         expect(toastStore.toasts[0].type).toBe('success')
-        expect(toastStore.toasts[0].message).toBe(en.proofread.stashed)
+        // live counts: nothing approved yet, four lines in the fixture
+        expect(toastStore.toasts[0].message).toBe('Stashed · 0/4 lines')
+    })
+
+    it('⌘S stashes with the same action as the CTA and swallows the browser save', async () => {
+        const { toastStore } = await mountProofreadPage()
+
+        const event = new KeyboardEvent('keydown', { key: 's', metaKey: true, cancelable: true })
+        window.dispatchEvent(event)
+
+        expect(event.defaultPrevented).toBe(true)
+        expect(toastStore.toasts).toHaveLength(1)
+        expect(toastStore.toasts[0].message).toBe('Stashed · 0/4 lines')
     })
 
     it('clears the topbar CTA and sub override on unmount', async () => {
@@ -462,5 +484,41 @@ describe('ProofreadPage', () => {
         // the backflow is a jump; the glossary API module is not even imported
         // by the page — nothing but applyProofreadLine may have been called
         expect(applyProofreadLineMock).toHaveBeenCalledTimes(1)
+    })
+
+    // ── gloss chips on the translation side (screen-05 细节) ────────
+    it('renders per-term gloss chips next to the translation, locked terms green-edged', async () => {
+        glossaryMock.mockResolvedValue([
+            { id: 1, sourceTerm: 'Hello', targetTerm: '你好', isLocked: false },
+            { id: 2, sourceTerm: 'General', targetTerm: '将军', isLocked: true }
+        ] as ITranslationGlossary[])
+
+        const { wrapper } = await mountProofreadPage()
+
+        const chips = wrapper.findAll('.gloss')
+        expect(chips.length).toBeGreaterThanOrEqual(2)
+        const texts = chips.map((chip) => chip.text())
+        expect(texts).toContain('Hello → 你好')
+        expect(texts).toContain('General → 将军')
+        // locked chip carries the green-edge modifier
+        const locked = chips.find((chip) => chip.text() === 'General → 将军')
+        expect(locked?.classes()).toContain('locked')
+        // chips live on the translation side, not the source side
+        expect(chips[0].element.closest('.dst')).not.toBeNull()
+        expect(chips[0].element.closest('.src')).toBeNull()
+    })
+
+    // ── rejected rows: strikethrough state class (screen-05 细节) ───
+    it('marks a rejected row with the rej class for the translation strikethrough', async () => {
+        const { wrapper, vm } = await mountProofreadPage()
+
+        press('e')
+        await settle()
+        await wrapper.findAll('button').find((b) => b.text() === en.proofread.reject)?.trigger('click')
+        await settle()
+
+        expect(vm.rejected.has(1)).toBe(true)
+        const row = wrapper.find('.pline')
+        expect(row.classes()).toContain('rej')
     })
 })
