@@ -79,13 +79,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { ITranslationServiceHealth, SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
-import { parseServiceChain } from '@/cells/app/utils/serviceChain'
+import useServiceChain from '@/cells/settings/composables/useServiceChain'
 import { translateService } from '@/cells/app/api/translateService'
 import { ServiceLanguageTable } from '@/cells/settings/services/chainCoverage'
 
@@ -99,9 +99,8 @@ const settingStore = useSettingStore()
 const toastStore = useToastStore()
 const translateApi = translateService(axios)
 
-const chain = computed(() =>
-    parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string)
-)
+// 链派生与页面网格共用 useServiceChain(同一 store 派生 computed,不再各自 parse)
+const { chain, offChain } = useServiceChain()
 const rows = chain
 
 const healthFor = (member: string) => props.health.find((row) => row.provider === member)
@@ -200,11 +199,10 @@ function remove(index: number): void {
     toastStore.push({ message: t('settings.fallback.removed', { service: nameFor(member) }), type: 'success' })
 }
 
-/// 候选 = 已配置但不在链上的服务;无候选 → toast
+/// 候选 = 已配置但不在链上的服务(与页面「＋添加服务」共用 offChain 派生,
+/// 此处收紧到 configured);无候选 → toast
 function addMember(): void {
-    const candidates = props.health.filter(
-        (row) => row.configured && !rows.value.includes(row.provider)
-    )
+    const candidates = offChain(props.health).filter((row) => row.configured)
     if (candidates.length === 0) {
         toastStore.push({ message: t('settings.fallback.allChained'), type: 'info' })
         return

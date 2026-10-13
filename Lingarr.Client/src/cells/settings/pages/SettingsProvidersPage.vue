@@ -110,7 +110,9 @@
                         @click="openEdit(card.provider)">
                         {{ card.configured ? t('settings.providers.edit') : t('settings.providers.configure') }}
                     </button>
-                    <!-- 删除(ops 行末):仅链上或已配置服务;唯一链成员另有守卫 -->
+                    <!-- 删除(ops 行末):仅链上服务(移出回退链 + 清空配置);唯一链成员另有守卫。
+                         恒 configured 的免配置服务不在链时无删除按钮;上链后出现,删除 = 移出链,
+                         卡因 configured 仍默认展示。 -->
                     <button
                         v-if="isDeletable(card.provider)"
                         type="button"
@@ -122,7 +124,8 @@
                 </div>
             </div>
 
-            <!-- ＋添加服务虚线卡:未配置的内置服务 + 插件,点击加入链尾并展开编辑 -->
+            <!-- ＋添加服务虚线卡:所有未上链的服务(内置+插件,含已配置的免配置服务),
+                 点击加入链尾并展开编辑;全部上链后此卡隐藏 -->
             <div v-if="addCandidates.length > 0" class="relative" data-test="add-service-card">
                 <div
                     v-if="addMenuOpen"
@@ -252,7 +255,7 @@ import { translateService } from '@/cells/app/api/translateService'
 import { pluginService } from '@/cells/settings/services/pluginService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
-import { parseServiceChain } from '@/cells/app/utils/serviceChain'
+import useServiceChain from '@/cells/settings/composables/useServiceChain'
 import {
     IEncryptedSettings,
     ISettings,
@@ -323,14 +326,18 @@ function testLine(provider: string): string {
     return `${mark}${status} · ${Math.round(result.latencyMs)} ms · ${result.message}`
 }
 
+// ── 卡片展示规则(数据驱动,不硬编码服务名单):configured(免配置四服务
+// 健康行恒 true;LibreTranslate 配了 URL 亦 true)或在 service_type 链上
+// 才渲染卡;未配置且未上链的服务只能经「＋添加服务」进链后出现。
+// 链空时免配置服务仍恒在,网格天然不空。
 const cards = computed(() =>
-    [...health.value].sort((a, b) => Number(b.configured) - Number(a.configured) || a.displayName.localeCompare(b.displayName))
+    health.value
+        .filter((row) => row.configured || isOnChain(row.provider))
+        .sort((a, b) => Number(b.configured) - Number(a.configured) || a.displayName.localeCompare(b.displayName))
 )
 
 // ── 默认服务 / 回退链(A1:service_type 始终是 JSON 数组,首位 = 默认)──
-const chain = computed(() =>
-    parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string)
-)
+const { chain, isOnChain, offChain } = useServiceChain()
 
 const defaultProvider = computed(() => chain.value[0] ?? '')
 
@@ -351,7 +358,7 @@ function displayNameFor(provider: string): string {
  * 现在把目标服务移到数组首位后整体写回,链保持完整。
  */
 async function setDefault(provider: string): Promise<void> {
-    const current = parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string)
+    const current = chain.value
     if (current[0] === provider) return
     const next = [provider, ...current.filter((member) => member !== provider)]
     await settingStore.updateSetting(SETTINGS.SERVICE_TYPE, JSON.stringify(next), true)
@@ -427,18 +434,15 @@ function metaLine(card: ITranslationServiceHealth): string {
     return modelLine(card.provider) || '—'
 }
 
-// ── ＋添加服务(A3):未配置内置服务 + 插件 ───────────────────────
+// ── ＋添加服务(A3):所有未上链的服务(内置+插件)──
 const addMenuOpen = ref(false)
 
 const externalPlugins = computed(() => plugins.value.filter((p) => !p.isBuiltIn))
 
-const addCandidates = computed(() => {
-    const onChain = new Set(chain.value)
-    const configured = new Set(health.value.filter((row) => row.configured).map((row) => row.provider))
-    return plugins.value.filter(
-        (summary) => !onChain.has(summary.provider) && (!summary.isBuiltIn || !configured.has(summary.provider))
-    )
-})
+/// 候选 = 全部未上链服务,不再排除已配置者 —— 用户应能把 Bing 等免配置
+/// 服务加入回退链;与 FallbackOrderCard 快捷添加共用 offChain 派生(那里
+/// 收紧到 configured)。添加动作 = 追加链尾。
+const addCandidates = computed(() => offChain(plugins.value))
 
 async function addService(provider: string): Promise<void> {
     addMenuOpen.value = false
@@ -478,12 +482,10 @@ const deleteDisplayName = computed(() =>
     deleteCandidate.value !== null ? displayNameFor(deleteCandidate.value) : ''
 )
 
-/// 已配置(健康行 configured)或在 service_type 链上的服务才可删除。
+/// 仅链上服务可删除(移出回退链 + 清空配置)。恒 configured 的免配置服务
+/// 不在链时删除无意义;在链时删除 = 移出链,卡因 configured 仍默认展示。
 function isDeletable(provider: string): boolean {
-    return (
-        chain.value.includes(provider) ||
-        health.value.some((row) => row.provider === provider && row.configured)
-    )
+    return isOnChain(provider)
 }
 
 function requestDelete(provider: string): void {

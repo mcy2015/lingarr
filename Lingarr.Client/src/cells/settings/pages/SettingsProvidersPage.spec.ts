@@ -129,6 +129,8 @@ describe('SettingsProvidersPage · 测试连接 (P0-A)', () => {
 
         expect(testButton(wrapper)).toBeDefined()
         expect(wrapper.find('[data-test="openai"]').exists()).toBe(false)
+        // unconfigured and off-chain: no card at all under the display rule
+        expect(wrapper.find('[data-test="card-head-libretranslate"]').exists()).toBe(false)
     })
 
     it('shows the inline green result with status, latency and message on success', async () => {
@@ -221,12 +223,12 @@ describe('SettingsProvidersPage · request template entry (screen-10)', () => {
             }
         ])
 
-        const { wrapper } = await mountPage()
+        const { wrapper } = await mountPage('["openai","libretranslate"]')
 
         expect(wrapper.find('[data-test="tpl-entry-openai"]').text()).toBe(
             en.settings.providers.requestTemplate
         )
-        // not templated -> no entry, even though the card renders
+        // the chained card renders, but without template support there is no entry
         expect(wrapper.find('[data-test="tpl-entry-libretranslate"]').exists()).toBe(false)
     })
 
@@ -306,9 +308,88 @@ describe('SettingsProvidersPage · 设为默认(A1 截链修复)', () => {
     })
 })
 
-describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
-    it('lists unconfigured built-ins and plugins as add candidates and appends to the chain', async () => {
+describe('SettingsProvidersPage · 卡片展示规则(configured || 在链)', () => {
+    const bing: ITranslationServiceHealth = {
+        ...openai,
+        provider: 'bing',
+        displayName: 'Bing'
+    }
+
+    it('hides unconfigured off-chain services from the grid while keeping them addable', async () => {
         getHealthMock.mockResolvedValue([openai, libre]) // libretranslate unconfigured
+        listPluginsMock.mockResolvedValue([
+            {
+                provider: 'openai',
+                displayName: 'OpenAI',
+                isBuiltIn: true,
+                hasRequestTemplate: false
+            },
+            {
+                provider: 'libretranslate',
+                displayName: 'LibreTranslate',
+                isBuiltIn: true,
+                hasRequestTemplate: false
+            }
+        ])
+        const { wrapper } = await mountPage('["openai"]')
+
+        expect(wrapper.find('[data-test="card-head-openai"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="card-head-libretranslate"]').exists()).toBe(false)
+
+        await wrapper.find('[data-test="add-service-card"] button').trigger('click')
+        expect(wrapper.find('[data-test="add-candidate-libretranslate"]').exists()).toBe(true)
+    })
+
+    it('keeps the grid non-empty when the chain is empty: configured (config-free) services stay visible', async () => {
+        getHealthMock.mockResolvedValue([openai, libre])
+        const { wrapper } = await mountPage('[]')
+
+        expect(wrapper.find('[data-test="card-head-openai"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="card-head-libretranslate"]').exists()).toBe(false)
+    })
+
+    it('renders a configured off-chain (config-free) card without a delete button, then chains it via the add menu', async () => {
+        getHealthMock.mockResolvedValue([openai, bing]) // both configured
+        listPluginsMock.mockResolvedValue([
+            {
+                provider: 'openai',
+                displayName: 'OpenAI',
+                isBuiltIn: true,
+                hasRequestTemplate: false
+            },
+            {
+                provider: 'bing',
+                displayName: 'Bing',
+                isBuiltIn: true,
+                hasRequestTemplate: false
+            }
+        ])
+        setSettingMock.mockClear()
+        const { wrapper, pinia } = await mountPage('["openai"]')
+
+        // configured -> visible; off-chain -> no delete button (delete is chained-only)
+        expect(wrapper.find('[data-test="card-head-bing"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="delete-bing"]').exists()).toBe(false)
+
+        await wrapper.find('[data-test="add-service-card"] button').trigger('click')
+        await wrapper.find('[data-test="add-candidate-bing"]').trigger('click')
+        await flushPromises()
+
+        // config-free service joined the chain: array written back, delete button appears
+        expect(useSettingStore(pinia).getSetting(SETTINGS.SERVICE_TYPE)).toBe('["openai","bing"]')
+        expect(wrapper.find('[data-test="delete-bing"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="card-head-bing"]').exists()).toBe(true)
+    })
+})
+
+describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
+    it('lists every off-chain service (built-in + plugin, configured or not) as add candidates and appends to the chain', async () => {
+        const bing: ITranslationServiceHealth = {
+            ...openai,
+            provider: 'bing',
+            displayName: 'Bing'
+        }
+        getHealthMock.mockResolvedValue([openai, libre, bing]) // libretranslate unconfigured, bing configured
         listPluginsMock.mockResolvedValue([
             {
                 provider: 'openai',
@@ -323,6 +404,12 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
                 hasRequestTemplate: false
             },
             {
+                provider: 'bing',
+                displayName: 'Bing',
+                isBuiltIn: true,
+                hasRequestTemplate: false
+            },
+            {
                 provider: 'ollama-plugin',
                 displayName: 'Ollama Plugin',
                 isBuiltIn: false,
@@ -333,10 +420,11 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         const { wrapper, pinia } = await mountPage('["openai"]')
 
         await wrapper.find('[data-test="add-service-card"] button').trigger('click')
-        // configured + chained providers are not candidates
+        // chained providers are not candidates — configured or not
         expect(wrapper.find('[data-test="add-candidate-openai"]').exists()).toBe(false)
-        // unconfigured built-in and plugins are
+        // off-chain ones are: unconfigured built-in, configured (config-free) built-in, plugin
         expect(wrapper.find('[data-test="add-candidate-libretranslate"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="add-candidate-bing"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="add-candidate-ollama-plugin"]').exists()).toBe(true)
 
         await wrapper.find('[data-test="add-candidate-libretranslate"]').trigger('click')
@@ -348,7 +436,7 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         expect(settingStore.getSetting(SETTINGS.SERVICE_TYPE)).toBe('["openai","libretranslate"]')
     })
 
-    it('hides the add card when every provider is already chained and configured', async () => {
+    it('hides the add card when every service is already on the chain', async () => {
         getHealthMock.mockResolvedValue([openai]) // single configured provider
         listPluginsMock.mockResolvedValue([
             {
@@ -387,7 +475,8 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
 describe('SettingsProvidersPage · pcard 骨架对齐', () => {
     it('gives every card the same four slots with ops pinned as the last block', async () => {
         getHealthMock.mockResolvedValue([openai, libre])
-        const { wrapper } = await mountPage('["openai"]')
+        // libretranslate is unconfigured but on the chain — that keeps its card rendered
+        const { wrapper } = await mountPage('["openai","libretranslate"]')
 
         for (const provider of ['openai', 'libretranslate']) {
             const slots = wrapper
@@ -405,7 +494,8 @@ describe('SettingsProvidersPage · pcard 骨架对齐', () => {
 
     it('renders the meta slot on unconfigured cards with the weak copy', async () => {
         getHealthMock.mockResolvedValue([openai, libre])
-        const { wrapper } = await mountPage('["openai"]')
+        // unconfigured card stays visible because it sits on the chain
+        const { wrapper } = await mountPage('["openai","libretranslate"]')
 
         expect(wrapper.find('[data-test="card-meta-libretranslate"]').text()).toBe(
             en.settings.providers.notConfigured
@@ -436,11 +526,15 @@ describe('SettingsProvidersPage · 删除服务', () => {
         displayName: 'DeepL'
     }
 
-    it('offers delete only for chained or configured services', async () => {
-        getHealthMock.mockResolvedValue([openai, libre]) // libretranslate unconfigured & off-chain
+    it('offers delete only for chained services — not for configured off-chain cards', async () => {
+        getHealthMock.mockResolvedValue([openai, libre, deepl]) // deepl configured but off-chain
         const { wrapper } = await mountPage('["openai"]')
 
         expect(wrapper.find('[data-test="delete-openai"]').exists()).toBe(true)
+        // configured yet off-chain: the card renders but has no delete button
+        expect(wrapper.find('[data-test="card-head-deepl"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="delete-deepl"]').exists()).toBe(false)
+        // unconfigured and off-chain: no card at all
         expect(wrapper.find('[data-test="delete-libretranslate"]').exists()).toBe(false)
     })
 
