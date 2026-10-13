@@ -198,10 +198,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
 import services from '@/services'
+import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useUiStore } from '@/cells/app/stores/ui'
-import { useTranslateStore } from '@/store/translate'
+import { useTranslateStore } from '@/cells/app/stores/translate'
 import {
     ILanguage,
     MEDIA_TYPE,
@@ -228,6 +230,7 @@ const { t, locale } = useI18n()
 const router = useRouter()
 const uiStore = useUiStore()
 const translateStore = useTranslateStore()
+const translationRequestApi = translationRequestService(axios)
 
 const item = ref<IMediaLibraryItem | null>(null)
 const history = ref<ITranslationRequest[]>([])
@@ -315,7 +318,7 @@ async function load(): Promise<void> {
         ? seasons.value.flatMap((s) => s.episodes.map((e) => e.id))
         : [item.value.id]
     if (ids.length > 0) {
-        const historyPage = await services.translationRequest.requests<IPagedResult<ITranslationRequest>>(
+        const historyPage = await translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
             1,
             '',
             'CreatedAt',

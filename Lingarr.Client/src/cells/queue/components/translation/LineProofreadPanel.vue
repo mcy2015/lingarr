@@ -81,11 +81,14 @@ import {
     ProofreadLineOrigin,
     PROOFREAD_LINE_ORIGIN
 } from '@/types'
-import services from '@/services'
-import useTranslationRequestStore from '@/store/translationRequest'
+import axios from 'axios'
+import { translateService } from '@/cells/app/api/translateService'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import TextAreaComponent from '@/cells/kernel/components/TextAreaComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
+
+const translateApi = translateService(axios)
 
 const props = withDefaults(
     defineProps<{
@@ -143,7 +146,7 @@ async function requestProofread() {
     draft.value = undefined
     error.value = undefined
     try {
-        suggestion.value = await services.translate.proofreadLine<string>({
+        suggestion.value = await translateApi.proofreadLine<string>({
             sourceLine: props.line.source,
             translatedLine: props.line.target,
             sourceLanguage: props.sourceLanguage,

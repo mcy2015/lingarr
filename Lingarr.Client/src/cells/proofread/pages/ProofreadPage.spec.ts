@@ -9,7 +9,6 @@ import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
-import services from '@/services'
 import ProofreadPage from '@/cells/proofread/pages/ProofreadPage.vue'
 import en from '@/i18n/locales/en.json'
 import { useToastStore } from '@/cells/app/stores/toast'
@@ -25,26 +24,31 @@ import {
 } from '@/types'
 
 const glossaryGetAll = vi.hoisted(() => vi.fn())
+const translationRequestApi = vi.hoisted(() => ({
+    get: vi.fn(),
+    requests: vi.fn(),
+    statusCounts: vi.fn(),
+    applyProofreadLine: vi.fn()
+}))
+const translateApi = vi.hoisted(() => ({
+    proofreadStatus: vi.fn()
+}))
 
-vi.mock('@/services', () => ({
-    default: {
-        translationRequest: {
-            get: vi.fn(),
-            requests: vi.fn(),
-            statusCounts: vi.fn(),
-            applyProofreadLine: vi.fn()
-        },
-        translate: { proofreadStatus: vi.fn() }
-    }
+vi.mock('@/cells/app/api/translationRequestService', () => ({
+    translationRequestService: () => translationRequestApi
+}))
+
+vi.mock('@/cells/app/api/translateService', () => ({
+    translateService: () => translateApi
 }))
 
 vi.mock('@/cells/app/api/glossaryService', () => ({
     glossaryService: () => ({ getAll: glossaryGetAll })
 }))
 
-const getMock = vi.mocked(services.translationRequest.get)
+const getMock = translationRequestApi.get
 const glossaryMock = vi.mocked(glossaryGetAll)
-const applyProofreadLineMock = vi.mocked(services.translationRequest.applyProofreadLine)
+const applyProofreadLineMock = translationRequestApi.applyProofreadLine
 
 // ── fixtures ───────────────────────────────────────────────────────
 // A fresh detail per test: applyDraft mutates line.target in place, so

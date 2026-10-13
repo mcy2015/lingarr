@@ -205,8 +205,9 @@ import NoMediaNotification from '@/components/common/NoMediaNotification.vue'
 import PaginationComponent from '@/cells/kernel/components/PaginationComponent.vue'
 import services from '@/services'
 import { statisticsService } from '@/cells/app/api/statisticsService'
+import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useSettingStore } from '@/cells/app/stores/setting'
-import { useTranslateStore } from '@/store/translate'
+import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
 import {
@@ -223,6 +224,7 @@ import {
 const VISIBLE_TRACKS = 4
 
 const statisticsApi = statisticsService(axios)
+const translationRequestApi = translationRequestService(axios)
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -357,7 +359,7 @@ onMounted(async () => {
     // toolbar stats: pipeline missing count + live in-progress count
     const [pipeline, counts] = await Promise.allSettled([
         statisticsApi.getPipelineStatistics(),
-        services.translationRequest.statusCounts()
+        translationRequestApi.statusCounts()
     ])
     if (pipeline.status === 'fulfilled') missingCount.value = pipeline.value.missingSubtitles
     if (counts.status === 'fulfilled') inProgressCount.value = counts.value['InProgress'] ?? 0

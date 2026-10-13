@@ -21,8 +21,6 @@ import {
 export interface Services {
     subtitle: ISubtitleService
     import: IImportService
-    translate: ITranslateService
-    translationRequest: ITranslationRequestService
     media: IMediaService
     directory: IDirectoryService
 }

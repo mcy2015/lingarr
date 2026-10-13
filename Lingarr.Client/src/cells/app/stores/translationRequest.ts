@@ -11,7 +11,12 @@ import {
     TRANSLATION_STATUS,
     TranslationStatus
 } from '@/types'
-import services from '@/services'
+import axios from 'axios'
+import { translateService } from '@/cells/app/api/translateService'
+import { translationRequestService } from '@/cells/app/api/translationRequestService'
+
+const translationRequestApi = translationRequestService(axios)
+const translateApi = translateService(axios)
 
 export const useTranslationRequestStore = defineStore('translateRequest', {
     state: (): IUseTranslationRequestStore => ({
@@ -49,7 +54,7 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
             await this.fetch()
         },
         async fetch() {
-            this.translationRequests = await services.translationRequest.requests<
+            this.translationRequests = await translationRequestApi.requests<
                 IPagedResult<ITranslationRequest>
             >(
                 this.filter.pageNumber,
@@ -58,18 +63,18 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
                 this.filter.isAscending,
                 this.filter.status ?? null
             )
-            this.statusCounts = await services.translationRequest.statusCounts()
+            this.statusCounts = await translationRequestApi.statusCounts()
         },
         async setStatusFilter(status: string | null) {
             this.filter = { ...this.filter, status: status, pageNumber: 1 }
             await this.fetch()
         },
         async pause(translationRequest: ITranslationRequest) {
-            await services.translationRequest.pause(translationRequest)
+            await translationRequestApi.pause(translationRequest)
             await this.fetch()
         },
         async resumePaused(translationRequest: ITranslationRequest) {
-            await services.translationRequest.resumePaused(translationRequest)
+            await translationRequestApi.resumePaused(translationRequest)
             await this.fetch()
         },
         setActiveTranslations(activeTranslations: IActiveTranslation[]) {
@@ -77,35 +82,35 @@ export const useTranslationRequestStore = defineStore('translateRequest', {
         },
         async fetchActiveTranslations() {
             this.activeTranslations =
-                await services.translationRequest.getActiveTranslations<IActiveTranslation[]>()
+                await translationRequestApi.getActiveTranslations<IActiveTranslation[]>()
         },
         async cancel(translationRequest: ITranslationRequest) {
-            await services.translationRequest.cancel<string>(translationRequest)
+            await translationRequestApi.cancel<string>(translationRequest)
         },
         async remove(translationRequest: ITranslationRequest) {
-            await services.translationRequest.remove<string>(translationRequest).finally(() => {
+            await translationRequestApi.remove<string>(translationRequest).finally(() => {
                 this.translationRequests.items = this.translationRequests.items.filter(
                     (request) => request.id !== translationRequest.id
                 )
             })
         },
         async retry(translationRequest: ITranslationRequest) {
-            await services.translationRequest.retry<string>(translationRequest)
+            await translationRequestApi.retry<string>(translationRequest)
             await this.fetch()
         },
         async resume(translationRequest: ITranslationRequest) {
-            await services.translationRequest.resume<string>(translationRequest)
+            await translationRequestApi.resume<string>(translationRequest)
             await this.fetch()
         },
         async proofread(translationRequest: ITranslationRequest) {
-            await services.translationRequest.proofread<string>(translationRequest)
+            await translationRequestApi.proofread<string>(translationRequest)
             await this.fetch()
         },
         async applyProofreadLine(request: IProofreadLineApplyRequest) {
-            return await services.translationRequest.applyProofreadLine<string>(request)
+            return await translationRequestApi.applyProofreadLine<string>(request)
         },
         async fetchProofreadStatus() {
-            const status = await services.translate.proofreadStatus<IProofreadStatus>()
+            const status = await translateApi.proofreadStatus<IProofreadStatus>()
             this.proofreadSupported = status.supported
         },
         async updateProgress(requestProgress: IRequestProgress) {

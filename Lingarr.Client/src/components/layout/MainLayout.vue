@@ -89,7 +89,7 @@ import { useSignalR } from '@/cells/app/composables/useSignalR'
 import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useInstanceStore } from '@/cells/app/stores/instance'
-import useTranslationRequestStore from '@/store/translationRequest'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import { useUiStore } from '@/cells/app/stores/ui'
 
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'

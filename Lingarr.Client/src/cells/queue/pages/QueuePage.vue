@@ -196,21 +196,24 @@ import {
     TRANSLATION_ACTIONS,
     TRANSLATION_STATUS
 } from '@/types'
-import useTranslationRequestStore from '@/store/translationRequest'
-import services from '@/services'
+import axios from 'axios'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
+import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
 import { useSelection } from '@/cells/kernel/composables/useSelection'
-import { usePagedList } from '@/composables/usePagedList'
+import { usePagedList } from '@/cells/queue/composables/usePagedList'
 import { formatDateTime } from '@/utils/date'
 import PaginationComponent from '@/cells/kernel/components/PaginationComponent.vue'
 import ListToolbar from '@/cells/kernel/components/ListToolbar.vue'
-import TranslationStatus from '@/components/common/TranslationStatus.vue'
+import TranslationStatus from '@/cells/queue/components/TranslationStatus.vue'
 import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
-import TranslationAction from '@/components/common/TranslationAction.vue'
-import TranslationCompletedAt from '@/components/common/TranslationCompletedAt.vue'
+import TranslationAction from '@/cells/queue/components/TranslationAction.vue'
+import TranslationCompletedAt from '@/cells/queue/components/TranslationCompletedAt.vue'
 import BadgeComponent from '@/cells/kernel/components/BadgeComponent.vue'
 import CheckboxComponent from '@/cells/kernel/components/CheckboxComponent.vue'
+
+const translationRequestApi = translationRequestService(axios)
 
 const signalR = useSignalR()
 const hubConnection = ref<Hub>()
@@ -366,7 +369,7 @@ const handleDelete = async () => {
 const handleBatchConvert = async () => {
     if (!window.confirm(t('translations.list.batchConvertConfirm'))) return
     try {
-        await services.translationRequest.convertAll(true)
+        await translationRequestApi.convertAll(true)
     } catch (error) {
         console.error('Batch conversion failed:', error)
     }

@@ -35,12 +35,12 @@ const routes: RouteRecordRaw[] = [
             },
             {
                 path: '/queue',
-                component: () => import('@/pages/QueuePage.vue'),
+                component: () => import('@/cells/queue/pages/QueuePage.vue'),
                 name: 'queue'
             },
             {
                 path: '/queue/:id',
-                component: () => import('@/pages/QueueDetailPage.vue'),
+                component: () => import('@/cells/queue/pages/QueueDetailPage.vue'),
                 name: 'queue-detail',
                 props: true
             },

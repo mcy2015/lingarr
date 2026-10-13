@@ -1,7 +1,10 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ILanguage, ISubtitle, IUseTranslateStore, MediaType } from '@/types'
-import services from '@/services'
-import useTranslationRequestStore from '@/store/translationRequest'
+import axios from 'axios'
+import { translateService } from '@/cells/app/api/translateService'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
+
+const translateApi = translateService(axios)
 
 export const useTranslateStore = defineStore('translate', {
     state: (): IUseTranslateStore => ({
@@ -22,7 +25,7 @@ export const useTranslateStore = defineStore('translate', {
             target: ILanguage,
             mediaType: MediaType
         ): Promise<number> {
-            const result = await services.translate.translateSubtitle<{ jobId: number }>(
+            const result = await translateApi.translateSubtitle<{ jobId: number }>(
                 mediaId,
                 subtitle,
                 source,
@@ -37,7 +40,7 @@ export const useTranslateStore = defineStore('translate', {
             targetLanguage: string,
             mediaType: MediaType
         ): Promise<void> {
-            await services.translate.bulkTranslate<number[]>(
+            await translateApi.bulkTranslate<number[]>(
                 mediaIds,
                 targetLanguage,
                 mediaType
@@ -48,7 +51,7 @@ export const useTranslateStore = defineStore('translate', {
             try {
                 this.languagesLoading = true
                 this.languagesError = false
-                this.languages = await services.translate.getLanguages<ILanguage[]>()
+                this.languages = await translateApi.getLanguages<ILanguage[]>()
             } catch (error) {
                 console.error('Failed to load languages:', error)
                 this.languagesError = true

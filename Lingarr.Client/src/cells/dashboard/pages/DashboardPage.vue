@@ -133,8 +133,9 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
-import services from '@/services'
 import { statisticsService } from '@/cells/app/api/statisticsService'
+import { translateService } from '@/cells/app/api/translateService'
+import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
 import {
@@ -150,6 +151,8 @@ import {
 const REFRESH_INTERVAL_MS = 30_000
 
 const statisticsApi = statisticsService(axios)
+const translationRequestApi = translationRequestService(axios)
+const translateApi = translateService(axios)
 
 const { t, locale } = useI18n()
 const signalR = useSignalR()
@@ -324,16 +327,16 @@ const updateSub = (): void => {
 const fetchOverview = async (): Promise<void> => {
     const [pipelineResult, countsResult, activeResult, healthResult, eventsResult] = await Promise.allSettled([
         statisticsApi.getPipelineStatistics(),
-        services.translationRequest.statusCounts(),
-        services.translationRequest.requests<IPagedResult<ITranslationRequest>>(
+        translationRequestApi.statusCounts(),
+        translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
             1,
             '',
             'CreatedAt',
             false,
             'InProgress'
         ),
-        services.translate.getHealth(),
-        services.translationRequest.getRecentEvents(20)
+        translateApi.getHealth(),
+        translationRequestApi.getRecentEvents(20)
     ])
     if (pipelineResult.status === 'fulfilled') pipeline.value = pipelineResult.value
     if (countsResult.status === 'fulfilled') counts.value = countsResult.value

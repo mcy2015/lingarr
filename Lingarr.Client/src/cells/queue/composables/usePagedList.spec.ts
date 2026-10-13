@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { defineComponent, h, type WritableComputedRef } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { usePagedList } from '@/composables/usePagedList'
+import { usePagedList } from '@/cells/queue/composables/usePagedList'
 import type { IFilter, IPagedResult } from '@/types'
 
 const SEARCH_DEBOUNCE_MS = 300

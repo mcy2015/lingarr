@@ -76,7 +76,7 @@ import { useI18n } from 'vue-i18n'
 import CodeSnippet from '@/cells/kernel/components/CodeSnippet.vue'
 import LanguageSelect from '@/cells/settings/components/LanguageSelect.vue'
 import { ILanguage, SETTINGS } from '@/types'
-import { useTranslateStore } from '@/store/translate'
+import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 

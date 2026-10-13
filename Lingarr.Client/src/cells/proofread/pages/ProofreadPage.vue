@@ -145,11 +145,11 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import services from '@/services'
-import useTranslationRequestStore from '@/store/translationRequest'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { glossaryService } from '@/cells/app/api/glossaryService'
+import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useProofreadKeyboard } from '@/cells/proofread/composables/useProofreadKeyboard'
 import {
     IPagedResult,
@@ -168,6 +168,7 @@ const translationRequestStore = useTranslationRequestStore()
 const uiStore = useUiStore()
 const toastStore = useToastStore()
 const glossaryApi = glossaryService(axios)
+const translationRequestApi = translationRequestService(axios)
 
 const loading = ref(true)
 const detail = ref<ITranslationRequestDetail | null>(null)
@@ -223,7 +224,7 @@ onMounted(async () => {
     let requestId = Number(props.id)
     if (!Number.isFinite(requestId) || requestId <= 0) {
         // bare /proofread — land on the newest completed request
-        const page = await services.translationRequest.requests<IPagedResult<ITranslationRequest>>(
+        const page = await translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
             1,
             '',
             'Id',
@@ -240,7 +241,7 @@ onMounted(async () => {
     }
 
     try {
-        detail.value = await services.translationRequest.get<ITranslationRequestDetail>(requestId)
+        detail.value = await translationRequestApi.get<ITranslationRequestDetail>(requestId)
         glossary.value = await glossaryApi.getAll()
         focusLine(lines.value[0]?.position ?? 0)
     } finally {

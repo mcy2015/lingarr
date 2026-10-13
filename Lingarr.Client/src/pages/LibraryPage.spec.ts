@@ -13,11 +13,11 @@ import { useUiStore } from '@/cells/app/stores/ui'
 import { IMediaLibraryItem, IPagedResult, ITranslationEstimate, MEDIA_TYPE, SETTINGS } from '@/types'
 
 const statisticsMock = vi.hoisted(() => vi.fn())
+const statusCountsMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services', () => ({
     default: {
-        media: { library: vi.fn(), estimate: vi.fn() },
-        translationRequest: { statusCounts: vi.fn() }
+        media: { library: vi.fn(), estimate: vi.fn() }
     }
 }))
 
@@ -25,9 +25,12 @@ vi.mock('@/cells/app/api/statisticsService', () => ({
     statisticsService: () => ({ getPipelineStatistics: statisticsMock })
 }))
 
+vi.mock('@/cells/app/api/translationRequestService', () => ({
+    translationRequestService: () => ({ statusCounts: statusCountsMock })
+}))
+
 const libraryMock = vi.mocked(services.media.library)
 const estimateMock = vi.mocked(services.media.estimate)
-const statusCountsMock = vi.mocked(services.translationRequest.statusCounts)
 
 // ── fixtures (partial rows: only the fields the page reads) ──────
 const show1 = {

@@ -4,8 +4,8 @@ import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { DOMWrapper, mount, VueWrapper } from '@vue/test-utils'
-import TranslationAction from '@/components/common/TranslationAction.vue'
-import useTranslationRequestStore from '@/store/translationRequest'
+import TranslationAction from '@/cells/queue/components/TranslationAction.vue'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import { ITranslationRequest, TRANSLATION_ACTIONS, TRANSLATION_STATUS } from '@/types'
 
 // The i18n instance below carries no messages, so every `t(key)` used as

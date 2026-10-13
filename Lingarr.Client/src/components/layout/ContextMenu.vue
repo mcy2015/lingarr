@@ -41,7 +41,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ILanguage, ISubtitle, MediaType, SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
-import { useTranslateStore } from '@/store/translate'
+import { useTranslateStore } from '@/cells/app/stores/translate'
 import useClickOutside from '@/cells/kernel/composables/useClickOutside'
 import TooltipComponent from '@/cells/kernel/components/TooltipComponent.vue'
 

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import services from '@/services'
-import { useTranslationRequestStore } from '@/store/translationRequest'
+import { useTranslationRequestStore } from '@/cells/app/stores/translationRequest'
 import {
     IFilter,
     IPagedResult,
@@ -10,30 +9,34 @@ import {
     TRANSLATION_STATUS
 } from '@/types'
 
-vi.mock('@/services', () => ({
-    default: {
-        translationRequest: {
-            requests: vi.fn(),
-            statusCounts: vi.fn(),
-            pause: vi.fn(),
-            resumePaused: vi.fn(),
-            cancel: vi.fn(),
-            remove: vi.fn(),
-            retry: vi.fn(),
-            resume: vi.fn(),
-            proofread: vi.fn(),
-            applyProofreadLine: vi.fn(),
-            getActiveTranslations: vi.fn()
-        },
-        translate: {
-            proofreadStatus: vi.fn()
-        }
-    }
+const translationRequestApi = vi.hoisted(() => ({
+    requests: vi.fn(),
+    statusCounts: vi.fn(),
+    pause: vi.fn(),
+    resumePaused: vi.fn(),
+    cancel: vi.fn(),
+    remove: vi.fn(),
+    retry: vi.fn(),
+    resume: vi.fn(),
+    proofread: vi.fn(),
+    applyProofreadLine: vi.fn(),
+    getActiveTranslations: vi.fn()
+}))
+const translateApi = vi.hoisted(() => ({
+    proofreadStatus: vi.fn()
 }))
 
-const mockedRequests = vi.mocked(services.translationRequest.requests)
-const mockedStatusCounts = vi.mocked(services.translationRequest.statusCounts)
-const mockedRemove = vi.mocked(services.translationRequest.remove)
+vi.mock('@/cells/app/api/translationRequestService', () => ({
+    translationRequestService: () => translationRequestApi
+}))
+
+vi.mock('@/cells/app/api/translateService', () => ({
+    translateService: () => translateApi
+}))
+
+const mockedRequests = translationRequestApi.requests
+const mockedStatusCounts = translationRequestApi.statusCounts
+const mockedRemove = translationRequestApi.remove
 
 const defaultFilter: IFilter = {
     searchQuery: '',

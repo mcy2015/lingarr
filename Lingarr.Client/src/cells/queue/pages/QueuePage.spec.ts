@@ -4,36 +4,41 @@ import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { DOMWrapper, mount, VueWrapper } from '@vue/test-utils'
-import services from '@/services'
 import en from '@/i18n/locales/en.json'
-import QueuePage from '@/pages/QueuePage.vue'
-import useTranslationRequestStore from '@/store/translationRequest'
+import QueuePage from '@/cells/queue/pages/QueuePage.vue'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { IPagedResult, ITranslationRequest, TRANSLATION_STATUS } from '@/types'
 
-vi.mock('@/services', () => ({
-    default: {
-        translationRequest: {
-            requests: vi.fn(),
-            statusCounts: vi.fn(),
-            pause: vi.fn(),
-            resumePaused: vi.fn(),
-            cancel: vi.fn(),
-            remove: vi.fn(),
-            retry: vi.fn(),
-            resume: vi.fn(),
-            proofread: vi.fn(),
-            applyProofreadLine: vi.fn(),
-            getActiveTranslations: vi.fn(),
-            convertAll: vi.fn()
-        },
-        translate: { proofreadStatus: vi.fn() }
-    }
+const translationRequestApi = vi.hoisted(() => ({
+    requests: vi.fn(),
+    statusCounts: vi.fn(),
+    pause: vi.fn(),
+    resumePaused: vi.fn(),
+    cancel: vi.fn(),
+    remove: vi.fn(),
+    retry: vi.fn(),
+    resume: vi.fn(),
+    proofread: vi.fn(),
+    applyProofreadLine: vi.fn(),
+    getActiveTranslations: vi.fn(),
+    convertAll: vi.fn()
+}))
+const translateApi = vi.hoisted(() => ({
+    proofreadStatus: vi.fn()
 }))
 
-const requestsMock = vi.mocked(services.translationRequest.requests)
-const statusCountsMock = vi.mocked(services.translationRequest.statusCounts)
-const proofreadStatusMock = vi.mocked(services.translate.proofreadStatus)
+vi.mock('@/cells/app/api/translationRequestService', () => ({
+    translationRequestService: () => translationRequestApi
+}))
+
+vi.mock('@/cells/app/api/translateService', () => ({
+    translateService: () => translateApi
+}))
+
+const requestsMock = translationRequestApi.requests
+const statusCountsMock = translationRequestApi.statusCounts
+const proofreadStatusMock = translateApi.proofreadStatus
 
 // The page joins a live hub on mount; a real connection would try to
 // negotiate over the network, so the composable is replaced wholesale.

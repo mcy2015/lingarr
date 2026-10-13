@@ -211,17 +211,20 @@ import {
     ILineProofread,
     TRANSLATION_STATUS
 } from '@/types'
-import { useTranslationDetailHub } from '@/composables/useTranslationDetailHub'
+import axios from 'axios'
+import { useTranslationDetailHub } from '@/cells/queue/composables/useTranslationDetailHub'
 import { formatDateTime } from '@/utils/date'
-import services from '@/services'
-import useTranslationRequestStore from '@/store/translationRequest'
-import TranslationStatus from '@/components/common/TranslationStatus.vue'
+import { translationRequestService } from '@/cells/app/api/translationRequestService'
+import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
+import TranslationStatus from '@/cells/queue/components/TranslationStatus.vue'
 import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
 import BadgeComponent from '@/cells/kernel/components/BadgeComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import CardComponent from '@/cells/kernel/components/CardComponent.vue'
-import LineProofreadPanel from '@/components/features/translation/LineProofreadPanel.vue'
+import LineProofreadPanel from '@/cells/queue/components/translation/LineProofreadPanel.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
+
+const translationRequestApi = translationRequestService(axios)
 
 const props = defineProps<{
     id: string
@@ -253,8 +256,8 @@ const handleConvert = async () => {
     if (!detail.value || converting.value) return
     converting.value = true
     try {
-        await services.translationRequest.convert(detail.value.id, !detail.value.isBilingual)
-        detail.value = await services.translationRequest.get<ITranslationRequestDetail>(
+        await translationRequestApi.convert(detail.value.id, !detail.value.isBilingual)
+        detail.value = await translationRequestApi.get<ITranslationRequestDetail>(
             Number(props.id)
         )
     } catch (error) {
@@ -324,7 +327,7 @@ const { connect } = useTranslationDetailHub()
 
 onMounted(async () => {
     try {
-        detail.value = await services.translationRequest.get<ITranslationRequestDetail>(
+        detail.value = await translationRequestApi.get<ITranslationRequestDetail>(
             Number(props.id)
         )
         progress.value = detail.value.progress ?? 0

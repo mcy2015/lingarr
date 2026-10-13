@@ -81,11 +81,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import axios from 'axios'
 import ServicesPage from './ServicesPage.vue'
 import PluginsPage from './PluginsPage.vue'
-import services from '@/services'
+import { translateService } from '@/cells/app/api/translateService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { ITranslationServiceHealth, SETTINGS } from '@/types'
+
+const translateApi = translateService(axios)
 
 const { t, locale } = useI18n()
 const settingStore = useSettingStore()
@@ -101,7 +104,7 @@ const defaultProvider = computed(() => settingStore.getSetting(SETTINGS.SERVICE_
 
 onMounted(async () => {
     try {
-        health.value = await services.translate.getHealth()
+        health.value = await translateApi.getHealth()
     } catch {
         // the forms below still work without the health glance
     }
