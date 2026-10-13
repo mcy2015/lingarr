@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios'
 import { baseUrl } from '@/utils/baseUrl'
-import { ApiError } from '@/services/apiError'
+import { ApiError } from '@/cells/app/api/apiError'
 
 axios.defaults.baseURL = baseUrl()
 

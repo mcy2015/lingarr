@@ -410,7 +410,7 @@ import { useRoute } from 'vue-router'
 import TabComponent from '@/cells/kernel/components/TabComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import axios from 'axios'
-import services from '@/services'
+import { importService } from '@/cells/import/services/importService'
 import { mediaService } from '@/cells/app/api/mediaService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
@@ -496,6 +496,7 @@ watch(selectedShowId, () => {
 })
 
 const mediaApi = mediaService(axios)
+const importApi = importService(axios)
 
 void mediaApi
     .shows<IPagedResult<IShow>>(1, '', 'title', true)
@@ -618,7 +619,7 @@ const runScan = async (): Promise<void> => {
     if (!path || scanning.value) return
     scanning.value = true
     try {
-        const files = await services.import.scanPath(path)
+        const files = await importApi.scanPath(path)
         const known = new Set(rows.value.map((row) => row.fileName + ':' + (row.sizeBytes ?? 0)))
         const fresh = files.filter((file) => !known.has(file.fileName + ':' + file.sizeBytes))
         rows.value.push(
@@ -648,7 +649,7 @@ const runScan = async (): Promise<void> => {
 const refreshMetadata = async (): Promise<void> => {
     if (rows.value.length === 0) return
     try {
-        const parsed = await services.import.parseFilenames(rows.value.map((row) => row.fileName))
+        const parsed = await importApi.parseFilenames(rows.value.map((row) => row.fileName))
         const byName = new Map(parsed.map((item) => [item.fileName, item]))
         for (const row of rows.value) {
             row.parse = byName.get(row.fileName) ?? null
@@ -735,7 +736,7 @@ const runImport = async (): Promise<void> => {
             }
 
             if (uploads.length > 0) {
-                const response = await services.import.importFiles(
+                const response = await importApi.importFiles(
                     uploads.map((r) => r.file!),
                     sourceLanguage.value,
                     targetLanguage.value,
@@ -750,7 +751,7 @@ const runImport = async (): Promise<void> => {
             }
 
             if (paths.length > 0) {
-                const response = await services.import.importPaths<IImportSubtitlesResponse>({
+                const response = await importApi.importPaths<IImportSubtitlesResponse>({
                     paths: paths.map((r) => r.serverPath!),
                     sourceLanguage: sourceLanguage.value,
                     targetLanguage: targetLanguage.value,

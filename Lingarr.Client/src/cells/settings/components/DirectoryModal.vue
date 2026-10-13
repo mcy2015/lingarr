@@ -108,8 +108,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import axios from 'axios'
 import { DirectoryItem } from '@/types'
-import services from '@/services'
+import { directoryService } from '@/cells/app/api/directoryService'
 
 const { t } = useI18n()
 
@@ -122,6 +123,8 @@ const emit = defineEmits<{
     (e: 'select', path: string): void
 }>()
 
+const directoryApi = directoryService(axios)
+
 const currentPath = ref<string>('/')
 const fullPath = ref<string[]>([])
 const highlightedDirectory = ref<DirectoryItem | null>(null)
@@ -133,7 +136,7 @@ const updateFullPath = (path: string) => {
 
 const browsePath = async (path: string): Promise<void> => {
     try {
-        directoryContents.value = await services.directory.get(path)
+        directoryContents.value = await directoryApi.get(path)
         currentPath.value = path
         updateFullPath(path)
         highlightedDirectory.value = null

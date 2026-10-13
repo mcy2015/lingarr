@@ -18,11 +18,6 @@ import {
     IProofreadLineRequest
 } from '@/types'
 
-export interface Services {
-    import: IImportService
-    directory: IDirectoryService
-}
-
 export interface IPluginService {
     list(): Promise<IPluginSummary[]>
     getManifest(provider: string): Promise<IPluginManifest>

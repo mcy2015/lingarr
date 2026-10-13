@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '@/services/apiError'
+import { ApiError } from '@/cells/app/api/apiError'
 
 describe('ApiError', () => {
     it('is an instanceof Error so component checks work', () => {

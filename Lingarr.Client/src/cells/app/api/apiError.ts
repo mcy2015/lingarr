@@ -1,6 +1,6 @@
 /**
  * Normalised error thrown by every service call (via the axios response
- * interceptor in `services/index.ts`).
+ * interceptor in `cells/app/http.ts`).
  *
  * - `instanceof Error` works, so component-level `err instanceof Error`
  *   checks behave correctly.

@@ -84,7 +84,7 @@ const routes: RouteRecordRaw[] = [
             },
             {
                 path: '/import',
-                component: () => import('@/pages/ImportPage.vue'),
+                component: () => import('@/cells/import/pages/ImportPage.vue'),
                 name: 'import'
             },
             {
