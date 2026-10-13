@@ -1,6 +1,10 @@
 <template>
-    <div class="w-full">
-        <div class="bg-tertiary flex items-center p-4">
+    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
+        <div class="flex shrink-0 flex-wrap items-center gap-3">
+            <b class="min-w-0 truncate text-[15px] font-semibold">
+                {{ detail?.title ?? t('nav.queue') }}
+            </b>
+            <span class="flex-1"></span>
             <ButtonComponent
                 variant="ghost"
                 size="xs"
