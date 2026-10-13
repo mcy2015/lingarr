@@ -53,8 +53,8 @@ Lingarr Docker images are available from multiple registries:
 
 ## Setting up Lingarr
 
-By default, Lingarr uses `MySQL` however, `PostgreSQL` and `SQLite` are also supported. Note that Lingarr starts quickly, if migrations fail, using a `healthcheck` combined with 
-`depends_on` is recommended.
+Lingarr uses `SQLite` as its database. The database files live under `/app/config`
+— mount a volume there to persist them across restarts.
 
 ```yaml
 services:
@@ -64,42 +64,14 @@ services:
     restart: unless-stopped
     environment:
       - ASPNETCORE_URLS=http://+:9876
-      - DB_CONNECTION=mysql
-      - DB_HOST=lingarr-db
-      - DB_PORT=3306
-      - DB_DATABASE=lingarr
-      - DB_USERNAME=lingarr
-      - DB_PASSWORD=your-password # provide a password
     ports:
       - "9876:9876"
     volumes:
       - /path/to/media/movies:/movies
       - /path/to/media/tv:/tv
-      - /path/to/config:/app/config
+      - /path/to/config:/app/config # persists lingarr.db and Hangfire.db
     networks:
       - lingarr
-    depends_on:
-      lingarr-db:
-        condition: service_healthy
-
-  lingarr-db:
-    image: mariadb:latest
-    container_name: lingarr-db
-    restart: unless-stopped
-    environment:
-      - MYSQL_DATABASE=lingarr
-      - MYSQL_USER=lingarr
-      - MYSQL_PASSWORD=your-password # provide a password
-      - MYSQL_ROOT_PASSWORD=your-password # provide a root password
-    volumes:
-      - /path/to/db:/var/lib/mysql # define a volume to persist the database
-    networks:
-      - lingarr
-    healthcheck:
-      test: "mariadb $$MYSQL_DATABASE -u$$MYSQL_USER -p$$MYSQL_PASSWORD -e 'SELECT 1;'"
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 networks:
   lingarr:
@@ -113,30 +85,12 @@ Follow the following steps to set up Lingarr via Docker CLI
 # Create the network
 docker network create lingarr
 
-# Start MariaDB
-docker run -d \
-  --name lingarr-db \
-  --restart unless-stopped \
-  -e MYSQL_DATABASE=lingarr \
-  -e MYSQL_USER=lingarr \
-  -e MYSQL_PASSWORD=your-password \
-  -e MYSQL_ROOT_PASSWORD=your-root-password \
-  -v /path/to/db:/var/lib/mysql \
-  --network lingarr \
-  mariadb:latest
-
 # Start Lingarr
 docker run -d \
   --name lingarr \
   --restart unless-stopped \
   -p 9876:9876 \
   -e ASPNETCORE_URLS=http://+:9876 \
-  -e DB_CONNECTION=mysql \
-  -e DB_HOST=lingarr-db \
-  -e DB_PORT=3306 \
-  -e DB_DATABASE=lingarr \
-  -e DB_USERNAME=lingarr \
-  -e DB_PASSWORD=your-password \ # provide a password
   -v /path/to/media/movies:/movies \
   -v /path/to/media/tv:/tv \
   -v /path/to/config:/app/config \
@@ -151,14 +105,9 @@ These variables can be used
 |---------------------------------------------------|-----------------------------------------------------------------------------------------|
 | `ASPNETCORE_URLS=http://+:9876`                   | The internal port that Lingarr will listen on inside the container.                     |
 | `MAX_CONCURRENT_JOBS=1`                           | Sets the amount of jobs that can run concurrently, defaults to 1.                       |
-| `JOB_TIMEOUT_MINUTES=30`                          | Minutes of silence before Hangfire retries a job. `sqlite` only, defaults to `30`.      |
-| `DB_CONNECTION=mysql`                             | Specifies the database connection type. Options are `mysql`, `postgresql` or `sqlite`.  |
-| `DB_HOST=Lingarr.Mysql`                           | The hostname for the MySQL database (required when using `mysql` or `postgresql`).      |
-| `DB_PORT=3306`                                    | The port for the MySQL database (required when using `mysql` or `postgresql`).          |
-| `DB_DATABASE=Lingarr`                             | The name of the database (required when using `mysql` or `postgresql`).                 |
-| `DB_USERNAME=Lingarr`                             | The username for the database (required when using `mysql` or `postgresql`).            |
-| `DB_PASSWORD=Secret1234`                          | The password for the database (required when using `mysql` or `postgresql`).            |
-| `DB_HANGFIRE_SQLITE_PATH=/app/config/Hangfire.db` | The path of the sqlite database file for Hangfire, when sqlite connection is used       |
+| `JOB_TIMEOUT_MINUTES=30`                          | Minutes of silence before Hangfire retries a job, defaults to `30`.                     |
+| `SQLITE_DB_PATH=lingarr.db`                       | SQLite database file for the application. Relative paths resolve against `/app/config`. |
+| `DB_HANGFIRE_SQLITE_PATH=/app/config/Hangfire.db` | The path of the SQLite database file for Hangfire, defaults to `/app/config/Hangfire.db`. |
 
 Additional [settings](Settings.MD) can be found here that can be set as environment variables to persist settings for each reinstall
 

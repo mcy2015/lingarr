@@ -36,10 +36,10 @@ public class LingarrDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EpisodeConfiguration());
         modelBuilder.ApplyConfiguration(new ImageConfiguration());
 
-        ConvertTimestampsToUtc(modelBuilder, Database.IsNpgsql());
+        ConvertTimestampsToUtc(modelBuilder);
     }
 
-    private static void ConvertTimestampsToUtc(ModelBuilder modelBuilder, bool isNpgsql)
+    private static void ConvertTimestampsToUtc(ModelBuilder modelBuilder)
     {
         var converter = new ValueConverter<DateTimeOffset, DateTime>(
             value => DateTime.SpecifyKind(value.UtcDateTime, DateTimeKind.Unspecified),
@@ -60,11 +60,6 @@ public class LingarrDbContext : DbContext
                 if (property.ClrType != typeof(DateTimeOffset) && property.ClrType != typeof(DateTimeOffset?))
                 {
                     continue;
-                }
-
-                if (isNpgsql)
-                {
-                    property.SetColumnType("timestamp without time zone");
                 }
 
                 if (property.ClrType == typeof(DateTimeOffset))

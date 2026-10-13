@@ -19,24 +19,15 @@
         <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
         <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
         <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.12" />
-        <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-        <PackageVersion Include="Microting.EntityFrameworkCore.MySql" Version="10.0.12" />
         <!-- FluentMigrator -->
         <PackageVersion Include="FluentMigrator" Version="8.0.1" />
-        <PackageVersion Include="FluentMigrator.Extensions.Postgres" Version="8.0.1" />
         <PackageVersion Include="FluentMigrator.Runner" Version="8.0.1" />
-        <PackageVersion Include="FluentMigrator.Runner.MySql" Version="8.0.1" />
-        <PackageVersion Include="FluentMigrator.Runner.Postgres" Version="8.0.1" />
         <PackageVersion Include="FluentMigrator.Runner.SQLite" Version="8.0.1" />
         <!-- Database -->
         <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
-        <PackageVersion Include="MySqlConnector" Version="2.6.2" />
-        <PackageVersion Include="Npgsql" Version="10.0.3" />
         <!-- Hangfire -->
         <PackageVersion Include="Hangfire" Version="1.8.25" />
         <PackageVersion Include="Hangfire.MemoryStorage" Version="1.8.1.2" />
-        <PackageVersion Include="Hangfire.MySqlStorage" Version="2.0.3" />
-        <PackageVersion Include="Hangfire.PostgreSql" Version="1.21.1" />
         <PackageVersion Include="Hangfire.Storage.SQLite" Version="0.4.3" />
         <!-- Translation -->
         <PackageVersion Include="DeepL.net" Version="1.22.1" />
@@ -46,8 +37,5 @@
         <PackageVersion Include="xunit.v3" Version="3.2.2" />
         <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
         <PackageVersion Include="Moq" Version="4.21.0" />
-        <PackageVersion Include="Testcontainers" Version="4.15.0" />
-        <PackageVersion Include="Testcontainers.MySql" Version="4.15.0" />
-        <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
     </ItemGroup>
 </Project>

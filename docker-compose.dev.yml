@@ -20,21 +20,12 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - BASE_PATH=/lingarr
-    
-      - DB_CONNECTION=mysql
-      - DB_HOST=Lingarr.Mysql
-      - DB_PORT=3306
-      - DB_DATABASE=Lingarr
-      - DB_USERNAME=Lingarr
-      - DB_PASSWORD=Secret1234
 
-#      - DB_CONNECTION=postgresql
-#      - DB_HOST=Lingarr.Postgres
-#      - DB_PORT=5432
-#      - DB_DATABASE=Lingarr
-#      - DB_USERNAME=Lingarr
-#      - DB_PASSWORD=Secret1234
-      
+      # SQLite is the single database engine. Relative paths resolve against
+      # /app/config, which is persisted through the config volume below.
+      - SQLITE_DB_PATH=lingarr.db
+      - DB_HANGFIRE_SQLITE_PATH=/app/config/Hangfire.db
+
       - SERVICE_TYPE=libretranslate
       - LIBRE_TRANSLATE_URL=http://libretranslate:5000
       - SOURCE_LANGUAGES=[{"name":"English","code":"en"},{"name":"Dutch","code":"nl"}]
@@ -54,9 +45,6 @@ services:
       - "9877:9876"
     networks:
       - lingarr
-    depends_on:
-      Lingarr.Mysql:
-        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=lingarr"
@@ -118,58 +106,6 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "./venv/bin/python scripts/healthcheck.py"]
 
-  Lingarr.Mysql:
-    image: mariadb:latest
-    container_name: Lingarr.Mysql
-    tty: true
-    ports:
-      - "1433:3306"
-    environment:
-      MYSQL_DATABASE: Lingarr
-      MYSQL_USER: Lingarr
-      MYSQL_PASSWORD: Secret1234
-      MYSQL_ROOT_PASSWORD: Secret1234
-      SERVICE_TAGS: dev
-      SERVICE_NAME: mariadb
-    networks:
-      - lingarr
-    healthcheck:
-      test: "mariadb $$MYSQL_DATABASE -u$$MYSQL_USER -p$$MYSQL_PASSWORD -e 'SELECT 1;'"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  Lingarr.Postgres:
-    image: postgres:16-alpine
-    container_name: Lingarr.Postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: Lingarr
-      POSTGRES_USER: Lingarr
-      POSTGRES_PASSWORD: Secret1234
-    ports:
-      - "5432:5432"
-    networks:
-      - lingarr
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U Lingarr -d Lingarr"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      
-  Lingarr.PHPMyAdmin:
-    image: phpmyadmin/phpmyadmin:5.0.1
-    container_name: Lingarr.PHPMyAdmin
-    environment:
-      PMA_HOST: Lingarr.Mysql
-      PMA_USER: Lingarr
-      PMA_PASSWORD: Secret1234
-      UPLOAD_LIMIT: 500M
-    ports:
-      - "9878:80"
-    networks:
-      - lingarr
-  
   radarr:
     image: ghcr.io/hotio/radarr:nightly
     container_name: radarr

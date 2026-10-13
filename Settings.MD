@@ -30,8 +30,8 @@ secrets:
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
 | `BASE_PATH`                | Optional URL prefix to host Lingarr under a sub-path (e.g., behind a reverse proxy). Example: `/lingarr`. Leave unset to serve from the root. |
 | `MAX_CONCURRENT_JOBS`      | Maximum number of Hangfire worker threads processing jobs in parallel. Defaults to `1` when unset.                                            |
-| `JOB_TIMEOUT_MINUTES`      | Minutes of silence before Hangfire retries a job. `sqlite` only, defaults to `30`.                                                            |
-| `SQLITE_DB_PATH`           | Path to the SQLite database file used when `DB_CONNECTION` is `sqlite`. Defaults to `local.db` within `/app/config/`.                         |
+| `JOB_TIMEOUT_MINUTES`      | Minutes of silence before Hangfire retries a job. Defaults to `30`.                                                                            |
+| `SQLITE_DB_PATH`           | Path to the SQLite application database file. Relative paths resolve against `/app/config/`; defaults to `lingarr.db`.                        |
 | `DB_HANGFIRE_SQLITE_PATH`  | Path to the SQLite database file used by the Hangfire job store. Defaults to `/app/config/Hangfire.db`.                                       |
 
 ---

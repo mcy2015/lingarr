@@ -3,27 +3,28 @@ using Lingarr.Core.Entities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using MySqlConnector;
-using Npgsql;
-using Testcontainers.MySql;
-using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace Lingarr.Migrations.Tests;
 
+/// <summary>
+/// SQLite cannot order or compare DateTimeOffset without the UTC converter, so
+/// every query shape Lingarr runs over a timestamp or a day has to be proven
+/// against the migrated SQLite database.
+/// </summary>
 [Trait("Category", "Integration")]
 public class TimestampKindTests
 {
-    private const string ServerTimeZone = "Europe/Amsterdam";
     private static readonly DateTimeOffset Written = new(2026, 8, 20, 20, 52, 17, TimeSpan.Zero);
 
     [Fact]
     public async Task Sqlite_ReadsBackAsUtc()
     {
-        var connectionString = $"Data Source={Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.db")}";
+        var dbPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.db");
         try
         {
-            RunMigrations(connectionString, "sqlite");
+            var connectionString = $"Data Source={dbPath}";
+            RunMigrations(connectionString);
 
             await AssertRoundTrip(() => new DbContextOptionsBuilder<LingarrDbContext>()
                 .UseSqlite(connectionString)
@@ -33,48 +34,8 @@ public class TimestampKindTests
         finally
         {
             SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
         }
-    }
-
-    [Fact]
-    public async Task MySql_ReadsBackAsUtc()
-    {
-        var token = TestContext.Current.CancellationToken;
-
-        await using var container = new MySqlBuilder("mysql:latest")
-            .WithCommand("--default-time-zone=+02:00")
-            .Build();
-        await container.StartAsync(token);
-
-        var connectionString = container.GetConnectionString();
-        RunMigrations(connectionString, "mysql");
-
-        await AssertRoundTrip(() => new DbContextOptionsBuilder<LingarrDbContext>()
-            .UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
-            .UseSnakeCaseNamingConvention()
-            .Options);
-
-        MySqlConnection.ClearAllPools();
-    }
-
-    [Fact]
-    public async Task Postgres_ReadsBackAsUtc()
-    {
-        var token = TestContext.Current.CancellationToken;
-
-        await using var container = new PostgreSqlBuilder("postgres:latest").Build();
-        await container.StartAsync(token);
-
-        var connectionString = container.GetConnectionString();
-        await SetPostgresTimeZone(connectionString);
-        RunMigrations(connectionString, "postgresql");
-
-        await AssertRoundTrip(() => new DbContextOptionsBuilder<LingarrDbContext>()
-            .UseNpgsql(connectionString)
-            .UseSnakeCaseNamingConvention()
-            .Options);
-
-        NpgsqlConnection.ClearAllPools();
     }
 
     private static async Task AssertRoundTrip(Func<DbContextOptions<LingarrDbContext>> buildOptions)
@@ -148,10 +109,6 @@ public class TimestampKindTests
         }
     }
 
-    /// <summary>
-    /// SQLite cannot order or compare DateTimeOffset without the converter, so every query shape
-    /// Lingarr runs over a timestamp or a day has to be proven on each provider.
-    /// </summary>
     private static async Task AssertQueriesTranslate(LingarrDbContext context)
     {
         var token = TestContext.Current.CancellationToken;
@@ -172,23 +129,11 @@ public class TimestampKindTests
         await context.DailyStatistics.MaxAsync(row => (DateOnly?)row.Date, token);
     }
 
-    private static async Task SetPostgresTimeZone(string connectionString)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"ALTER DATABASE postgres SET TimeZone = '{ServerTimeZone}'";
-        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-
-        NpgsqlConnection.ClearPool(connection);
-    }
-
-    private static void RunMigrations(string connectionString, string provider)
+    private static void RunMigrations(string connectionString)
     {
         var services = new ServiceCollection();
-        services.AddFluentMigrator(connectionString, provider);
+        services.AddFluentMigrator(connectionString);
 
-        MigrationConfiguration.RunMigrations(services.BuildServiceProvider(), provider, connectionString);
+        MigrationConfiguration.RunMigrations(services.BuildServiceProvider());
     }
 }

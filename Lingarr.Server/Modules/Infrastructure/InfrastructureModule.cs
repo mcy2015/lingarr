@@ -2,8 +2,6 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Hangfire;
-using Hangfire.MySql;
-using Hangfire.PostgreSql;
 using Hangfire.Storage.SQLite;
 using Lingarr.Core;
 using Lingarr.Core.Configuration;
@@ -104,9 +102,7 @@ public static class InfrastructureModule
         });
 
         // Add FluentMigrator
-        var dbConnection = DatabaseConfiguration.GetDbConnection();
-        var connectionString = DatabaseConfiguration.GetConnectionString(dbConnection);
-        services.AddFluentMigrator(connectionString, dbConnection);
+        services.AddFluentMigrator(DatabaseConfiguration.GetConnectionString());
     }
 
     private static void AddSignalR(IServiceCollection services)
@@ -120,7 +116,6 @@ public static class InfrastructureModule
 
     private static void AddHangfire(WebApplicationBuilder builder)
     {
-        var tablePrefix = "_hangfire";
         builder.Services.AddHangfireServer(options =>
         {
             options.Queues = ["movies", "shows", "system", "translation", "webhook", "default"];
@@ -136,58 +131,10 @@ public static class InfrastructureModule
                 .UseSimpleAssemblyNameTypeSerializer()
                 .UseRecommendedSerializerSettings();
 
-            var dbConnection = DatabaseConfiguration.GetDbConnection();
-            var connectionString = DatabaseConfiguration.GetConnectionString(dbConnection);
-            switch (dbConnection)
-            {
-                case "mysql":
-                    ConfigureMySqlStorage(configuration, connectionString, tablePrefix);
-                    break;
-                case "postgres":
-                case "postgresql":
-                    ConfigurePostgresStorage(configuration, connectionString);
-                    break;
-                case "sqlite":
-                    ConfigureSqLiteStorage(configuration, builder.Environment.ContentRootPath);
-                    break;
-                default:
-                    throw new InvalidOperationException(
-                        $"Database connection '{dbConnection}' is not supported.");
-            }
+            ConfigureSqLiteStorage(configuration, builder.Environment.ContentRootPath);
 
             configuration.UseFilter(new JobContextFilter());
         });
-    }
-
-    /// <summary>
-    /// Configures Hangfire to use MySQL storage. Connection string comes from
-    /// <see cref="DatabaseConfiguration"/> — the single source of truth (the two
-    /// previously diverged defaults drifted apart).
-    /// </summary>
-    /// <param name="configuration">Hangfire global configuration</param>
-    /// <param name="connectionString">Connection string from DatabaseConfiguration</param>
-    /// <param name="tablePrefix">Prefix for Hangfire tables in MySQL</param>
-    private static void ConfigureMySqlStorage(IGlobalConfiguration configuration, string connectionString, string tablePrefix)
-    {
-        configuration.UseStorage(new MySqlStorage(connectionString, new MySqlStorageOptions
-        {
-            TablesPrefix = tablePrefix
-        }));
-    }
-
-    /// <summary>
-    /// Configures Hangfire to use PostgreSQL storage.
-    /// </summary>
-    /// <param name="configuration">Hangfire global configuration</param>
-    /// <param name="connectionString">Connection string from DatabaseConfiguration</param>
-    private static void ConfigurePostgresStorage(IGlobalConfiguration configuration, string connectionString)
-    {
-        configuration.UsePostgreSqlStorage(
-            options => options.UseNpgsqlConnection(connectionString),
-            new PostgreSqlStorageOptions
-            {
-                UseSlidingInvisibilityTimeout = true
-            });
     }
 
     /// <summary>

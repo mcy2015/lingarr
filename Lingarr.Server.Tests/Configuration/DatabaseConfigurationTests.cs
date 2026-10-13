@@ -22,7 +22,7 @@ public class DatabaseConfigurationTests
             Environment.SetEnvironmentVariable("SQLITE_DB_PATH", dbPath);
 
             var options = new DbContextOptionsBuilder<LingarrDbContext>();
-            DatabaseConfiguration.ConfigureDbContext(options, "sqlite");
+            DatabaseConfiguration.ConfigureDbContext(options);
 
             await using var context = new LingarrDbContext(options.Options);
             await context.Database.OpenConnectionAsync();

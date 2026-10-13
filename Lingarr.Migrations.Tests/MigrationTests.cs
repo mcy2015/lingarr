@@ -2,132 +2,234 @@ using FluentMigrator.Runner;
 using Lingarr.Migrations;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
-using MySqlConnector;
-using Npgsql;
-using Testcontainers.MySql;
-using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace Lingarr.Migrations.Tests;
 
+/// <summary>
+/// SQLite-only migration tests around the single squashed baseline
+/// (M0001_Baseline). The baseline was verified column-by-column against a
+/// database built by the original 29-migration chain during the squash; these
+/// tests lock that shape in and prove the Up/Down cycle works.
+/// </summary>
 [Trait("Category", "Integration")]
 public class MigrationTests
 {
-    private static void RunMigrations(string connectionString, string dbType)
+    [Fact]
+    public async Task Sqlite_BaselineMigratesFreshDatabase()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            // The single baseline is the only applied version.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM version_info"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT version FROM version_info"));
+
+            // Seed data is present.
+            Assert.Equal(85L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public async Task Sqlite_BaselineRollsBackFullyAndReapplies()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            // Roll all the way down: every application table must be gone.
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(0);
+            }
+
+            await using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync(TestContext.Current.CancellationToken);
+                // MigrateDown(0) removes every application table; only the
+                // FluentMigrator bookkeeping table survives.
+                var remaining = await ReadColumnAsync(connection,
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", columnIndex: 0);
+                Assert.Equal(["version_info"], actual: remaining);
+            }
+
+            // Up again from the empty database must fully rebuild schema and seeds.
+            MigrationConfiguration.RunMigrations(BuildRunner(connectionString));
+
+            await using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync(TestContext.Current.CancellationToken);
+                Assert.Equal(15L, await ExecuteScalarAsync(connection,
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
+                Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                    "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request'"));
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// Locks in the schema shape the squash verified against the old
+    /// 29-migration chain: tables, column names in order, foreign keys and
+    /// explicit indexes. Fails when the baseline drifts from the contract the
+    /// historical chain left behind.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_BaselineSchemaMatchesLegacyChainShape()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            MigrationConfiguration.RunMigrations(BuildRunner(connectionString));
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            var expectedColumns = new Dictionary<string, string[]>
+            {
+                ["settings"] = ["key", "value", "provider"],
+                ["movies"] = ["id", "radarr_id", "title", "file_name", "path", "media_hash", "date_added",
+                    "translation_age_threshold", "created_at", "updated_at", "include_in_translation",
+                    "subtitle_coverage_json"],
+                ["shows"] = ["id", "sonarr_id", "title", "path", "date_added", "translation_age_threshold",
+                    "created_at", "updated_at", "include_in_translation", "subtitle_coverage_json"],
+                ["seasons"] = ["id", "season_number", "path", "show_id", "created_at", "updated_at",
+                    "include_in_translation"],
+                ["episodes"] = ["id", "sonarr_id", "episode_number", "title", "file_name", "path", "media_hash",
+                    "season_id", "date_added", "created_at", "updated_at", "include_in_translation"],
+                ["images"] = ["id", "type", "path", "show_id", "movie_id"],
+                ["path_mappings"] = ["id", "source_path", "destination_path", "media_type", "created_at", "updated_at"],
+                ["translation_requests"] = ["id", "job_id", "media_id", "title", "source_language", "target_language",
+                    "subtitle_to_translate", "translated_subtitle", "media_type", "status", "completed_at",
+                    "created_at", "updated_at", "error_message", "stack_trace", "job_type", "is_bilingual", "source",
+                    "content_hash", "service_type", "progress", "started_at", "retry_count", "characters_translated"],
+                ["translation_request_events"] = ["id", "translation_request_id", "status", "message", "created_at",
+                    "updated_at", "event_type", "provider"],
+                ["translation_request_lines"] = ["id", "translation_request_id", "position", "source", "target",
+                    "created_at", "updated_at", "service", "matched_source", "matched_target", "tier"],
+                ["translation_glossaries"] = ["id", "source_term", "target_term", "note", "is_locked", "created_at",
+                    "updated_at"],
+                ["statistics"] = ["id", "total_lines_translated", "total_files_translated",
+                    "total_characters_translated", "total_movies", "total_episodes", "total_subtitles",
+                    "translations_by_media_type_json", "translations_by_service_json", "subtitles_by_language_json",
+                    "translations_by_model_json", "created_at", "updated_at"],
+                ["daily_statistics"] = ["id", "date", "translation_count", "created_at", "updated_at"],
+                ["users"] = ["id", "username", "password_hash", "created_at", "last_login_at"],
+                ["version_info"] = ["version", "applied_on", "description"],
+            };
+
+            var expectedForeignKeys = new Dictionary<string, int>
+            {
+                ["images"] = 2,
+                ["seasons"] = 1,
+                ["episodes"] = 1,
+                ["translation_request_events"] = 1,
+                ["translation_request_lines"] = 1,
+            };
+
+            var expectedIndexes = new Dictionary<string, string[]>
+            {
+                ["episodes"] = ["ix_episodes_season_id"],
+                ["images"] = ["ix_images_movie_id", "ix_images_show_id"],
+                ["seasons"] = ["ix_seasons_show_id"],
+                ["translation_glossaries"] = ["ix_glossary_source_term"],
+                ["translation_request_events"] = ["ix_translation_request_events_translation_request_id"],
+                ["translation_request_lines"] = ["ix_translation_request_lines_translation_request_id"],
+                ["version_info"] = ["ux_version"],
+            };
+
+            var tables = await ReadColumnAsync(connection,
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", columnIndex: 0);
+            Assert.Equal(expectedColumns.Keys.Order().ToArray(), tables);
+
+            foreach (var (table, columns) in expectedColumns)
+            {
+                // table_info columns: cid, name, type, notnull, dflt_value, pk.
+                var actual = await ReadColumnAsync(connection, $"PRAGMA table_info(\"{table}\")", columnIndex: 1);
+                Assert.True(actual.Count > 0, $"Table {table} is missing");
+                Assert.Equal(columns, actual);
+            }
+
+            foreach (var (table, count) in expectedForeignKeys)
+            {
+                var foreignKeys = await ReadPragmaRowCountAsync(connection, "foreign_key_list", table);
+                Assert.Equal(count, foreignKeys);
+            }
+
+            foreach (var (table, indexes) in expectedIndexes)
+            {
+                // index_list columns: seq, name, unique, origin, partial.
+                var actual = await ReadColumnAsync(connection, $"PRAGMA index_list(\"{table}\")", columnIndex: 1);
+                Assert.Equal(indexes.Order().ToArray(), actual.Order().ToArray());
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    private static IServiceProvider BuildRunner(string connectionString)
     {
         var services = new ServiceCollection();
-        services.AddFluentMigrator(connectionString, dbType);
-
-        var serviceProvider = services.BuildServiceProvider();
-        MigrationConfiguration.RunMigrations(serviceProvider, dbType, connectionString);
+        services.AddFluentMigrator(connectionString);
+        return services.BuildServiceProvider();
     }
 
-    [Fact]
-    public async Task Sqlite_MigrationsRunSuccessfully()
+    private static async Task<object?> ExecuteScalarAsync(SqliteConnection connection, string commandText)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
-        try
-        {
-            var connectionString = $"Data Source={dbPath}";
-            RunMigrations(connectionString, "sqlite");
-
-            await using var connection = new SqliteConnection(connectionString);
-            await connection.OpenAsync(TestContext.Current.CancellationToken);
-            Assert.Equal(System.Data.ConnectionState.Open, connection.State);
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            if (File.Exists(dbPath)) File.Delete(dbPath);
-        }
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        return await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
-    public async Task Sqlite_MigrationsRollBackSuccessfully()
+    private static async Task<long> ReadPragmaRowCountAsync(SqliteConnection connection, string pragma, string table)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
-        try
-        {
-            var connectionString = $"Data Source={dbPath}";
-            var services = new ServiceCollection();
-            services.AddFluentMigrator(connectionString, "sqlite");
-
-            var serviceProvider = services.BuildServiceProvider();
-            MigrationConfiguration.RunMigrations(serviceProvider, "sqlite", connectionString);
-
-            using var scope = serviceProvider.CreateScope();
-            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(7);
-
-            await using var connection = new SqliteConnection(connectionString);
-            await connection.OpenAsync(TestContext.Current.CancellationToken);
-            Assert.Equal(System.Data.ConnectionState.Open, connection.State);
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            if (File.Exists(dbPath)) File.Delete(dbPath);
-        }
+        // Table-valued PRAGMA functions take the object name as a string literal.
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM pragma_{pragma}('{table}')";
+        return Convert.ToInt64(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
-    [Fact]
-    public async Task Sqlite_MigrationsReapplyAfterRollback()
+    private static async Task<List<string>> ReadColumnAsync(
+        SqliteConnection connection,
+        string commandText,
+        int columnIndex)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
-        try
+        var values = new List<string>();
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
         {
-            var connectionString = $"Data Source={dbPath}";
-            var services = new ServiceCollection();
-            services.AddFluentMigrator(connectionString, "sqlite");
-
-            var serviceProvider = services.BuildServiceProvider();
-            MigrationConfiguration.RunMigrations(serviceProvider, "sqlite", connectionString);
-
-            using var scope = serviceProvider.CreateScope();
-            var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
-            runner.MigrateDown(2);
-            runner.MigrateUp();
-
-            await using var connection = new SqliteConnection(connectionString);
-            await connection.OpenAsync(TestContext.Current.CancellationToken);
-            await using var command = connection.CreateCommand();
-            command.CommandText =
-                "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request'";
-            Assert.Equal(1L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+            values.Add(reader.IsDBNull(columnIndex) ? "<null>" : Convert.ToString(reader.GetValue(columnIndex)));
         }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            if (File.Exists(dbPath)) File.Delete(dbPath);
-        }
-    }
-
-    [Fact]
-    public async Task MySql_MigrationsRunSuccessfully()
-    {
-        await using var container = new MySqlBuilder("mysql:latest")
-            .Build();
-        await container.StartAsync(TestContext.Current.CancellationToken);
-
-        var connectionString = container.GetConnectionString();
-        RunMigrations(connectionString, "mysql");
-
-        await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(System.Data.ConnectionState.Open, connection.State);
-    }
-
-    [Fact]
-    public async Task Postgres_MigrationsRunSuccessfully()
-    {
-        await using var container = new PostgreSqlBuilder("postgres:latest")
-            .Build();
-        await container.StartAsync(TestContext.Current.CancellationToken);
-
-        var connectionString = container.GetConnectionString();
-        RunMigrations(connectionString, "postgres");
-
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(System.Data.ConnectionState.Open, connection.State);
+        return values;
     }
 }

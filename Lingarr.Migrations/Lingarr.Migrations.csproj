@@ -9,14 +9,9 @@
 
     <ItemGroup>
         <PackageReference Include="FluentMigrator" />
-        <PackageReference Include="FluentMigrator.Extensions.Postgres" />
         <PackageReference Include="FluentMigrator.Runner" />
-        <PackageReference Include="FluentMigrator.Runner.MySql" />
-        <PackageReference Include="FluentMigrator.Runner.Postgres" />
         <PackageReference Include="FluentMigrator.Runner.SQLite" />
         <PackageReference Include="Microsoft.Data.Sqlite" />
-        <PackageReference Include="MySqlConnector" />
-        <PackageReference Include="Npgsql" />
     </ItemGroup>
 
 </Project>
