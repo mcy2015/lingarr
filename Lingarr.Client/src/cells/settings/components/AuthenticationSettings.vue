@@ -27,17 +27,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import axios from 'axios'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { SETTINGS } from '@/types'
 import CardComponent from '@/cells/kernel/components/CardComponent.vue'
 import { useToastStore } from '@/cells/app/stores/toast'
 import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
 import StatusMessage from '@/cells/kernel/components/StatusMessage.vue'
-import services from '@/services'
+import { authService } from '@/cells/app/api/authService'
 
 const settingsStore = useSettingStore()
 const { t } = useI18n()
 const toastStore = useToastStore()
+const authApi = authService(axios)
 const error = ref<string>('')
 
 const authEnabled = computed({
@@ -46,7 +48,7 @@ const authEnabled = computed({
         if (newValue === 'true') {
             // auth enabled, check if users exist
             try {
-                const hasUsers = await services.auth.hasAnyUsers()
+                const hasUsers = await authApi.hasAnyUsers()
                 if (!hasUsers) {
                     error.value = t('settings.authentication.noUsers')
                     return

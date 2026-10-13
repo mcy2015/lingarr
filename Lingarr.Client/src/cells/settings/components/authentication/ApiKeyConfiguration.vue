@@ -57,15 +57,17 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import axios from 'axios'
 import { ENCRYPTED_SETTINGS, SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
-import services from '@/services'
+import { authService } from '@/cells/app/api/authService'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import CardComponent from '@/cells/kernel/components/CardComponent.vue'
 import { useToastStore } from '@/cells/app/stores/toast'
 
 const settingsStore = useSettingStore()
 const { t } = useI18n()
+const authApi = authService(axios)
 const { title } = defineProps<{
     title?: string
 }>()
@@ -90,7 +92,7 @@ const apiKey = computed({
 })
 
 const generateApiKey = async () => {
-    const response = await services.auth.generateApiKey()
+    const response = await authApi.generateApiKey()
     await settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY, response.apiKey)
 }
 </script>

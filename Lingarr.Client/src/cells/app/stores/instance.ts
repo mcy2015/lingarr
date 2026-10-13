@@ -3,10 +3,12 @@ import axios from 'axios'
 import { IUseInstanceStore, ITheme, THEMES, IMovie, IShow, IVersion } from '@/types'
 import { useLocalStorage } from '@/cells/kernel/composables/useLocalStorage'
 import { settingService } from '@/cells/app/api/settingService'
+import { authService } from '@/cells/app/api/authService'
 import services from '@/services'
 
 const localStorage = useLocalStorage()
 const settingApi = settingService(axios)
+const authApi = authService(axios)
 
 export const useInstanceStore = defineStore('instance', {
     state: (): IUseInstanceStore => ({
@@ -37,7 +39,7 @@ export const useInstanceStore = defineStore('instance', {
             }
 
             try {
-                await services.auth.authenticated()
+                await authApi.authenticated()
                 this.authenticated = true
                 return true
             } catch (error: unknown) {

@@ -19,7 +19,6 @@ import {
 } from '@/types'
 
 export interface Services {
-    auth: IAuthService
     subtitle: ISubtitleService
     import: IImportService
     translate: ITranslateService

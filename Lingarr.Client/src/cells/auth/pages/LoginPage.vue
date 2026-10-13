@@ -57,13 +57,15 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import services from '@/services'
+import axios from 'axios'
+import { authService } from '@/cells/app/api/authService'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import CardComponent from '@/cells/kernel/components/CardComponent.vue'
 
 const router = useRouter()
 const { t } = useI18n()
+const authApi = authService(axios)
 
 const loading = ref(false)
 const error = ref('')
@@ -81,7 +83,7 @@ const handleLogin = async () => {
     error.value = ''
 
     try {
-        await services.auth.login({
+        await authApi.login({
             username: username.value,
             password: password.value
         })

@@ -6,11 +6,11 @@ const routes: RouteRecordRaw[] = [
     // Auth
     {
         path: '/auth',
-        component: () => import('@/components/layout/AuthLayout.vue'),
+        component: () => import('@/cells/auth/layouts/AuthLayout.vue'),
         children: [
             {
                 path: '/auth/login',
-                component: () => import('@/pages/LoginPage.vue'),
+                component: () => import('@/cells/auth/pages/LoginPage.vue'),
                 name: 'login',
                 meta: { authenticated: false }
             }

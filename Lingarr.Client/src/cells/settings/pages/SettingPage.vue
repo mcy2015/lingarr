@@ -28,9 +28,10 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import axios from 'axios'
 import { ITabOption, SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
-import services from '@/services'
+import { authService } from '@/cells/app/api/authService'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import TabComponent from '@/cells/kernel/components/TabComponent.vue'
 
@@ -38,6 +39,7 @@ const router = useRouter()
 const route = useRoute()
 const settings = useSettingStore()
 const { t } = useI18n()
+const authApi = authService(axios)
 
 const GROUPS = ['providers', 'sources', 'quality', 'system'] as const
 type Group = (typeof GROUPS)[number]
@@ -67,7 +69,7 @@ const switchTab = (value: string): void => {
 
 const handleLogout = async (): Promise<void> => {
     try {
-        await services.auth.logout()
+        await authApi.logout()
         router.push({ name: 'login' })
     } catch (error) {
         console.error('Logout failed:', error)

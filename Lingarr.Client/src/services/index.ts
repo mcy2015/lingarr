@@ -1,7 +1,6 @@
 import axios, { AxiosStatic } from 'axios'
 import { Services } from '@/types'
 import { translationRequestService } from '@/services/translationRequestService'
-import { authService } from './authService'
 import { subtitleService } from './subtitleService'
 import { importService } from './importService'
 import { translateService } from './translateService'
@@ -16,7 +15,6 @@ import { glossaryService } from '@/services/glossaryService'
 import '@/cells/app/http'
 
 const services = (axios: AxiosStatic): Services => ({
-    auth: authService(axios),
     subtitle: subtitleService(axios),
     import: importService(axios),
     translate: translateService(axios),
