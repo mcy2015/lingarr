@@ -1,13 +1,30 @@
 # Lingarr 重构计划与完成情况总览
 
-> 更新：2026-10-12 · 分支：`feat/b1-overview`（B1 概览重做已完成，待合并 main）
-> 基线：main = `3858195`（feat/visual-refresh 合并，已推送 origin）
-> 配套文档：`module-analysis.zh-CN.md`（P0-P2 清单）· `redesign-proposal.zh-CN.md`（P3 设计）· `ia-gap-audit.zh-CN.md`（原型差距与接口计划）
-> 质量快照：Server.Tests **378/378**（SDK 容器）· Migrations.Tests **12/12**（真容器）· 前端 build/oxlint/vitest 11/11 · i18n en/zh-CN **609/609**
+> 更新：2026-10-13 · 分支：`main`
+> 配套文档:`module-analysis.zh-CN.md`(P0-P2 清单)· `redesign-proposal.zh-CN.md`(P3 设计)· `prototype-spec/`(12 屏原型规格=功能验收标准)· `cell-migration-plan.zh-CN.md`(前端 cells 方案)
+> 质量快照(2026-10-13 收官):Server.Tests **458/458** · Migrations.Tests **4/4**(SQLite 直跑,无容器)· 前端 vitest **150/150** · oxlint 0 · vue-tsc 0 · 浏览器全屏验收零报错
 
 ---
 
-## 一、总时间线
+## 〇、2026-10-13 细胞级重构收官(阶段0–4 全部完成)
+
+| 批次 | 内容 | 状态 | 提交锚点 |
+|---|---|---|---|
+| 原型规格 | refactor-prototype.html 12 屏全量拆解为 docs/prototype-spec/(token/45 组件/交互/逐屏) | ✅ | `1852665` |
+| 测试基线 | 前端回归保护网 84 spec(四高危交互)+ R1 搜索翻页 bug 修复 | ✅ | `f9220b0` `3c3116f` |
+| 阶段0 砍壳 | 遥测/onboarding/用户 CRUD/Lingarr.Docs/社区 CI 全删;认证改 LINGARR_ADMIN_* 环境变量种子 | ✅ | `ff0d3f7` |
+| 阶段1 cells | 前端 F~Z 八批:src/ 只剩 cells/{kernel,app,7 业务 cell};架构守护测试;401 拦截器启动装配回归修复 | ✅ | `2e37758..42ddbff` |
+| P0 三洞 | 测试连接(主动探测)/试译预览/导入成本预估 + QA 修复批 | ✅ | `bf42980` `890def4` |
+| P1 四项 | 14 天产量成本趋势/回退执行链+事件时间线/语言策略卡(链上覆盖)/术语回流;降级完成归属实际服务修复 | ✅ | `477790e` `d5b9bd7` |
+| 阶段2 模块化 | 386 行 DI 巨石拆 9 域 Module;149 文件迁入 Modules/<域>,Interfaces/ 镜像消灭;gitignore media/ 陷阱修复 | ✅ | `41970ae` `2ab9d68` |
+| 阶段3 DB | SQLite 单引擎 + 29 迁移 squash 为 M0001_Baseline(两库对拍 schema 全等);MySQL/Postgres 全链清除;迁移测试去容器化 | ✅ | `77a8bdf` |
+| 阶段4 收尾 | 累积 QA/烟测小项清理(含 v-model 翻页响应性真 bug)、SignalR 并发 joinGroup 竞态修复、最终浏览器验收 | ✅ | `0cf9b21` + 收官批 |
+
+**已知遗留(不阻塞,后续迭代)**:Hangfire 用社区版 SQLite 存储(单机单进程成熟,多实例短板);旧 MySQL/Postgres 库与未跑满 29 版的旧 SQLite 库需重建(决策内);术语回流仅跳转不自动创建(产品语义待定);LingarrApiService 仍外联 api.lingarr.com 查版本(候选砍除);QA P3 级小项(批次成本 meta/DST 边缘/覆盖粒度提示已补注)若干。
+
+---
+
+## 一、总时间线(2026-10-12 及以前)
 
 | 阶段 | 内容 | 状态 | 提交锚点 |
 |---|---|---|---|

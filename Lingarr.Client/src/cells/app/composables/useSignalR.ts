@@ -13,49 +13,50 @@ export const createSignalRStore = (): SignalRStore => {
     const connectionPromises = new Map<string, Promise<void>>()
 
     const connect = async (hubName: string, url: string): Promise<Hub> => {
-        if (!state.hubs[hubName]) {
-            if (!connectionPromises.has(hubName)) {
-                const startPromise = (async () => {
-                    const connection = new HubConnectionBuilder()
-                        .withUrl(resolveUrl(url))
-                        .configureLogging(LogLevel.None)
-                        .withAutomaticReconnect()
-                        .build()
+        // The hub entry is assigned synchronously inside the start promise, so
+        // "hub exists" is not "hub connected": concurrent connect() calls for
+        // the same hub must still await the pending connection.start().
+        if (!state.hubs[hubName] && !connectionPromises.has(hubName)) {
+            const startPromise = (async () => {
+                const connection = new HubConnectionBuilder()
+                    .withUrl(resolveUrl(url))
+                    .configureLogging(LogLevel.None)
+                    .withAutomaticReconnect()
+                    .build()
 
-                    state.hubs[hubName] = {
-                        connection,
-                        isConnected: false,
-                        lastError: null
-                    }
+                state.hubs[hubName] = {
+                    connection,
+                    isConnected: false,
+                    lastError: null
+                }
 
-                    connection.onreconnecting(() => {
-                        state.hubs[hubName].isConnected = false
-                    })
+                connection.onreconnecting(() => {
+                    state.hubs[hubName].isConnected = false
+                })
 
-                    connection.onreconnected(() => {
-                        state.hubs[hubName].isConnected = true
-                    })
+                connection.onreconnected(() => {
+                    state.hubs[hubName].isConnected = true
+                })
 
-                    connection.onclose(() => {
-                        state.hubs[hubName].isConnected = false
-                    })
+                connection.onclose(() => {
+                    state.hubs[hubName].isConnected = false
+                })
 
-                    try {
-                        await connection.start()
-                        state.hubs[hubName].isConnected = true
-                    } catch (error) {
-                        state.hubs[hubName].lastError = error as Error
-                        console.error(`SignalR ${hubName} Connection Error:`, error)
-                    } finally {
-                        connectionPromises.delete(hubName)
-                    }
-                })()
+                try {
+                    await connection.start()
+                    state.hubs[hubName].isConnected = true
+                } catch (error) {
+                    state.hubs[hubName].lastError = error as Error
+                    console.error(`SignalR ${hubName} Connection Error:`, error)
+                } finally {
+                    connectionPromises.delete(hubName)
+                }
+            })()
 
-                connectionPromises.set(hubName, startPromise)
-            }
-
-            await connectionPromises.get(hubName)
+            connectionPromises.set(hubName, startPromise)
         }
+
+        await connectionPromises.get(hubName)
 
         const hubConnection = state.hubs[hubName]
 
