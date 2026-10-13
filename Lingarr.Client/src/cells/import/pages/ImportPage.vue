@@ -551,9 +551,7 @@ const refreshEstimate = useDebounce(async () => {
             files: translating.map((row) => ({
                 name: row.fileName,
                 characters: Math.round((row.sizeBytes ?? 0) * 0.5)
-            })),
-            translateCount: translating.length,
-            targetLanguage: targetLanguage.value
+            }))
         })
         estimatedCost.value = result.cost
     } catch {

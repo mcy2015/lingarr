@@ -6,9 +6,7 @@ namespace Lingarr.Server.Models;
 /// </summary>
 public class ImportEstimateRequest
 {
-    public required List<ImportEstimateFile> Files { get; init; }
-    public int TranslateCount { get; init; }
-    public string? TargetLanguage { get; init; }
+    public List<ImportEstimateFile>? Files { get; init; }
 }
 
 public class ImportEstimateFile

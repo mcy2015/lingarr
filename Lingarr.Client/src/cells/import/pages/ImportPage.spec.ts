@@ -127,9 +127,7 @@ describe('ImportPage · 导入成本预估 (P0-C)', () => {
 
         expect(estimateMock).toHaveBeenCalledTimes(1)
         expect(estimateMock).toHaveBeenCalledWith({
-            files: [{ name: 'a.srt', characters: 1000 }],
-            translateCount: 1,
-            targetLanguage: 'ZH'
+            files: [{ name: 'a.srt', characters: 1000 }]
         })
         expect(wrapper.text()).toContain('≈ $0.11')
         expect(ctaButton(wrapper)!.text()).toContain('≈ $0.11')

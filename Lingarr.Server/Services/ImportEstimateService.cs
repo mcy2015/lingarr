@@ -25,12 +25,11 @@ public class ImportEstimateService : IImportEstimateService
     }
 
     /// <inheritdoc />
-    public async Task<ImportEstimateResult> Estimate(
-        List<ImportEstimateFile> files,
-        int translateCount,
-        string? targetLanguage)
+    public async Task<ImportEstimateResult> Estimate(List<ImportEstimateFile>? files)
     {
-        var characters = (long)files.Sum(file => Math.Max(0, file.Characters));
+        // Defensive: a null file list (malformed request body) prices like
+        // an empty queue instead of throwing — the UI treats both as "0".
+        var characters = (long)(files ?? []).Sum(file => Math.Max(0, file.Characters));
 
         // The default (primary) provider prices the estimate; the parse
         // handles both the plain-string and JSON-array service_type forms.

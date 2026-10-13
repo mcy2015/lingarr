@@ -48,9 +48,7 @@ public class ImportEstimateServiceTests
         SetupRates(("openai", 2.0m));
 
         var result = await CreateService().Estimate(
-            Files(("a.srt", 1_000), ("b.ass", 1_500)),
-            translateCount: 2,
-            targetLanguage: "zh");
+            Files(("a.srt", 1_000), ("b.ass", 1_500)));
 
         Assert.Equal(2.0 * 2_500 / 1_000_000, result.Cost!.Value, precision: 12);
         Assert.Equal("USD", result.Currency);
@@ -63,9 +61,7 @@ public class ImportEstimateServiceTests
         SetupRates(("deepl", 0.5m));
 
         var result = await CreateService().Estimate(
-            Files(("a.srt", 1_000)),
-            translateCount: 1,
-            targetLanguage: "zh");
+            Files(("a.srt", 1_000)));
 
         Assert.Null(result.Cost);
         Assert.Equal("USD", result.Currency);
@@ -78,9 +74,7 @@ public class ImportEstimateServiceTests
         SetupRates(("openai", 2.0m), ("deepl", 0.5m));
 
         var result = await CreateService().Estimate(
-            Files(("a.srt", 1_000)),
-            translateCount: 1,
-            targetLanguage: "zh");
+            Files(("a.srt", 1_000)));
 
         // priced at the primary (openai), not the fallback
         Assert.Equal(2.0 * 1_000 / 1_000_000, result.Cost!.Value, precision: 12);
@@ -93,9 +87,7 @@ public class ImportEstimateServiceTests
         SetupRates((SettingKeys.Translation.DefaultServiceType, 3.0m));
 
         var result = await CreateService().Estimate(
-            Files(("a.srt", 2_000)),
-            translateCount: 1,
-            targetLanguage: "zh");
+            Files(("a.srt", 2_000)));
 
         Assert.Equal(3.0 * 2_000 / 1_000_000, result.Cost!.Value, precision: 12);
     }
@@ -106,11 +98,20 @@ public class ImportEstimateServiceTests
         SetupDefaultProvider("openai");
         SetupRates(("openai", 2.0m));
 
-        var result = await CreateService().Estimate(
-            Files(),
-            translateCount: 0,
-            targetLanguage: "zh");
+        var result = await CreateService().Estimate(Files());
 
         Assert.Equal(0, result.Cost);
+    }
+
+    [Fact]
+    public async Task Estimate_NullFiles_ZeroCostWithoutThrowing()
+    {
+        SetupDefaultProvider("openai");
+        SetupRates(("openai", 2.0m));
+
+        var result = await CreateService().Estimate(null);
+
+        Assert.Equal(0, result.Cost);
+        Assert.Equal("USD", result.Currency);
     }
 }

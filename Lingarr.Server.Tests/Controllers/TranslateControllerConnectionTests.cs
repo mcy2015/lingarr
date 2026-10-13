@@ -7,11 +7,14 @@ using System.Threading.Tasks;
 using Lingarr.Contracts.Exceptions;
 using Lingarr.Contracts.Models;
 using Lingarr.Contracts.Translation;
+using Lingarr.Core.Configuration;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Services;
+using Lingarr.Server.Tests.Services.Translation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -51,16 +54,36 @@ public class TranslateControllerConnectionTests
     }
 
     private static TranslateController CreateController(
-        Mock<ITranslationServiceFactory> factoryMock) =>
+        Mock<ITranslationServiceFactory> factoryMock,
+        Mock<ISettingService>? settingsMock = null) =>
         new(
             factoryMock.Object,
             new Mock<ITranslationRequestService>().Object,
-            new Mock<ISettingService>().Object,
+            (settingsMock ?? new Mock<ISettingService>()).Object,
             new LanguageCodeService(),
             new Mock<ITranslationHealthService>().Object,
             new Mock<IGlossaryService>().Object,
             new Mock<ICostService>().Object,
             NullLogger<TranslateController>.Instance);
+
+    /// <summary>
+    /// Configures the source/target language settings used to derive the
+    /// default probe pair.
+    /// </summary>
+    private static void SetupLanguages(
+        Mock<ISettingService> settingsMock,
+        string sourceCode,
+        string targetCode)
+    {
+        settingsMock
+            .Setup(settings => settings.GetSettingAsJson<Language>(
+                SettingKeys.Translation.SourceLanguages))
+            .ReturnsAsync([new Language { code = sourceCode, name = sourceCode }]);
+        settingsMock
+            .Setup(settings => settings.GetSettingAsJson<TargetLanguage>(
+                SettingKeys.Translation.TargetLanguages))
+            .ReturnsAsync([new TargetLanguage { Name = targetCode, Code = targetCode }]);
+    }
 
     /// <summary>
     /// The actions return Ok(result), so the payload sits inside the
@@ -153,6 +176,108 @@ public class TranslateControllerConnectionTests
         Assert.False(result.Ok);
         Assert.Equal(429, result.Status);
         Assert.Contains("rate limited", result.Message);
+    }
+
+    [Fact]
+    public async Task TestConnection_WrappedHttpFailure_ExtractsStatusCodeFromInnerChain()
+    {
+        // The shared retry pipeline wraps provider HttpRequestExceptions in a
+        // TranslationException — the 429 only exists on the inner exception.
+        var serviceMock = CreateTranslationService();
+        serviceMock
+            .Setup(service => service.TranslateAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<List<string>?>(),
+                It.IsAny<List<string>?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TranslationException(
+                "Retry limit reached after TooManyRequests.",
+                new HttpRequestException("rate limited", null, HttpStatusCode.TooManyRequests)));
+        var factoryMock = new Mock<ITranslationServiceFactory>();
+        factoryMock
+            .Setup(factory => factory.CreateTranslationService("openai"))
+            .Returns(serviceMock.Object);
+        var controller = CreateController(factoryMock);
+
+        var result = await Invoke(controller, "openai");
+
+        Assert.False(result.Ok);
+        Assert.Equal(429, result.Status);
+        Assert.Contains("Retry limit reached", result.Message);
+    }
+
+    [Fact]
+    public async Task TestConnection_UsesConfiguredLanguagePairInsteadOfHardcodedEnZh()
+    {
+        var serviceMock = CreateTranslationService(pair:
+            new LanguagePair { Source = "ja", Target = "zh", Tier = MatchTier.Exact });
+        var factoryMock = new Mock<ITranslationServiceFactory>();
+        factoryMock
+            .Setup(factory => factory.CreateTranslationService("openai"))
+            .Returns(serviceMock.Object);
+        var settingsMock = new Mock<ISettingService>();
+        SetupLanguages(settingsMock, sourceCode: "ja", targetCode: "zh");
+        var controller = CreateController(factoryMock, settingsMock);
+
+        var result = await Invoke(controller, "openai");
+
+        Assert.True(result.Ok);
+        serviceMock.Verify(service => service.GetLanguagePair(
+            "ja",
+            "zh",
+            It.IsAny<CancellationToken>()), Times.Once);
+        serviceMock.Verify(service => service.TranslateAsync(
+            "Hello",
+            "ja",
+            "zh",
+            null,
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TestConnection_InvalidConfiguredCodesFallBackToEnZh()
+    {
+        var serviceMock = CreateTranslationService(pair:
+            new LanguagePair { Source = "en", Target = "zh", Tier = MatchTier.Exact });
+        var factoryMock = new Mock<ITranslationServiceFactory>();
+        factoryMock
+            .Setup(factory => factory.CreateTranslationService("openai"))
+            .Returns(serviceMock.Object);
+        var settingsMock = new Mock<ISettingService>();
+        SetupLanguages(settingsMock, sourceCode: "not-a-code", targetCode: "");
+        var controller = CreateController(factoryMock, settingsMock);
+
+        var result = await Invoke(controller, "openai");
+
+        Assert.True(result.Ok);
+        serviceMock.Verify(service => service.GetLanguagePair(
+            "en",
+            "zh",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TestConnection_ProbeRunsSingleAttemptAgainstRealRetryPipeline()
+    {
+        // End-to-end over the real BaseTranslationService retry loop: the
+        // probe must report the wrapped 429 immediately (one provider call,
+        // no backoff ladder) instead of hanging the button for seconds.
+        var probeService = new RateLimitedTranslationService();
+        var factoryMock = new Mock<ITranslationServiceFactory>();
+        factoryMock
+            .Setup(factory => factory.CreateTranslationService("openai"))
+            .Returns(probeService);
+        var controller = CreateController(factoryMock);
+
+        var result = await Invoke(controller, "openai");
+
+        Assert.False(result.Ok);
+        Assert.Equal(429, result.Status);
+        Assert.Equal(1, probeService.OperationCalls);
+        Assert.Contains("Retry limit reached", result.Message);
     }
 
     [Fact]

@@ -5,10 +5,12 @@ using System.Threading.Tasks;
 using Lingarr.Contracts.Exceptions;
 using Lingarr.Contracts.Models;
 using Lingarr.Contracts.Translation;
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Interfaces.Services.Translation;
+using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -51,11 +53,11 @@ public class TranslateControllerPreviewTests
             .ReturnsAsync(new Dictionary<string, decimal>());
     }
 
-    private TranslateController CreateController() =>
+    private TranslateController CreateController(Mock<ISettingService>? settingsMock = null) =>
         new(
             _factoryMock.Object,
             new Mock<ITranslationRequestService>().Object,
-            new Mock<ISettingService>().Object,
+            (settingsMock ?? new Mock<ISettingService>()).Object,
             new LanguageCodeService(),
             new Mock<ITranslationHealthService>().Object,
             _glossaryMock.Object,
@@ -63,10 +65,13 @@ public class TranslateControllerPreviewTests
             NullLogger<TranslateController>.Instance);
 
     /// <summary>The actions return Ok(result), so the payload sits inside
-    /// the OkObjectResult rather than on ActionResult&lt;T&gt;.Value.</summary>
-    private async Task<TranslationPreviewResponse> Invoke(TranslationPreviewRequest request)
+    /// the OkObjectResult rather than ActionResult&lt;T&gt;.Value.</summary>
+    private async Task<TranslationPreviewResponse> Invoke(
+        TranslationPreviewRequest request,
+        Mock<ISettingService>? settingsMock = null)
     {
-        var actionResult = await CreateController().PreviewTranslation(request, CancellationToken.None);
+        var actionResult = await CreateController(settingsMock)
+            .PreviewTranslation(request, CancellationToken.None);
         return (TranslationPreviewResponse)((OkObjectResult)actionResult.Result!).Value!;
     }
 
@@ -160,6 +165,36 @@ public class TranslateControllerPreviewTests
 
         _serviceMock.Verify(service => service.GetLanguagePair(
             "en",
+            "zh",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Preview_DefaultLanguagesComeFromConfiguredLists()
+    {
+        var settingsMock = new Mock<ISettingService>();
+        settingsMock
+            .Setup(settings => settings.GetSettingAsJson<Language>(
+                SettingKeys.Translation.SourceLanguages))
+            .ReturnsAsync([new Language { code = "ja", name = "Japanese" }]);
+        settingsMock
+            .Setup(settings => settings.GetSettingAsJson<TargetLanguage>(
+                SettingKeys.Translation.TargetLanguages))
+            .ReturnsAsync([new TargetLanguage { Name = "Chinese", Code = "zh" }]);
+        _serviceMock
+            .Setup(service => service.TranslateAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<List<string>?>(),
+                It.IsAny<List<string>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync("translation");
+
+        await Invoke(NewRequest(), settingsMock);
+
+        _serviceMock.Verify(service => service.GetLanguagePair(
+            "ja",
             "zh",
             It.IsAny<CancellationToken>()), Times.Once);
     }

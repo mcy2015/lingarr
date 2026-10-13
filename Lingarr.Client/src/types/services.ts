@@ -129,8 +129,6 @@ export interface IImportService {
     /// when the provider has no rate ("unknown", not $0).
     estimate(params: {
         files: { name: string; characters: number }[]
-        translateCount: number
-        targetLanguage: string
     }): Promise<IImportEstimateResponse>
 }
 

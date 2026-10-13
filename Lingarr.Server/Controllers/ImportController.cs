@@ -24,16 +24,14 @@ public class ImportController : ControllerBase
     /// <summary>
     /// Estimates the translation cost of the files queued for import,
     /// priced at the default provider's rate via the shared cost service.
-    /// Cost is null when the provider has no rate configured.
+    /// Cost is null when the provider has no rate configured; a missing
+    /// file list prices like an empty queue.
     /// </summary>
     [HttpPost("estimate")]
     public async Task<ActionResult<ImportEstimateResult>> Estimate(
         [FromBody] Lingarr.Server.Models.ImportEstimateRequest request)
     {
-        var result = await _importEstimateService.Estimate(
-            request.Files,
-            request.TranslateCount,
-            request.TargetLanguage);
+        var result = await _importEstimateService.Estimate(request.Files);
         return Ok(result);
     }
 }

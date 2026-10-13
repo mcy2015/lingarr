@@ -5,6 +5,7 @@ using Lingarr.Core.Enum;
 using Lingarr.Server.Interfaces.Services;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
+using Lingarr.Server.Services.Translation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lingarr.Server.Services;
@@ -311,19 +312,22 @@ public class MediaLibraryService : IMediaLibraryService
         }
 
         var characters = (long)(sourceBytes * charsPerByte);
-        var defaultProvider = await _settingService.GetSetting(SettingKeys.Translation.ServiceType);
+        // The service_type setting is normalised to a JSON array by the
+        // startup migration, so look the rate up for the parsed primary
+        // provider — the raw string would never match a rate key.
+        var defaultProvider = TranslationServices.Parse(
+            await _settingService.GetSetting(SettingKeys.Translation.ServiceType))[0];
         var rates = await _costService.GetRates();
         // A missing rate means "unknown", not free — TryGetValue keeps that
         // distinct from a configured $0 rate.
-        var rate = !string.IsNullOrEmpty(defaultProvider)
-                   && rates.TryGetValue(defaultProvider, out var configured)
+        var rate = rates.TryGetValue(defaultProvider, out var configured)
             ? configured
             : (decimal?)null;
 
         return new TranslationEstimate
         {
             Characters = characters,
-            Provider = defaultProvider ?? string.Empty,
+            Provider = defaultProvider,
             Cost = rate is null
                 ? null
                 : (double)rate * characters / 1_000_000

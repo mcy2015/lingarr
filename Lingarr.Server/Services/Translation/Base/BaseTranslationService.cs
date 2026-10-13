@@ -18,6 +18,10 @@ public abstract class BaseTranslationService : ITranslationService
     protected TimeSpan _retryDelay = TimeSpan.FromSeconds(1);
     protected int _retryDelayMultiplier = 2;
 
+    // Set via UseSingleAttempt: connection probes must not sit through the
+    // full task-level backoff ladder — a 429 there is a verdict, not noise.
+    private bool _singleAttempt;
+
     protected BaseTranslationService(
         ISettingService settings,
         ILogger logger,
@@ -128,6 +132,16 @@ public abstract class BaseTranslationService : ITranslationService
     }
 
     /// <summary>
+    /// Marks this instance for single-attempt execution: every subsequent
+    /// <see cref="ExecuteWithRetryAsync{T}"/> call runs the operation exactly
+    /// once and surfaces the failure immediately instead of walking the
+    /// retry/backoff ladder. Used by the connection probe so a rate-limited
+    /// provider answers in one round trip. Each attempt outcome still feeds
+    /// the health tracker unchanged.
+    /// </summary>
+    public void UseSingleAttempt() => _singleAttempt = true;
+
+    /// <summary>
     /// Executes a provider operation with the shared retry policy: exponential
     /// backoff on 429/503, cancellation passthrough, any other failure wrapped
     /// in a <see cref="TranslationException"/>. Every attempt outcome feeds the
@@ -148,8 +162,9 @@ public abstract class BaseTranslationService : ITranslationService
         using var retryCts = new CancellationTokenSource();
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, retryCts.Token);
 
+        var maxAttempts = _singleAttempt ? 1 : _maxRetries;
         var delay = _retryDelay;
-        for (var attempt = 1; attempt <= _maxRetries; attempt++)
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             var attemptStarted = DateTimeOffset.UtcNow;
             try
@@ -161,7 +176,7 @@ public abstract class BaseTranslationService : ITranslationService
             catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
             {
                 RecordHealth(false, DateTimeOffset.UtcNow - attemptStarted, $"{ex.StatusCode}");
-                if (attempt == _maxRetries)
+                if (attempt == maxAttempts)
                 {
                     if (logText is null)
                     {
@@ -180,7 +195,7 @@ public abstract class BaseTranslationService : ITranslationService
 
                 _logger.LogWarning(
                     "{ServiceName} received {StatusCode}. Retrying in {Delay}... (Attempt {Attempt}/{MaxRetries})",
-                    serviceName, ex.StatusCode, delay, attempt, _maxRetries);
+                    serviceName, ex.StatusCode, delay, attempt, maxAttempts);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

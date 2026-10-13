@@ -14,6 +14,7 @@ using Lingarr.Server.Interfaces.Services.Translation;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Services;
 using Lingarr.Server.Services.Translation;
+using Lingarr.Server.Services.Translation.Base;
 
 namespace Lingarr.Server.Controllers;
 
@@ -64,11 +65,13 @@ public class TranslateController : ControllerBase
 
     /// <summary>
     /// Probe constants for the active connection test (PM analysis P0):
-    /// a minimal EN→ZH request that every provider can legally serve.
+    /// a minimal request on the configured default language pair that
+    /// every provider can legally serve. The en→zh pair is only the
+    /// last-resort fallback for an unconfigured instance.
     /// </summary>
     private const string ProbeText = "Hello";
-    private const string ProbeSourceLanguage = "en";
-    private const string ProbeTargetLanguage = "zh";
+    private const string FallbackSourceLanguage = "en";
+    private const string FallbackTargetLanguage = "zh";
 
     /// <summary>
     /// Actively tests one provider by sending a real minimal translation
@@ -100,17 +103,26 @@ public class TranslateController : ControllerBase
             });
         }
 
+        // A probe is a verdict, not a job: one provider attempt, no task-level
+        // retry/backoff, so a rate-limited provider answers in one round trip
+        // instead of hanging the button through the full ladder.
+        if (service is BaseTranslationService builtInService)
+        {
+            builtInService.UseSingleAttempt();
+        }
+
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var pair = await service.GetLanguagePair(ProbeSourceLanguage, ProbeTargetLanguage, cancellationToken);
+            var (probeSource, probeTarget) = await GetConfiguredLanguagePair();
+            var pair = await service.GetLanguagePair(probeSource, probeTarget, cancellationToken);
             if (pair is null)
             {
                 return Ok(new TranslationTestResult
                 {
                     Ok = false,
                     LatencyMs = stopwatch.Elapsed.TotalMilliseconds,
-                    Message = $"Service does not support {ProbeSourceLanguage} -> {ProbeTargetLanguage}."
+                    Message = $"Service does not support {probeSource} -> {probeTarget}."
                 });
             }
 
@@ -135,7 +147,7 @@ public class TranslateController : ControllerBase
             return Ok(new TranslationTestResult
             {
                 Ok = false,
-                Status = (ex as HttpRequestException)?.StatusCode is { } statusCode ? (int)statusCode : null,
+                Status = ExtractHttpStatus(ex),
                 LatencyMs = stopwatch.Elapsed.TotalMilliseconds,
                 Message = DescribeFailure(ex)
             });
@@ -178,8 +190,9 @@ public class TranslateController : ControllerBase
             return Ok(PreviewFailure(ex.Message, 0));
         }
 
-        var sourceLanguage = request.SourceLanguage ?? "en";
-        var targetLanguage = request.TargetLanguage ?? "zh";
+        var (defaultSource, defaultTarget) = await GetConfiguredLanguagePair();
+        var sourceLanguage = request.SourceLanguage ?? defaultSource;
+        var targetLanguage = request.TargetLanguage ?? defaultTarget;
 
         var stopwatch = Stopwatch.StartNew();
         try
@@ -238,6 +251,49 @@ public class TranslateController : ControllerBase
     /// </summary>
     private static string DescribeFailure(Exception ex) =>
         ex is TranslationException ? ex.Message : ex.InnerException?.Message ?? ex.Message;
+
+    /// <summary>
+    /// Extracts the provider HTTP status from a failure. Services that run
+    /// through the shared retry pipeline wrap their HttpRequestExceptions
+    /// inside a <see cref="TranslationException"/>, so the status code has
+    /// to be looked up along the inner-exception chain — checking only the
+    /// outermost exception loses 429/503 etc.
+    /// </summary>
+    private static int? ExtractHttpStatus(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is HttpRequestException { StatusCode: not null } httpException)
+            {
+                return (int)httpException.StatusCode!;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the default language pair from the configured source/target
+    /// language lists (first valid entry each); en→zh is only the fallback
+    /// for an instance with no languages configured yet.
+    /// </summary>
+    private async Task<(string Source, string Target)> GetConfiguredLanguagePair()
+    {
+        var source = FirstValidCode(
+            (await _settings.GetSettingAsJson<Language>(SettingKeys.Translation.SourceLanguages))
+            ?.Select(language => language.code));
+        var target = FirstValidCode(
+            (await _settings.GetSettingAsJson<TargetLanguage>(SettingKeys.Translation.TargetLanguages))
+            ?.Select(language => language.Code));
+
+        return (
+            source ?? FallbackSourceLanguage,
+            target ?? FallbackTargetLanguage);
+    }
+
+    private string? FirstValidCode(IEnumerable<string>? codes) =>
+        codes?.FirstOrDefault(code =>
+            !string.IsNullOrWhiteSpace(code) && _languageCodeService.Validate(code));
 
     private static TranslationPreviewResponse PreviewFailure(string message, double latencyMs) => new()
     {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
@@ -286,5 +287,29 @@ public class MediaLibraryServiceTests : IDisposable
 
         Assert.Equal(10_000, estimate.Characters);
         Assert.Null(estimate.Cost);
+    }
+
+    [Fact]
+    public async Task EstimateWithServiceTypeJsonArray_PricesParsedPrimaryProvider()
+    {
+        // StartupService normalises service_type into a JSON array — the
+        // estimate must look the rate up for the parsed provider, not the
+        // raw array string (which never matches a rate key).
+        _settingService
+            .Setup(s => s.GetSetting(SettingKeys.Translation.ServiceType))
+            .ReturnsAsync("[\"libretranslate\",\"openai\"]");
+        await SeedMovieAsync("Dune", new Dictionary<string, MediaLanguageCoverage>
+        {
+            ["en"] = new() { Count = 1, Bytes = 20_000 }
+        });
+
+        var estimate = await CreateService().Estimate(
+        [
+            new EstimateItem { MediaType = MediaType.Movie, Id = 1 }
+        ], "zh");
+
+        Assert.Equal("libretranslate", estimate.Provider);
+        // 20k bytes → 10k chars at 5.0 per 1M
+        Assert.Equal(0.05, estimate.Cost);
     }
 }

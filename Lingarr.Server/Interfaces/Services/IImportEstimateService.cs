@@ -9,7 +9,8 @@ public interface IImportEstimateService
     /// Prices the characters of the files queued for translation at the
     /// default provider's rate — the same rate/pricing convention as the
     /// library estimate (ICostService). Unpriced providers yield a null
-    /// cost ("unknown"), never $0.
+    /// cost ("unknown"), never $0. A null file list prices like an empty
+    /// queue (zero characters) rather than throwing.
     /// </summary>
-    Task<ImportEstimateResult> Estimate(List<ImportEstimateFile> files, int translateCount, string? targetLanguage);
+    Task<ImportEstimateResult> Estimate(List<ImportEstimateFile>? files);
 }

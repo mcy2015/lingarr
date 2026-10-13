@@ -11,8 +11,6 @@ const service = (http: AxiosStatic, resource = '/api/subtitle'): IImportService 
     /// subtitle controller — its own base path.
     estimate: async (params: {
         files: { name: string; characters: number }[]
-        translateCount: number
-        targetLanguage: string
     }): Promise<IImportEstimateResponse> => {
         const response = await http.post('/api/import/estimate', params)
         return response.data
