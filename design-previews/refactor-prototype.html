@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lingarr · 重构原型（P3 · 五屏）</title>
+<title>Lingarr · 重构原型（P3 · 六屏 + 下钻屏）</title>
 <!--
   Lingarr 重构原型 · 遵循 docs/DESIGN.md「Timeline 剪辑台」token 契约
   配套提案：docs/redesign-proposal.zh-CN.md
@@ -362,7 +362,100 @@
   .badge.enc{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 45%,var(--line))}
   .badge.fmt{font-family:var(--font-mono);font-size:10.5px}
 
+  /* ── 下钻屏通用:可点击行 ─────────────────── */
+  .jobrow{cursor:pointer}
+  .qrow{cursor:pointer}
+
+  /* ── 任务详情 ─────────────────── */
+  .qd-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:14px 0 12px}
+  .qd-stat{background:var(--primary);border:1px solid var(--line);border-radius:6px;padding:9px 13px}
+  .qd-stat .n{font-family:var(--font-mono);font-size:16px;font-weight:600}
+  .qd-stat .n small{font-size:11px;color:var(--secondary-content);font-weight:400}
+  .qd-stat .l{font-size:11.5px;color:var(--secondary-content);margin-top:1px}
+  .tl{padding:4px 0}
+  .tl-row{display:grid;grid-template-columns:58px 14px minmax(0,1fr);gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);font-size:12.5px;align-items:start}
+  .tl-row:last-child{border-bottom:0}
+  .tl-row time{font-family:var(--font-mono);font-size:11px;color:var(--secondary-content);padding-top:2px}
+  .tl-row .d{width:8px;height:8px;border-radius:50%;margin-top:4px}
+  .tl-row .d.ok{background:var(--success)} .tl-row .d.warn{background:var(--warning)}
+  .tl-row .d.err{background:var(--danger)}  .tl-row .d.acc{background:var(--accent)}
+  .tl-row .d.dim{background:var(--line)}
+  .tl-row b{font-weight:600}
+  .tl-row .m{color:var(--secondary-content)}
+  .fb-chain{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px}
+  .fb-chain .arr{color:var(--secondary-content);font-size:11px}
+  .fb-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);font-size:13px}
+  .fb-row:last-child{border-bottom:0}
+  .fb-row .idx{font-family:var(--font-mono);font-size:11px;color:var(--secondary-content);width:16px;flex:none}
+  .fb-row .end{margin-left:auto;display:flex;gap:6px}
+
+  /* ── 请求模版 ─────────────────── */
+  .tpl-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px;align-items:start}
+  .tpl-editor textarea{
+    width:100%;min-height:170px;background:var(--primary);border:1px solid var(--line);border-radius:6px;
+    color:var(--primary-content);font-family:var(--font-mono);font-size:12px;line-height:1.7;padding:12px;outline:none;resize:vertical;
+  }
+  .tpl-editor textarea:focus{border-color:var(--accent)}
+  .vars{display:flex;gap:6px;flex-wrap:wrap}
+  pre.json{
+    margin:0;background:var(--primary);border:0;border-radius:0;
+    font-family:var(--font-mono);font-size:11.5px;line-height:1.7;color:var(--secondary-content);
+    overflow-x:auto;
+  }
+  pre.json .k{color:var(--info)} pre.json .s{color:var(--success)} pre.json .n{color:var(--warning)}
+  .tryout input.en{
+    width:100%;background:var(--primary);border:1px solid var(--line);border-radius:4px;
+    color:var(--primary-content);font:inherit;padding:7px 10px;outline:none;
+  }
+  .tryout input.en:focus{border-color:var(--accent)}
+
+  /* ── 日志 ─────────────────── */
+  .logline{display:grid;grid-template-columns:70px 46px minmax(0,1fr);gap:14px;padding:6px 16px;font-family:var(--font-mono);font-size:11.5px;border-bottom:1px solid var(--line);color:var(--secondary-content)}
+  .logline:last-child{border-bottom:0}
+  .logline .lv{font-weight:600}
+  .logline .lv.inf{color:var(--info)} .logline .lv.warn{color:var(--warning)} .logline .lv.err{color:var(--danger)}
+  .logline .msg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .logline.warnrow .msg{color:var(--warning)} .logline.errrow .msg{color:var(--danger)}
+  .chips .chip[aria-pressed="true"]{color:var(--primary-content);border-color:var(--accent)}
+
+  /* ── 定时任务 ─────────────────── */
+  .qdepth{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .qdep{background:var(--secondary);border:1px solid var(--line);border-radius:6px;padding:10px 14px}
+  .qdep .n{font-family:var(--font-mono);font-size:18px;font-weight:600}
+  .qdep .l{font-size:11.5px;color:var(--secondary-content)}
+
+  /* ── 成本趋势 ─────────────────── */
+  .trend{display:flex;align-items:flex-end;gap:3px;height:72px;padding:0 2px}
+  .trend .grp{flex:1;display:flex;align-items:flex-end;gap:2px;height:100%}
+  .trend .bar{flex:1;border-radius:1px;min-height:2px}
+  .trend .bar.a{background:var(--accent)}
+  .trend .bar.b{background:color-mix(in srgb,var(--info) 75%,transparent)}
+
+  /* ── 测试连接结果态 ─────────────────── */
+  .test-res{display:none;font-family:var(--font-mono);font-size:11.5px}
+  .test-res.on{display:block}
+  .test-res.ok{color:var(--success)} .test-res.err{color:var(--danger)}
+
+  /* ── 校对驳回态 ─────────────────── */
+  .pline.rej .mark{color:var(--danger)}
+  .pline.rej .dst .dst-text{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--danger) 60%,transparent)}
+
+  /* ── 全局搜索模态 ─────────────────── */
+  .modal{position:fixed;inset:0;background:color-mix(in srgb,var(--primary) 72%,transparent);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:50}
+  .modal.on{display:flex}
+  .modal-box{width:min(560px,92vw);background:var(--secondary);border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:0 18px 48px rgba(0,0,0,.45)}
+  .modal-box .mhead{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .modal-box input{flex:1;background:none;border:0;color:var(--primary-content);font:inherit;outline:none;min-width:0}
+  .mres{max-height:46vh;overflow-y:auto;padding:6px 0}
+  .mres .grp{font-size:11px;color:var(--secondary-content);padding:8px 14px 4px;font-weight:600}
+  .mres .item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 14px;font-size:13px;color:var(--primary-content)}
+  .mres .item:hover{background:var(--tertiary)}
+  .mres .item .sub{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--secondary-content);white-space:nowrap}
+
   @media (max-width:1080px){
+    .tpl-grid{grid-template-columns:1fr}
+    .qd-stats{grid-template-columns:repeat(3,1fr)}
+    .qdepth{grid-template-columns:repeat(2,1fr)}
     .kpis{grid-template-columns:repeat(2,1fr)}
     .cols{grid-template-columns:1fr}
     .pipe{flex-wrap:wrap;gap:8px}
@@ -378,12 +471,124 @@
     .pline{grid-template-columns:110px minmax(0,1fr)}
     .pline .dst,.pline .mark{display:none}
   }
+
+  /* ── 补全交互:菜单 / toast / 表单模态 / 状态 ── */
+  .menu{position:fixed;z-index:60;min-width:190px;background:var(--secondary);border:1px solid var(--line);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.45);padding:4px 0;font-size:13px}
+  .menu button{display:flex;width:100%;text-align:left;gap:8px;padding:7px 14px;color:var(--primary-content);align-items:center}
+  .menu button:hover{background:var(--tertiary)}
+  .menu .ck{width:14px;color:var(--accent);flex:none;font-size:12px}
+  .menu .sep{height:1px;background:var(--line);margin:4px 0}
+  #toasts{position:fixed;right:18px;bottom:18px;z-index:70;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+  .toast{background:var(--secondary);border:1px solid var(--line);border-left:2px solid var(--accent);border-radius:6px;padding:9px 14px;font-size:12.5px;box-shadow:0 10px 28px rgba(0,0,0,.4);animation:tin .18s ease}
+  .toast.out{opacity:0;transition:opacity .3s}
+  @keyframes tin{from{opacity:0;transform:translateY(6px)}}
+  .fmodal .frow{display:flex;flex-direction:column;gap:5px;padding:10px 16px}
+  .fmodal .frow label{font-size:12px;color:var(--secondary-content)}
+  .fmodal .frow input,.fmodal .frow select{background:var(--primary);border:1px solid var(--line);border-radius:4px;color:var(--primary-content);font:inherit;padding:7px 10px;outline:none;width:100%}
+  .fmodal .frow input:focus,.fmodal .frow select:focus{border-color:var(--accent)}
+  .fmodal .fbtns{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--line)}
+  .qrow.paused .rail{background:var(--warning)}
+  .chip.act-toggle{cursor:pointer}
+  .drop-chip{cursor:pointer;text-align:left}
+  .fb-row .chip.langcap{cursor:pointer}
+
+  /* ── 视口铺满(真实应用 4948dc3 模式):屏内固定区不动,主内容区拉伸占满,滚动收进卡内 ── */
+  .screens{display:flex}
+  .screen.on{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0}
+  [data-screen="overview"] .cols{flex:1}
+  [data-screen="library"] .card{flex:1 1 auto;min-height:0;overflow:auto}
+  .qcol{flex:1;min-height:0;overflow-y:auto;background:var(--secondary);border:1px solid var(--line);border-radius:6px}
+  .qcol .qrow{background:transparent}
+  [data-screen="proofread"] #plines{flex:1;min-height:0;overflow-y:auto}
+  [data-screen="import"] .panel.on{display:flex;flex-direction:column;flex:1;min-height:0;overflow:visible}
+  [data-screen="import"] .import-grid{flex:1;min-height:0;align-items:stretch}
+  [data-screen="import"] .import-grid>.card{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  [data-screen="import"] [data-ip="season"]>.card{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  [data-screen="import"] .card>.tscroll{flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable}
+  [data-screen="import"] .card>.tscroll thead th{position:sticky;top:0;background:var(--secondary);z-index:1}
+  [data-screen="import"] .card>div:last-child{flex:none}
+  [data-screen="settings"] .panel.on{flex:1;min-height:0;overflow-y:auto}
+  [data-screen="media-detail"] .card{min-height:0}
+  [data-screen="media-detail"] .card:first-of-type{flex:1.5;overflow:auto}
+  [data-screen="media-detail"] .card:last-of-type{flex:1;overflow:auto}
+  [data-screen="queue-detail"] .card:last-of-type{flex:1;min-height:0;overflow:auto}
+  [data-screen="logs"] .card{flex:1;min-height:0;overflow:auto}
+  [data-screen="schedule"] .card:last-of-type{flex:1;min-height:0;overflow:auto}
+  [data-screen="media-detail-movie"] .card:first-of-type{flex:1;overflow:auto}
+  [data-screen="media-detail-movie"] .card:last-of-type{flex:1;overflow:auto}
+  [data-screen="request-template"] .tpl-grid{flex:1;min-height:0}
+  [data-screen="request-template"] .tpl-grid>div{display:flex;flex-direction:column;min-height:0}
+  [data-screen="request-template"] .tpl-editor{flex:1}
+  [data-screen="request-template"] .tpl-editor .card{height:100%;min-height:0;display:flex;flex-direction:column}
+  [data-screen="request-template"] .tpl-editor textarea{flex:1;min-height:170px}
+  [data-screen="request-template"] .tpl-grid>div:last-child>.card:first-child{flex:1;min-height:0;overflow:auto}
+
+  /* ── 手机端展示模式(body.mobile:真机 ≤760px 自动,或 proto-bar 手动预览) ── */
+  body.mobile{display:flex;flex-direction:column;align-items:center}
+  body.mobile .proto-bar{width:100%}
+  body.mobile .proto-bar span{display:none}
+  body.mobile .shell{width:min(430px,100%);height:calc(100vh - 33px - 56px);border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  body.mobile .side{display:none}
+  .mnav{display:none}
+  body.mobile .mnav{display:flex;width:min(430px,100%);height:56px;flex:none;background:var(--secondary);border-top:1px solid var(--line)}
+  .mnav button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10px;color:var(--secondary-content);position:relative;padding:5px 0 3px}
+  .mnav button[aria-current="true"]{color:var(--accent)}
+  .mnav .ico{width:18px;height:18px}
+  .mnav .cnt{position:absolute;top:3px;right:calc(50% - 24px);font-family:var(--font-mono);font-size:9px;background:var(--accent);color:var(--accent-content);border-radius:8px;padding:0 5px}
+  body.mobile .topbar{padding:12px 14px 10px}
+  body.mobile .topbar h1{font-size:16px}
+  body.mobile .topbar .sub{display:none}
+  body.mobile #pg-search{display:none}
+  body.mobile .screens{padding:14px 12px 18px;overflow-x:hidden}
+  body.mobile .kpis{grid-template-columns:repeat(2,1fr);gap:8px}
+  body.mobile .kpi .n{font-size:20px}
+  body.mobile .pipe-node{flex:1 1 40%;padding:10px 12px}
+  body.mobile .pipe-node .val{font-size:17px}
+  body.mobile .cols,body.mobile .tpl-grid,body.mobile .set-grid,body.mobile .import-grid{grid-template-columns:1fr}
+  body.mobile .qd-stats{grid-template-columns:repeat(3,1fr);gap:8px}
+  body.mobile .qdepth{grid-template-columns:repeat(2,1fr)}
+  body.mobile .toolbar{gap:6px}
+  body.mobile .search{min-width:0;flex:1 1 100%}
+  body.mobile .tray{flex-wrap:wrap;gap:8px}
+  body.mobile .pager{justify-content:center}
+  body.mobile .tabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  body.mobile .tabs button{white-space:nowrap}
+  body.mobile .qrow{grid-template-columns:3px minmax(0,1fr) 92px;row-gap:3px;padding:11px 12px}
+  body.mobile .qrow .track{grid-column:2/4}
+  body.mobile .qrow .chip,body.mobile .qrow .ops{display:none}
+  body.mobile .pline{grid-template-columns:1fr;position:relative}
+  body.mobile .pline .tc{display:flex;gap:10px;border-right:0;border-bottom:1px solid var(--line);padding:7px 12px;overflow-x:auto;scrollbar-width:none}
+  body.mobile .pline .src{border-right:0}
+  body.mobile .pline .mark{position:absolute;top:6px;right:8px;padding:0}
+  body.mobile .keys{display:none}
+  body.mobile .pb-foot{flex-wrap:wrap;gap:8px}
+  body.mobile .drop{padding:24px 14px}
+  body.mobile #toasts{bottom:66px;right:10px;left:10px;align-items:stretch}
+  body.mobile .modal{padding-top:6vh}
+
+  /* ── 滚动条定制:纳入 Timeline 设计系统(细 8px / token 色 / 悬停提亮 / 双内核 / gutter 稳定) ── */
+  @supports selector(::-webkit-scrollbar){
+    /* WebKit/Blink:伪元素全套(含悬停提亮);标准属性不得出现在继承链上,否则伪元素被禁用 */
+    ::-webkit-scrollbar{width:8px;height:8px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-corner{background:transparent}
+    ::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--secondary-content) 26%,transparent);border-radius:4px}
+    ::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--secondary-content) 55%,transparent)}
+    :is(.screens,.qcol,#plines,.mres,.card,.tscroll,pre.json,[data-screen="settings"] .panel.on,textarea,.tabs):hover::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--secondary-content) 48%,transparent)}
+    body.mobile .tabs::-webkit-scrollbar,body.mobile .pline .tc::-webkit-scrollbar{display:none}
+  }
+  @supports not selector(::-webkit-scrollbar){
+    /* Firefox:标准属性兜底(gated,防泄漏进 webkit 禁用伪元素) */
+    html{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--secondary-content) 26%,transparent) transparent}
+  }
+  .screens,.qcol,#plines,.tpl-editor textarea,[data-screen="settings"] .panel.on{scrollbar-gutter:stable}
 </style>
 </head>
 <body>
 
 <div class="proto-bar">
-  <b>重构原型</b><span>六屏 · 点击左侧导航或按 <span class="key">1</span>–<span class="key">6</span> 切换</span>
+  <b>重构原型</b><span>六屏 + 下钻屏 · 左侧导航或 <span class="key">1</span>–<span class="key">6</span> · 深链 <span class="key">#queue-detail</span> <span class="key">#request-template</span> <span class="key">#logs</span> <span class="key">#schedule</span> <span class="key">#media-detail-movie</span> · <span class="key">⌘K</span> 全局搜索</span>
+  <button class="key" id="mode-toggle" style="cursor:pointer" title="切换手机端展示模式">📱 手机模式</button>
   <span style="margin-left:auto">配套提案 docs/redesign-proposal.zh-CN.md · 视觉基座 docs/DESIGN.md</span>
 </div>
 
@@ -410,7 +615,7 @@
       <h1 id="pg-title">概览</h1>
       <span class="sub" id="pg-sub">管线正在运行 · 数据 5 秒前更新</span>
       <div class="right">
-        <button class="btn sm" title="全局搜索">⌘K 搜索</button>
+        <button class="btn sm" id="pg-search" title="全局搜索">⌘K 搜索</button>
         <button class="btn sm primary" id="pg-cta">⇪ 导入字幕</button>
       </div>
     </header>
@@ -441,12 +646,12 @@
         <div class="cols">
           <div class="card">
             <div class="card-h"><h2>活跃任务</h2><span class="meta mono">实时 · SignalR</span></div>
-            <div class="jobrow">
+            <div class="jobrow" onclick="location.hash='queue-detail'">
               <div class="t"><b>Shōgun — S01E05「Broken to the Fist」</b><span>EN → ZH · openai / gpt-4o-mini · 批次 3/4</span></div>
               <div class="track"><div class="fill" style="width:72%"></div><div class="head" style="left:72%"></div></div>
               <div class="pct">72% · 剩 04:12</div>
             </div>
-            <div class="jobrow">
+            <div class="jobrow" onclick="location.hash='queue-detail'">
               <div class="t"><b>Dune: Part Two (2024)</b><span>EN → ZH · deepl / api-free · 上下文窗口 500 行</span></div>
               <div class="track"><div class="fill" style="width:38%"></div><div class="head" style="left:38%"></div></div>
               <div class="pct">38% · 剩 11:47</div>
@@ -471,19 +676,46 @@
             <div><time>15:02</time><span class="warn">△</span><span>开始人工校对：3 Body Problem S01E02（机翻 486 行 · 术语表命中 <b class="mono">12</b> 次）</span></div>
           </div>
         </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-h"><h2>产量与成本 · 近 14 天</h2><span class="meta mono">写回 96 条 · 成本 $1.62 · 本月累计 212 条 / $3.56</span></div>
+          <div style="padding:16px 16px 12px">
+            <div class="trend" role="img" aria-label="近 14 天每日写回条数与成本趋势">
+              <div class="grp"><div class="bar a" style="height:27%"></div><div class="bar b" style="height:20%"></div></div>
+              <div class="grp"><div class="bar a" style="height:55%"></div><div class="bar b" style="height:50%"></div></div>
+              <div class="grp"><div class="bar a" style="height:36%"></div><div class="bar b" style="height:35%"></div></div>
+              <div class="grp"><div class="bar a" style="height:64%"></div><div class="bar b" style="height:60%"></div></div>
+              <div class="grp"><div class="bar a" style="height:91%"></div><div class="bar b" style="height:90%"></div></div>
+              <div class="grp"><div class="bar a" style="height:45%"></div><div class="bar b" style="height:40%"></div></div>
+              <div class="grp"><div class="bar a" style="height:73%"></div><div class="bar b" style="height:70%"></div></div>
+              <div class="grp"><div class="bar a" style="height:82%"></div><div class="bar b" style="height:80%"></div></div>
+              <div class="grp"><div class="bar a" style="height:55%"></div><div class="bar b" style="height:50%"></div></div>
+              <div class="grp"><div class="bar a" style="height:73%"></div><div class="bar b" style="height:70%"></div></div>
+              <div class="grp"><div class="bar a" style="height:100%"></div><div class="bar b" style="height:100%"></div></div>
+              <div class="grp"><div class="bar a" style="height:64%"></div><div class="bar b" style="height:55%"></div></div>
+              <div class="grp"><div class="bar a" style="height:55%"></div><div class="bar b" style="height:45%"></div></div>
+              <div class="grp"><div class="bar a" style="height:55%"></div><div class="bar b" style="height:45%"></div></div>
+            </div>
+            <div class="legend" style="margin-top:12px">
+              <span><i style="background:var(--accent)"></i>写回条数 / 日</span>
+              <span><i style="background:color-mix(in srgb,var(--info) 75%,transparent)"></i>成本 $ / 日</span>
+              <span class="mono" style="margin-left:auto">双序列各自归一 · 峰值 11 条 / $0.20</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ═══ 2 媒体库 ═══ -->
       <section class="screen" data-screen="library">
         <div class="toolbar">
-          <div class="seg" role="group" aria-label="类型过滤">
-            <button aria-pressed="true">全部</button><button>剧集</button><button>电影</button>
+          <div class="seg" role="group" aria-label="类型过滤" id="lib-seg">
+            <button aria-pressed="true" data-libtype="all">全部</button><button data-libtype="show">剧集</button><button data-libtype="movie">电影</button>
           </div>
-          <label class="search"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="搜索标题…"></label>
-          <button class="btn sm">目标语言 <span class="mono">ZH</span> ▾</button>
-          <button class="btn sm">字幕状态 ▾</button>
+          <label class="search"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="lib-search" placeholder="搜索标题…"></label>
+          <button class="btn sm" id="lib-lang">目标语言 <span class="mono">ZH</span> ▾</button>
+          <button class="btn sm" id="lib-state"><span id="lib-state-l">全部状态</span> ▾</button>
           <button class="btn sm" onclick="location.hash='import'">⇪ 导入字幕</button>
-          <span class="mono" style="margin-left:auto;font-size:12px;color:var(--secondary-content)">1 284 项 · 63 缺字幕 · 14 进行中</span>
+          <span class="mono" id="lib-count" style="margin-left:auto;font-size:12px;color:var(--secondary-content)">1 284 项 · 63 缺字幕 · 14 进行中</span>
         </div>
 
         <div class="card" style="overflow-x:auto">
@@ -511,7 +743,7 @@
                 <td class="title"><span class="badge movie">电影</span><b>Dune: Part Two</b> <span class="meta">2024 · 166 min</span></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip busy">ZH ⏳ 38%</span></div></td>
                 <td class="state part">⏳ 队列中</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">15:40</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm" onclick="location.hash='media-detail-movie'">详情</button></td>
               </tr>
               <tr>
                 <td><input type="checkbox" checked aria-label="选择 True Detective"></td>
@@ -523,9 +755,9 @@
               <tr>
                 <td><input type="checkbox" checked aria-label="选择 Past Lives"></td>
                 <td class="title"><span class="badge movie">电影</span><b>Past Lives</b> <span class="meta">2023 · 105 min</span></td>
-                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH · 无字幕</span></div></td>
-                <td class="state none">· 未排队</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm" onclick="location.hash='media-detail'">详情</button></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip busy">ZH ⏳ 排队</span></div></td>
+                <td class="state part">⏳ 队列中</td><td class="mono" style="font-size:12px;color:var(--secondary-content)">15:40</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='import'">导入字幕</button> <button class="btn sm" onclick="location.hash='media-detail-movie'">详情</button></td>
               </tr>
               <tr>
                 <td><input type="checkbox" aria-label="选择 3 Body Problem"></td>
@@ -540,16 +772,16 @@
 
         <div class="tray" id="tray">
           <span>已选 <span class="n" id="tray-n">3</span> 项</span>
-          <button class="btn sm primary">翻译所选 EN → ZH ▸</button>
-          <button class="btn sm">加入队列末尾</button>
-          <button class="btn sm">清除已选</button>
+          <button class="btn sm primary" id="tray-run">翻译所选 EN → ZH ▸</button>
+          <button class="btn sm" id="tray-append">加入队列末尾</button>
+          <button class="btn sm" id="tray-clear">清除已选</button>
           <span class="sp"></span>
           <span style="font-size:12px;color:var(--secondary-content)">预计消耗 ≈ <b class="mono">$0.21</b> · 41 800 字符</span>
         </div>
 
         <div class="pager mono">
-          <span>第 1 / 129 页</span>
-          <button>‹</button><button>›</button>
+          <span>第 <b id="pg-no">1</b> / 129 页</span>
+          <button id="pg-prev" aria-label="上一页">‹</button><button id="pg-next" aria-label="下一页">›</button>
         </div>
       </section>
 
@@ -563,6 +795,7 @@
           <button role="tab" aria-selected="false" data-q="done">已完成<span class="n">9</span></button>
         </div>
 
+        <div class="qcol">
         <div class="qrow run" data-st="run">
           <div class="rail"></div>
           <div class="t"><b>Shōgun — S01E05</b><span>EN → ZH · 批次 3/4 · 已翻译 368 行</span></div>
@@ -601,7 +834,7 @@
           <span class="chip" style="color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,var(--line))">gemini · 2.5-flash</span>
           <div class="track"><div class="fill" style="width:83%;background:var(--danger)"></div><div class="head" style="left:83%;background:var(--danger)"></div></div>
           <div class="eta">✗ 83% · 2 次重试</div>
-          <div class="ops"><button class="btn sm">重试</button><button class="btn sm">日志</button></div>
+          <div class="ops"><button class="btn sm">重试</button><button class="btn sm" onclick="location.hash='logs'">日志</button></div>
         </div>
         <div class="qrow done" data-st="done">
           <div class="rail"></div>
@@ -609,7 +842,7 @@
           <span class="chip">openai · gpt-4o-mini</span>
           <div class="track"><div class="fill" style="width:100%;background:var(--success)"></div></div>
           <div class="eta" style="color:var(--success)">✓ 15:41 完成</div>
-          <div class="ops"><button class="btn sm">校对</button></div>
+          <div class="ops"><button class="btn sm" onclick="location.hash='proofread'">校对</button></div>
         </div>
         <div class="qrow done" data-st="done">
           <div class="rail"></div>
@@ -617,12 +850,10 @@
           <span class="chip">deepl · api-free</span>
           <div class="track"><div class="fill" style="width:100%;background:var(--success)"></div></div>
           <div class="eta" style="color:var(--success)">✓ 13:58 完成</div>
-          <div class="ops"><button class="btn sm">校对</button></div>
+          <div class="ops"><button class="btn sm" onclick="location.hash='proofread'">校对</button></div>
+        </div>
         </div>
 
-        <p style="margin-top:12px;font-size:12px;color:var(--secondary-content)">
-          队列由 Hangfire 6 队列驱动（movies / shows / system / translation / webhook / default）· 并发 <b class="mono">MAX_CONCURRENT_JOBS=2</b>
-        </p>
       </section>
 
 
@@ -641,7 +872,7 @@
 
         <div class="toolbar">
           <div class="seg" role="group" aria-label="季">
-            <button aria-pressed="true">S01</button><button>S02</button>
+            <button aria-pressed="true">S01</button>
           </div>
           <span class="chips" style="gap:5px">
             <span class="chip ok">EN ✓</span><span class="chip part">ZH ◐ 3/10</span><span class="chip dim">JA ·</span>
@@ -664,16 +895,72 @@
                 <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='proofread'">校对</button></td>
               </tr>
               <tr>
+                <td class="ep-num">E02</td>
+                <td class="ep-title"><b>Servant of Two Masters</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip ok">ZH ✓</span></div></td>
+                <td class="state done">✓ 已完成</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">13:12</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='proofread'">校对</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E03</td>
+                <td class="ep-title"><b>Tomorrow Is Tomorrow</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip ok">ZH ✓</span></div></td>
+                <td class="state done">✓ 已完成</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">11:47</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='proofread'">校对</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E04</td>
+                <td class="ep-title"><b>The Eightfold Fence</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ✗</span></div></td>
+                <td class="state" style="color:var(--danger)">✗ 失败 · Gemini 429</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">15:29</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm">重试</button> <button class="btn sm" onclick="location.hash='queue-detail'">详情</button></td>
+              </tr>
+              <tr>
                 <td class="ep-num">E05</td>
                 <td class="ep-title"><b>Broken to the Fist</b></td>
-                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip busy">ZH ⏳ 72%</span></div></td>
                 <td class="state part">◐ 翻译中 72%</td>
                 <td class="mono" style="font-size:12px;color:var(--secondary-content)">15:39</td>
-                <td style="text-align:right;white-space:nowrap"><button class="btn sm">翻译 ▾</button></td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm" onclick="location.hash='queue-detail'">详情</button></td>
               </tr>
               <tr>
                 <td class="ep-num">E06</td>
                 <td class="ep-title"><b>Ladies of the Willow World</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
+                <td class="state none">· 未排队</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm">翻译 ▾</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E07</td>
+                <td class="ep-title"><b>A Dream of a Dream</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
+                <td class="state none">· 未排队</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm">翻译 ▾</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E08</td>
+                <td class="ep-title"><b>The Abyss of Life</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
+                <td class="state none">· 未排队</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm">翻译 ▾</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E09</td>
+                <td class="ep-title"><b>Crimson Sky</b></td>
+                <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
+                <td class="state none">· 未排队</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
+                <td style="text-align:right;white-space:nowrap"><button class="btn sm">翻译 ▾</button></td>
+              </tr>
+              <tr>
+                <td class="ep-num">E10</td>
+                <td class="ep-title"><b>A Dream of England</b></td>
                 <td><div class="chips"><span class="chip ok">EN ✓</span><span class="chip dim">ZH ·</span></div></td>
                 <td class="state none">· 未排队</td>
                 <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
@@ -689,19 +976,31 @@
             <div class="t"><b>Shōgun — S01E05「Broken to the Fist」</b><span>EN → ZH · 72% · 剩 04:12</span></div>
             <span class="chip">openai · gpt-4o-mini</span>
             <div class="track" style="width:110px"><div class="fill" style="width:72%"></div><div class="head" style="left:72%"></div></div>
-            <button class="btn sm" onclick="location.hash='queue'">详情</button>
+            <button class="btn sm" onclick="location.hash='queue-detail'">详情</button>
           </div>
           <div class="hist-row">
             <div class="t"><b>Shōgun — S01E01「Anjin」</b><span>写回 Shogun.S01E01.zh.srt · 512 行</span></div>
             <span class="chip">deepl · api-free</span>
             <span class="state done" style="white-space:nowrap">✓ 完成</span>
-            <button class="btn sm" onclick="location.hash='queue'">详情</button>
+            <button class="btn sm" onclick="location.hash='queue-detail'">详情</button>
+          </div>
+          <div class="hist-row">
+            <div class="t"><b>Shōgun — S01E02「Servant of Two Masters」</b><span>写回 Shogun.S01E02.zh.srt · 498 行 · $0.018</span></div>
+            <span class="chip">deepl · api-free</span>
+            <span class="state done" style="white-space:nowrap">✓ 完成</span>
+            <button class="btn sm" onclick="location.hash='queue-detail'">详情</button>
+          </div>
+          <div class="hist-row">
+            <div class="t"><b>Shōgun — S01E03「Tomorrow Is Tomorrow」</b><span>写回 Shogun.S01E03.zh.srt · 505 行 · $0.019</span></div>
+            <span class="chip">deepl · api-free</span>
+            <span class="state done" style="white-space:nowrap">✓ 完成</span>
+            <button class="btn sm" onclick="location.hash='queue-detail'">详情</button>
           </div>
           <div class="hist-row">
             <div class="t"><b>Shōgun — S01E04「The Eightfold Fence」</b><span>Gemini 429 · 自动降级失败</span></div>
             <span class="chip" style="color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,var(--line))">gemini · 2.5-flash</span>
             <span class="state" style="color:var(--danger);white-space:nowrap">✗ 失败</span>
-            <button class="btn sm" onclick="location.hash='queue'">详情</button>
+            <button class="btn sm" onclick="location.hash='queue-detail'">详情</button>
           </div>
         </div>
       </section>
@@ -716,29 +1015,31 @@
         <div class="panel on" data-ip="free">
         <div class="import-grid">
           <div>
-            <div class="drop" role="button" tabindex="0">
+            <div class="drop" id="drop-free" role="button" tabindex="0">
               <b>拖拽字幕文件到此处</b><br>或点击选择文件
               <span class="fmt">.srt · .ass · .ssa <span class="off">· .vtt（P3-f 规划中）</span></span>
             </div>
             <div class="pathpick">
               <span class="p">/media/subtitles/inbox</span>
-              <button class="btn sm">扫描路径</button>
+              <button class="btn sm" disabled>扫描路径</button>
+              <span class="chip dim">规划中 · B3-A7</span>
             </div>
             <div class="hint-card">
               <b>导入即任务</b> · 文件经「解析 → 编码转码 → 转格式」后写回原目录，可同时进入翻译队列；按内容哈希与既有任务去重。
             </div>
           </div>
-          <div class="card" style="overflow-x:auto">
-            <div class="card-h"><h2>处理队列</h2><span class="meta mono">4 个文件 · 3 个可处理</span></div>
+          <div class="card">
+            <div class="card-h"><h2>处理队列</h2><span class="meta mono" id="free-meta">4 个文件 · 3 个可处理</span></div>
+            <div class="tscroll">
             <table>
               <thead><tr><th>文件</th><th>检出</th><th>编码</th><th>目标</th><th>动作</th><th>状态</th></tr></thead>
-              <tbody>
+              <tbody id="free-tbody">
                 <tr>
                   <td class="mono" style="font-size:12px">Rurouni.Kenshin.OVA.chs.srt</td>
                   <td><span class="chip">SRT · 1 024 行</span></td>
                   <td><span class="badge enc">GB18030 → UTF-8</span></td>
                   <td><span class="chip">SRT</span></td>
-                  <td><span class="chip part">转换＋翻译</span></td>
+                  <td><span class="chip part act-toggle">转换＋翻译</span></td>
                   <td class="state part">◐ 等待</td>
                 </tr>
                 <tr>
@@ -746,7 +1047,7 @@
                   <td><span class="chip">ASS · 1 890 行</span></td>
                   <td><span class="chip ok">UTF-8 ✓</span></td>
                   <td><span class="chip">SRT</span></td>
-                  <td><span class="chip">仅转换</span></td>
+                  <td><span class="chip act-toggle">仅转换</span></td>
                   <td style="min-width:150px"><div class="track"><div class="fill" style="width:64%"></div><div class="head" style="left:64%"></div></div><span class="mono" style="font-size:11px;color:var(--secondary-content)">转写中 64%</span></td>
                 </tr>
                 <tr>
@@ -754,7 +1055,7 @@
                   <td><span class="chip">SRT · 980 行</span></td>
                   <td><span class="chip ok">UTF-8 ✓</span></td>
                   <td><span class="chip">原格式</span></td>
-                  <td><span class="chip part">仅翻译 EN→ZH</span></td>
+                  <td><span class="chip part act-toggle">仅翻译 EN→ZH</span></td>
                   <td class="state" style="color:var(--warning)">△ 命中已有任务 · 建议跳过</td>
                 </tr>
                 <tr style="opacity:.55">
@@ -767,12 +1068,13 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <div style="display:flex;gap:16px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap">
               <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">转码 UTF-8 <div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span>
-              <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">简繁 <span class="chip">简体 ▾</span></span>
+              <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">简繁 <button class="chip drop-chip" data-menu="convert">简体 ▾</button></span>
               <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">双语输出 <div class="switch" role="switch" aria-checked="false" tabindex="0"></div></span>
-              <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">写回 <span class="chip">导入库目录 ▾</span></span>
-              <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">冲突 <span class="chip">跳过 ▾</span></span>
+              <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">写回 <button class="chip drop-chip" data-menu="writeback">导入库目录 ▾</button></span>
+              <span style="font-size:12.5px;display:flex;gap:8px;align-items:center">冲突 <button class="chip drop-chip" data-menu="conflict">跳过 ▾</button></span>
               <span style="margin-left:auto;font-size:12px;color:var(--secondary-content)">预计 3 项 · 转写 <b class="mono">2 914</b> 行 · 翻译 2 项 ≈ <b class="mono">$0.11</b></span>
             </div>
           </div>
@@ -786,23 +1088,24 @@
               <b style="font-size:15px">Shōgun — 第一季</b>
               <div class="mono" style="font-size:11.5px;color:var(--secondary-content)">目标 · 10 集 · 已有 ZH 字幕 3/10 · 映射自文件名</div>
             </div>
-            <button class="btn sm">更换目标 ▾</button>
+            <button class="btn sm" id="season-target">更换目标 ▾</button>
           </div>
-          <div class="drop" role="button" tabindex="0" style="padding:20px;margin-bottom:12px">
+          <div class="drop" id="drop-season" role="button" tabindex="0" style="padding:20px;margin-bottom:12px">
             <b>拖入整季字幕包</b> 或点击选择文件
             <span class="fmt">文件名含 SxxExx / E01 / 1x02 / 第x集 均可自动映射 · .srt / .ass · 中文简繁自动归一</span>
           </div>
-          <div class="card" style="overflow-x:auto">
-            <div class="card-h"><h2>映射预览</h2><span class="meta mono">10 个文件 · 9 已匹配 · 1 待指派</span></div>
+          <div class="card">
+            <div class="card-h"><h2>映射预览</h2><span class="meta mono" id="season-meta">10 个文件 · 9 已匹配 · 1 待指派</span></div>
+            <div class="tscroll">
             <table>
               <thead><tr><th>文件</th><th>匹配集</th><th>置信度</th><th>语言</th><th>动作</th><th>状态</th></tr></thead>
-              <tbody>
+              <tbody id="season-tbody">
                 <tr>
                   <td class="mono" style="font-size:12px">Shogun.S01E01.1080p.chs.srt</td>
                   <td>E01「Anjin」</td>
                   <td><span class="chip ok">✓ 精确</span></td>
                   <td><span class="chip">ZH</span></td>
-                  <td><span class="chip part">入库＋翻译</span></td>
+                  <td><span class="chip part act-toggle">入库＋翻译</span></td>
                   <td class="state part">◐ 等待</td>
                 </tr>
                 <tr>
@@ -810,7 +1113,7 @@
                   <td>E02</td>
                   <td><span class="chip ok">✓ 精确</span></td>
                   <td><span class="chip">ZH</span> <span class="chip dim">注释轨</span></td>
-                  <td><span class="chip part">转换＋翻译</span></td>
+                  <td><span class="chip part act-toggle">转换＋翻译</span></td>
                   <td class="state part">ASS → SRT 转写</td>
                 </tr>
                 <tr>
@@ -818,7 +1121,7 @@
                   <td>E05「Broken to the Fist」</td>
                   <td><span class="chip ok">✓ 精确</span></td>
                   <td><span class="chip">ZH</span></td>
-                  <td><span class="chip part">入库＋翻译</span></td>
+                  <td><span class="chip part act-toggle">入库＋翻译</span></td>
                   <td class="state" style="color:var(--warning)">△ 内容哈希命中 · 建议跳过</td>
                 </tr>
                 <tr>
@@ -834,7 +1137,7 @@
                   <td>E08</td>
                   <td><span class="chip ok">✓ 精确</span></td>
                   <td><span class="chip">ZH·简</span></td>
-                  <td><span class="chip part">入库＋翻译</span></td>
+                  <td><span class="chip part act-toggle">入库＋翻译</span></td>
                   <td class="state done">✓ 就绪 ·「第x集」命中</td>
                 </tr>
                 <tr>
@@ -847,11 +1150,12 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <div style="display:flex;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap">
               <span style="font-size:12px;color:var(--secondary-content)">导入完成后不自动排队翻译（防覆盖语义）· 写回前清理同视频 .default/.forced 标记</span>
               <span style="margin-left:auto"></span>
-              <button class="btn sm">排除未匹配</button>
-              <button class="btn sm primary">开始导入 9 项 · 翻译 7 项 ≈ $0.31</button>
+              <button class="btn sm" id="season-exclude">排除未匹配</button>
+              <button class="btn sm primary" id="btn-import-run">开始导入 9 项 · 翻译 7 项 ≈ $0.31</button>
             </div>
           </div>
         </div>
@@ -887,8 +1191,14 @@
             <div class="dst"><span class="dst-text">把一切都煎烤殆尽。</span></div>
             <div class="mark" title="已通过">✓</div>
           </div>
+          <div class="pline rej" tabindex="0">
+            <div class="tc"><span class="idx">#414</span><br>00:12:47,150<br>→ 00:12:48,900</div>
+            <div class="src">The universe is a dark forest.</div>
+            <div class="dst"><span class="dst-text">宇宙是一个黑暗的森林。</span><span class="gloss">黑暗森林 → Dark Forest</span></div>
+            <div class="mark" title="已驳回">✗</div>
+          </div>
           <div class="pline focus dirty" tabindex="0">
-            <div class="tc"><span class="idx">#414</span><br>00:12:47,150<br>→ 00:12:50,640</div>
+            <div class="tc"><span class="idx">#415</span><br>00:12:49,260<br>→ 00:12:52,040</div>
             <div class="src">My <del class="w">interpreter</del> counted the waves for me.</div>
             <div class="dst">
               <input class="syn" value="我的翻译替我数过海浪。" aria-label="编辑译文">
@@ -902,13 +1212,13 @@
             <div class="mark" title="待定">·</div>
           </div>
           <div class="pline" tabindex="0">
-            <div class="tc"><span class="idx">#415</span><br>00:12:51,020<br>→ 00:12:53,480</div>
+            <div class="tc"><span class="idx">#416</span><br>00:12:52,300<br>→ 00:12:54,760</div>
             <div class="src">Every wave that arrived was a message.</div>
             <div class="dst"><span class="dst-text">每一道抵达的波浪都是一条讯息。</span></div>
             <div class="mark" title="待校对">·</div>
           </div>
           <div class="pline" tabindex="0">
-            <div class="tc"><span class="idx">#416</span><br>00:12:53,900<br>→ 00:12:57,260</div>
+            <div class="tc"><span class="idx">#417</span><br>00:12:55,100<br>→ 00:12:58,460</div>
             <div class="src">I just didn't know who was sending them.</div>
             <div class="dst"><span class="dst-text">我只是不知道是谁发来的。</span></div>
             <div class="mark" title="待校对">·</div>
@@ -923,6 +1233,7 @@
             <span><span class="key">⌘S</span>暂存</span>
           </div>
           <span class="sp"></span>
+          <button class="btn sm" onclick="location.hash='settings';setSettingsTab('quality')">✎ 3 处修改 → 建议入术语表</button>
           <button class="btn">导出当前快照</button>
           <button class="btn primary">完成校对并写回（128/486）</button>
         </div>
@@ -948,25 +1259,29 @@
                 <span class="st">在线</span></div>
               <div class="model">gpt-4o-mini · temperature 0.2 · 批 500 行</div>
               <div class="usage"><span>本月 <b>$3.12</b></span><span>延迟 <b>820 ms</b></span><span>成功 <b>99.4%</b></span></div>
-              <div class="ops"><button class="btn sm">测试连接</button><button class="btn sm">请求模版</button><button class="btn sm">编辑</button></div>
+              <div class="ops"><button class="btn sm" data-test="✓ 200 · 812 ms · 「你好」→「Hello」" data-ok="1">测试连接</button><button class="btn sm" onclick="location.hash='request-template'">请求模版</button><button class="btn sm">编辑</button></div>
+              <div class="test-res"></div>
             </div>
             <div class="pcard">
               <div class="head"><span class="dot ok"></span><b>DeepL</b><span class="st">在线</span></div>
               <div class="model">api-free · 500k 字符/月 · 已用 312k</div>
               <div class="usage"><span>本月 <b>$0</b></span><span>延迟 <b>310 ms</b></span><span>成功 <b>100%</b></span></div>
-              <div class="ops"><button class="btn sm">测试连接</button><button class="btn sm">设为默认</button><button class="btn sm">编辑</button></div>
+              <div class="ops"><button class="btn sm" data-test="✓ 200 · 310 ms · 500k 配额余 188k 字符" data-ok="1">测试连接</button><button class="btn sm">设为默认</button><button class="btn sm">编辑</button></div>
+              <div class="test-res"></div>
             </div>
             <div class="pcard">
               <div class="head"><span class="dot warn"></span><b>Gemini</b><span class="st">限流中</span></div>
               <div class="model">2.5-flash · 429 ×3（近 1 小时）</div>
               <div class="usage"><span>本月 <b>$0.44</b></span><span>延迟 <b>1.1 s</b></span><span>成功 <b>91.2%</b></span></div>
-              <div class="ops"><button class="btn sm">测试连接</button><button class="btn sm">编辑</button></div>
+              <div class="ops"><button class="btn sm" data-test="✗ 429 · 限流中 · 窗口 42 分钟后重置">测试连接</button><button class="btn sm">编辑</button></div>
+              <div class="test-res"></div>
             </div>
             <div class="pcard">
               <div class="head"><span class="dot ok"></span><b>Ollama 本地</b><span class="st">在线</span></div>
               <div class="model">qwen3:14b · http://localhost:11434</div>
               <div class="usage"><span>本月 <b>$0</b></span><span>延迟 <b>2.4 s</b></span><span>成功 <b>98.1%</b></span></div>
-              <div class="ops"><button class="btn sm">测试连接</button><button class="btn sm">编辑</button></div>
+              <div class="ops"><button class="btn sm" data-test="✓ 200 · 2.4 s · qwen3:14b 就绪 · 14.2 GB 显存" data-ok="1">测试连接</button><button class="btn sm">编辑</button></div>
+              <div class="test-res"></div>
             </div>
             <div class="pcard off">
               <div class="head"><span class="dot off"></span><b>LibreTranslate</b><span class="st">未连接</span></div>
@@ -975,6 +1290,13 @@
               <div class="ops"><button class="btn sm">配置</button></div>
             </div>
             <div class="pcard add" role="button" tabindex="0">＋ 添加服务<span class="model" style="margin-left:8px">内置 10 种 · 或挂载插件</span></div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-h"><h2>回退顺序</h2><span class="meta">主服务失败自动按序降级 · 降级过程在任务详情时间线可见</span></div>
+            <div class="fb-row"><span class="idx">1</span><span class="dot ok"></span><b>OpenAI</b><span class="chip">主服务 · gpt-4o-mini</span><span class="chip langcap" title="AI 服务无语言表 · 不做语言门控,配 restrictions 后可受限(点击编辑)">未受限</span><span class="end"><button class="btn sm" data-fb="up" title="上移">↑</button><button class="btn sm" data-fb="down" title="下移">↓</button><button class="btn sm">移除</button></span></div>
+            <div class="fb-row"><span class="idx">2</span><span class="dot ok"></span><b>DeepL</b><span class="chip">api-free</span><span class="chip ok langcap" title="语言表经 API 查证 · 派生只读">全语言</span><span class="end"><button class="btn sm" data-fb="up" title="上移">↑</button><button class="btn sm" data-fb="down" title="下移">↓</button><button class="btn sm">移除</button></span></div>
+            <div class="fb-row"><span class="idx">3</span><span class="dot ok"></span><b>Ollama 本地</b><span class="chip">qwen3:14b · $0</span><span class="chip part langcap" title="受限语言对(provider_language_restrictions)· 点击编辑">仅 EN → ZH</span><span class="end"><button class="btn sm" data-fb="up" title="上移">↑</button><button class="btn sm" data-fb="down" title="下移">↓</button><button class="btn sm">移除</button></span></div>
+            <div class="fb-row" style="color:var(--secondary-content)">＋ 添加服务到回退链</div>
           </div>
         </div>
 
@@ -991,8 +1313,9 @@
           <div class="card" style="max-width:640px;margin-top:12px">
             <div class="card-h"><h2>自动化批次</h2><span class="meta mono">cron</span></div>
             <div class="setlist">
-              <div class="row"><b>每日补缺</b><span class="hint mono">0 4 * * * · 限额 50 任务/次 · 延迟新片 48h</span><span class="end"><div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span></div>
-              <div class="row"><b>每周全库巡检</b><span class="hint mono">0 5 * * 0 · 只检不翻，生成缺字幕报告</span><span class="end"><div class="switch" role="switch" aria-checked="false" tabindex="0"></div></span></div>
+              <div class="row"><b>每日补缺</b><span class="hint mono">0 4 * * * · 限额 50 任务/次 · 延迟新片 48h</span><span class="end"><button class="btn sm">编辑</button><div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span></div>
+              <div class="row"><b>每周全库巡检</b><span class="hint mono">0 5 * * 0 · 只检不翻 · 生成缺字幕报告</span><span class="end"><button class="btn sm">编辑</button><div class="switch" role="switch" aria-checked="false" tabindex="0"></div></span></div>
+              <div class="row" style="color:var(--secondary-content)">＋ 新增批次</div>
             </div>
           </div>
         </div>
@@ -1015,6 +1338,14 @@
               <div class="row" style="color:var(--secondary-content)">＋ 添加术语 · 支持 CSV 导入</div>
             </div>
           </div>
+          <div class="card" style="max-width:640px;margin-top:12px">
+            <div class="card-h"><h2>语言策略</h2><span class="meta">翻译管线的语言范围 · 缺字幕统计与自动化批次均遵循 · 每服务能力见「回退顺序」卡</span></div>
+            <div class="setlist">
+              <div class="row"><b>目标语言</b><span class="chips" style="gap:5px"><span class="chip ok">ZH ✓</span><span class="chip dim">＋ 追加</span></span><span class="end"><button class="btn sm">编辑</button></span></div>
+              <div class="row"><b>源语言白名单</b><span class="hint mono">EN · JA</span><span class="end"><button class="btn sm">编辑</button></span></div>
+              <div class="row" title="派生值:回退链成员语言能力 ∩ (源白名单 × 目标语言),随回退顺序卡增删实时重算"><b>链上语言覆盖</b><span class="hint mono" id="lang-coverage">—</span></div>
+            </div>
+          </div>
         </div>
 
         <!-- 系统 -->
@@ -1022,17 +1353,336 @@
           <div class="card" style="max-width:640px">
             <div class="card-h"><h2>系统</h2><span class="meta mono">v1.4.0 · sqlite · /app/config</span></div>
             <div class="setlist">
-              <div class="row"><span class="dot ok"></span><b>认证</b><span class="hint">本地用户 + API Key · Pbkdf2 · 2 用户</span><span class="end"><button class="btn sm">用户管理</button></span></div>
-              <div class="row"><span class="dot ok"></span><b>日志</b><span class="hint mono">Information · 环形缓冲 2 000 条</span><span class="end"><button class="btn sm">打开日志</button></span></div>
-              <div class="row"><span class="dot warn"></span><b>遥测</b><span class="hint">匿名版本统计 · 关闭中</span><span class="end"><div class="switch" role="switch" aria-checked="false" tabindex="0"></div></span></div>
-              <div class="row"><span class="dot ok"></span><b>定时任务</b><span class="hint mono">Hangfire · 6 队列 · 并发 2</span><span class="end"><button class="btn sm">面板</button></span></div>
+              <div class="row"><span class="dot ok"></span><b>认证</b><span class="hint">单用户 henry · PBKDF2 · Cookie + API Key（webhook）</span><span class="end"><span class="chip ok">API Key 已发放</span></span></div>
+              <div class="row"><span class="dot ok"></span><b>日志</b><span class="hint mono">Information · 环形缓冲 2 000 条</span><span class="end"><button class="btn sm" onclick="location.hash='logs'">打开日志</button></span></div>
+              <div class="row"><span class="dot ok"></span><b>定时任务</b><span class="hint mono">Hangfire · 6 队列 · 并发 2</span><span class="end"><button class="btn sm" onclick="location.hash='schedule'">面板</button></span></div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 8 任务详情（下钻屏） ═══ -->
+      <section class="screen" data-screen="queue-detail">
+        <div class="pb-head">
+          <button class="btn sm" onclick="location.hash='queue'">← 任务队列</button>
+          <div>
+            <b style="font-size:15px">Shōgun — S01E05「Broken to the Fist」</b>
+            <div class="mono" style="font-size:11.5px;color:var(--secondary-content)">请求 #2417 · EN → ZH · 512 行 · 8 942 字符 · 自动化「每日补缺」</div>
+          </div>
+          <span style="flex:1"></span>
+          <button class="btn sm" onclick="location.hash='proofread'">校对</button>
+          <button class="btn sm" onclick="location.hash='logs'">日志</button>
+          <button class="btn sm primary">⏸ 暂停</button>
+        </div>
+
+        <div class="card" style="padding:16px">
+          <div class="track" style="height:10px"><div class="fill" style="width:72%"></div><div class="head" style="left:72%;height:18px;top:-4px"></div></div>
+          <div class="qd-stats">
+            <div class="qd-stat"><div class="n">368<small> /512 行</small></div><div class="l">已翻译</div></div>
+            <div class="qd-stat"><div class="n">3/4</div><div class="l">当前批次 94/128 行</div></div>
+            <div class="qd-stat"><div class="n">$0.019</div><div class="l">成本（估算）</div></div>
+            <div class="qd-stat"><div class="n">06:12</div><div class="l">已运行</div></div>
+            <div class="qd-stat"><div class="n" style="color:var(--accent)">04:12</div><div class="l">预计剩余</div></div>
+          </div>
+          <div class="fb-chain" style="padding:2px 2px 0">
+            <span style="color:var(--secondary-content);font-size:11.5px">执行链</span>
+            <span class="chip" style="color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,var(--line))">gemini · 2.5-flash ✗ 429</span>
+            <span class="arr">→</span>
+            <span class="chip part">openai · gpt-4o-mini ▸ 处理中</span>
+            <span class="arr">→</span>
+            <span class="chip dim">ollama · qwen3:14b</span>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-h"><h2>事件时间线</h2><span class="meta mono">9 个事件 · SignalR 实时</span></div>
+          <div class="tl">
+            <div class="tl-row"><time>15:33</time><span class="d dim"></span><span>创建请求 · 自动化批次「每日补缺」扫出缺字幕 <span class="m">EN 源轨就绪</span></span></div>
+            <div class="tl-row"><time>15:33</time><span class="d dim"></span><span>入队 <span class="m">translation 队列 · 位次 2</span></span></div>
+            <div class="tl-row"><time>15:35</time><span class="d acc"></span><span>开始翻译 · <b>gemini 2.5-flash</b> <span class="m">批次 1/4 · 128 行</span></span></div>
+            <div class="tl-row"><time>15:36</time><span class="d err"></span><span>429 Rate Limited <span class="m">重试 1/3 · 退避 8s 后再遇 429</span></span></div>
+            <div class="tl-row"><time>15:36</time><span class="d warn"></span><span>自动降级 → <b>openai gpt-4o-mini</b> <span class="m">回退链第 2 位 · 从批次 1 断点续传</span></span></div>
+            <div class="tl-row"><time>15:37</time><span class="d ok"></span><span>批次 1/4 完成 <span class="m">128 行 · $0.004</span></span></div>
+            <div class="tl-row"><time>15:39</time><span class="d ok"></span><span>批次 2/4 完成 <span class="m">256 行累计 · $0.011</span></span></div>
+            <div class="tl-row"><time>15:41</time><span class="d acc"></span><span>批次 3/4 进行中 <span class="m">368/512 行 · 1.4 行/s</span></span></div>
+            <div class="tl-row"><time>—</time><span class="d dim"></span><span>写回 Shogun.S01E05.zh.srt <span class="m">待批次 4/4 · 双语关</span></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 9 请求模版（下钻屏） ═══ -->
+      <section class="screen" data-screen="request-template">
+        <div class="pb-head">
+          <button class="btn sm" onclick="location.hash='settings'">← 翻译服务</button>
+          <div>
+            <b style="font-size:15px">请求模版 · OpenAI</b>
+            <div class="mono" style="font-size:11.5px;color:var(--secondary-content)">gpt-4o-mini · temperature 0.2 · 批 128 行 · 术语表注入开</div>
+          </div>
+          <span style="flex:1"></span>
+          <button class="btn sm">重置为默认</button>
+          <button class="btn sm primary">保存模版</button>
+        </div>
+
+        <div class="tpl-grid">
+          <div class="tpl-editor">
+            <div class="card">
+              <div class="card-h"><h2>System Prompt</h2><span class="meta mono">4 个变量可用</span></div>
+              <div style="padding:12px 14px">
+                <textarea spellcheck="false" aria-label="System Prompt 模版">You are a professional subtitle translator.
+Translate {sourceLang} to {targetLang}.
+One line in, one line out — never merge or split cues.
+Preserve names via glossary: {glossary}
+Previous-line context:
+{context}</textarea>
+                <div class="vars" style="margin-top:10px">
+                  <span class="chip">{sourceLang}</span><span class="chip">{targetLang}</span><span class="chip">{glossary}</span><span class="chip">{context}</span><span class="chip dim">＋ 变量</span>
+                </div>
+                <div class="hint-card" style="margin-top:10px">
+                  <b>断点续传</b> · 模版变更只影响新批次；进行中的任务按创建时的模版执行完毕。
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <div class="card-h"><h2>请求预览</h2><span class="meta mono">POST /v1/chat/completions</span></div>
+              <pre class="json">{
+  <span class="k">"model"</span>: <span class="s">"gpt-4o-mini"</span>,
+  <span class="k">"temperature"</span>: <span class="n">0.2</span>,
+  <span class="k">"messages"</span>: [
+    { <span class="k">"role"</span>: <span class="s">"system"</span>, <span class="k">"content"</span>: <span class="s">"…模版渲染后…"</span> },
+    { <span class="k">"role"</span>: <span class="s">"user"</span>, <span class="k">"content"</span>: <span class="s">"[128 行字幕块]"</span> }
+  ]
+}</pre>
+            </div>
+            <div class="card" style="margin-top:12px">
+              <div class="card-h"><h2>试译预览</h2><span class="meta mono">单行 · 走真实请求</span></div>
+              <div class="tryout" style="padding:12px 14px">
+                <input class="en" value="The Shōgun commands the Anjin to sail west." aria-label="试译原文">
+                <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+                  <button class="btn sm primary" id="try-run">试译 ▸</button>
+                  <span class="mono" id="try-meta" style="font-size:11px;color:var(--secondary-content)">812 ms · 17 tokens · $0.0001</span>
+                </div>
+                <div id="try-out" style="margin-top:10px;padding:9px 12px;background:var(--primary);border:1px solid var(--line);border-radius:4px;font-size:13px">
+                  将军命令按针向西航行。<span class="gloss">Anjin → 按针</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 10 日志（下钻屏） ═══ -->
+      <section class="screen" data-screen="logs">
+        <div class="pb-head">
+          <button class="btn sm" onclick="location.hash='settings'">← 系统</button>
+          <div>
+            <b style="font-size:15px">日志</b>
+            <div class="mono" style="font-size:11.5px;color:var(--secondary-content)">环形缓冲 2 000 条 · SSE 实时 · Information 级</div>
+          </div>
+          <span style="flex:1"></span>
+          <span class="chips" style="gap:5px" role="group" aria-label="级别过滤">
+            <button class="chip" data-lv="all" aria-pressed="true">全部 12</button>
+            <button class="chip" data-lv="inf">INFO 8</button>
+            <button class="chip" data-lv="warn">WARN 3</button>
+            <button class="chip" data-lv="err">ERROR 1</button>
+          </span>
+          <span style="font-size:12.5px;display:flex;gap:8px;align-items:center;margin-left:10px">自动滚动 <div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span>
+        </div>
+        <div class="card" style="overflow-x:auto">
+          <div id="loglist">
+            <div class="logline" data-lv="inf"><time>15:41:22</time><span class="lv inf">INF</span><span class="msg">TranslationRequest #2417 批次 3/4 · 368/512 行 · 1.4 行/s</span></div>
+            <div class="logline" data-lv="inf"><time>15:40:05</time><span class="lv inf">INF</span><span class="msg">TranslationRequest #2418 创建 · Dune: Part Two · 手动添加</span></div>
+            <div class="logline" data-lv="inf"><time>15:38:44</time><span class="lv inf">INF</span><span class="msg">AutomatedTranslationJob 扫描完成 · Radarr「最近添加」扫出 6 部缺中文字幕</span></div>
+            <div class="logline warnrow" data-lv="warn"><time>15:36:51</time><span class="lv warn">WRN</span><span class="msg">GeminiService 429 Rate Limited · attempt 2/3 · 退避 8s</span></div>
+            <div class="logline" data-lv="inf"><time>15:36:12</time><span class="lv inf">INF</span><span class="msg">#2417 降级 → OpenAI gpt-4o-mini · 回退链第 2 位 · 批次 1 断点续传</span></div>
+            <div class="logline warnrow" data-lv="warn"><time>15:36:02</time><span class="lv warn">WRN</span><span class="msg">GeminiService 429 Rate Limited · attempt 1/3 · 退避 4s</span></div>
+            <div class="logline" data-lv="inf"><time>15:35:48</time><span class="lv inf">INF</span><span class="msg">#2417 开始翻译 · gemini 2.5-flash · 512 行 4 批</span></div>
+            <div class="logline errrow" data-lv="err"><time>15:29:41</time><span class="lv err">ERR</span><span class="msg">TranslationJob #2409 失败 · True Detective S04E06 · 回退链耗尽（429 ×3）</span></div>
+            <div class="logline warnrow" data-lv="warn"><time>15:29:12</time><span class="lv warn">WRN</span><span class="msg">GeminiService 429 · attempt 3/3 · 切换回退链下一位</span></div>
+            <div class="logline" data-lv="inf"><time>15:02:19</time><span class="lv inf">INF</span><span class="msg">ProofreadRequest #2416 打开 · 3 Body Problem S01E02 · 486 行</span></div>
+            <div class="logline" data-lv="inf"><time>14:57:33</time><span class="lv inf">INF</span><span class="msg">写回 The.Bear.S03E01.zh.srt · 512 行 · $0.021</span></div>
+            <div class="logline" data-lv="inf"><time>04:00:07</time><span class="lv inf">INF</span><span class="msg">StatisticsJob 完成 · 312s · DailyStatistics 写入</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 11 定时任务（下钻屏） ═══ -->
+      <section class="screen" data-screen="schedule">
+        <div class="pb-head">
+          <button class="btn sm" onclick="location.hash='settings'">← 系统</button>
+          <div>
+            <b style="font-size:15px">定时任务</b>
+            <div class="mono" style="font-size:11.5px;color:var(--secondary-content)">Hangfire · 6 队列 · 并发 MAX_CONCURRENT_JOBS=2</div>
+          </div>
+          <span style="flex:1"></span>
+          <button class="btn sm" onclick="location.hash='queue'">查看任务队列</button>
+        </div>
+        <div class="qdepth" style="margin-bottom:14px">
+          <div class="qdep"><div class="n" style="color:var(--accent)">12</div><div class="l">translation 排队</div></div>
+          <div class="qdep"><div class="n">2</div><div class="l">正在执行</div></div>
+          <div class="qdep"><div class="n">1</div><div class="l">system 排队</div></div>
+          <div class="qdep"><div class="n">0</div><div class="l">movies / shows</div></div>
+          <div class="qdep"><div class="n">0</div><div class="l">webhook / default</div></div>
+          <div class="qdep"><div class="n">98.2%</div><div class="l">30 天任务成功率</div></div>
+        </div>
+        <div class="card" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>任务</th><th>cron</th><th>上次</th><th>下次</th><th>状态</th><th style="width:90px"></th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="title"><b>每日补缺</b><span class="meta">AutomatedTranslationJob · 限额 50 任务/次</span></td>
+                <td class="mono" style="font-size:12px">0 4 * * *</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">今 04:00 · 312s</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">明 04:00</td>
+                <td><span class="chip ok">✓ 开启</span></td>
+                <td style="text-align:right"><button class="btn sm">触发</button></td>
+              </tr>
+              <tr>
+                <td class="title"><b>统计快照</b><span class="meta">StatisticsJob</span></td>
+                <td class="mono" style="font-size:12px">0 3 * * *</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">今 03:00 · 4s</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">明 03:00</td>
+                <td><span class="chip ok">✓ 开启</span></td>
+                <td style="text-align:right"><button class="btn sm">触发</button></td>
+              </tr>
+              <tr>
+                <td class="title"><b>媒体同步 · Sonarr</b><span class="meta">SyncShowJob · 46 剧集</span></td>
+                <td class="mono" style="font-size:12px">*/30 * * * *</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">15:30 · 8s</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">16:00</td>
+                <td><span class="chip ok">✓ 开启</span></td>
+                <td style="text-align:right"><button class="btn sm">触发</button></td>
+              </tr>
+              <tr>
+                <td class="title"><b>媒体同步 · Radarr</b><span class="meta">SyncMovieJob · 312 电影</span></td>
+                <td class="mono" style="font-size:12px">0 */2 * * *</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">14:00 · 5s</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">16:00</td>
+                <td><span class="chip ok">✓ 开启</span></td>
+                <td style="text-align:right"><button class="btn sm">触发</button></td>
+              </tr>
+              <tr>
+                <td class="title"><b>每周清理</b><span class="meta">CleanupJob · 孤儿字幕与临时文件</span></td>
+                <td class="mono" style="font-size:12px">0 2 * * 0</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">周日 02:00 · 1.2s</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">下周日 02:00</td>
+                <td><span class="chip ok">✓ 开启</span></td>
+                <td style="text-align:right"><button class="btn sm">触发</button></td>
+              </tr>
+              <tr style="opacity:.55">
+                <td class="title"><b>每周全库巡检</b><span class="meta">只检不翻 · 生成缺字幕报告</span></td>
+                <td class="mono" style="font-size:12px">0 5 * * 0</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">—</td>
+                <td><span class="chip dim">关闭</span></td>
+                <td style="text-align:right"><button class="btn sm">启用</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══ 12 媒体详情 · 电影（下钻屏） ═══ -->
+      <section class="screen" data-screen="media-detail-movie">
+        <div class="pb-head">
+          <button class="btn sm" onclick="location.hash='library'">← 媒体库</button>
+          <div>
+            <b style="font-size:15px">Dune: Part Two</b>
+            <div class="mono" style="font-size:11.5px;color:var(--secondary-content)">2024 · 166 min · 电影 · EN → ZH</div>
+          </div>
+          <span style="flex:1"></span>
+          <button class="btn sm" onclick="location.hash='import'">⇪ 导入字幕</button>
+        </div>
+        <div class="toolbar">
+          <span class="chips" style="gap:5px">
+            <span class="chip ok">EN ✓ 源轨 · 1 890 行</span>
+            <span class="chip busy">ZH ⏳ 38%</span>
+          </span>
+          <span class="mono" style="margin-left:auto;font-size:12px;color:var(--secondary-content)">最近活动 15:40</span>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>进行中任务</h2><span class="meta mono">请求 #2418 · deepl api-free</span></div>
+          <div class="jobrow" onclick="location.hash='queue-detail'">
+            <div class="t"><b>Dune: Part Two (2024)</b><span>EN → ZH · 上下文窗口 500 行 · 批次 2/4</span></div>
+            <div class="track"><div class="fill" style="width:38%"></div><div class="head" style="left:38%"></div></div>
+            <div class="pct">38% · 剩 11:47</div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="card-h"><h2>翻译历史</h2><span class="meta mono">近期 3 / 3 个请求</span></div>
+          <div class="hist-row">
+            <div class="t"><b>Dune: Part Two · 翻译请求</b><span>#2418 · 38% · 剩 11:47</span></div>
+            <span class="chip">deepl · api-free</span>
+            <div class="track" style="width:110px"><div class="fill" style="width:38%"></div><div class="head" style="left:38%"></div></div>
+            <button class="btn sm" onclick="location.hash='queue-detail'">详情</button>
+          </div>
+          <div class="hist-row">
+            <div class="t"><b>手动添加入队</b><span>15:40 · 媒体库勾选批量 · 与 3 部同期排队</span></div>
+            <span class="chip dim">library</span>
+            <span class="state part" style="white-space:nowrap">◐ 排队 2 位</span>
+            <button class="btn sm" onclick="location.hash='queue-detail'">详情</button>
+          </div>
+          <div class="hist-row">
+            <div class="t"><b>EN 源轨检出</b><span>15:35 · 媒体同步 · Dune.Part.Two.2024.en.srt · UTF-8</span></div>
+            <span class="chip dim">sync</span>
+            <span class="state done" style="white-space:nowrap">✓ 就绪</span>
+            <button class="btn sm" onclick="location.hash='import'">导入台</button>
           </div>
         </div>
       </section>
 
     </div>
   </main>
+</div>
+
+<div class="modal" id="cmdk" role="dialog" aria-label="全局搜索">
+  <div class="modal-box">
+    <div class="mhead">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="cmdk-in" placeholder="搜索媒体、任务、设置…" aria-label="全局搜索">
+      <span class="chip dim mono">ESC</span>
+    </div>
+    <div class="mres" id="cmdk-res">
+      <div class="grp">媒体</div>
+      <button class="item" data-k="shogun 幕府将军 剧集" data-go-h="media-detail"><b>Shōgun</b><span class="sub">剧集 · 翻译中</span></button>
+      <button class="item" data-k="dune 沙丘 电影" data-go-h="media-detail-movie"><b>Dune: Part Two</b><span class="sub">电影 · 队列中</span></button>
+      <button class="item" data-k="3 body problem 三体" data-go-h="proofread"><b>3 Body Problem</b><span class="sub">待校对 E02</span></button>
+      <button class="item" data-k="the bear 熊家" data-go-h="library"><b>The Bear</b><span class="sub">剧集 · 完成</span></button>
+      <div class="grp">任务</div>
+      <button class="item" data-k="#2417 shogun s01e05 进行中" data-go-h="queue-detail"><b>#2417 · Shōgun S01E05</b><span class="sub">72% · 进行中</span></button>
+      <button class="item" data-k="#2418 dune 电影" data-go-h="queue-detail"><b>#2418 · Dune: Part Two</b><span class="sub">38% · 进行中</span></button>
+      <button class="item" data-k="#2409 true detective 失败" data-go-h="queue"><b>#2409 · True Detective S04E06</b><span class="sub">失败 · 待重试</span></button>
+      <div class="grp">设置</div>
+      <button class="item" data-k="翻译服务 provider 回退 fallback 顺序 卡片" data-go-h="settings" data-panel="providers">翻译服务 · 回退顺序</button>
+      <button class="item" data-k="语言策略 language 目标语言" data-go-h="settings" data-panel="quality">语言策略</button>
+      <button class="item" data-k="术语表 glossary" data-go-h="settings" data-panel="quality">术语表</button>
+      <button class="item" data-k="请求模版 prompt 模板 template" data-go-h="request-template">请求模版 · 试译预览</button>
+      <button class="item" data-k="日志 logs log" data-go-h="logs">日志</button>
+      <button class="item" data-k="定时任务 hangfire 调度 schedule cron" data-go-h="schedule">定时任务</button>
+    </div>
+  </div>
+</div>
+
+<nav class="mnav" aria-label="移动端主导航">
+  <button data-go="overview" aria-current="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>概览</button>
+  <button data-go="library"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16"/></svg>媒体库<span class="cnt">1284</span></button>
+  <button data-go="queue"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>队列<span class="cnt">14</span></button>
+  <button data-go="import"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V4m0 0L8 8m4-4l4 4M4 20h16"/></svg>导入</button>
+  <button data-go="proofread"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12l3 3 5-7"/></svg>校对<span class="cnt">1</span></button>
+  <button data-go="settings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg>设置</button>
+</nav>
+
+<input type="file" id="file-in" multiple accept=".srt,.ass,.ssa,.vtt" hidden>
+<div id="toasts" aria-live="polite"></div>
+<div class="menu" id="menu" hidden></div>
+
+<div class="modal fmodal" id="fmodal" role="dialog" aria-label="表单">
+  <div class="modal-box" style="width:min(430px,92vw)">
+    <div class="mhead"><b id="fm-title" style="font-size:14px"></b></div>
+    <div id="fm-fields" style="padding:4px 0 8px"></div>
+    <div class="fbtns"><button class="btn" id="fm-cancel">取消</button><button class="btn primary" id="fm-save">保存</button></div>
+  </div>
 </div>
 
 <script>
@@ -1044,9 +1694,14 @@
     import:['导入与转换','拖拽上传或服务器路径 · 转码 / 转格式 / 去重后入管线'],
     proofread:['校对台','3 Body Problem S01E02 · 128/486 行'],
     settings:['设置','四组：服务 / 媒体与自动化 / 字幕与质量 / 系统'],
-    'media-detail':['媒体详情','Shōgun · S01 · 逐集字幕轨与翻译历史']
+    'media-detail':['媒体详情','Shōgun · S01 · 逐集字幕轨与翻译历史'],
+    'queue-detail':['任务详情','Shōgun S01E05 · 请求 #2417 · 72% · 剩 04:12'],
+    'request-template':['请求模版','openai · gpt-4o-mini · prompt 编辑与试译预览'],
+    logs:['日志','环形缓冲 2 000 条 · SSE 实时'],
+    schedule:['定时任务','Hangfire · 6 队列 · recurring 一览'],
+    'media-detail-movie':['媒体详情','Dune: Part Two · 电影 · EN → ZH']
   };
-  const ctas={overview:'⇪ 导入字幕',library:'翻译所选 ▸',queue:'＋ 新建任务',import:'开始处理 ▸',proofread:'暂存 ⌘S',settings:'保存全部','media-detail':'翻译缺失 ▸'};
+  const ctas={overview:'⇪ 导入字幕',library:'翻译所选 ▸',queue:'＋ 新建任务',import:'开始处理 ▸',proofread:'暂存 ⌘S',settings:'保存全部','media-detail':'翻译缺失 ▸','queue-detail':'⏸ 暂停','request-template':'保存模版',logs:'⇩ 导出',schedule:'＋ 新建任务','media-detail-movie':'翻译缺失 ▸'};
   const ctaGo={overview:'import'};
   function go(name){
     document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.dataset.screen===name));
@@ -1118,6 +1773,719 @@
   document.querySelectorAll('.switch').forEach(s=>s.addEventListener('click',()=>{
     s.classList.toggle('on');s.setAttribute('aria-checked',s.classList.contains('on'));
   }));
+
+  // 队列行 / 活跃任务行 → 任务详情
+  document.querySelectorAll('.qrow,.jobrow').forEach(r=>r.addEventListener('click',e=>{
+    if(e.target.closest('button'))return;location.hash='queue-detail';
+  }));
+
+  // 设置分组:供外部调用(术语回流、⌘K 跳设置组)
+  function setSettingsTab(name){
+    const t=document.querySelector(`[data-p="${name}"]`);
+    if(t)t.click();
+  }
+
+  // 测试连接 → 卡片内联结果态
+  document.querySelectorAll('[data-test]').forEach(b=>b.addEventListener('click',()=>{
+    const res=b.closest('.pcard').querySelector('.test-res');
+    res.textContent=b.dataset.test;
+    res.className='test-res on '+(b.dataset.ok==='1'?'ok':'err');
+  }));
+
+  // 回退顺序:上移/下移
+  function renum(){document.querySelectorAll('.fb-row .idx').forEach((i,n)=>i.textContent=n+1);}
+  document.querySelectorAll('.fb-row [data-fb]').forEach(b=>b.addEventListener('click',()=>{
+    const row=b.closest('.fb-row');
+    if(b.dataset.fb==='up'&&row.previousElementSibling)row.previousElementSibling.before(row);
+    if(b.dataset.fb==='down'&&row.nextElementSibling)row.nextElementSibling.after(row);
+    renum();
+  }));
+
+  // 日志级别过滤
+  document.querySelectorAll('[data-lv]').forEach(c=>c.addEventListener('click',()=>{
+    document.querySelectorAll('[data-lv]').forEach(x=>x.setAttribute('aria-pressed',x===c));
+    const lv=c.dataset.lv;
+    document.querySelectorAll('#loglist .logline').forEach(l=>l.classList.toggle('hidden',lv!=='all'&&l.dataset.lv!==lv));
+  }));
+
+  // 试译预览:重跑计数
+  const tryBtn=document.getElementById('try-run');
+  if(tryBtn)tryBtn.addEventListener('click',()=>{
+    document.getElementById('try-meta').textContent='798 ms · 17 tokens · $0.0001';
+  });
+
+  // ⌘K 全局搜索
+  const cmdk=document.getElementById('cmdk'),cin=document.getElementById('cmdk-in');
+  function openK(){cmdk.classList.add('on');cin.value='';filterK('');cin.focus();}
+  function closeK(){cmdk.classList.remove('on');}
+  function filterK(q){
+    q=q.trim().toLowerCase();
+    document.querySelectorAll('#cmdk-res .item').forEach(it=>{
+      it.classList.toggle('hidden',q&&!((it.dataset.k||'')+' '+it.textContent).toLowerCase().includes(q));
+    });
+    document.querySelectorAll('#cmdk-res .grp').forEach(g=>{
+      let it=g.nextElementSibling,vis=false;
+      while(it&&it.classList.contains('item')){if(!it.classList.contains('hidden'))vis=true;it=it.nextElementSibling;}
+      g.classList.toggle('hidden',!vis);
+    });
+  }
+  document.getElementById('pg-search').addEventListener('click',openK);
+  addEventListener('keydown',e=>{
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();cmdk.classList.contains('on')?closeK():openK();}
+    if(e.key==='Escape')closeK();
+  });
+  cin.addEventListener('input',()=>filterK(cin.value));
+  cmdk.addEventListener('click',e=>{if(e.target===cmdk)closeK();});
+  document.querySelectorAll('#cmdk-res .item').forEach(it=>it.addEventListener('click',()=>{
+    const h=it.dataset.goH||'settings';
+    location.hash=h;go(h);
+    if(it.dataset.panel)setSettingsTab(it.dataset.panel);
+    closeK();
+  }));
+
+  /* ═══════════ 通用交互系统:toast / 下拉菜单 / 表单模态 / 下载 ═══════════ */
+  function toast(msg){
+    const t=document.createElement('div');t.className='toast';t.textContent=msg;
+    document.getElementById('toasts').appendChild(t);
+    setTimeout(()=>t.classList.add('out'),2200);setTimeout(()=>t.remove(),2600);
+  }
+  const menuEl=document.getElementById('menu');let menuOut=null;
+  function closeMenu(){menuEl.hidden=true;if(menuOut){document.removeEventListener('click',menuOut);menuOut=null;}}
+  function openMenu(anchor,items){
+    closeMenu();menuEl.innerHTML='';
+    items.forEach(it=>{
+      if(it.sep){const s=document.createElement('div');s.className='sep';menuEl.appendChild(s);return;}
+      const b=document.createElement('button');
+      const ck=document.createElement('span');ck.className='ck';ck.textContent=it.checked?'✓':'';
+      const lb=document.createElement('span');lb.textContent=it.label;
+      b.append(ck,lb);
+      b.addEventListener('click',()=>{closeMenu();it.pick&&it.pick();});
+      menuEl.appendChild(b);
+    });
+    menuEl.hidden=false;
+    const r=anchor.getBoundingClientRect();
+    menuEl.style.left=Math.max(8,Math.min(r.left,innerWidth-menuEl.offsetWidth-8))+'px';
+    menuEl.style.top=Math.min(r.bottom+6,innerHeight-menuEl.offsetHeight-8)+'px';
+    setTimeout(()=>{menuOut=e=>{if(!menuEl.contains(e.target)&&!anchor.contains(e.target))closeMenu();};document.addEventListener('click',menuOut);},0);
+  }
+  addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();});
+
+  const fmodal=document.getElementById('fmodal');let fmSave=null;
+  function openForm(title,fields,onSave){
+    document.getElementById('fm-title').textContent=title;
+    const box=document.getElementById('fm-fields');box.innerHTML='';
+    fields.forEach(f=>{
+      const row=document.createElement('div');row.className='frow';
+      const lab=document.createElement('label');lab.textContent=f.label;row.appendChild(lab);
+      let inp;
+      if(f.options){inp=document.createElement('select');f.options.forEach(o=>{const op=document.createElement('option');op.value=op.textContent=o;inp.appendChild(op);});inp.value=f.value||f.options[0];}
+      else{inp=document.createElement('input');inp.type=f.type||'text';inp.value=f.value||'';if(f.mono)inp.style.fontFamily='var(--font-mono)';}
+      row.appendChild(inp);box.appendChild(row);
+    });
+    fmSave=()=>onSave([...box.querySelectorAll('input,select')].map(i=>i.value));
+    fmodal.classList.add('on');
+    const first=box.querySelector('input,select');if(first)first.focus();
+  }
+  document.getElementById('fm-cancel').addEventListener('click',()=>fmodal.classList.remove('on'));
+  document.getElementById('fm-save').addEventListener('click',()=>{fmodal.classList.remove('on');fmSave&&fmSave();fmSave=null;});
+  fmodal.addEventListener('click',e=>{if(e.target===fmodal)fmodal.classList.remove('on');});
+  addEventListener('keydown',e=>{if(e.key==='Escape'&&fmodal.classList.contains('on'))fmodal.classList.remove('on');});
+
+  function download(name,text){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+    a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }
+
+  /* ═══════════ 顶栏 CTA:每屏真实动作(设置页无 CTA——自动保存模型) ═══════════ */
+  const ctaBtn=document.getElementById('pg-cta');
+  const _goBase=go;
+  go=function(name){
+    _goBase(name);ctaBtn.style.display=(name==='settings')?'none':'';
+    document.querySelectorAll('.mnav button').forEach(b=>b.setAttribute('aria-current',b.dataset.go===name));
+  };
+  go(document.querySelector('.screen.on').dataset.screen||'overview');
+  ctaBtn.addEventListener('click',()=>{
+    const s=document.querySelector('.screen.on').dataset.screen;
+    const act={
+      overview:()=>{location.hash='import';},
+      library:ctaLibrary,
+      queue:()=>{location.hash='library';toast('从媒体库勾选条目即可新建翻译任务');},
+      import:()=>runFreeImport(),
+      proofread:()=>toast('已暂存 · 128/486 行'),
+      'media-detail':mdTranslateMissing,
+      'media-detail-movie':()=>toast('翻译进行中 · 请求 #2418 · 38%'),
+      'queue-detail':qdTogglePause,
+      'request-template':()=>tplSave(),
+      logs:()=>exportLogs(),
+      schedule:()=>openMenu(ctaBtn,[
+        {label:'每日补缺',pick:()=>toast('已创建 recurring · 每日补缺 0 4 * * *')},
+        {label:'每周全库巡检',pick:()=>toast('已创建 recurring · 每周全库巡检')},
+        {sep:1},
+        {label:'自定义 cron…',pick:()=>openForm('自定义定时任务',[{label:'名称',value:'巡检'},{label:'cron 表达式',value:'0 5 * * *',mono:1}],v=>toast(`已创建 ${v[0]} · ${v[1]}`))},
+      ]),
+      settings:null,
+    }[s];
+    act&&act();
+  });
+  function ctaLibrary(){
+    go('library');
+    const boxes=[...document.querySelectorAll('[data-screen="library"] tbody input[type=checkbox]')];
+    if(!boxes.some(b=>b.checked)){boxes[0].checked=true;syncTray();}
+    openMenu(ctaBtn,[
+      {label:'EN → ZH · 简体',checked:1,pick:trayRun},
+      {label:'EN → ZH · 繁体',pick:()=>{toast(`已加入队列 · ${trayCount()} 项 · 繁体目标`);trayClear();}},
+    ]);
+  }
+
+  /* ═══════════ 媒体库:类型 / 状态 / 搜索 三联动过滤 ═══════════ */
+  [...document.querySelectorAll('[data-screen="library"] tbody tr')].forEach(tr=>{
+    const t=tr.textContent;
+    tr.dataset.type=t.includes('电影')?'movie':'show';
+    tr.dataset.st=t.includes('翻译中')?'run':t.includes('队列中')?'wait':t.includes('失败')?'fail':t.includes('待校对')?'proof':t.includes('完成')?'done':'none';
+  });
+  let libType='all',libSt='all',libQ='';
+  function applyLibFilter(){
+    let n=0;
+    document.querySelectorAll('[data-screen="library"] tbody tr').forEach(tr=>{
+      const show=(libType==='all'||tr.dataset.type===libType)
+        &&(libSt==='all'||tr.dataset.st===libSt)
+        &&(!libQ||tr.textContent.toLowerCase().includes(libQ));
+      tr.classList.toggle('hidden',!show);if(show)n++;
+    });
+    document.getElementById('lib-count').textContent=
+      (libType==='all'&&libSt==='all'&&!libQ)?'1 284 项 · 63 缺字幕 · 14 进行中':`匹配 ${n} / 1 284 项`;
+  }
+  document.querySelectorAll('#lib-seg button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#lib-seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+    libType=b.dataset.libtype;applyLibFilter();
+  }));
+  document.getElementById('lib-search').addEventListener('input',e=>{libQ=e.target.value.trim().toLowerCase();applyLibFilter();});
+  document.getElementById('lib-lang').addEventListener('click',e=>{
+    const cur=document.querySelector('#lib-lang .mono').textContent;
+    openMenu(e.currentTarget,['ZH','EN','JA'].map(l=>({label:l==='ZH'?'ZH · 中文':l==='EN'?'EN · English':'JA · 日本語',checked:cur===l,pick:()=>{document.querySelector('#lib-lang .mono').textContent=l;}})));
+  });
+  document.getElementById('lib-state').addEventListener('click',e=>{
+    const opts=[['all','全部状态'],['run','翻译中'],['wait','队列中'],['fail','失败'],['proof','待校对'],['done','已完成'],['none','未排队']];
+    openMenu(e.currentTarget,opts.map(([v,l])=>({label:l,checked:libSt===v,pick:()=>{libSt=v;document.getElementById('lib-state-l').textContent=l;applyLibFilter();}})));
+  });
+
+  // 分页
+  let pgNo=1;
+  document.getElementById('pg-prev').addEventListener('click',()=>{if(pgNo>1)document.getElementById('pg-no').textContent=--pgNo;});
+  document.getElementById('pg-next').addEventListener('click',()=>{if(pgNo<129)document.getElementById('pg-no').textContent=++pgNo;});
+
+  // 托盘动作
+  const trayCount=()=>+document.getElementById('tray-n').textContent;
+  function trayClear(){document.querySelectorAll('[data-screen="library"] input[type=checkbox]').forEach(c=>c.checked=false);syncTray();}
+  function trayRun(){toast(`已加入翻译队列 · ${trayCount()} 项 · 预计 $${(trayCount()*0.07).toFixed(2)}`);trayClear();location.hash='queue';}
+  document.getElementById('tray-run').addEventListener('click',trayRun);
+  document.getElementById('tray-append').addEventListener('click',()=>{toast(`已加入队列末尾 · ${trayCount()} 项`);trayClear();});
+  document.getElementById('tray-clear').addEventListener('click',trayClear);
+
+  /* ═══════════ 任务队列:暂停 / 取消 / 重试(计数同步) ═══════════ */
+  const qCounts={all:24,run:2,wait:12,fail:1,done:9};
+  function qSyncCounts(){document.querySelectorAll('[data-q]').forEach(t=>{const v=qCounts[t.dataset.q];if(v!=null){const n=t.querySelector('.n');if(n)n.textContent=v;}});}
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('.qrow .ops .btn');if(!b)return;
+    const r=b.closest('.qrow');const t=b.textContent.trim();
+    if(t==='⏸'||t==='▶'){
+      const paused=t==='⏸';
+      r.classList.toggle('paused',paused);
+      b.textContent=paused?'▶':'⏸';b.title=paused?'恢复':'暂停';
+      toast(paused?'已暂停 · 批循环检查点挂起,重启自动恢复':'已恢复');
+    }else if(t==='✕'){
+      qCounts[r.dataset.st]--;qCounts.all--;qSyncCounts();r.remove();toast('已取消任务');
+    }else if(t==='重试'){
+      r.dataset.st='run';r.classList.remove('fail');r.classList.add('run');
+      r.querySelector('.eta').textContent='◐ 0% · 重新入队';
+      r.querySelector('.t span').textContent='EN → ZH · 手动重试 · 走回退链 openai';
+      qCounts.fail--;qCounts.run++;qSyncCounts();
+      b.textContent='⏸';b.title='暂停';
+      toast('已重新入队 · gemini ✗ → openai');
+    }
+  });
+
+  /* ═══════════ 媒体详情:排队 / 翻译菜单 / 重试 ═══════════ */
+  function setEpQueued(tr){
+    const st=tr.querySelector('.state');st.className='state part';st.textContent='◐ 排队中';
+    const zh=tr.querySelector('.chips').lastElementChild;zh.className='chip busy';zh.textContent='ZH ⏳ 排队';
+    tr.querySelector('td:last-child').innerHTML='<button class="btn sm" onclick="location.hash=\'queue\'">详情</button>';
+  }
+  const epRows=()=>[...document.querySelectorAll('[data-screen="media-detail"] tbody tr')];
+  function mdTranslateMissing(){
+    const rows=epRows().filter(tr=>tr.querySelector('.state').textContent.includes('未排队'));
+    if(!rows.length)return toast('无待排队剧集');
+    rows.forEach(setEpQueued);
+    qCounts.wait+=rows.length;qCounts.all+=rows.length;qSyncCounts();
+    toast(`已排队 ${rows.length} 集 · EN → ZH`);location.hash='queue';
+  }
+  document.querySelector('[data-screen="media-detail"] .pb-head .btn.primary').addEventListener('click',mdTranslateMissing);
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('[data-screen="media-detail"] tbody .btn');if(!b)return;
+    const t=b.textContent.trim();const tr=b.closest('tr');
+    if(t==='翻译 ▾'){
+      openMenu(b,[
+        {label:'翻译 EN → ZH · 简体',pick:()=>{setEpQueued(tr);qCounts.wait++;qCounts.all++;qSyncCounts();toast(`已排队 · ${tr.querySelector('.ep-title b').textContent}`);location.hash='queue';}},
+        {label:'翻译 EN → ZH · 繁体',pick:()=>{setEpQueued(tr);toast('已排队 · 繁体目标');location.hash='queue';}},
+      ]);
+    }else if(t==='重试'){
+      setEpQueued(tr);qCounts.wait++;qCounts.all++;qSyncCounts();toast('已重新入队 E04 · 走回退链 openai');
+    }
+  });
+
+  /* ═══════════ 导入与转换:真实文件接入 + 选项下拉 + 动作切换 ═══════════ */
+  const fileIn=document.getElementById('file-in');
+  const dropFree=document.getElementById('drop-free'),dropSeason=document.getElementById('drop-season');
+  let fileTarget='free';
+  dropFree.addEventListener('click',()=>{fileTarget='free';fileIn.click();});
+  dropSeason.addEventListener('click',()=>{fileTarget='season';fileIn.click();});
+  [dropFree,dropSeason].forEach(d=>{d.addEventListener('dragover',e=>e.preventDefault());});
+  dropFree.addEventListener('drop',e=>{e.preventDefault();handleFiles(e.dataTransfer.files,'free');});
+  dropSeason.addEventListener('drop',e=>{e.preventDefault();handleFiles(e.dataTransfer.files,'season');});
+  fileIn.addEventListener('change',()=>{handleFiles(fileIn.files,fileTarget);fileIn.value='';});
+
+  async function sniffFile(file){
+    const buf=await file.arrayBuffer();
+    let encOk=true;
+    try{new TextDecoder('utf-8',{fatal:true}).decode(buf);}catch(_){encOk=false;}
+    const txt=new TextDecoder(encOk?'utf-8':'utf-8').decode(buf);
+    const ext=file.name.split('.').pop().toLowerCase();
+    let lines=0;
+    if(ext==='srt'||ext==='vtt')lines=txt.split(/\r?\n\s*\r?\n/).filter(b=>b.trim()).length;
+    else if(ext==='ass'||ext==='ssa')lines=(txt.match(/^Dialogue:/gm)||[]).length;
+    return {encOk,ext,lines};
+  }
+  const EP_TITLES=['Anjin','Servant of Two Masters','Tomorrow Is Tomorrow','The Eightfold Fence','Broken to the Fist','Ladies of the Willow World','A Dream of a Dream','The Abyss of Life','Crimson Sky','A Dream of England'];
+  function parseEp(name){
+    let m=name.match(/[sS]\d{1,2}[eE](\d{1,3})/);if(m)return +m[1];
+    m=name.match(/(?:^|[^\d])[eE](\d{1,3})(?!\d)/);if(m)return +m[1];
+    m=name.match(/\d{1,2}x(\d{1,3})/);if(m)return +m[1];
+    m=name.match(/第(\d{1,3})集/);if(m)return +m[1];
+    return null;
+  }
+  function seasonStats(){
+    const rows=[...document.querySelectorAll('#season-tbody tr')];
+    const matched=rows.filter(r=>!r.textContent.includes('未匹配')).length;
+    document.getElementById('season-meta').textContent=`${rows.length} 个文件 · ${matched} 已匹配 · ${rows.length-matched} 待指派`;
+    document.getElementById('btn-import-run').textContent=`开始导入 ${matched} 项 · 翻译 ${Math.max(matched-2,0)} 项 ≈ $${(matched*0.034).toFixed(2)}`;
+    return {total:rows.length,matched};
+  }
+  function freeStats(){
+    const rows=[...document.querySelectorAll('#free-tbody tr')];
+    const ok=rows.filter(r=>!(r.style.opacity&&+r.style.opacity<1)).length;
+    document.getElementById('free-meta').textContent=`${rows.length} 个文件 · ${ok} 个可处理`;
+  }
+  async function handleFiles(list,mode){
+    const files=[...list];if(!files.length)return;
+    for(const f of files){
+      const {encOk,ext,lines}=await sniffFile(f);
+      if(mode==='free'){
+        document.querySelector('#free-tbody').insertAdjacentHTML('beforeend',`<tr>
+          <td class="mono" style="font-size:12px">${f.name}</td>
+          <td><span class="chip">${ext.toUpperCase()} · ${lines} 行</span></td>
+          <td><span class="${encOk?'chip ok':'badge enc'}">${encOk?'UTF-8 ✓':'非 UTF-8 · 将转码'}</span></td>
+          <td><span class="chip">SRT</span></td>
+          <td><span class="chip part act-toggle">转换＋翻译</span></td>
+          <td class="state part">◐ 等待</td></tr>`);
+        freeStats();toast(`已入列:${f.name}`);
+      }else{
+        const ep=parseEp(f.name);
+        const lang=/(\.eng\.|\.en\.|english)/i.test(f.name)?'EN':'ZH · 简';
+        if(ep&&ep>=1&&ep<=10){
+          document.querySelector('#season-tbody').insertAdjacentHTML('beforeend',`<tr>
+            <td class="mono" style="font-size:12px">${f.name}</td>
+            <td>E${String(ep).padStart(2,'0')}「${EP_TITLES[ep-1]}」</td>
+            <td><span class="chip ok">✓ 精确</span></td>
+            <td><span class="chip">${lang}</span></td>
+            <td><span class="chip part act-toggle">入库＋翻译</span></td>
+            <td class="state done">✓ 就绪</td></tr>`);
+        }else{
+          document.querySelector('#season-tbody').insertAdjacentHTML('beforeend',`<tr>
+            <td class="mono" style="font-size:12px">${f.name}</td>
+            <td><button class="chip assign-ep">指派到集 ▾</button></td>
+            <td><span class="chip" style="color:var(--danger)">✗ 未匹配</span></td>
+            <td><span class="chip">${lang}</span></td>
+            <td><span class="chip dim act-toggle">入库＋翻译 · 待指派</span></td>
+            <td class="state" style="color:var(--warning)">△ 手动指派后导入</td></tr>`);
+        }
+        seasonStats();toast(`映射 ${ep?'✓ E'+String(ep).padStart(2,'0'):'✗ 未匹配'}:${f.name}`);
+      }
+    }
+  }
+  // 未匹配行的「指派到集」菜单
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('.assign-ep');if(!b)return;
+    const tr=b.closest('tr');
+    openMenu(b,EP_TITLES.map((t,i)=>({label:`E${String(i+1).padStart(2,'0')}「${t}」`,pick:()=>{
+      b.outerHTML=`E${String(i+1).padStart(2,'0')}「${t}」`;
+      const conf=tr.querySelector('td:nth-child(3) .chip');
+      if(conf){conf.className='chip part';conf.textContent='◐ 手动指派';}
+      tr.querySelector('td:last-child').className='state done';
+      tr.querySelector('td:last-child').textContent='✓ 就绪';
+      const act=tr.querySelector('.act-toggle');if(act){act.className='chip part act-toggle';act.textContent='入库＋翻译';}
+      seasonStats();toast(`已指派到 E${String(i+1).padStart(2,'0')}`);
+    }})));
+  });
+  // 选项下拉(简繁 / 写回 / 冲突)
+  const OPT_MENUS={convert:['简体','繁体','原样'],writeback:['导入库目录','原目录','下载'],conflict:['跳过','加后缀','覆盖']};
+  document.querySelectorAll('.drop-chip').forEach(ch=>ch.addEventListener('click',()=>{
+    const cur=ch.textContent.replace(' ▾','').trim();
+    openMenu(ch,OPT_MENUS[ch.dataset.menu].map(o=>({label:o,checked:o===cur,pick:()=>{ch.textContent=o+' ▾';}})));
+  }));
+  // 每文件动作切换
+  const ACT_SWAP={'转换＋翻译':'仅转换','仅转换':'转换＋翻译','入库＋翻译':'仅入库','仅入库':'入库＋翻译','仅翻译 EN→ZH':'转换＋翻译','入库＋翻译 · 待指派':'仅入库'};
+  document.addEventListener('click',e=>{
+    const c=e.target.closest('.act-toggle');if(!c)return;
+    const t=c.textContent.trim();
+    if(ACT_SWAP[t]){c.textContent=ACT_SWAP[t];c.classList.toggle('part',!ACT_SWAP[t].startsWith('仅')||ACT_SWAP[t].includes('＋'));}
+  });
+  // 整季:更换目标 / 排除未匹配 / 开始导入
+  document.getElementById('season-target').addEventListener('click',e=>{
+    openMenu(e.currentTarget,[
+      {label:'Shōgun · S01',checked:1},
+      {label:'The Bear · S03',pick:()=>{document.querySelector('[data-ip="season"] .pb-head b').textContent='The Bear — 第三季';}},
+      {label:'3 Body Problem · S01',pick:()=>{document.querySelector('[data-ip="season"] .pb-head b').textContent='3 Body Problem — 第一季';}},
+    ]);
+  });
+  document.getElementById('season-exclude').addEventListener('click',()=>{
+    const bad=[...document.querySelectorAll('#season-tbody tr')].filter(r=>r.textContent.includes('未匹配'));
+    if(!bad.length)return toast('没有未匹配项');
+    bad.forEach(r=>r.remove());seasonStats();toast(`已排除 ${bad.length} 个未匹配文件`);
+  });
+  function runSeasonImport(){
+    const s=seasonStats();
+    toast(`导入已开始 · ${s.matched} 项入库 · ${Math.max(s.matched-2,0)} 项进入翻译`);
+    location.hash='queue';
+  }
+  document.getElementById('btn-import-run').addEventListener('click',runSeasonImport);
+  function runFreeImport(){
+    const rows=[...document.querySelectorAll('#free-tbody tr')].filter(r=>!(r.style.opacity&&+r.style.opacity<1));
+    if(!rows.length)return toast('处理队列为空 · 先拖入文件');
+    toast(`处理已开始 · ${rows.length} 项进入管线 · 转码后写回`);location.hash='queue';
+  }
+
+  /* ═══════════ 校对台:E 编辑 / ⌘S 暂存 / 快照导出 / 完成写回 ═══════════ */
+  addEventListener('keydown',e=>{
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){
+      if(document.querySelector('.screen.on').dataset.screen==='proofread'){e.preventDefault();toast('已暂存 · 128/486 行');}
+    }
+    if((e.key==='e'||e.key==='E')&&!e.target.matches('input,textarea,select')){
+      const cur=[...document.querySelectorAll('.pline')].find(l=>l.classList.contains('focus'));
+      if(cur){
+        const txt=cur.querySelector('.dst-text');
+        if(txt){
+          const inp=document.createElement('input');inp.className='syn';inp.value=txt.textContent;inp.setAttribute('aria-label','编辑译文');
+          txt.replaceWith(inp);cur.classList.add('dirty');inp.focus();inp.select();
+        }else{(cur.querySelector('input.syn')||{}).focus?.();}
+      }
+    }
+  });
+  function exportProofread(){
+    const out=[...document.querySelectorAll('.pline')].map((l,i)=>{
+      const parts=[...l.querySelector('.tc').childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent.trim()).filter(Boolean);
+      const start=parts.find(t=>/:/.test(t))||'00:00:00,000';
+      const end=(parts.find(t=>t.startsWith('→'))||'').replace('→ ','')||'00:00:02,000';
+      const inp=l.querySelector('input.syn');
+      const text=inp?inp.value:(l.querySelector('.dst-text')||{}).textContent||'';
+      return `${i+1}\n${start} --> ${end}\n${text}\n`;
+    }).join('\n');
+    download('3body-s01e02.snapshot.srt',out);toast('快照已导出 · 样例行');
+  }
+  [...document.querySelectorAll('[data-screen="proofread"] .pb-foot button')].forEach(b=>{
+    if(b.textContent==='导出当前快照')b.addEventListener('click',exportProofread);
+    if(b.textContent.includes('完成校对并写回'))b.addEventListener('click',()=>{toast('已写回 3 Body Problem S01E02.zh.srt · 486 行');location.hash='queue';});
+  });
+
+  /* ═══════════ 日志:导出 ═══════════ */
+  function exportLogs(){
+    const txt=[...document.querySelectorAll('#loglist .logline')].map(l=>{
+      const [t,lv,m]=[...l.children].map(c=>c.textContent);
+      return `${t}  ${lv.padEnd(3)}  ${m}`;
+    }).join('\n');
+    download('lingarr-logs.txt',txt);toast('日志已导出 · 12 条');
+  }
+
+  /* ═══════════ 定时任务:触发 / 启用 ═══════════ */
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('[data-screen="schedule"] tbody .btn');if(!b)return;
+    const tr=b.closest('tr');const name=tr.querySelector('.title b').textContent;
+    if(b.textContent.trim()==='启用'){
+      tr.style.opacity='';const chip=tr.querySelector('.chip');chip.className='chip ok';chip.textContent='✓ 开启';
+      b.textContent='触发';toast(`已启用:${name}`);return;
+    }
+    const cell=tr.querySelectorAll('td')[2];cell.textContent='刚刚 · 运行中…';
+    const chip=tr.querySelector('.chip');chip.className='chip busy';chip.textContent='▸ 运行中';
+    setTimeout(()=>{cell.textContent=`刚刚 · ${(1+Math.random()*8).toFixed(1)}s`;chip.className='chip ok';chip.textContent='✓ 开启';},2200);
+    toast(`已触发:${name}`);
+  });
+
+  /* ═══════════ 请求模版:保存 / 重置 / 变量插入 ═══════════ */
+  const tplTa=document.querySelector('[data-screen="request-template"] textarea');
+  const TPL_DEFAULT=tplTa.value;
+  function tplSave(){toast('模版已保存 · 新批次起生效');}
+  [...document.querySelectorAll('[data-screen="request-template"] .pb-head .btn')].forEach(b=>{
+    const t=b.textContent.trim();
+    if(t==='重置为默认')b.addEventListener('click',()=>{tplTa.value=TPL_DEFAULT;toast('已重置为默认模版');});
+    if(t==='保存模版')b.addEventListener('click',tplSave);
+  });
+  const addVar=[...document.querySelectorAll('.vars .chip')].find(c=>c.textContent.trim()==='＋ 变量');
+  if(addVar){
+    addVar.style.cursor='pointer';
+    addVar.addEventListener('click',()=>openMenu(addVar,['{sourceLang}','{targetLang}','{glossary}','{context}'].map(v=>({label:v,pick:()=>{
+      const s=tplTa.selectionStart??tplTa.value.length,e2=tplTa.selectionEnd??s;
+      tplTa.value=tplTa.value.slice(0,s)+v+tplTa.value.slice(e2);
+      tplTa.focus();tplTa.selectionStart=tplTa.selectionEnd=s+v.length;
+    }}))));
+  }
+
+  /* ═══════════ 任务详情:暂停 / 恢复 ═══════════ */
+  let qdPaused=false;
+  function qdTogglePause(){
+    qdPaused=!qdPaused;
+    document.querySelector('[data-screen="queue-detail"] .pb-head .btn.primary').textContent=qdPaused?'▶ 恢复':'⏸ 暂停';
+    ctaBtn.textContent=qdPaused?'▶ 恢复':'⏸ 暂停';
+    toast(qdPaused?'已暂停 #2417 · 批循环检查点挂起':'已恢复 #2417');
+  }
+  document.querySelector('[data-screen="queue-detail"] .pb-head .btn.primary').addEventListener('click',qdTogglePause);
+
+  /* ═══════════ 设置:编辑 / 设为默认 / 添加服务 / 回退链 / 同步 / 术语 ═══════════ */
+  function bindTest(b){
+    if(b._tb)return;b._tb=1;
+    b.addEventListener('click',()=>{
+      const res=b.closest('.pcard').querySelector('.test-res');
+      if(res){res.textContent=b.dataset.test;res.className='test-res on '+(b.dataset.ok==='1'?'ok':'err');}
+    });
+  }
+  document.querySelectorAll('[data-panel="providers"] .pcard:not(.add)').forEach(card=>{
+    card.querySelectorAll('.ops .btn').forEach(b=>{
+      const t=b.textContent.trim(),name=card.querySelector('.head b').textContent;
+      if(t==='编辑')b.addEventListener('click',()=>openForm(`编辑 · ${name}`,[
+        {label:'API Key',type:'password',value:'sk-••••••••••••••••••••7f2a'},
+        {label:'模型',value:(card.querySelector('.model').textContent||'').split(' ·')[0]},
+        {label:'temperature',value:'0.2'},
+        {label:'批大小(行)',value:'128'},
+      ],()=>toast(`${name} 配置已保存`)));
+      if(t==='设为默认')b.addEventListener('click',()=>{
+        document.querySelectorAll('[data-panel="providers"] .pcard .tag').forEach(x=>x.remove());
+        card.querySelector('.head').insertAdjacentHTML('afterbegin','<span class="tag">默认</span>');
+        const rows=[...document.querySelectorAll('.fb-row')].filter(r=>r.querySelector('b'));
+        const mine=rows.find(r=>r.querySelector('b').textContent===name);
+        if(mine&&mine!==rows[0])rows[0].before(mine);
+        renum();
+        toast(`默认服务已切换为 ${name} · 回退链同步调整`);
+      });
+      if(t==='配置')b.addEventListener('click',()=>openForm(`配置 · ${name}`,[{label:'服务 URL',value:'http://libretranslate:5000',mono:1}],v=>{
+        card.classList.remove('off');
+        card.querySelector('.dot').className='dot warn';
+        card.querySelector('.st').textContent='已配置 · 待测试';
+        card.querySelector('.model').textContent=v[0];
+        if(!card.querySelector('.test-res')){const d=document.createElement('div');d.className='test-res';card.appendChild(d);}
+        b.textContent='测试连接';b.dataset.test='✓ 200 · 连接正常';b.dataset.ok='1';bindTest(b);
+        toast(`${name} 已配置`);
+      }));
+    });
+  });
+  // ＋ 添加服务
+  document.querySelector('[data-panel="providers"] .pcard.add').addEventListener('click',function(){
+    const configured=new Set([...document.querySelectorAll('[data-panel="providers"] .pcard .head b')].map(b=>b.textContent));
+    const avail=['DeepSeek','Mistral','xAI','Yandex','Bing 翻译','Google 翻译','Microsoft 翻译','LocalAI'].filter(x=>!configured.has(x));
+    if(!avail.length)return toast('内置服务已全部添加');
+    openMenu(this,avail.map(x=>({label:x,pick:()=>{
+      const div=document.createElement('div');div.className='pcard off';
+      div.innerHTML=`<div class="head"><span class="dot off"></span><b>${x}</b><span class="st">未配置</span></div><div class="model">未配置</div><div class="usage"><span>本月 <b>—</b></span></div><div class="ops"><button class="btn sm cfg-new">配置</button></div>`;
+      this.before(div);toast(`已添加 ${x} · 待配置`);
+    }})));
+  });
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('.cfg-new');if(!b)return;
+    const card=b.closest('.pcard');const name=card.querySelector('b').textContent;
+    openForm(`配置 · ${name}`,[{label:'API Key / 服务 URL',value:'',mono:1}],v=>{
+      if(!v[0])return toast('未填写 · 保持未配置');
+      card.classList.remove('off');card.querySelector('.dot').className='dot ok';
+      card.querySelector('.st').textContent='在线';card.querySelector('.model').textContent=v[0];
+      toast(`${name} 已配置`);
+    });
+  });
+  // 回退链:移除 / 添加
+  function moveFb(btn){
+    const row=btn.closest('.fb-row');
+    const prev=row.previousElementSibling,next=row.nextElementSibling;
+    if(btn.dataset.fb==='up'&&prev&&prev.querySelector('.idx'))prev.before(row);
+    if(btn.dataset.fb==='down'&&next&&next.querySelector('.idx'))next.after(row);
+    renum();
+  }
+  document.addEventListener('click',e=>{
+    const fb=e.target.closest('.fb-row .end .btn');
+    if(fb&&fb.textContent.trim()==='移除'){
+      const row=fb.closest('.fb-row');const nm=row.querySelector('b').textContent;
+      row.remove();renum();toast(`已从回退链移除 ${nm}`);return;
+    }
+    const addRow=e.target.closest('.fb-row');
+    if(addRow&&addRow.textContent.includes('＋ 添加服务到回退链')){
+      const inChain=new Set([...document.querySelectorAll('.fb-row b')].map(b=>b.textContent));
+      const cands=[...document.querySelectorAll('[data-panel="providers"] .pcard .head b')].map(b=>b.textContent).filter(n=>!inChain.has(n));
+      if(!cands.length)return toast('所有已配置服务都已在链上');
+      openMenu(addRow,cands.map(n=>({label:n,pick:()=>{
+        const row=document.createElement('div');row.className='fb-row';
+        row.innerHTML=`<span class="idx"></span><span class="dot ok"></span><b>${n}</b><span class="chip">回退位</span><span class="chip langcap" title="AI 服务无语言表 · 不做语言门控(点击编辑)">未受限</span><span class="end"><button class="btn sm" data-fb="up" title="上移">↑</button><button class="btn sm" data-fb="down" title="下移">↓</button><button class="btn sm">移除</button></span>`;
+        addRow.before(row);
+        row.querySelectorAll('[data-fb]').forEach(nb=>nb.addEventListener('click',()=>moveFb(nb)));
+        renum();toast(`${n} 已加入回退链`);
+      }})));
+    }
+  });
+  // 媒体源:重新同步 / 编辑(按卡头过滤,避免命中自动化批次等同面板其他卡的按钮)
+  [...document.querySelectorAll('[data-panel="sources"] .card')].filter(c=>c.querySelector('h2')&&c.querySelector('h2').textContent==='媒体源').forEach(card=>{
+    card.querySelectorAll('.row .end .btn').forEach(b=>{
+      const t=b.textContent.trim();const name=b.closest('.row').querySelector('b').textContent;
+      if(t==='重新同步')b.addEventListener('click',()=>toast(`${name} 同步已触发 · 完成后媒体库自动刷新`));
+      if(t==='编辑')b.addEventListener('click',()=>{
+        const hint=b.closest('.row').querySelector('.hint').textContent.split(' ·')[0];
+        openForm(`编辑 · ${name}`,[{label:'地址',value:hint,mono:1},{label:'API Key',type:'password',value:'••••••••'}],()=>toast(`${name} 配置已保存`));
+      });
+    });
+  });
+  // 自动化批次:每行编辑(参数与开关解耦)+ 新增批次
+  const abCard=[...document.querySelectorAll('[data-panel="sources"] .card')].find(c=>c.querySelector('h2')&&c.querySelector('h2').textContent==='自动化批次');
+  function bindAbRow(row){
+    const name=row.querySelector('b').textContent;
+    const hint=row.querySelector('.hint');
+    const isDaily=name==='每日补缺',isPatrol=name==='每周全库巡检';
+    row.querySelector('.end .btn').addEventListener('click',()=>{
+      const cron=hint.textContent.split(' ·')[0].trim();
+      const fields=isDaily?[
+        {label:'cron 表达式',value:cron,mono:1},
+        {label:'单次限额(任务/次)',value:(hint.textContent.match(/限额 (\d+)/)||[])[1]||'50',type:'number'},
+        {label:'新片延迟(h)',value:(hint.textContent.match(/延迟新片 (\d+)h/)||[])[1]||'48',type:'number'},
+      ]:[{label:'cron 表达式',value:cron,mono:1}];
+      openForm(`编辑 · ${name}`,fields,v=>{
+        if(!v[0].trim())return toast('cron 表达式必填');
+        if(isDaily){
+          if(!(+v[1]>0))return toast('限额需为正整数');
+          if(!(+v[2]>=0))return toast('延迟需为非负整数');
+          hint.textContent=`${v[0].trim()} · 限额 ${v[1]} 任务/次 · 延迟新片 ${v[2]}h`;
+        }else if(isPatrol){
+          hint.textContent=`${v[0].trim()} · 只检不翻 · 生成缺字幕报告`;
+        }else{
+          hint.textContent=v[0].trim();
+        }
+        toast(row.querySelector('.switch').classList.contains('on')?`${name} 已保存`:`${name} 已保存 · 批次未启用`);
+      });
+    });
+  }
+  abCard.querySelectorAll('.row').forEach(row=>{if(row.querySelector('.end'))bindAbRow(row);});
+  const abAdd=abCard.querySelector('.row:last-child');
+  abAdd.style.cursor='pointer';
+  abAdd.addEventListener('click',()=>openForm('新增批次',[{label:'名称',value:''},{label:'cron 表达式',value:'0 6 * * *',mono:1}],v=>{
+    if(!v[0].trim()||!v[1].trim())return toast('名称与 cron 必填');
+    const div=document.createElement('div');div.className='row';
+    div.innerHTML=`<b>${v[0]}</b><span class="hint mono">${v[1]}</span><span class="end"><button class="btn sm">编辑</button><div class="switch" role="switch" aria-checked="false" tabindex="0"></div></span>`;
+    abAdd.before(div);
+    const sw=div.querySelector('.switch');
+    sw.addEventListener('click',()=>{sw.classList.toggle('on');sw.setAttribute('aria-checked',sw.classList.contains('on'));});
+    bindAbRow(div);
+    toast(`批次已创建:${v[0]} · 默认未启用`);
+  }));
+  // 字幕与质量:编辑 / 添加术语
+  function bindQualityEdits(){
+    document.querySelectorAll('[data-panel="quality"] .row .end .btn').forEach(b=>{
+      if(b._qb)return;b._qb=1;
+      const row=b.closest('.row');const name=row.querySelector('b').textContent;
+      const t=b.textContent.trim();if(t!=='编辑')return;
+      if(name==='文件命名')b.addEventListener('click',()=>openForm('文件命名',[{label:'命名模板',value:'{原名}.{语言}.srt',mono:1}],()=>toast('命名模板已保存')));
+      else if(name==='目标语言')b.addEventListener('click',()=>openForm('目标语言',[{label:'目标语言(逗号分隔 ISO 码)',value:'ZH'}],v=>{row.querySelector('.chips .chip').textContent=v[0]+' ✓';toast('语言策略已保存');}));
+      else if(name==='源语言白名单')b.addEventListener('click',()=>openForm('源语言白名单',[{label:'源语言(逗号分隔)',value:'EN, JA'}],()=>toast('语言策略已保存')));
+      else b.addEventListener('click',()=>openForm(`编辑术语 · ${name}`,[
+        {label:'源术语',value:name},
+        {label:'译名',value:(row.querySelector('.hint').textContent.match(/→ (.+?) ·/)||[])[1]||''},
+        {label:'匹配模式',options:['锁定','上下文匹配']},
+      ],()=>toast('术语已更新')));
+    });
+  }
+  bindQualityEdits();
+  const addTerm=[...document.querySelectorAll('[data-panel="quality"] .row')].find(r=>r.textContent.includes('＋ 添加术语'));
+  if(addTerm){
+    addTerm.style.cursor='pointer';
+    addTerm.addEventListener('click',()=>openForm('添加术语',[
+      {label:'源术语',value:''},{label:'译名',value:''},{label:'匹配模式',options:['上下文匹配','锁定']},
+    ],v=>{
+      if(!v[0]||!v[1])return toast('术语与译名必填');
+      addTerm.insertAdjacentHTML('beforebegin',`<div class="row"><b class="mono">${v[0]}</b><span class="hint">→ ${v[1]} · ${v[2]}</span><span class="end"><button class="btn sm">编辑</button></span></div>`);
+      const gcard=addTerm.closest('.card');const meta=gcard.querySelector('.meta');meta.textContent=meta.textContent.replace(/\d+/,m=>+m+1);
+      bindQualityEdits();toast(`术语已添加:${v[0]} → ${v[1]}`);
+    }));
+  }
+
+  /* ═══════════ 手机端展示模式:≤760px 自动,或 proto-bar 手动预览 ═══════════ */
+  const mqMobile=matchMedia('(max-width:760px)');
+  let mobileManual=null;
+  const modeBtn=document.getElementById('mode-toggle');
+  function applyMode(){
+    const on=mobileManual===null?mqMobile.matches:mobileManual;
+    document.body.classList.toggle('mobile',on);
+    modeBtn.textContent=on?'📱 手机模式 · 开':'📱 手机模式';
+  }
+  mqMobile.addEventListener('change',()=>{if(mobileManual===null)applyMode();});
+  modeBtn.addEventListener('click',()=>{mobileManual=!document.body.classList.contains('mobile');applyMode();});
+  applyMode();
+  document.querySelectorAll('.mnav button').forEach(b=>b.addEventListener('click',()=>{go(b.dataset.go);location.hash=b.dataset.go;}));
+
+  /* ═══════════ 链上语言覆盖(派生):从各服务 langcap chip 实时解析能力 ═══════════ */
+  function parseLangCap(text){
+    text=text.trim();
+    if(text==='未受限'||text==='全语言'||text==='未知')return {all:true};
+    const m=text.match(/^仅 (.+) → (.+)$/);
+    if(m)return {sources:m[1].split(/[,，]\s*/),targets:m[2].split(/[,，]\s*/)};
+    return {all:true};
+  }
+  function syncLangCoverage(){
+    const el=document.getElementById('lang-coverage');if(!el)return;
+    const rows=[...document.querySelectorAll('.fb-row')].filter(r=>r.querySelector('b'));
+    if(!rows.length){el.textContent='链上无服务';el.style.color='var(--warning)';return;}
+    const members=rows.map(r=>({name:r.querySelector('b').textContent.trim(),
+      cap:parseLangCap((r.querySelector('.chip.langcap')||{textContent:'未受限'}).textContent)}));
+    const pairs=[['EN','ZH'],['JA','ZH']];
+    const parts=[];let zero=false;
+    for(const [s,t] of pairs){
+      const cap=members.filter(m=>m.cap.all||(m.cap.sources.includes(s)&&m.cap.targets.includes(t)));
+      if(!cap.length)zero=true;
+      const excluded=members.filter(m=>!cap.includes(m)).map(m=>m.name.replace(' 本地',''));
+      parts.push(`${s}→${t} ${cap.length}/${members.length}${excluded.length?`(${excluded.join('/')} 不支持)`:''}`);
+    }
+    el.textContent=(zero?'⚠ ':'')+parts.join(' · ');
+    el.style.color=zero?'var(--warning)':'';
+  }
+  // 语言能力 chip 编辑:未受限/受限可编辑(源、目标逗号分隔,两格都留空=清除限制);全语言派生只读
+  document.addEventListener('click',e=>{
+    const chip=e.target.closest('.fb-row .chip.langcap');if(!chip)return;
+    const row=chip.closest('.fb-row');const name=row.querySelector('b').textContent;
+    const text=chip.textContent.trim();
+    if(text==='全语言'){toast(`${name} 的语言能力经 API 查证 · 派生只读`);return;}
+    if(text==='未知'){toast('能力查询失败 · 待服务恢复后自动重算');return;}
+    const cur=parseLangCap(text);
+    openForm(`语言限制 · ${name}`,[
+      {label:'源语言(逗号分隔;两格都留空 = 清除限制)',value:cur.all?'':cur.sources.join(','),mono:1},
+      {label:'目标语言(逗号分隔)',value:cur.all?'':cur.targets.join(','),mono:1},
+    ],v=>{
+      const s=v[0].trim().toUpperCase(),t=v[1].trim().toUpperCase();
+      if(!s&&!t){
+        chip.textContent='未受限';chip.className='chip langcap';
+        chip.title='AI 服务无语言表 · 不做语言门控(点击编辑)';
+      }else if(!s||!t){
+        toast('要么两格都填,要么都留空(清除限制)');return;
+      }else{
+        chip.textContent=`仅 ${s} → ${t}`;chip.className='chip part langcap';
+        chip.title='受限语言对(provider_language_restrictions)· 点击编辑';
+      }
+      syncLangCoverage();
+      toast(`${name} 语言限制已保存 · 回退资格即时生效`);
+    });
+  });
+  const _renumBase=renum;
+  renum=function(){_renumBase();syncLangCoverage();};
+  syncLangCoverage();
 </script>
 </body>
 </html>
