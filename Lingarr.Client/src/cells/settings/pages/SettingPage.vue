@@ -44,6 +44,13 @@ const authApi = authService(axios)
 const GROUPS = ['providers', 'sources', 'quality', 'system'] as const
 type Group = (typeof GROUPS)[number]
 
+// drill-down child pages keep their parent group's tab highlighted
+const CHILD_PAGE_GROUP: Record<string, Group> = {
+    'settings-plugins': 'providers',
+    'settings-mapping': 'sources',
+    'settings-authentication': 'system'
+}
+
 // computed so labels re-resolve when the locale changes
 const tabs = computed<ITabOption[]>(() =>
     GROUPS.map((group) => ({ label: t(`settings.menu.groups.${group}`), value: group }))
@@ -52,6 +59,9 @@ const tabs = computed<ITabOption[]>(() =>
 const activeTab = ref<Group>(groupFromRoute(route.name))
 
 function groupFromRoute(name: unknown): Group {
+    if (typeof name === 'string' && name in CHILD_PAGE_GROUP) {
+        return CHILD_PAGE_GROUP[name]
+    }
     const match = typeof name === 'string' ? name.match(/^settings-(\w+)$/) : null
     return (match && (GROUPS as readonly string[]).includes(match[1]) ? match[1] : 'providers') as Group
 }

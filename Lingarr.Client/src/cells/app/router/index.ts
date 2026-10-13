@@ -144,8 +144,11 @@ const routes: RouteRecordRaw[] = [
                         redirect: { name: 'settings-providers' }
                     },
                     {
+                        // external plugins drill-down (prototype screen-06 A):
+                        // kept as its own page behind the providers group row
                         path: 'plugins',
-                        redirect: { name: 'settings-providers' }
+                        name: 'settings-plugins',
+                        component: () => import('@/cells/settings/pages/PluginsPage.vue')
                     },
                     {
                         path: 'integration',
@@ -156,16 +159,22 @@ const routes: RouteRecordRaw[] = [
                         redirect: { name: 'settings-sources' }
                     },
                     {
+                        // path mapping drill-down (prototype screen-06 B):
+                        // kept as its own page behind the media sources card row
                         path: 'mapping',
-                        redirect: { name: 'settings-sources' }
+                        name: 'settings-mapping',
+                        component: () => import('@/cells/settings/pages/MappingPage.vue')
                     },
                     {
                         path: 'subtitle',
                         redirect: { name: 'settings-quality' }
                     },
                     {
+                        // authentication management drill-down (screen-06 D):
+                        // auth toggle + API key management page
                         path: 'authentication',
-                        redirect: { name: 'settings-system' }
+                        name: 'settings-authentication',
+                        component: () => import('@/cells/settings/pages/AuthenticationPage.vue')
                     },
                     {
                         // logs / schedule were promoted from settings children

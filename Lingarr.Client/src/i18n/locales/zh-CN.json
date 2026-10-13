@@ -622,7 +622,14 @@
             "limitPerSchedule": "限制每次计划执行的翻译数量",
             "fileAgeDelay": "翻译的默认文件延迟:",
             "movieAgeDelay": "电影文件延迟(单位:小时)",
-            "showAgeDelay": "剧集文件延迟(单位:小时)"
+            "showAgeDelay": "剧集文件延迟(单位:小时)",
+            "batchesTitle": "自动化批次",
+            "batchesMeta": "cron",
+            "dailyRow": "每日补缺",
+            "dailyHint": "{cron} · 限额 {limit} 任务/次 · 新片延迟 电影 {movie}h / 剧集 {show}h",
+            "edit": "编辑",
+            "scheduleField": "调度(cron)",
+            "editFailed": "请检查标红的字段。"
         },
         "schedule": {
             "heading": "定时任务",
@@ -761,7 +768,15 @@
             "failing": "故障",
             "test": "测试连接",
             "testing": "◐ 测试中…",
-            "requestTemplate": "请求模版"
+            "requestTemplate": "请求模版",
+            "defaultSwitched": "默认服务已切换为 {service} · 回退链同步调整",
+            "edit": "编辑",
+            "configure": "配置",
+            "addService": "＋ 添加服务",
+            "addServiceHint": "内置 {builtin} 个可用 · 插件 {plugins} 个",
+            "externalPlugins": "外部插件",
+            "pluginsCount": "已加载 {count} 个",
+            "open": "打开"
         },
         "glossary": {
             "title": "术语表",
@@ -785,6 +800,56 @@
             "chainEmpty": "链上无服务。",
             "loading": "正在获取语言表…",
             "noPairs": "配置源语言与目标语言后可见覆盖情况。"
+        },
+        "fallback": {
+            "title": "回退顺序",
+            "meta": "主服务失败自动按序降级 · 降级过程在任务详情时间线可见",
+            "primary": "主服务",
+            "fallbackSlot": "回退位",
+            "langcapUnrestricted": "未受限",
+            "langcapUnrestrictedTitle": "AI 服务无语言表 · 不做语言门控",
+            "langcapAll": "全语言",
+            "langcapAllTitle": "语言表经 API 查证 · 派生只读",
+            "langcapUnknown": "未知",
+            "langcapUnknownTitle": "语言表无法获取",
+            "langcapReadonly": "派生只读",
+            "add": "＋ 添加服务到回退链",
+            "allChained": "所有已配置服务都已在链上",
+            "removed": "已从回退链移除 {service}",
+            "added": "{service} 已加入回退链"
+        },
+        "requests": {
+            "title": "请求与重试"
+        },
+        "sources": {
+            "title": "媒体源",
+            "meta": "Sonarr / Radarr · webhook 实时 + 轮询兜底",
+            "resync": "重新同步",
+            "syncTriggered": "{name} 同步已触发 · 完成后媒体库自动刷新",
+            "showsSynced": "{count} 部剧集已同步",
+            "moviesSynced": "{count} 部电影已同步",
+            "notConfigured": "未配置",
+            "indexHeading": "媒体源同步",
+            "webhook": "Webhook",
+            "mapping": "路径映射",
+            "mappingHint": "{count} 条映射",
+            "manage": "管理",
+            "edit": "编辑",
+            "movieIndexer": "电影索引",
+            "showIndexer": "剧集索引"
+        },
+        "subtitleOutput": {
+            "title": "字幕输出",
+            "naming": "文件命名",
+            "namingHint": "{'{'}原名{'}'}.{'{'}语言{'}'}.srt · 与媒体同目录写回"
+        },
+        "system": {
+            "title": "系统",
+            "authRow": "认证",
+            "authOn": "已启用 · Cookie + API Key(webhook)",
+            "authOff": "未启用",
+            "apiKeyIssued": "API Key 已发放",
+            "manage": "管理"
         }
     },
     "translations": {

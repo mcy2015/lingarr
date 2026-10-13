@@ -1,24 +1,13 @@
 <template>
-    <div class="space-y-2">
-        <!-- The integrations section is headed by the IntegrationSettings
-             card itself ("Integrations") — no extra section heading here. -->
-        <IntegrationPage />
-        <h2 class="text-secondary-content/70 px-4 pt-4 text-xs font-semibold tracking-wider uppercase">
-            {{ t('settings.menu.automation') }}
-        </h2>
-        <AutomationPage />
-        <h2 class="text-secondary-content/70 px-4 pt-4 text-xs font-semibold tracking-wider uppercase">
-            {{ t('settings.menu.mapping') }}
-        </h2>
-        <MappingPage />
+    <div class="space-y-3">
+        <!-- 媒体源卡:Sonarr/Radarr 行 + Webhook 折叠 + 媒体源同步 cron + 路径映射行 -->
+        <MediaSourcesCard class="px-4" />
+        <!-- 自动化批次卡:每日补缺行(参数与开关解耦) -->
+        <AutomationBatchesCard class="px-4" />
     </div>
 </template>
 
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-import IntegrationPage from './IntegrationPage.vue'
-import AutomationPage from './AutomationPage.vue'
-import MappingPage from './MappingPage.vue'
-
-const { t } = useI18n()
+import MediaSourcesCard from '@/cells/settings/components/MediaSourcesCard.vue'
+import AutomationBatchesCard from '@/cells/settings/components/AutomationBatchesCard.vue'
 </script>

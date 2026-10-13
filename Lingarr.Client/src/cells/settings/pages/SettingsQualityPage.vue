@@ -1,8 +1,7 @@
 <template>
     <div class="space-y-3">
-        <!-- The subtitle section is headed by the SubtitleSettings card
-             itself ("Subtitle") — no extra section heading here. -->
-        <SubtitlePage />
+        <!-- 字幕输出行式卡(原 SubtitleSettings + ValidationSettings 全量收纳) -->
+        <SubtitleOutputCard class="px-4" />
         <GlossaryCard id="glossary" class="px-4 scroll-mt-24" />
         <LanguagePolicyCard class="px-4" />
     </div>
@@ -11,7 +10,7 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import SubtitlePage from './SubtitlePage.vue'
+import SubtitleOutputCard from '@/cells/settings/components/SubtitleOutputCard.vue'
 import GlossaryCard from '@/cells/settings/components/GlossaryCard.vue'
 import LanguagePolicyCard from '@/cells/settings/components/LanguagePolicyCard.vue'
 

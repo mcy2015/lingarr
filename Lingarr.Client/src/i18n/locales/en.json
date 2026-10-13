@@ -622,7 +622,14 @@
             "limitPerSchedule": "Limit the amount of translations per schedule",
             "fileAgeDelay": "Default file age delay for translation:",
             "movieAgeDelay": "Movie file age delay in 'hours'",
-            "showAgeDelay": "TV Show file age delay in 'hours'"
+            "showAgeDelay": "TV Show file age delay in 'hours'",
+            "batchesTitle": "Automation batches",
+            "batchesMeta": "cron",
+            "dailyRow": "Daily catch-up",
+            "dailyHint": "{cron} · limit {limit} tasks/run · new-media delay {movie}h movie / {show}h show",
+            "edit": "Edit",
+            "scheduleField": "Schedule (cron)",
+            "editFailed": "Please check the highlighted fields."
         },
         "schedule": {
             "heading": "Scheduled jobs",
@@ -761,7 +768,15 @@
             "failing": "failing",
             "test": "Test connection",
             "testing": "◐ Testing…",
-            "requestTemplate": "Request template"
+            "requestTemplate": "Request template",
+            "defaultSwitched": "Default service switched to {service} · fallback chain reordered",
+            "edit": "Edit",
+            "configure": "Configure",
+            "addService": "＋ Add service",
+            "addServiceHint": "{builtin} built-in available · {plugins} plugins",
+            "externalPlugins": "External plugins",
+            "pluginsCount": "{count} loaded",
+            "open": "Open"
         },
         "glossary": {
             "title": "Glossary",
@@ -785,6 +800,56 @@
             "chainEmpty": "No services in the fallback chain.",
             "loading": "Loading language tables…",
             "noPairs": "Configure source and target languages to see coverage."
+        },
+        "fallback": {
+            "title": "Fallback order",
+            "meta": "On primary failure requests degrade in order · visible in the task detail timeline",
+            "primary": "Primary",
+            "fallbackSlot": "Fallback",
+            "langcapUnrestricted": "Unrestricted",
+            "langcapUnrestrictedTitle": "AI service without a language table · no language gating",
+            "langcapAll": "All languages",
+            "langcapAllTitle": "Language table verified via API · derived read-only",
+            "langcapUnknown": "Unknown",
+            "langcapUnknownTitle": "Language table could not be fetched",
+            "langcapReadonly": "Derived read-only",
+            "add": "＋ Add service to the fallback chain",
+            "allChained": "All configured services are already on the chain",
+            "removed": "{service} removed from the fallback chain",
+            "added": "{service} joined the fallback chain"
+        },
+        "requests": {
+            "title": "Requests & retries"
+        },
+        "sources": {
+            "title": "Media sources",
+            "meta": "Sonarr / Radarr · webhook realtime + polling fallback",
+            "resync": "Re-sync",
+            "syncTriggered": "{name} sync triggered · the library refreshes when it completes",
+            "showsSynced": "{count} shows synced",
+            "moviesSynced": "{count} movies synced",
+            "notConfigured": "Not configured",
+            "indexHeading": "Media source sync",
+            "webhook": "Webhook",
+            "mapping": "Path mapping",
+            "mappingHint": "{count} mapping | {count} mappings",
+            "manage": "Manage",
+            "edit": "Edit",
+            "movieIndexer": "Movie indexer",
+            "showIndexer": "TV show indexer"
+        },
+        "subtitleOutput": {
+            "title": "Subtitle output",
+            "naming": "File naming",
+            "namingHint": "{'{'}original{'}'}.{'{'}language{'}'}.srt · written next to the media file"
+        },
+        "system": {
+            "title": "System",
+            "authRow": "Authentication",
+            "authOn": "Enabled · Cookie + API Key (webhook)",
+            "authOff": "Disabled",
+            "apiKeyIssued": "API Key issued",
+            "manage": "Manage"
         }
     },
     "translations": {
