@@ -9,6 +9,10 @@
             "DOM.Iterable"
         ],
         "skipLibCheck": true,
+        /* Node builtins are used by node-environment tests (architecture guard) */
+        "types": [
+            "node"
+        ],
         /* Bundler mode */
         "moduleResolution": "bundler",
         "resolveJsonModule": true,

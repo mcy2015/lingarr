@@ -39,14 +39,40 @@ src/
 |---|---|---|
 | F 地基 | kernel(纯 UI/composable/工具)+ app(http/全局 store)+ 全库路径重写 | ✅ 2026-10-13 完成:kernel=20 组件+icons 整目录+4 composable+string 工具;app=http.ts+ui/toast/instance store;88+33 处路径重写零残留 |
 | S1 settings | SettingPage+14 子页+features/settings 组件+mapping/schedule store 与 service 集群 → `cells/settings/`(51 文件) | ✅ 2026-10-13 完成:**setting store 与 settingService 归 app**(跨屏全局态);TriggerJob/InputComponent/useValidation 随屏迁入;过渡态 8 处旧 barrel/store 引用留后续批(见 S5/Z) |
-| S2 auth | LoginPage/AuthLayout → `cells/auth/`(阶段0 后已很薄) | 待做 |
-| S3 dashboard | DashboardPage → `cells/dashboard/` | 待做 |
-| S4 proofread | ProofreadPage+键盘流 → `cells/proofread/` | 待做 |
-| S5 queue | QueuePage+QueueDetailPage+Translation* 域组件+translationRequest/translate store → `cells/queue/`(translate 跨 library 使用,若仍跨屏则归 app) | 待做 |
-| S6 library | LibraryPage+MediaDetailPage → `cells/library/` | 待做 |
-| S7 import | ImportPage → `cells/import/` | 待做 |
-| Z 收尾 | 旧目录清空删除、layout/router 并入 app、services 总桶解散完毕、ci.yml 加 cells 结构守护(可选 lint 规则) | 待做 |
+| S2 auth | LoginPage/AuthLayout → `cells/auth/`(阶段0 后已很薄) | ✅ 2026-10-13 完成:LoginPage→`cells/auth/pages/`、AuthLayout→`cells/auth/layouts/`,引用 app/api/authService 与 kernel 基元 |
+| S3 dashboard | DashboardPage → `cells/dashboard/` | ✅ 2026-10-13 完成:DashboardPage→`cells/dashboard/pages/`,统计/翻译服务走 app/api |
+| S4 proofread | ProofreadPage+键盘流 → `cells/proofread/` | ✅ 2026-10-13 完成:ProofreadPage→`cells/proofread/pages/`,useProofreadKeyboard→`cells/proofread/composables/`(含 spec) |
+| S5 queue | QueuePage+QueueDetailPage+Translation* 域组件+translationRequest/translate store → `cells/queue/`(translate 跨 library 使用,若仍跨屏则归 app) | ✅ 2026-10-13 完成:页面+Translation* 组件+usePagedList/useTranslationDetailHub → `cells/queue/`;**translate/translationRequest store 均归 app**(library/proofread/设置页共用) |
+| S6 library | LibraryPage+MediaDetailPage → `cells/library/` | ✅ 2026-10-13 完成:两页+NoMediaNotification+subtitleService → `cells/library/`(含 LibraryPage spec) |
+| S7 import | ImportPage → `cells/import/` | ✅ 2026-10-13 完成:ImportPage+importService → `cells/import/` |
+| Z 收尾 | 旧目录清空删除、layout/router 并入 app、services 总桶解散完毕、ci.yml 加 cells 结构守护(可选 lint 规则) | ✅ 2026-10-13 完成:layout 四件(MainLayout/AsideNavigation/ContextMenu/LanguageDropdown)→`cells/app/layout/`;router→`cells/app/router/`;directives→`cells/app/directives/`;baseUrl/date→`cells/app/utils/`、delay→`cells/kernel/utils/`、utils barrel 删除(String.format 副作用由 main.ts 直挂 kernel/string);死码 ActiveTranslationBadge 删除;旧目录(components/composables/utils/directives/router 等)全删零残留;新增 `cells/architecture.spec.ts` 架构守护 4 用例(vitest 88 全绿) |
 
 ## 已知跨屏共享物(暂定归 app,迁移时逐一确认)
 
 translate store(bulkTranslate:library 勾选与设置页共用)、Context UI(toast 服务)、`usePagedList`(queue 在用,library 自管)。判据见依赖规则 3。
+
+## 完成态结构树(阶段1 收官,Z 批后)
+
+```
+src/
+  App.vue                  # 仅 <router-view>
+  main.ts                  # 装配:pinia + app/router + app/directives + i18n
+                            # + kernel/string 副作用 + app/http
+  env.d.ts  assets/  i18n/  types/   # 全局件:i18n 双语不动(决策),types=共享契约层
+  cells/
+    architecture.spec.ts    # 架构守护(4 用例:kernel 纯度 / app 隔离 / cell 互不引用 / 旧目录零引用)
+    kernel/                 # 零业务依赖层
+      components/ (+icons/)  composables/  utils/(string、delay)
+    app/                    # 应用装配层(唯一可引用全部 cell 的入口 = router 路由表)
+      http.ts  api/  stores/  components/  composables/
+      layout/  router/  directives/  utils/(baseUrl、date)
+    auth/      layouts/  pages/
+    dashboard/ pages/
+    proofread/ composables/  pages/
+    queue/     components/ (+translation/)  composables/  pages/
+    library/   components/  pages/  services/
+    import/    pages/  services/
+    settings/  components/ (+authentication/ +template/)  composables/  pages/  services/  stores/
+```
+
+依赖方向恒定:业务 cell → app → kernel;`@/types`/`@/i18n`/`@/assets` 为全局保留件;业务 cell 之间互不引用,由 `cells/architecture.spec.ts` 持久守护。

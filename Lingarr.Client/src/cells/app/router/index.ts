@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useInstanceStore } from '@/cells/app/stores/instance'
-import { baseUrl } from '@/utils/baseUrl'
+import { baseUrl } from '@/cells/app/utils/baseUrl'
 
 const routes: RouteRecordRaw[] = [
     // Auth
@@ -20,7 +20,7 @@ const routes: RouteRecordRaw[] = [
     // Main
     {
         path: '/',
-        component: () => import('@/components/layout/MainLayout.vue'),
+        component: () => import('@/cells/app/layout/MainLayout.vue'),
         meta: { authenticated: true },
         children: [
             {

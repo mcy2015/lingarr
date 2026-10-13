@@ -23,7 +23,7 @@
 import { useI18n } from 'vue-i18n'
 import CardComponent from '@/cells/kernel/components/CardComponent.vue'
 import CodeSnippet from '@/cells/kernel/components/CodeSnippet.vue'
-import { resolveUrl } from '@/utils/baseUrl'
+import { resolveUrl } from '@/cells/app/utils/baseUrl'
 
 const { t } = useI18n()
 

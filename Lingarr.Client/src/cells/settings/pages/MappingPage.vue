@@ -109,7 +109,7 @@ import { MEDIA_TYPE } from '@/types'
 import SelectComponent from '@/cells/kernel/components/SelectComponent.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import DirectoryModal from '@/cells/settings/components/DirectoryModal.vue'
-import { delay } from '@/utils/delay'
+import { delay } from '@/cells/kernel/utils/delay'
 
 const mappingStore = useMappingStore()
 const { t } = useI18n()

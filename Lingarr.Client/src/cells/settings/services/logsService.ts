@@ -1,5 +1,5 @@
 import { ILogsService } from '@/types'
-import { resolveUrl } from '@/utils/baseUrl'
+import { resolveUrl } from '@/cells/app/utils/baseUrl'
 
 const service = (resource = '/api/logs'): ILogsService => ({
     getStream(): EventSource {

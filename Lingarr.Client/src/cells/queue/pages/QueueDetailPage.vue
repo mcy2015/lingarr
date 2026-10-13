@@ -213,7 +213,7 @@ import {
 } from '@/types'
 import axios from 'axios'
 import { useTranslationDetailHub } from '@/cells/queue/composables/useTranslationDetailHub'
-import { formatDateTime } from '@/utils/date'
+import { formatDateTime } from '@/cells/app/utils/date'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import TranslationStatus from '@/cells/queue/components/TranslationStatus.vue'

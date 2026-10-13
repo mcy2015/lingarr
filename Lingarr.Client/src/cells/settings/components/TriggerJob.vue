@@ -14,7 +14,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
-import { delay } from '@/utils/delay'
+import { delay } from '@/cells/kernel/utils/delay'
 
 const emit = defineEmits(['toggle:trigger'])
 const loading = ref(false)

@@ -92,9 +92,9 @@ import { useInstanceStore } from '@/cells/app/stores/instance'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import { useUiStore } from '@/cells/app/stores/ui'
 
-import AsideNavigation from '@/components/layout/AsideNavigation.vue'
+import AsideNavigation from '@/cells/app/layout/AsideNavigation.vue'
 import DropdownComponent from '@/cells/kernel/components/DropdownComponent.vue'
-import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
+import LanguageDropdown from '@/cells/app/layout/LanguageDropdown.vue'
 import ToastNotification from '@/cells/app/components/ToastNotification.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 

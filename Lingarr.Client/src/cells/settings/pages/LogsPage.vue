@@ -110,7 +110,7 @@ import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ILogEntry, IFilterOptions } from '@/types'
 import { logsService } from '@/cells/settings/services/logsService'
-import { formatDate, formatTime } from '@/utils/date'
+import { formatDate, formatTime } from '@/cells/app/utils/date'
 
 const logsApi = logsService()
 

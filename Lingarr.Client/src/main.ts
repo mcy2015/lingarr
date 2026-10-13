@@ -1,13 +1,14 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 
-import router from '@/router'
+import router from '@/cells/app/router'
 import App from './App.vue'
 
-import { showTitle } from '@/directives'
+import { showTitle } from '@/cells/app/directives'
 import i18n from '@/i18n'
 import '@/assets/style.css'
-import './utils'
+// Side-effect import: installs String.prototype.format (kernel/string)
+import '@/cells/kernel/utils/string'
 // Axios assembly side effects (baseURL, ApiError normalisation, 401 → login
 // redirect) live in the app cell; loading them here keeps them active from
 // app startup, before any lazily loaded route chunk makes a request.
