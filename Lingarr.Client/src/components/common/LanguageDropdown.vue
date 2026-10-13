@@ -32,8 +32,8 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, SUPPORTED_LOCALES, type LocaleCode } from '@/i18n'
-import DropdownComponent from '@/components/common/DropdownComponent.vue'
-import Icon from '@/components/icons/Icon.vue'
+import DropdownComponent from '@/cells/kernel/components/DropdownComponent.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const { t, locale } = useI18n()
 const currentLocale = computed(() => locale.value)

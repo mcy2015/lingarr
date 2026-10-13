@@ -1,6 +1,6 @@
 import { AxiosStatic } from 'axios'
 import { IMediaService, IIncludeSummary, MediaType } from '@/types'
-import { buildUrl } from '@/utils/string'
+import { buildUrl } from '@/cells/kernel/utils/string'
 
 const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => ({
     movies<T>(

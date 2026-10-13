@@ -407,12 +407,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import TabComponent from '@/components/common/TabComponent.vue'
-import ButtonComponent from '@/components/common/ButtonComponent.vue'
+import TabComponent from '@/cells/kernel/components/TabComponent.vue'
+import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import services from '@/services'
-import { useSettingStore } from '@/store/setting'
-import { useToastStore } from '@/store/toast'
-import { useUiStore } from '@/store/ui'
+import { useSettingStore } from '@/cells/app/stores/setting'
+import { useToastStore } from '@/cells/app/stores/toast'
+import { useUiStore } from '@/cells/app/stores/ui'
 import {
     IImportedSubtitleResult,
     IImportSubtitlesResponse,

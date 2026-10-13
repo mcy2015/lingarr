@@ -8,7 +8,7 @@ import services from '@/services'
 import en from '@/i18n/locales/en.json'
 import QueuePage from '@/pages/QueuePage.vue'
 import useTranslationRequestStore from '@/store/translationRequest'
-import { useUiStore } from '@/store/ui'
+import { useUiStore } from '@/cells/app/stores/ui'
 import { IPagedResult, ITranslationRequest, TRANSLATION_STATUS } from '@/types'
 
 vi.mock('@/services', () => ({

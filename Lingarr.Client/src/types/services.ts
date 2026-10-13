@@ -20,20 +20,14 @@ import {
 
 export interface Services {
     auth: IAuthService
-    setting: ISettingService
     subtitle: ISubtitleService
     import: IImportService
     translate: ITranslateService
     translationRequest: ITranslationRequestService
     version: IVersionService
     media: IMediaService
-    schedule: IScheduleService
-    mapping: IMappingService
     directory: IDirectoryService
     statistics: IStatisticsService
-    logs: ILogsService
-    requestTemplate: IRequestTemplateService
-    plugin: IPluginService
     glossary: IGlossaryService
 }
 

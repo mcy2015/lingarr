@@ -197,16 +197,16 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import ButtonComponent from '@/components/common/ButtonComponent.vue'
+import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
-import Icon from '@/components/icons/Icon.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import NoMediaNotification from '@/components/common/NoMediaNotification.vue'
-import PaginationComponent from '@/components/common/PaginationComponent.vue'
+import PaginationComponent from '@/cells/kernel/components/PaginationComponent.vue'
 import services from '@/services'
-import { useSettingStore } from '@/store/setting'
+import { useSettingStore } from '@/cells/app/stores/setting'
 import { useTranslateStore } from '@/store/translate'
-import { useUiStore } from '@/store/ui'
-import { useToastStore } from '@/store/toast'
+import { useUiStore } from '@/cells/app/stores/ui'
+import { useToastStore } from '@/cells/app/stores/toast'
 import {
     ILanguage,
     IMediaLibraryItem,

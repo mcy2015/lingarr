@@ -133,7 +133,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import TranslationProgress from '@/components/common/TranslationProgress.vue'
 import services from '@/services'
-import { useUiStore } from '@/store/ui'
+import { useUiStore } from '@/cells/app/stores/ui'
 import { useSignalR } from '@/composables/useSignalR'
 import {
     IPagedResult,

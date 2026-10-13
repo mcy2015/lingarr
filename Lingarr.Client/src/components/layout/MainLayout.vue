@@ -87,16 +87,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSignalR } from '@/composables/useSignalR'
 import { Hub, IActiveTranslation, ISettings, ITheme, THEMES } from '@/types'
-import { useSettingStore } from '@/store/setting'
-import { useInstanceStore } from '@/store/instance'
+import { useSettingStore } from '@/cells/app/stores/setting'
+import { useInstanceStore } from '@/cells/app/stores/instance'
 import useTranslationRequestStore from '@/store/translationRequest'
-import { useUiStore } from '@/store/ui'
+import { useUiStore } from '@/cells/app/stores/ui'
 
 import AsideNavigation from '@/components/layout/AsideNavigation.vue'
-import DropdownComponent from '@/components/common/DropdownComponent.vue'
+import DropdownComponent from '@/cells/kernel/components/DropdownComponent.vue'
 import LanguageDropdown from '@/components/common/LanguageDropdown.vue'
 import ToastNotification from '@/components/common/ToastNotification.vue'
-import Icon from '@/components/icons/Icon.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const settingStore = useSettingStore()
 const instanceStore = useInstanceStore()

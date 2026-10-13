@@ -7,9 +7,9 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import services from '@/services'
 import LibraryPage from '@/pages/LibraryPage.vue'
-import { useSettingStore } from '@/store/setting'
-import { useToastStore } from '@/store/toast'
-import { useUiStore } from '@/store/ui'
+import { useSettingStore } from '@/cells/app/stores/setting'
+import { useToastStore } from '@/cells/app/stores/toast'
+import { useUiStore } from '@/cells/app/stores/ui'
 import { IMediaLibraryItem, IPagedResult, ITranslationEstimate, MEDIA_TYPE, SETTINGS } from '@/types'
 
 vi.mock('@/services', () => ({

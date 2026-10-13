@@ -1,4 +1,4 @@
-import type { IconName } from '@/components/icons'
+import type { IconName } from '@/cells/kernel/components/icons'
 
 export interface MenuItem {
     label: string

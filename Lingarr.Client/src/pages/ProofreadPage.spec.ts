@@ -12,8 +12,8 @@ import { mount, VueWrapper } from '@vue/test-utils'
 import services from '@/services'
 import ProofreadPage from '@/pages/ProofreadPage.vue'
 import en from '@/i18n/locales/en.json'
-import { useToastStore } from '@/store/toast'
-import { useUiStore } from '@/store/ui'
+import { useToastStore } from '@/cells/app/stores/toast'
+import { useUiStore } from '@/cells/app/stores/ui'
 import {
     ISubtitleLineComparison,
     ITranslationGlossary,

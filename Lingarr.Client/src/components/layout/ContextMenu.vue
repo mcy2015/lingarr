@@ -40,10 +40,10 @@ import { ref, Ref, computed, ComputedRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ILanguage, ISubtitle, MediaType, SETTINGS } from '@/types'
-import { useSettingStore } from '@/store/setting'
+import { useSettingStore } from '@/cells/app/stores/setting'
 import { useTranslateStore } from '@/store/translate'
-import useClickOutside from '@/composables/useClickOutside'
-import TooltipComponent from '@/components/common/TooltipComponent.vue'
+import useClickOutside from '@/cells/kernel/composables/useClickOutside'
+import TooltipComponent from '@/cells/kernel/components/TooltipComponent.vue'
 
 const router = useRouter()
 const { t } = useI18n()

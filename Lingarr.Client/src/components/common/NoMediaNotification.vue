@@ -19,10 +19,10 @@
     </div>
 </template>
 <script setup lang="ts">
-import Icon from '@/components/icons/Icon.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import ButtonComponent from '@/components/common/ButtonComponent.vue'
+import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 
 const router = useRouter()
 const { t } = useI18n()

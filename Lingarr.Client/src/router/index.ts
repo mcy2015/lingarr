@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
-import { useInstanceStore } from '@/store/instance'
+import { useInstanceStore } from '@/cells/app/stores/instance'
 import { baseUrl } from '@/utils/baseUrl'
 
 const routes: RouteRecordRaw[] = [
@@ -89,7 +89,7 @@ const routes: RouteRecordRaw[] = [
             },
             {
                 path: '/settings',
-                component: () => import('@/pages/SettingPage.vue'),
+                component: () => import('@/cells/settings/pages/SettingPage.vue'),
                 name: 'settings',
                 // parent-level redirect: the empty-child redirect did not
                 // fire on SPA navigation, leaving the tab content empty
@@ -102,27 +102,27 @@ const routes: RouteRecordRaw[] = [
                     {
                         path: 'providers',
                         name: 'settings-providers',
-                        component: () => import('@/pages/settings/SettingsProvidersPage.vue')
+                        component: () => import('@/cells/settings/pages/SettingsProvidersPage.vue')
                     },
                     {
                         path: 'sources',
                         name: 'settings-sources',
-                        component: () => import('@/pages/settings/SettingsSourcesPage.vue')
+                        component: () => import('@/cells/settings/pages/SettingsSourcesPage.vue')
                     },
                     {
                         path: 'quality',
                         name: 'settings-quality',
-                        component: () => import('@/pages/settings/SettingsQualityPage.vue')
+                        component: () => import('@/cells/settings/pages/SettingsQualityPage.vue')
                     },
                     {
                         path: 'system',
                         name: 'settings-system',
-                        component: () => import('@/pages/settings/SettingsSystemPage.vue')
+                        component: () => import('@/cells/settings/pages/SettingsSystemPage.vue')
                     },
                     {
                         path: 'request-template/:service',
                         name: 'request-template-settings',
-                        component: () => import('@/pages/settings/RequestTemplatePage.vue'),
+                        component: () => import('@/cells/settings/pages/RequestTemplatePage.vue'),
                         props: true
                     },
                     {

@@ -93,11 +93,11 @@
 import { computed, ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useInstanceStore } from '@/store/instance'
+import { useInstanceStore } from '@/cells/app/stores/instance'
 import { useTranslationRequestStore } from '@/store/translationRequest'
 import { MenuItem } from '@/types'
-import BadgeComponent from '@/components/common/BadgeComponent.vue'
-import Icon from '@/components/icons/Icon.vue'
+import BadgeComponent from '@/cells/kernel/components/BadgeComponent.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const translationRequestStore = useTranslationRequestStore()
 const instanceStore = useInstanceStore()

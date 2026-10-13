@@ -62,7 +62,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ITranslationRequest, TRANSLATION_ACTIONS, TRANSLATION_STATUS } from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
-import Icon from '@/components/icons/Icon.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 const router = useRouter()
 const translationRequestStore = useTranslationRequestStore()
 const { t } = useI18n()

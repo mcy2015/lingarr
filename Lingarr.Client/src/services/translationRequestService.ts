@@ -1,6 +1,6 @@
 import { AxiosStatic } from 'axios'
 import { IProofreadLineApplyRequest, ITranslationRequest, ITranslationRequestService } from '@/types'
-import { buildUrl } from '@/utils/string'
+import { buildUrl } from '@/cells/kernel/utils/string'
 
 const service = (
     http: AxiosStatic,

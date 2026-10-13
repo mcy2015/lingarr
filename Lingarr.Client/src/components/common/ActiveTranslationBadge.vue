@@ -22,7 +22,7 @@ import { computed, ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { IActiveTranslation, IShow, MEDIA_TYPE, MediaType, TRANSLATION_STATUS } from '@/types'
 import useTranslationRequestStore from '@/store/translationRequest'
-import BadgeComponent from '@/components/common/BadgeComponent.vue'
+import BadgeComponent from '@/cells/kernel/components/BadgeComponent.vue'
 
 const props = defineProps<{
     show?: IShow

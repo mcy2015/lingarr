@@ -146,8 +146,8 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
-import { useUiStore } from '@/store/ui'
-import { useToastStore } from '@/store/toast'
+import { useUiStore } from '@/cells/app/stores/ui'
+import { useToastStore } from '@/cells/app/stores/toast'
 import { useProofreadKeyboard } from '@/composables/useProofreadKeyboard'
 import {
     IPagedResult,

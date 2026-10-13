@@ -1,2 +1,2 @@
-import './string'
+import '../cells/kernel/utils/string'
 import './delay'

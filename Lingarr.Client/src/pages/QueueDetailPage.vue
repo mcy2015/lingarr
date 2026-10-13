@@ -217,11 +217,11 @@ import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
 import TranslationStatus from '@/components/common/TranslationStatus.vue'
 import TranslationProgress from '@/components/common/TranslationProgress.vue'
-import BadgeComponent from '@/components/common/BadgeComponent.vue'
-import ButtonComponent from '@/components/common/ButtonComponent.vue'
-import CardComponent from '@/components/common/CardComponent.vue'
+import BadgeComponent from '@/cells/kernel/components/BadgeComponent.vue'
+import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
+import CardComponent from '@/cells/kernel/components/CardComponent.vue'
 import LineProofreadPanel from '@/components/features/translation/LineProofreadPanel.vue'
-import Icon from '@/components/icons/Icon.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const props = defineProps<{
     id: string

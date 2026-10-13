@@ -15,6 +15,6 @@
 </template>
 
 <script setup lang="ts">
-import { useInstanceStore } from '@/store/instance'
+import { useInstanceStore } from '@/cells/app/stores/instance'
 const instanceStore = useInstanceStore()
 </script>

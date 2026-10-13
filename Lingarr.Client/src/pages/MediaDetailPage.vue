@@ -200,7 +200,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import ContextMenu from '@/components/layout/ContextMenu.vue'
 import services from '@/services'
-import { useUiStore } from '@/store/ui'
+import { useUiStore } from '@/cells/app/stores/ui'
 import { useTranslateStore } from '@/store/translate'
 import {
     ILanguage,

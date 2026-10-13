@@ -1,6 +1,6 @@
 import { computed, onMounted, type ComputedRef } from 'vue'
 import type { IFilter, IPagedResult } from '@/types'
-import useDebounce from '@/composables/useDebounce'
+import useDebounce from '@/cells/kernel/composables/useDebounce'
 
 export interface UsePagedListOptions<T> {
     /** Paged list contents, read from the store getter. */

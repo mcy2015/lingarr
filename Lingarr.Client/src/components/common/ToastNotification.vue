@@ -55,8 +55,8 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import Icon from '@/components/icons/Icon.vue'
-import { useToastStore } from '@/store/toast'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
+import { useToastStore } from '@/cells/app/stores/toast'
 
 const toastStore = useToastStore()
 const { t } = useI18n()

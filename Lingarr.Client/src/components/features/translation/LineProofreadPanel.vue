@@ -83,9 +83,9 @@ import {
 } from '@/types'
 import services from '@/services'
 import useTranslationRequestStore from '@/store/translationRequest'
-import TextAreaComponent from '@/components/common/TextAreaComponent.vue'
-import ButtonComponent from '@/components/common/ButtonComponent.vue'
-import Icon from '@/components/icons/Icon.vue'
+import TextAreaComponent from '@/cells/kernel/components/TextAreaComponent.vue'
+import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 
 const props = withDefaults(
     defineProps<{
