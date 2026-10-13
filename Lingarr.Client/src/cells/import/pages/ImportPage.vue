@@ -120,15 +120,13 @@
                     </tbody>
                 </table>
                 </div>
+                <!-- ═══ 底部选项条(钉卡底):可配置项为真实控件(简繁/双语/
+                     语言);固定服务端行为只给说明文案,不渲染假控件 ═══ -->
                 <div
                     class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-line px-4 py-3 text-[12.5px]">
-                    <span class="text-secondary-content flex items-center gap-2">
+                    <span class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.transcode') }}
-                        <span
-                            class="border-accent bg-accent relative inline-block h-[17px] w-[30px] rounded-full border"
-                            :title="t('import.options.transcodeHint')">
-                            <span class="bg-accent-content absolute top-0.5 right-0.5 h-[11px] w-[11px] rounded-full"></span>
-                        </span>
+                        <span class="text-secondary-content/70">{{ t('import.options.transcodeFixed') }}</span>
                     </span>
                     <label class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.chineseConvert') }}
@@ -140,7 +138,7 @@
                             <option value="traditional">{{ t('import.chinese.traditional') }}</option>
                         </select>
                     </label>
-                    <span
+                    <label
                         class="text-secondary-content flex items-center gap-1.5"
                         :title="t('import.options.bilingualHint')">
                         {{ t('import.options.bilingual') }}
@@ -151,14 +149,14 @@
                             <option value="on">{{ t('import.on') }}</option>
                             <option value="off">{{ t('import.off') }}</option>
                         </select>
-                    </span>
+                    </label>
                     <span class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.writeback') }}
-                        <span :class="chipClass()">{{ t('import.writeback.importsDir') }}</span>
+                        <span class="text-secondary-content/70">{{ t('import.options.writebackFree') }}</span>
                     </span>
                     <span class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.conflict') }}
-                        <span :class="chipClass()">{{ t('import.conflict.suffix') }}</span>
+                        <span class="text-secondary-content/70">{{ t('import.options.conflictFixed') }}</span>
                     </span>
                     <span class="text-secondary-content ml-auto text-xs">
                         {{ t('import.estimate', { files: rows.length, lines: totalLines, translate: translateCount }) }}
@@ -375,11 +373,11 @@
                     </label>
                     <span class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.writeback') }}
-                        <span :class="chipClass()">{{ t('import.writeback.mediaDir') }}</span>
+                        <span class="text-secondary-content/70">{{ t('import.options.writebackSeason') }}</span>
                     </span>
                     <span class="text-secondary-content flex items-center gap-1.5">
                         {{ t('import.options.conflict') }}
-                        <span :class="chipClass()">{{ t('import.conflict.suffix') }}</span>
+                        <span class="text-secondary-content/70">{{ t('import.options.conflictFixed') }}</span>
                     </span>
                     <span class="flex-1"></span>
                     <button

@@ -54,7 +54,8 @@
             "interrupted": "Interrupted",
             "paused": "Paused"
         },
-        "runNow": "Run now"
+        "runNow": "Run now",
+        "etaHint": "Linear estimate from start time and progress"
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -104,6 +105,7 @@
             "none": "· Not queued",
             "queued": "⏳ Queued",
             "inProgress": "◐ Translating",
+            "inProgressRatio": "◐ Translating · {progress}%",
             "completed": "✓ Completed",
             "completedRatio": "✓ {done}/{total} completed",
             "failed": "✗ Failed",
@@ -116,8 +118,7 @@
         },
         "detail": {
             "include": "Include in translation",
-            "threshold": "Delay (hours)",
-            "subtitles": "Subtitle files"
+            "threshold": "Delay (hours)"
         },
         "tray": {
             "selected": "{count} selected",
@@ -202,22 +203,18 @@
             "target": "Target language",
             "chineseConvert": "Chinese variant",
             "transcode": "UTF-8 transcode",
-            "transcodeHint": "Imports are always stored as UTF-8",
             "bilingual": "Bilingual output",
             "bilingualHint": "Decided by the global subtitle setting at write-back time",
             "bilingualFollows": "follows global",
             "writeback": "Write-back",
-            "conflict": "Conflict"
+            "conflict": "Conflict",
+            "transcodeFixed": "always · imports are stored as UTF-8",
+            "writebackFree": "free imports land in the import library directory",
+            "writebackSeason": "matched episodes land next to their media · unmatched in the import library",
+            "conflictFixed": "collisions get a suffix, never overwritten · content-hash dedup against existing jobs"
         },
         "on": "On",
         "off": "Off",
-        "writeback": {
-            "importsDir": "Import library dir",
-            "mediaDir": "Next to media (unmatched → import library)"
-        },
-        "conflict": {
-            "suffix": "Add suffix, never overwrite"
-        },
         "estimate": "{files} items · {lines} lines · {translate} to translate",
         "estimateCost": "≈ {cost}",
         "estimateUnknown": "cost unknown",
@@ -361,8 +358,7 @@
         "active": {
             "title": "Active tasks",
             "live": "live · SignalR",
-            "empty": "No tasks running right now.",
-            "etaHint": "Linear estimate from start time and progress"
+            "empty": "No tasks running right now."
         },
         "health": {
             "title": "Service health",
@@ -1030,10 +1026,26 @@
         "historyCount": "{count} requests",
         "noHistory": "No translation requests for this media yet.",
         "noEpisodes": "No episodes in this season.",
-        "noSubtitles": "No subtitle files found beside the video.",
         "translate": "Translate ▾",
         "showMeta": "{seasons} seasons · {episodes} episodes",
         "movieMeta": "movie",
-        "lastActivity": "last activity {time}"
+        "lastActivity": "last activity {time}",
+        "tasks": "In-progress tasks",
+        "tasksMeta": "request {meta}",
+        "tasksCount": "{count} requests",
+        "missingEpisodes": "{count} episodes missing {lang} subtitles",
+        "noTarget": "No target language configured",
+        "show": {
+            "noneQueued": "No episodes waiting to be queued",
+            "queuedToast": "Queued {count} episodes · {pair}"
+        },
+        "movie": {
+            "untranslated": "Not translated yet",
+            "start": "Start translation",
+            "done": "Target-language subtitle already in place",
+            "busyToast": "Translation in progress · request #{id} · {progress}%",
+            "queuedToast": "Translation created · request #{id}",
+            "noSource": "No source subtitle beside the video — import one first"
+        }
     }
 }

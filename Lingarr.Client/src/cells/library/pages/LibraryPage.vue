@@ -289,6 +289,25 @@ const targetLanguages = computed(() => {
     return (settings.target_languages ?? []) as ILanguage[]
 })
 
+/// Deep link from the overview pipeline (screen-01「缺字幕检测」node,
+/// ?missing=1): activate the missing-subtitles view. Expressed with the
+/// existing server-side target-language filter — "items whose primary
+/// target track is not complete" is exactly the missing view, so no new
+/// query semantics are needed. Only fills an empty filter; a user-chosen
+/// target is never clobbered.
+watch(
+    () => route.query.missing,
+    (value) => {
+        if (value === '1' && !targetFilter.value) {
+            const primary = targetLanguages.value[0]
+            if (primary) {
+                targetFilter.value = primary.code
+            }
+        }
+    },
+    { immediate: true }
+)
+
 function normalizeType(value: unknown): LibraryType {
     return value === 'show' || value === 'movie' ? value : 'all'
 }

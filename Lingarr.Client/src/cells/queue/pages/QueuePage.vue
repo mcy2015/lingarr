@@ -191,7 +191,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
     Hub,
     ITranslationRequest,
@@ -224,8 +224,22 @@ const hubConnection = ref<Hub>()
 const translationRequestStore = useTranslationRequestStore()
 const toastStore = useToastStore()
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const uiStore = useUiStore()
+
+/// Deep links from the overview (KPI tiles / pipeline nodes) arrive as
+/// ?status=InProgress|Pending|Failed|Completed — activate the matching
+/// status tab; without the param the store keeps whatever the user had.
+watch(
+    () => route.query.status,
+    (value) => {
+        if (typeof value === 'string' && value) {
+            void translationRequestStore.setStatusFilter(value)
+        }
+    },
+    { immediate: true }
+)
 
 /// 整行点击 → 任务详情(原型 screen-03 交互 2);行内按钮与选择模式的
 /// checkbox 区已在模板层 @click.stop 排除冒泡。

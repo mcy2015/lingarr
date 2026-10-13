@@ -126,7 +126,7 @@ interface MountedLibrary {
     router: ReturnType<typeof createRouter>
 }
 
-async function mountLibraryPage(): Promise<MountedLibrary> {
+async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
     const pinia = createPinia()
 
     // the page root is v-if="configured" — the settings gate must be
@@ -150,7 +150,7 @@ async function mountLibraryPage(): Promise<MountedLibrary> {
             { path: '/import', name: 'import', component: { template: '<div />' } }
         ]
     })
-    await router.push('/library')
+    await router.push(path)
     await router.isReady()
 
     const wrapper = mount(LibraryPage, {
@@ -220,6 +220,24 @@ describe('LibraryPage', () => {
             mediaType: 'Show',
             state: null,
             targetLanguage: null
+        })
+    })
+
+    // ── overview deep link (screen-01「缺字幕检测」node) ─────────────
+    it('activates the missing-subtitles view from the ?missing=1 deep link', async () => {
+        await mountLibraryPage('/library?missing=1')
+
+        // expressed through the existing target-language filter: items whose
+        // primary-target (ZH) track is not yet complete
+        expect(libraryMock).toHaveBeenCalledTimes(1)
+        expect(libraryMock).toHaveBeenLastCalledWith({
+            pageNumber: 1,
+            searchQuery: '',
+            sortBy: 'Title',
+            ascending: true,
+            mediaType: null,
+            state: null,
+            targetLanguage: 'ZH'
         })
     })
 

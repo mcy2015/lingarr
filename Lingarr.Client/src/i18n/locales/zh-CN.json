@@ -54,7 +54,8 @@
             "interrupted": "已中断",
             "paused": "已暂停"
         },
-        "runNow": "立即运行"
+        "runNow": "立即运行",
+        "etaHint": "按开始时间与进度线性外推"
     },
     "nav": {
         "dashboard": "仪表盘",
@@ -104,6 +105,7 @@
             "none": "· 未排队",
             "queued": "⏳ 队列中",
             "inProgress": "◐ 翻译中",
+            "inProgressRatio": "◐ 翻译中 {progress}%",
             "completed": "✓ 完成",
             "completedRatio": "✓ {done}/{total} 完成",
             "failed": "✗ 失败",
@@ -116,8 +118,7 @@
         },
         "detail": {
             "include": "参与翻译",
-            "threshold": "延迟(小时)",
-            "subtitles": "字幕文件"
+            "threshold": "延迟(小时)"
         },
         "tray": {
             "selected": "已选 {count} 项",
@@ -202,22 +203,18 @@
             "target": "目标语言",
             "chineseConvert": "简繁",
             "transcode": "转码 UTF-8",
-            "transcodeHint": "导入统一转码为 UTF-8 存储",
             "bilingual": "双语输出",
             "bilingualHint": "由全局字幕设置在写回时决定",
             "bilingualFollows": "跟随全局",
             "writeback": "写回",
-            "conflict": "冲突"
+            "conflict": "冲突",
+            "transcodeFixed": "恒定 · 导入统一转码为 UTF-8 存储",
+            "writebackFree": "自由导入写入导入库目录",
+            "writebackSeason": "匹配集写入媒体目录 · 未匹配入导入库",
+            "conflictFixed": "同名加后缀不覆盖 · 内容哈希与既有任务去重"
         },
         "on": "开",
         "off": "关",
-        "writeback": {
-            "importsDir": "导入库目录",
-            "mediaDir": "媒体目录（未匹配 → 导入库）"
-        },
-        "conflict": {
-            "suffix": "加后缀不覆盖"
-        },
         "estimate": "预计 {files} 项 · 共 {lines} 行 · 翻译 {translate} 项",
         "estimateCost": "≈ {cost}",
         "estimateUnknown": "成本未知",
@@ -361,8 +358,7 @@
         "active": {
             "title": "活跃任务",
             "live": "实时 · SignalR",
-            "empty": "当前没有运行中的任务。",
-            "etaHint": "由开始时间与进度线性估算"
+            "empty": "当前没有运行中的任务。"
         },
         "health": {
             "title": "服务健康",
@@ -1030,10 +1026,26 @@
         "historyCount": "{count} 个请求",
         "noHistory": "该媒体还没有翻译请求。",
         "noEpisodes": "这一季没有集。",
-        "noSubtitles": "视频旁未找到字幕文件。",
         "translate": "翻译 ▾",
         "showMeta": "{seasons} 季 · {episodes} 集",
         "movieMeta": "电影",
-        "lastActivity": "最近活动 {time}"
+        "lastActivity": "最近活动 {time}",
+        "tasks": "进行中任务",
+        "tasksMeta": "请求 {meta}",
+        "tasksCount": "{count} 个请求",
+        "missingEpisodes": "缺 {count} 集 {lang} 字幕",
+        "noTarget": "未配置目标语言",
+        "show": {
+            "noneQueued": "无待排队剧集",
+            "queuedToast": "已排队 {count} 集 · {pair}"
+        },
+        "movie": {
+            "untranslated": "未翻译",
+            "start": "开始翻译",
+            "done": "目标语言字幕已就绪",
+            "busyToast": "翻译进行中 · 请求 #{id} · {progress}%",
+            "queuedToast": "翻译已创建 · 请求 #{id}",
+            "noSource": "视频旁没有源字幕 · 请先导入"
+        }
     }
 }

@@ -1,65 +1,77 @@
 <template>
     <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <!-- ═══ 头部：返回 · 标题 · 汇总 chips · 动作 ═══ -->
-        <div class="flex shrink-0 flex-wrap items-center gap-3">
-            <button
-                type="button"
-                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                @click="router.push({ name: 'library' })">
-                {{ t('mediaDetail.back') }}
-            </button>
-            <div class="min-w-0">
-                <b class="text-[15px] font-semibold">{{ item?.title ?? t('common.loading') }}</b>
-                <div class="mono text-secondary-content mt-0.5 text-[11.5px]">
-                    {{ headerMeta }}
-                </div>
+        <!-- ═══ pb-head(原型下钻屏页头):返回 · 标题 + mono 副行 · 动作组 ═══ -->
+        <PbHead
+            :back-to="{ name: 'library' }"
+            :back-label="t('mediaDetail.back')"
+            :title="item?.title ?? t('common.loading')"
+            :sub="headerMeta">
+            <template #actions>
+                <button
+                    v-if="isShow"
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                    @click="router.push({ name: 'import', query: { tab: 'season', show: props.id } })">
+                    {{ t('library.action.seasonImport') }}
+                </button>
+                <button
+                    v-else
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                    @click="router.push({ name: 'import' })">
+                    {{ t('library.toolbar.import') }}
+                </button>
+                <ContextMenu v-if="isShow" @select="translateMissing">
+                    <button
+                        type="button"
+                        class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors">
+                        {{ t('mediaDetail.translateMissing') }}
+                    </button>
+                </ContextMenu>
+                <button
+                    v-else
+                    type="button"
+                    class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors"
+                    @click="movieTranslateMissing">
+                    {{ t('mediaDetail.translateMissing') }}
+                </button>
+            </template>
+        </PbHead>
+
+        <!-- ═══ 工具栏:季段选(剧集)· 语言 chips · 最近活动 ═══ -->
+        <div class="flex shrink-0 flex-wrap items-center gap-2">
+            <div
+                v-if="isShow"
+                class="border-line inline-flex overflow-hidden rounded-md border"
+                role="group"
+                :aria-label="t('mediaDetail.seasons')">
+                <button
+                    v-for="season in seasons"
+                    :key="season.seasonNumber"
+                    type="button"
+                    class="border-line text-secondary-content hover:text-primary-content cursor-pointer border-r px-3 py-1.5 text-[12.5px] transition-colors last:border-r-0"
+                    :class="activeSeason === season.seasonNumber ? 'bg-tertiary text-primary-content' : ''"
+                    :aria-pressed="activeSeason === season.seasonNumber"
+                    @click="activeSeason = season.seasonNumber">
+                    S{{ String(season.seasonNumber).padStart(2, '0') }}
+                </button>
             </div>
             <div class="flex flex-wrap gap-1">
                 <span
                     v-for="track in item?.tracks ?? []"
                     :key="track.language"
-                    :class="chipClass(track.state)"
+                    :class="chipClass(movieBusyState(track))"
                     :title="trackTitle(track)">
                     {{ trackLabel(track) }}
                 </span>
             </div>
-            <span class="flex-1"></span>
-            <button
-                v-if="isShow"
-                type="button"
-                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                @click="router.push({ name: 'import', query: { tab: 'season', show: props.id } })">
-                {{ t('library.action.seasonImport') }}
-            </button>
-            <ContextMenu @select="translateMissing">
-                <button
-                    type="button"
-                    class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors">
-                    {{ t('mediaDetail.translateMissing') }}
-                </button>
-            </ContextMenu>
+            <span class="mono text-secondary-content ml-auto text-xs">
+                {{ t('mediaDetail.lastActivity', { time: lastActivityLabel }) }}
+            </span>
         </div>
 
-        <!-- ═══ 剧集：季段选 + 逐集轨道表 ═══ -->
+        <!-- ═══ 剧集:逐集轨道表 ═══ -->
         <template v-if="isShow">
-            <div class="flex shrink-0 flex-wrap items-center gap-2">
-                <div class="border-line inline-flex overflow-hidden rounded-md border" role="group" :aria-label="t('mediaDetail.seasons')">
-                    <button
-                        v-for="season in seasons"
-                        :key="season.seasonNumber"
-                        type="button"
-                        class="border-line text-secondary-content hover:text-primary-content cursor-pointer border-r px-3 py-1.5 text-[12.5px] transition-colors last:border-r-0"
-                        :class="activeSeason === season.seasonNumber ? 'bg-tertiary text-primary-content' : ''"
-                        :aria-pressed="activeSeason === season.seasonNumber"
-                        @click="activeSeason = season.seasonNumber">
-                        S{{ String(season.seasonNumber).padStart(2, '0') }}
-                    </button>
-                </div>
-                <span class="mono text-secondary-content ml-auto text-xs">
-                    {{ t('mediaDetail.lastActivity', { time: lastActivityLabel }) }}
-                </span>
-            </div>
-
             <div class="border-line bg-secondary flex min-h-0 flex-[1.5] flex-col rounded-md border">
                 <div class="shell-scroll min-h-0 flex-1 overflow-auto">
                 <table class="w-full text-[13px]">
@@ -117,6 +129,15 @@
                                             {{ t('common.translationAction.proofread') }}
                                         </button>
                                     </router-link>
+                                    <router-link
+                                        v-else-if="episodeDetailRequest(ep)"
+                                        :to="{ name: 'queue-detail', params: { id: episodeDetailRequest(ep)!.id } }">
+                                        <button
+                                            type="button"
+                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
+                                            {{ t('library.action.detail') }}
+                                        </button>
+                                    </router-link>
                                     <ContextMenu
                                         v-if="episodeSource(ep)"
                                         :media="ep"
@@ -138,29 +159,38 @@
             </div>
         </template>
 
-        <!-- ═══ 电影：字幕轨 chips 列表 ═══ -->
-        <div v-else class="border-line bg-secondary flex min-h-0 flex-1 flex-col rounded-md border">
+        <!-- ═══ 电影:进行中任务卡(无任务时空态主行动) ═══ -->
+        <div v-else class="border-line bg-secondary flex min-h-[160px] flex-1 flex-col rounded-md border">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
-                <h2 class="text-[13px] font-semibold">{{ t('library.detail.subtitles') }}</h2>
-                <span class="mono text-secondary-content ml-auto text-xs">
-                    {{ item?.subtitleFiles?.length ?? 0 }}
+                <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.tasks') }}</h2>
+                <span v-if="tasksMeta" class="mono text-secondary-content ml-auto text-xs">
+                    {{ tasksMeta }}
                 </span>
             </div>
-            <div v-if="!item?.subtitleFiles?.length" class="text-secondary-content/60 px-4 py-5 text-center text-xs">
-                {{ t('mediaDetail.noSubtitles') }}
-            </div>
-            <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
-            <div
-                v-for="file in item?.subtitleFiles ?? []"
-                :key="file.path"
-                class="border-line flex items-center gap-3 border-b px-4 py-2 text-[12.5px] last:border-b-0">
-                <span :class="chipClass()">{{ file.language.toUpperCase() }}</span>
-                <span class="mono text-secondary-content truncate text-xs">{{ file.fileName }}{{ file.format }}</span>
-            </div>
+            <div class="shell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+                <JobRow v-for="request in activeRequests" :key="request.id" :request="request" />
+                <div
+                    v-if="item && activeRequests.length === 0"
+                    class="flex flex-wrap items-center justify-center gap-3 px-4 py-6 text-center">
+                    <span v-if="movieTargetComplete" class="text-success text-xs">
+                        ✓ {{ t('mediaDetail.movie.done') }}
+                    </span>
+                    <template v-else>
+                        <span class="text-secondary-content/60 text-xs">
+                            {{ t('mediaDetail.movie.untranslated') }}
+                        </span>
+                        <button
+                            type="button"
+                            class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors"
+                            @click="movieTranslateMissing">
+                            {{ t('mediaDetail.movie.start') }}
+                        </button>
+                    </template>
+                </div>
             </div>
         </div>
 
-        <!-- ═══ 翻译历史 ═══ -->
+        <!-- ═══ 翻译历史(请求列表形态;行内详情 → queue-detail) ═══ -->
         <div class="border-line bg-secondary flex min-h-[160px] flex-1 flex-col rounded-md border">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.history') }}</h2>
@@ -200,11 +230,15 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import ContextMenu from '@/cells/app/layout/ContextMenu.vue'
+import JobRow from '@/cells/app/components/JobRow.vue'
+import PbHead from '@/cells/app/components/PbHead.vue'
 import { mediaService } from '@/cells/app/api/mediaService'
 import { subtitleService } from '@/cells/library/services/subtitleService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
-import { useUiStore } from '@/cells/app/stores/ui'
+import { useSettingStore } from '@/cells/app/stores/setting'
+import { useToastStore } from '@/cells/app/stores/toast'
 import { useTranslateStore } from '@/cells/app/stores/translate'
+import { useUiStore } from '@/cells/app/stores/ui'
 import {
     ILanguage,
     MEDIA_TYPE,
@@ -214,7 +248,9 @@ import {
     ISubtitle,
     ITranslationRequest,
     IPagedResult,
-    TRANSLATION_STATUS
+    SETTINGS,
+    TRANSLATION_STATUS,
+    TranslationStatus
 } from '@/types'
 
 interface EpisodeRow {
@@ -229,6 +265,8 @@ const props = defineProps<{ type: 'show' | 'movie'; id: string }>()
 
 const { t, locale } = useI18n()
 const router = useRouter()
+const settingStore = useSettingStore()
+const toastStore = useToastStore()
 const uiStore = useUiStore()
 const translateStore = useTranslateStore()
 const translationRequestApi = translationRequestService(axios)
@@ -262,20 +300,112 @@ const trackedLanguages = computed<string[]>(() => {
     return [...langs]
 })
 
+const firstTargetLanguage = computed<ILanguage | null>(() => {
+    const languages = (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
+    return languages[0] ?? null
+})
+
+const configuredSourceCodes = computed<string[]>(() => {
+    const languages = (settingStore.getSetting(SETTINGS.SOURCE_LANGUAGES) ?? []) as ILanguage[]
+    return languages.map((language) => language.code.toLowerCase())
+})
+
+/// Language pair shown in the movie head: first configured source that the
+/// scan found, arrowed at the first configured target. Null when either
+/// side cannot be derived from real data.
+const movieLanguagePair = computed<string | null>(() => {
+    const tracks = (item.value?.tracks ?? []).filter((track) => track.have > 0)
+    const target = firstTargetLanguage.value?.code?.toLowerCase()
+    if (!target) return null
+    const present = tracks.map((track) => track.language.toLowerCase())
+    const source =
+        configuredSourceCodes.value.find((code) => present.includes(code)) ??
+        present.find((code) => code !== target)
+    return source ? `${source.toUpperCase()} → ${target.toUpperCase()}` : null
+})
+
+/// Episodes still missing the primary target's subtitles — client-side from
+/// the coverage scan the library item already carries.
+const missingTargetEpisodes = computed<number | null>(() => {
+    const target = firstTargetLanguage.value?.code
+    if (!target || !item.value || !isShow.value) return null
+    const track = item.value.tracks.find(
+        (candidate) => candidate.language.toLowerCase() === target.toLowerCase()
+    )
+    return Math.max(0, item.value.episodeCount - (track?.have ?? 0))
+})
+
 const headerMeta = computed(() => {
     if (!item.value) return ''
     if (isShow.value) {
-        return t('mediaDetail.showMeta', {
-            seasons: item.value.seasonCount,
-            episodes: item.value.episodeCount
-        })
+        const missing = missingTargetEpisodes.value
+        return (
+            t('mediaDetail.showMeta', {
+                seasons: item.value.seasonCount,
+                episodes: item.value.episodeCount
+            }) +
+            (missing
+                ? ' · ' +
+                  t('mediaDetail.missingEpisodes', {
+                      count: missing,
+                      lang: firstTargetLanguage.value!.code.toUpperCase()
+                  })
+                : '')
+        )
     }
-    return t('mediaDetail.movieMeta')
+    const pair = movieLanguagePair.value
+    return pair ? `${t('mediaDetail.movieMeta')} · ${pair}` : t('mediaDetail.movieMeta')
 })
 
 const lastActivityLabel = computed(() =>
     item.value?.lastActivityAt ? formatTime(item.value.lastActivityAt) : '—'
 )
+
+/// In-flight requests of this media (movie: the request itself; queued ones
+/// included — they are the "current tasks" the prototype card summarizes).
+const activeRequests = computed<ITranslationRequest[]>(() =>
+    history.value
+        .filter(
+            (request) =>
+                request.status === TRANSLATION_STATUS.INPROGRESS ||
+                request.status === TRANSLATION_STATUS.PENDING
+        )
+        .sort(
+            (a, b) =>
+                Number(b.status === TRANSLATION_STATUS.INPROGRESS) -
+                Number(a.status === TRANSLATION_STATUS.INPROGRESS)
+        )
+)
+
+const tasksMeta = computed(() => {
+    const requests = activeRequests.value
+    if (requests.length === 0) return ''
+    if (requests.length === 1) {
+        const request = requests[0]
+        const meta = `#${request.id}` + (request.serviceType ? ` · ${request.serviceType}` : '')
+        return t('mediaDetail.tasksMeta', { meta })
+    }
+    return t('mediaDetail.tasksCount', { count: requests.length })
+})
+
+/// Active request per target language — backs the busy chip variant
+/// ("ZH ⏳ 38%") on the movie toolbar.
+const activeByLanguage = computed(() => {
+    const map = new Map<string, ITranslationRequest>()
+    for (const request of activeRequests.value) {
+        map.set(request.targetLanguage.toLowerCase(), request)
+    }
+    return map
+})
+
+const movieTargetComplete = computed(() => {
+    const target = firstTargetLanguage.value?.code
+    if (!target) return false
+    return (item.value?.tracks ?? []).some(
+        (track) =>
+            track.language.toLowerCase() === target.toLowerCase() && track.have >= track.total
+    )
+})
 
 onMounted(load)
 onUnmounted(() => {
@@ -286,15 +416,7 @@ onUnmounted(() => {
 // live topbar sub mirrors the page header line
 watch([item, activeSeason], ([value]) => {
     if (!value) return
-    uiStore.setSubOverride(
-        value.mediaType === 'Show'
-            ? t('topbar.sub.mediaDetailLive', {
-                  title: value.title,
-                  seasons: value.seasonCount,
-                  episodes: value.episodeCount
-              })
-            : t('mediaDetail.movieMeta')
-    )
+    uiStore.setSubOverride(headerMeta.value)
 }, { immediate: true })
 
 async function load(): Promise<void> {
@@ -381,6 +503,20 @@ function episodeRequest(ep: EpisodeRow): ITranslationRequest | null {
     return requestsByEpisode.value.get(ep.id) ?? null
 }
 
+/// Episodes with a live or failed request expose it through a「详情」link —
+/// the drill-down only exists when the request id is actually known.
+const EPISODE_DETAIL_STATUSES: TranslationStatus[] = [
+    TRANSLATION_STATUS.INPROGRESS,
+    TRANSLATION_STATUS.PENDING,
+    TRANSLATION_STATUS.FAILED
+]
+
+function episodeDetailRequest(ep: EpisodeRow): ITranslationRequest | null {
+    const request = episodeRequest(ep)
+    if (!request) return null
+    return EPISODE_DETAIL_STATUSES.includes(request.status) ? request : null
+}
+
 function episodeStatusClass(ep: EpisodeRow): string {
     const request = episodeRequest(ep)
     if (!request) return 'text-secondary-content/60 text-xs'
@@ -403,7 +539,9 @@ function episodeStatusLabel(ep: EpisodeRow): string {
     if (!request) return t('library.state.none')
     switch (request.status) {
         case TRANSLATION_STATUS.INPROGRESS:
-            return t('library.state.inProgress')
+            return request.progress > 0
+                ? t('library.state.inProgressRatio', { progress: request.progress })
+                : t('library.state.inProgress')
         case TRANSLATION_STATUS.COMPLETED:
             return t('library.state.completed')
         case TRANSLATION_STATUS.FAILED:
@@ -444,23 +582,88 @@ async function translateEpisode(ep: EpisodeRow, language: ILanguage): Promise<vo
     await translateStore.translateSubtitle(ep.id, source, source.language, language, MEDIA_TYPE.EPISODE)
 }
 
-/// Header CTA: queue every episode that still lacks a target-language track
-/// (needs a source subtitle to translate from).
+/// Screen button + topbar CTA (shared action): queue every episode of the
+/// active season that still lacks the target-language track, then report
+/// the real count and follow the jobs into the queue screen.
 async function translateMissing(language: ILanguage): Promise<void> {
-    if (!isShow.value) return
     const missing = episodes.value.filter(
         (ep) => episodeSource(ep) && !episodeHas(ep, language.code)
     )
+    if (missing.length === 0) {
+        toastStore.push({ message: t('mediaDetail.show.noneQueued'), type: 'info' })
+        return
+    }
+    const pair = `${episodeSource(missing[0])!.language.toUpperCase()} → ${language.code.toUpperCase()}`
     for (const ep of missing) {
         await translateEpisode(ep, language)
     }
+    toastStore.push({
+        message: t('mediaDetail.show.queuedToast', { count: missing.length, pair }),
+        type: 'success'
+    })
+    await router.push({ name: 'queue' })
 }
 
-// topbar CTA mirrors the header button
+/// Movie counterpart of「翻译缺失」(screen-08): with a job in flight the
+/// action reports the real request id and progress; otherwise it creates
+/// the translation for the first configured target from the movie's own
+/// source subtitle.
+async function movieTranslateMissing(): Promise<void> {
+    if (!item.value) return
+    const busy = activeRequests.value.find(
+        (request) => request.status === TRANSLATION_STATUS.INPROGRESS
+    ) ?? activeRequests.value[0]
+    if (busy) {
+        toastStore.push({
+            message: t('mediaDetail.movie.busyToast', { id: busy.id, progress: busy.progress }),
+            type: 'info'
+        })
+        return
+    }
+
+    const target = firstTargetLanguage.value
+    if (!target) {
+        toastStore.push({ message: t('mediaDetail.noTarget'), type: 'info' })
+        return
+    }
+    const files = item.value.subtitleFiles ?? []
+    const source =
+        files.find((file) => configuredSourceCodes.value.includes(file.language.toLowerCase())) ??
+        files[0]
+    if (!source) {
+        toastStore.push({ message: t('mediaDetail.movie.noSource'), type: 'info' })
+        return
+    }
+
+    const requestId = await translateStore.translateSubtitle(
+        item.value.id,
+        source,
+        source.language,
+        target,
+        MEDIA_TYPE.MOVIE
+    )
+    toastStore.push({
+        message: t('mediaDetail.movie.queuedToast', { id: requestId }),
+        type: 'success'
+    })
+    await load()
+}
+
+// topbar CTA shares the screen button's action: shows queue for the primary
+// target directly (the language menu stays on the screen button), movies
+// run the busy/create path verbatim.
 onMounted(() => {
     uiStore.registerCta(t('mediaDetail.translateMissing'), () => {
-        /* language menu opens from the header button; the CTA scrolls to it */
-        document.querySelector('main button.bg-accent')?.scrollIntoView({ block: 'center' })
+        if (isShow.value) {
+            const target = firstTargetLanguage.value
+            if (!target) {
+                toastStore.push({ message: t('mediaDetail.noTarget'), type: 'info' })
+                return
+            }
+            void translateMissing(target)
+            return
+        }
+        void movieTranslateMissing()
     })
 })
 
@@ -474,12 +677,26 @@ function chipClass(state?: string): string {
         'mono bg-tertiary border-line text-secondary-content inline-flex items-center gap-1 whitespace-nowrap rounded border px-1.5 py-px text-[11px]'
     if (state === 'complete') return base + ' text-success border-success/40'
     if (state === 'partial') return base + ' text-accent border-accent/45'
+    if (state === 'busy') return base + ' text-info border-info/45'
     if (state === 'none') return base + ' opacity-55'
     return base
 }
 
+/// Movie toolbar chip state: a target with an in-flight request renders the
+/// busy variant instead of the static coverage state.
+function movieBusyState(track: { language: string; state: string }): string {
+    if (!isShow.value && activeByLanguage.value.has(track.language.toLowerCase())) {
+        return 'busy'
+    }
+    return track.state
+}
+
 function trackLabel(track: { language: string; have: number; total: number }): string {
     const lang = track.language.toUpperCase()
+    const active = activeByLanguage.value.get(track.language.toLowerCase())
+    if (!isShow.value && active) {
+        return `${lang} ⏳ ${active.progress}%`
+    }
     if (track.have >= track.total) return `${lang} ✓`
     if (track.have > 0) return `${lang} ◐ ${track.have}/${track.total}`
     return `${lang} ·`

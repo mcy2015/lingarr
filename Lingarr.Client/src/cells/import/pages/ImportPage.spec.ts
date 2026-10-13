@@ -39,6 +39,8 @@ interface ImportRowVm {
 
 interface ImportVm {
     rows: ImportRowVm[]
+    chineseConvert: string
+    bilingualOverride: string
 }
 
 // flushPromises relies on setImmediate/setTimeout which the fake timers
@@ -167,5 +169,48 @@ describe('ImportPage · 导入成本预估 (P0-C)', () => {
         await settleEstimate()
 
         expect(wrapper.text()).toContain('cost unknown')
+    })
+})
+
+describe('ImportPage · 选项条诚实化 (B3-D)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('renders fixed server behaviors as explanation text, not fake controls', async () => {
+        const { wrapper } = await mountImportPage()
+
+        // the free tab's pinned options bar is the first bordered footer row
+        const bar = wrapper.findAll('.border-t')[0]!
+        expect(bar.text()).toContain(en.import.options.transcodeFixed)
+        expect(bar.text()).toContain(en.import.options.writebackFree)
+        expect(bar.text()).toContain(en.import.options.conflictFixed)
+
+        // no fake switch markup anywhere: neither a role=switch nor the old
+        // non-interactive pill
+        expect(wrapper.find('[role="switch"]').exists()).toBe(false)
+        expect(wrapper.findAll('.rounded-full')).toHaveLength(0)
+    })
+
+    it('keeps the real controls: chinese variant and bilingual override', async () => {
+        const { wrapper, vm } = await mountImportPage()
+
+        // options bar holds the chinese + bilingual selects, the action bar
+        // the source/target pair — the row action select only exists per row
+        const selects = wrapper.findAll('select')
+        expect(selects).toHaveLength(4)
+        expect((selects[0].element as HTMLSelectElement).value).toBe('none')
+        expect((selects[1].element as HTMLSelectElement).value).toBe('')
+
+        await selects[1].setValue('on')
+
+        expect(vm.bilingualOverride).toBe('on')
+        // chinese variant stays wired to the same model
+        await selects[0].setValue('traditional')
+        expect(vm.chineseConvert).toBe('traditional')
     })
 })

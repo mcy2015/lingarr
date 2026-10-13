@@ -131,7 +131,7 @@ interface MountedQueue {
     router: ReturnType<typeof createRouter>
 }
 
-async function mountQueuePage(): Promise<MountedQueue> {
+async function mountQueuePage(path = '/queue'): Promise<MountedQueue> {
     const pinia = createPinia()
 
     // the real English copy is loaded so tab labels are asserted against
@@ -154,7 +154,7 @@ async function mountQueuePage(): Promise<MountedQueue> {
             { path: '/logs', name: 'logs', component: { template: '<div />' } }
         ]
     })
-    await router.push('/queue')
+    await router.push(path)
     await router.isReady()
 
     const wrapper = mount(QueuePage, {
@@ -245,6 +245,20 @@ describe('QueuePage', () => {
         expect(requestsMock).toHaveBeenCalledTimes(2)
         expect(requestsMock.mock.calls[1]).toEqual([1, '', 'CreatedAt', true, 'Failed'])
 
+        const tabs = tabButtons(wrapper)
+        expect(tabs[3].classes()).toContain('border-accent')
+        expect(tabs[0].classes()).not.toContain('border-accent')
+    })
+
+    // ── overview deep links (screen-01 KPI / pipeline query) ─────────
+    it('activates the status filter from the ?status= deep link on mount', async () => {
+        const { wrapper, store } = await mountQueuePage('/queue?status=Failed')
+
+        // the deep link's filter drove the first fetch
+        expect(requestsMock.mock.calls[0]).toEqual([1, '', 'CreatedAt', true, 'Failed'])
+        expect(store.filter.status).toBe('Failed')
+
+        // the corresponding tab is highlighted
         const tabs = tabButtons(wrapper)
         expect(tabs[3].classes()).toContain('border-accent')
         expect(tabs[0].classes()).not.toContain('border-accent')

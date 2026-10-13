@@ -11,7 +11,7 @@
                     class="border-line hover:border-accent/60 min-w-[150px] flex-1 cursor-pointer rounded-md border bg-secondary px-3.5 py-3 text-left transition-colors"
                     :class="node.hot ? 'border-accent/55' : 'border-line'"
                     :title="node.label"
-                    @click="router.push({ name: node.route })">
+                    @click="router.push({ name: node.route, query: node.query })">
                     <div class="text-secondary-content text-[11.5px]">{{ node.label }}</div>
                     <div class="mono text-[22px] font-semibold leading-tight" :class="node.hot ? 'text-accent' : ''">
                         {{ node.value
@@ -29,7 +29,7 @@
                 type="button"
                 class="border-line hover:border-accent/60 cursor-pointer rounded-md border bg-secondary px-4 py-3 text-left transition-colors"
                 :title="kpi.label"
-                @click="router.push({ name: kpi.route })">
+                @click="router.push({ name: kpi.route, query: kpi.query })">
                 <div class="mono text-2xl font-semibold" :class="kpi.cls ?? ''">{{ kpi.value }}</div>
                 <div class="text-secondary-content mt-0.5 text-xs">{{ kpi.label }}</div>
             </button>
@@ -50,23 +50,7 @@
                         class="text-secondary-content/60 my-auto px-4 py-6 text-center text-sm">
                         {{ t('overview.active.empty') }}
                     </p>
-                    <router-link
-                        v-for="item in activeItems"
-                        :key="item.id"
-                        :to="{ name: 'queue-detail', params: { id: item.id } }"
-                        class="hover:bg-tertiary/50 grid grid-cols-[minmax(0,1fr)_130px_74px] items-center gap-3.5 border-b border-line px-4 py-2.5 last:border-b-0">
-                        <div class="min-w-0">
-                            <b class="block truncate text-[13px] font-semibold" :title="item.title">{{ item.title }}</b>
-                            <span class="text-secondary-content block truncate text-[11.5px]">
-                                {{ item.sourceLanguage.toUpperCase() }} → {{ item.targetLanguage.toUpperCase() }}
-                                <template v-if="item.serviceType"> · {{ item.serviceType }}</template>
-                            </span>
-                        </div>
-                        <TranslationProgress :progress="item.progress" :status="item.status" />
-                        <div class="mono text-secondary-content text-right text-xs" :title="t('overview.active.etaHint')">
-                            {{ item.progress }}% · {{ remainingEta(item) }}
-                        </div>
-                    </router-link>
+                    <JobRow v-for="item in activeItems" :key="item.id" :request="item" />
                 </div>
             </div>
 
@@ -135,7 +119,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
+import JobRow from '@/cells/app/components/JobRow.vue'
 import TrendCard from '@/cells/dashboard/components/TrendCard.vue'
 import { statisticsService } from '@/cells/app/api/statisticsService'
 import { translateService } from '@/cells/app/api/translateService'
@@ -185,10 +169,15 @@ const trendMonth = computed(() =>
         : null
 )
 
+/// Deep-link targets (screen-01 interaction 1): nodes and KPIs jump with a
+/// route query so the destination screen can pre-activate the matching
+/// filter — the missing-subtitle node lands on the library's missing view,
+/// the queue KPIs on the corresponding status tab.
 const pipelineNodes = computed(() => [
     {
         key: 'library',
         route: 'library',
+        query: undefined as Record<string, string> | undefined,
         label: t('overview.pipe.library'),
         value: pipeline.value?.mediaCount ?? '—',
         small: t('overview.pipe.mediaUnit')
@@ -196,6 +185,7 @@ const pipelineNodes = computed(() => [
     {
         key: 'missing',
         route: 'library',
+        query: { missing: '1' },
         label: t('overview.pipe.missing'),
         value: pipeline.value?.missingSubtitles ?? '—',
         small: t('overview.pipe.trackUnit')
@@ -203,6 +193,7 @@ const pipelineNodes = computed(() => [
     {
         key: 'queue',
         route: 'queue',
+        query: undefined,
         label: t('overview.pipe.queue'),
         value: pipeline.value?.queueDepth ?? '—',
         small: t('overview.pipe.queueUnit', {
@@ -214,6 +205,7 @@ const pipelineNodes = computed(() => [
     {
         key: 'services',
         route: 'settings-providers',
+        query: undefined,
         label: t('overview.pipe.services'),
         value: pipeline.value?.servicesOnline ?? '—',
         small: t('overview.pipe.onlineUnit')
@@ -221,6 +213,7 @@ const pipelineNodes = computed(() => [
     {
         key: 'written',
         route: 'queue',
+        query: { status: 'Completed' },
         label: t('overview.pipe.written'),
         value: pipeline.value?.writtenThisMonth ?? '—',
         small: t('overview.pipe.writtenUnit')
@@ -228,8 +221,18 @@ const pipelineNodes = computed(() => [
 ])
 
 const kpis = computed(() => [
-    { label: t('overview.kpi.inProgress'), value: inProgressCount.value, route: 'queue' },
-    { label: t('overview.kpi.queued'), value: pendingCount.value, route: 'queue' },
+    {
+        label: t('overview.kpi.inProgress'),
+        value: inProgressCount.value,
+        route: 'queue',
+        query: { status: 'InProgress' } as Record<string, string> | undefined
+    },
+    {
+        label: t('overview.kpi.queued'),
+        value: pendingCount.value,
+        route: 'queue',
+        query: { status: 'Pending' }
+    },
     {
         label: t('overview.kpi.cost'),
         value:
@@ -239,7 +242,8 @@ const kpis = computed(() => [
                   )
                 : '—',
         cls: 'text-secondary-content/60',
-        route: 'settings-providers'
+        route: 'settings-providers',
+        query: undefined
     },
     {
         label: t('overview.kpi.successRate'),
@@ -247,7 +251,9 @@ const kpis = computed(() => [
         cls:
             pipeline.value?.successRate30Days != null && pipeline.value.successRate30Days < 90
                 ? 'text-warning'
-                : ''
+                : '',
+        route: 'queue',
+        query: { status: 'Failed' }
     }
 ])
 
@@ -334,19 +340,6 @@ const statusLabel = (status: string): string => {
 
 const formatTime = (createdAt: string): string =>
     new Date(createdAt).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
-
-/// Same linear estimate as the queue rows: startedAt + progress extrapolated
-/// to 100%; "—" until the job actually starts producing progress.
-const remainingEta = (item: ITranslationRequest): string => {
-    if (item.startedAt && item.progress > 0) {
-        const elapsed = Date.now() - new Date(item.startedAt).getTime()
-        const remaining = (elapsed / item.progress) * (100 - item.progress)
-        const minutes = Math.floor(remaining / 60_000)
-        const seconds = Math.floor((remaining % 60_000) / 1000)
-        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-    }
-    return '—'
-}
 
 // live topbar sub: pipeline state + seconds since the last refresh
 const lastFetchAt = ref(Date.now())
