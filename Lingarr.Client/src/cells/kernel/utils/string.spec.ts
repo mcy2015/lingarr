@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildUrl } from '@/cells/kernel/utils/string'
+import { buildUrl, maskSecret } from '@/cells/kernel/utils/string'
 
 describe('buildUrl', () => {
     it('appends and joins query parameters', () => {
@@ -30,5 +30,29 @@ describe('buildUrl', () => {
         const result = buildUrl('/api/media?pageNumber=1', { searchQuery: 'dune' })
 
         expect(result).toBe('/api/media?pageNumber=1&searchQuery=dune')
+    })
+})
+
+describe('maskSecret', () => {
+    it('keeps the first and last 4 characters around a fixed bullet run', () => {
+        expect(maskSecret('abcdefghijkl')).toBe('abcd•••ijkl')
+    })
+
+    it('masks short values entirely with a fixed-width mask that hides the length', () => {
+        expect(maskSecret('short')).toBe('••••••••')
+        expect(maskSecret('12345678')).toBe('••••••••')
+        expect(maskSecret('')).toBe('••••••••')
+        expect(maskSecret('ab')).toBe('••••••••')
+    })
+
+    it('never returns the original value', () => {
+        const secret = '9'.repeat(64)
+        expect(maskSecret(secret)).not.toContain(secret)
+        expect(maskSecret(secret)).toBe(`9999•••${'9'.repeat(4)}`)
+    })
+
+    it('supports a custom edge size', () => {
+        expect(maskSecret('abcdefgh', 2)).toBe('ab•••gh')
+        expect(maskSecret('abcd', 2)).toBe('••••••••')
     })
 })

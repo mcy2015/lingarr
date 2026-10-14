@@ -488,6 +488,7 @@
             "radarrUrlError": "Please enter a valid URL (e.g., http://localhost:7878 or https://example.com)",
             "sonarrUrlError": "Please enter a valid URL (e.g., http://localhost:8989 or https://example.com)",
             "apiKeyLengthError": "API Key must be {minLength} characters",
+            "apiKeyConfigured": "Configured — leave blank to keep the current key",
             "includeByDefault": "Include new imports by default",
             "noMediaHint": "No media visible? Try reindexing by starting a sync task",
             "here": "here"
@@ -517,7 +518,8 @@
             "loadingOptions": "Loading options…",
             "noOptionsEndpoint": "No options endpoint configured.",
             "noOptionsReturned": "No options returned.",
-            "optionsLoadError": "Error loading options. Please try again."
+            "optionsLoadError": "Error loading options. Please try again.",
+            "secretConfigured": "Configured — leave blank to keep the current value"
         },
         "webhook": {
             "title": "Webhook",
@@ -587,16 +589,21 @@
         },
         "apiKey": {
             "title": "API Key",
-            "description": "Click the button below to (re)generate your API key",
-            "generate": "Generate API Key",
+            "statusGenerated": "Generated",
+            "statusNotGenerated": "Not generated",
+            "generate": "Generate new key",
             "generating": "Generating…",
             "revoke": "Revoke",
             "revoking": "Revoking…",
             "revoked": "API key revoked",
-            "label": "API Key",
             "howToUse": "How to Use",
-            "headerIntro": "Include the API key in your HTTP requests using the",
-            "headerSuffix": "header:"
+            "headerIntro": "Include the key in your HTTP requests using the",
+            "headerSuffix": "header:",
+            "show": "Show key",
+            "hide": "Hide key",
+            "copy": "Copy",
+            "copied": "Key copied to clipboard",
+            "copyFailed": "Could not copy the key"
         },
         "plugins": {
             "subLineBase": "External translation plugins",

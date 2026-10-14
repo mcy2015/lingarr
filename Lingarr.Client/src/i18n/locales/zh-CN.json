@@ -488,6 +488,7 @@
             "radarrUrlError": "请输入有效的 URL(例如 http://localhost:7878 或 https://example.com)",
             "sonarrUrlError": "请输入有效的 URL(例如 http://localhost:8989 或 https://example.com)",
             "apiKeyLengthError": "API 密钥长度必须为 {minLength} 个字符",
+            "apiKeyConfigured": "已配置,留空保持不变",
             "includeByDefault": "默认包含新导入的内容",
             "noMediaHint": "看不到媒体?请尝试启动同步任务以重新建立索引",
             "here": "这里"
@@ -517,7 +518,8 @@
             "loadingOptions": "正在加载选项…",
             "noOptionsEndpoint": "未配置选项接口。",
             "noOptionsReturned": "未返回任何选项。",
-            "optionsLoadError": "加载选项出错,请重试。"
+            "optionsLoadError": "加载选项出错,请重试。",
+            "secretConfigured": "已配置,留空保持不变"
         },
         "webhook": {
             "title": "Webhook",
@@ -587,16 +589,21 @@
         },
         "apiKey": {
             "title": "API 密钥",
-            "description": "点击下方按钮(重新)生成你的 API 密钥",
-            "generate": "生成 API 密钥",
+            "statusGenerated": "已生成",
+            "statusNotGenerated": "未生成",
+            "generate": "生成新密钥",
             "generating": "生成中…",
             "revoke": "吊销",
             "revoking": "吊销中…",
             "revoked": "API 密钥已吊销",
-            "label": "API 密钥",
             "howToUse": "使用方法",
             "headerIntro": "请在 HTTP 请求中使用",
-            "headerSuffix": "请求头传入 API 密钥:"
+            "headerSuffix": "请求头传入密钥:",
+            "show": "显示密钥",
+            "hide": "隐藏密钥",
+            "copy": "复制",
+            "copied": "密钥已复制到剪贴板",
+            "copyFailed": "密钥复制失败"
         },
         "plugins": {
             "subLineBase": "外部翻译插件",

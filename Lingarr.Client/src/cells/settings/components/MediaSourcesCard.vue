@@ -15,9 +15,13 @@
             :key="source.kind"
             class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 text-[13px]"
             :data-test="`source-row-${source.kind}`">
-            <span class="dot flex-none" :class="source.configured ? 'bg-success' : 'bg-line'"></span>
+            <span
+                class="dot flex-none"
+                :class="source.configured ? 'bg-success' : 'bg-line'"></span>
             <b class="flex-none">{{ source.name }}</b>
-            <span class="mono text-secondary-content min-w-0 flex-1 truncate text-xs" :title="source.hint">
+            <span
+                class="mono text-secondary-content min-w-0 flex-1 truncate text-xs"
+                :title="source.hint">
                 {{ source.hint }}
             </span>
             <span class="ml-auto flex flex-none gap-1.5">
@@ -79,7 +83,9 @@
         </div>
 
         <!-- 路径映射行:下钻保留页面 -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-[13px]" data-test="mapping-row">
+        <div
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-[13px]"
+            data-test="mapping-row">
             <b class="flex-none">{{ t('settings.sources.mapping') }}</b>
             <span class="text-secondary-content mono min-w-0 flex-1 truncate text-xs">
                 {{ t('settings.sources.mappingHint', { count: mappingStore.mappings.length }) }}
@@ -134,7 +140,10 @@
                                 :validation-type="INPUT_VALIDATION_TYPE.STRING"
                                 :type="INPUT_TYPE.PASSWORD"
                                 :label="t('services.integration.apiKey')"
-                                :error-message="t('services.integration.apiKeyLengthError', { minLength: 32 })"
+                                :placeholder="editingKeyPlaceholder"
+                                :error-message="
+                                    t('services.integration.apiKeyLengthError', { minLength: 32 })
+                                "
                                 @update:validation="(val) => setValid(editing, 'key', val)" />
                             <div class="flex items-center space-x-2 pt-1">
                                 <ToggleButton v-model="editingSource.includeModel.value">
@@ -270,6 +279,24 @@ async function resync(source: ISourceRow): Promise<void> {
 const radarrValid = reactive({ url: false, key: false })
 const sonarrValid = reactive({ url: false, key: false })
 
+/// 敏感值统一策略(输入型):API Key 编辑态不回显旧值(输入恒从空开始),
+/// 已配置时占位符说明「留空保持不变」;空输入不写空串覆盖已存密钥。
+function keyConfigured(kind: 'radarr' | 'sonarr' | null): boolean {
+    const key =
+        kind === 'radarr'
+            ? ENCRYPTED_SETTINGS.RADARR_API_KEY
+            : kind === 'sonarr'
+              ? ENCRYPTED_SETTINGS.SONARR_API_KEY
+              : null
+    if (key === null) return false
+    return (settingStore.getEncryptedSetting(key) ?? '').trim() !== ''
+}
+
+const editingKeyConfigured = computed(() => keyConfigured(editing.value))
+const editingKeyPlaceholder = computed(() =>
+    editingKeyConfigured.value ? t('services.integration.apiKeyConfigured') : ''
+)
+
 const radarrUrlModel = computed({
     get: (): string => radarrUrl.value,
     set: (newValue: string): void => {
@@ -280,17 +307,24 @@ const radarrUrlModel = computed({
     }
 })
 const radarrKeyModel = computed({
-    get: (): string =>
-        settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.RADARR_API_KEY) ?? '',
+    // 不回显:Secret 类输入恒从空开始,占位符提示「留空保持不变」
+    get: (): string => '',
     set: (newValue: string): void => {
-        settingStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.RADARR_API_KEY, newValue, radarrValid.key)
+        // 空输入 = 保持已配置的密钥不变,不做任何写入
+        if (newValue === '') return
+        settingStore.updateEncryptedSetting(
+            ENCRYPTED_SETTINGS.RADARR_API_KEY,
+            newValue,
+            radarrValid.key
+        )
         if (radarrValid.key) {
             toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
 const radarrIncludeModel = computed({
-    get: (): string => (settingStore.getSetting(SETTINGS.RADARR_DEFAULT_INCLUDE) as string) ?? 'false',
+    get: (): string =>
+        (settingStore.getSetting(SETTINGS.RADARR_DEFAULT_INCLUDE) as string) ?? 'false',
     set: (newValue: string): void => {
         settingStore.updateSetting(SETTINGS.RADARR_DEFAULT_INCLUDE, newValue, true)
         toastStore.push({ message: t('common.saved'), type: 'success' })
@@ -307,17 +341,24 @@ const sonarrUrlModel = computed({
     }
 })
 const sonarrKeyModel = computed({
-    get: (): string =>
-        settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.SONARR_API_KEY) ?? '',
+    // 不回显:Secret 类输入恒从空开始,占位符提示「留空保持不变」
+    get: (): string => '',
     set: (newValue: string): void => {
-        settingStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.SONARR_API_KEY, newValue, sonarrValid.key)
+        // 空输入 = 保持已配置的密钥不变,不做任何写入
+        if (newValue === '') return
+        settingStore.updateEncryptedSetting(
+            ENCRYPTED_SETTINGS.SONARR_API_KEY,
+            newValue,
+            sonarrValid.key
+        )
         if (sonarrValid.key) {
             toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
 })
 const sonarrIncludeModel = computed({
-    get: (): string => (settingStore.getSetting(SETTINGS.SONARR_DEFAULT_INCLUDE) as string) ?? 'false',
+    get: (): string =>
+        (settingStore.getSetting(SETTINGS.SONARR_DEFAULT_INCLUDE) as string) ?? 'false',
     set: (newValue: string): void => {
         settingStore.updateSetting(SETTINGS.SONARR_DEFAULT_INCLUDE, newValue, true)
         toastStore.push({ message: t('common.saved'), type: 'success' })

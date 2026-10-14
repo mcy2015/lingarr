@@ -76,8 +76,6 @@ beforeEach(() => {
     setEncryptedSettingMock.mockReset().mockResolvedValue(undefined)
 })
 
-
-
 describe('AuthenticationPage · pb-head', () => {
     it('roots on the shared DrillDownPage skeleton (dd-page, scrolling column)', async () => {
         const { wrapper } = await mountPage()
@@ -123,9 +121,7 @@ describe('AuthenticationPage · 认证开关(原功能)', () => {
         await flushPromises()
 
         expect(hasAnyUsersMock).toHaveBeenCalledTimes(1)
-        const written = setSettingMock.mock.calls.find(
-            (call) => call[0] === SETTINGS.AUTH_ENABLED
-        )
+        const written = setSettingMock.mock.calls.find((call) => call[0] === SETTINGS.AUTH_ENABLED)
         expect(written?.[1]).toBe('true')
     })
 
@@ -155,7 +151,7 @@ describe('AuthenticationPage · API Key 区(原功能)', () => {
         expect(wrapper.find('[data-test="apikey-card"]').exists()).toBe(true)
     })
 
-    it('generates a key through the auth endpoint and renders it', async () => {
+    it('generates a key through the auth endpoint and renders it masked', async () => {
         const { wrapper, pinia } = await mountPage()
         const settingStore = useSettingStore(pinia)
         settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'true')
@@ -165,7 +161,9 @@ describe('AuthenticationPage · API Key 区(原功能)', () => {
         await flushPromises()
 
         expect(generateApiKeyMock).toHaveBeenCalledTimes(1)
-        expect(wrapper.find('[data-test="apikey-value"]').text()).toContain('fresh-key')
+        // 敏感值统一策略:默认掩码渲染,完整明文不进 DOM,只进 store
+        expect(wrapper.find('[data-test="apikey-value"]').text()).toBe('fres•••-key')
+        expect(wrapper.html()).not.toContain('fresh-key')
         expect(settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY)).toBe('fresh-key')
     })
 })

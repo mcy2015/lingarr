@@ -1,4 +1,10 @@
-export type QueryParamValue = string | number | boolean | string[] | number[] | Record<string, unknown>
+export type QueryParamValue =
+    | string
+    | number
+    | boolean
+    | string[]
+    | number[]
+    | Record<string, unknown>
 
 /**
  * Builds a URL by appending query parameters to the given path.
@@ -48,6 +54,30 @@ export const buildUrl = (path: string, params: Record<string, QueryParamValue>):
     } else {
         return `${path}?${queryString}`
     }
+}
+
+/**
+ * Masks a secret for display: first and last `edge` characters stay visible,
+ * the middle collapses to a fixed bullet run. Values too short to safely
+ * expose an edge (<= edge * 2 characters, including the empty string) are
+ * masked entirely with a fixed-width bullet run so the mask never leaks the
+ * original length.
+ *
+ * @param value - The secret to mask.
+ * @param edge - How many characters remain visible at each end (default 4).
+ * @returns The masked display string, never the full secret.
+ *
+ * @example
+ * maskSecret('abcdefghij')   // 'abcd•••ghij'
+ * maskSecret('short')        // '••••••••'
+ * maskSecret('')             // '••••••••'
+ */
+export const maskSecret = (value: string, edge: number = 4): string => {
+    const FULL_MASK = '••••••••'
+    if (value.length <= edge * 2) {
+        return FULL_MASK
+    }
+    return `${value.slice(0, edge)}•••${value.slice(-edge)}`
 }
 
 declare global {

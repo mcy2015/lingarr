@@ -13,11 +13,14 @@ import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { SETTINGS } from '@/types'
 import en from '@/i18n/locales/en.json'
+// side effect: installs String.prototype.format used by InputComponent validation
+import '@/cells/kernel/utils/string'
 
 const indexMoviesMock = vi.hoisted(() => vi.fn())
 const indexShowsMock = vi.hoisted(() => vi.fn())
 const moviesMock = vi.hoisted(() => vi.fn())
 const showsMock = vi.hoisted(() => vi.fn())
+const setEncryptedSettingMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/settings/services/scheduleService', () => ({
     scheduleService: () => ({
@@ -35,9 +38,11 @@ vi.mock('@/cells/app/api/mediaService', () => ({
 
 vi.mock('@/cells/settings/services/mappingService', () => ({
     mappingService: () => ({
-        getMappings: vi.fn().mockResolvedValue([
-            { sourcePath: '/media', destinationPath: '/tv', mediaType: 'Show' }
-        ]),
+        getMappings: vi
+            .fn()
+            .mockResolvedValue([
+                { sourcePath: '/media', destinationPath: '/tv', mediaType: 'Show' }
+            ]),
         setMappings: vi.fn().mockResolvedValue(undefined)
     })
 }))
@@ -45,6 +50,7 @@ vi.mock('@/cells/settings/services/mappingService', () => ({
 vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({
         setSetting: vi.fn().mockResolvedValue(undefined),
+        setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
         getEncryptedSettings: vi.fn().mockResolvedValue({})
     })
@@ -63,6 +69,7 @@ beforeEach(() => {
     indexShowsMock.mockReset().mockResolvedValue(undefined)
     moviesMock.mockReset().mockResolvedValue({ totalCount: 312, items: [] })
     showsMock.mockReset().mockResolvedValue({ totalCount: 46, items: [] })
+    setEncryptedSettingMock.mockReset().mockResolvedValue(undefined)
 })
 
 async function mountCard() {
@@ -77,7 +84,11 @@ async function mountCard() {
         history: createMemoryHistory(),
         routes: [
             { path: '/', name: 'home', component: { template: '<div />' } },
-            { path: '/settings/mapping', name: 'settings-mapping', component: { template: '<div />' } }
+            {
+                path: '/settings/mapping',
+                name: 'settings-mapping',
+                component: { template: '<div />' }
+            }
         ]
     })
     await router.push('/')
@@ -98,9 +109,7 @@ describe('MediaSourcesCard · 行渲染', () => {
         const radarr = wrapper.find('[data-test="source-row-radarr"]')
         expect(radarr.text()).toContain('Radarr')
         expect(radarr.text()).toContain('http://radarr:7878')
-        expect(radarr.text()).toContain(
-            en.settings.sources.moviesSynced.replace('{count}', '312')
-        )
+        expect(radarr.text()).toContain(en.settings.sources.moviesSynced.replace('{count}', '312'))
 
         const sonarr = wrapper.find('[data-test="source-row-sonarr"]')
         expect(sonarr.text()).toContain('http://sonarr:8989')
@@ -148,6 +157,70 @@ describe('MediaSourcesCard · 编辑模态', () => {
         expect(modal).not.toBeNull()
         const inputs = [...(modal?.querySelectorAll('input') ?? [])] as HTMLInputElement[]
         expect(inputs[0].value).toBe('http://radarr:7878')
+    })
+
+    it('never echoes the stored API key and hints to leave blank to keep it', async () => {
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="edit-source-sonarr"]').trigger('click')
+        await flushPromises()
+
+        const modal = document.querySelector('[data-test="source-modal-sonarr"]')
+        const inputs = [...(modal?.querySelectorAll('input') ?? [])] as HTMLInputElement[]
+        // 敏感值统一策略(输入型):type=password 且不回显,占位符说明留空保持不变
+        expect(inputs[1].type).toBe('password')
+        expect(inputs[1].value).toBe('')
+        expect(inputs[1].placeholder).toBe(en.services.integration.apiKeyConfigured)
+        // 完整明文不在 DOM(store 中的 32 位真实 key 不被渲染)
+        expect(modal?.innerHTML).not.toContain('x'.repeat(32))
+    })
+
+    it('keeps the stored key when the input is cleared (no empty overwrite)', async () => {
+        vi.useFakeTimers()
+        try {
+            const { wrapper, pinia } = await mountCard()
+            setEncryptedSettingMock.mockClear()
+
+            await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+            await flushPromises()
+
+            const modal = document.querySelector('[data-test="source-modal-radarr"]')
+            const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
+            keyInput.value = ''
+            keyInput.dispatchEvent(new Event('input'))
+            await vi.advanceTimersByTimeAsync(1100)
+            await flushPromises()
+
+            expect(setEncryptedSettingMock).not.toHaveBeenCalled()
+            expect(useSettingStore(pinia).getEncryptedSetting('radarr_api_key' as never)).toBe(
+                'x'.repeat(32)
+            )
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('writes a newly typed key through the encrypted channel once it is valid', async () => {
+        vi.useFakeTimers()
+        try {
+            const { wrapper } = await mountCard()
+            setEncryptedSettingMock.mockClear()
+
+            await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+            await flushPromises()
+
+            const modal = document.querySelector('[data-test="source-modal-radarr"]')
+            const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
+            const freshKey = 'k'.repeat(32)
+            keyInput.value = freshKey
+            keyInput.dispatchEvent(new Event('input'))
+            await vi.advanceTimersByTimeAsync(1100)
+            await flushPromises()
+
+            expect(setEncryptedSettingMock).toHaveBeenCalledWith('radarr_api_key', freshKey)
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })
 

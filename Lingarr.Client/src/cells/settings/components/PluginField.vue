@@ -23,7 +23,7 @@
                 field.type === PLUGIN_SETTING_TYPE.SECRET ? INPUT_TYPE.PASSWORD : INPUT_TYPE.TEXT
             "
             :label="field.label"
-            :placeholder="field.default ?? ''"
+            :placeholder="secretPlaceholder"
             :validation-type="validationType"
             :min-length="field.minLength ?? undefined"
             :error-message="field.validationErrorMessage ?? undefined"
@@ -74,6 +74,22 @@ const remoteOptions = ref<LabelValue[]>([])
 const remoteError = ref<string | null>(null)
 const remoteSelect = ref<SelectComponentExpose | null>(null)
 
+/// 敏感值统一策略(输入型):Secret 编辑态不回显旧值 —— 服务端虽回传明文,
+/// 前端至少不渲染进 DOM;空输入 = 「留空保持不变」,不写空串覆盖已存密钥。
+const isSecret = computed(() => props.field.type === PLUGIN_SETTING_TYPE.SECRET)
+const secretConfigured = computed(() => {
+    if (!isSecret.value) return false
+    const stored = settingsStore.getEncryptedSetting(props.field.key as keyof IEncryptedSettings)
+    return typeof stored === 'string' && stored.trim() !== ''
+})
+
+const secretPlaceholder = computed(() => {
+    if (!isSecret.value) return props.field.default ?? ''
+    return secretConfigured.value
+        ? t('services.plugins.secretConfigured')
+        : (props.field.default ?? '')
+})
+
 const validationType = computed<InputValidationType | undefined>(() => {
     if (props.field.type === PLUGIN_SETTING_TYPE.URL) {
         return INPUT_VALIDATION_TYPE.URL
@@ -86,12 +102,8 @@ const validationType = computed<InputValidationType | undefined>(() => {
 
 const fieldValue = computed<string>({
     get: (): string => {
-        if (props.field.type === PLUGIN_SETTING_TYPE.SECRET) {
-            const stored = settingsStore.getEncryptedSetting(
-                props.field.key as keyof IEncryptedSettings
-            )
-            return typeof stored === 'string' ? stored : ''
-        }
+        // Secret 永不回显:输入框恒从空开始,占位符说明「留空保持不变」
+        if (isSecret.value) return ''
         const stored = settingsStore.getSetting(props.field.key as keyof ISettings)
         if (typeof stored === 'string') {
             return stored
@@ -102,7 +114,9 @@ const fieldValue = computed<string>({
         return props.field.default ?? ''
     },
     set: (newValue: string): void => {
-        if (props.field.type === PLUGIN_SETTING_TYPE.SECRET) {
+        if (isSecret.value) {
+            // 空输入 = 保持已配置的密钥不变,不做任何写入
+            if (newValue === '') return
             settingsStore.updateEncryptedSetting(
                 props.field.key as keyof IEncryptedSettings,
                 newValue,
