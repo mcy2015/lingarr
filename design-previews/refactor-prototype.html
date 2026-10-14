@@ -1313,23 +1313,23 @@
           </div>
         </div>
 
-        <!-- 自动化(策略 + 任务表,cron 唯一编辑入口) -->
+        <!-- 自动化(批次卡 = AutomatedTranslationJob 唯一驻留位:cron/启停/触发/策略;
+             任务表只列 4 个运维任务,cron 编辑入口按卡分置) -->
         <div class="panel" data-panel="automation">
           <div class="card" style="max-width:860px">
             <div class="card-h"><h2>自动化批次</h2><span class="meta mono">cron</span></div>
             <div class="setlist">
-              <div class="row"><b>每日补缺</b><span class="hint mono">限额 50 任务/次 · 新片延迟 电影 48h / 剧集 24h</span><span class="end"><button class="btn sm">编辑</button><div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span></div>
+              <div class="row"><b>每日补缺</b><span class="hint mono">限额 50 任务/次 · 新片延迟 电影 48h / 剧集 24h</span><span class="mono" style="font-size:11.5px;color:var(--secondary-content)">下次执行 明日 04:00 <span style="opacity:.6">UTC</span></span><span class="end"><button class="btn sm">▶ 运行</button><button class="btn sm">编辑</button><div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span></div>
             </div>
           </div>
           <div class="card" style="margin-top:12px">
-            <div class="card-h"><h2>定时任务</h2><span class="meta mono">Hangfire · 5 个 recurring 任务</span>
-              <span class="end"><button class="btn sm">⟳</button><button class="btn sm">查看任务队列</button><button class="btn sm">＋ 新建任务</button></span></div>
+            <div class="card-h"><h2>定时任务</h2><span class="meta mono">Hangfire · 4 个运维任务</span>
+              <span class="end"><button class="btn sm">⟳</button><button class="btn sm">查看任务队列</button></span></div>
             <table class="tscroll" style="width:100%;border-collapse:collapse;font-size:12.5px">
               <thead><tr style="text-align:left;color:var(--secondary-content)">
                 <th style="padding:8px 14px">任务名称</th><th>Cron</th><th>上次执行</th><th>下次执行</th><th>状态</th><th style="text-align:right">操作</th>
               </tr></thead>
               <tbody>
-                <tr style="border-top:1px solid var(--line)"><td class="mono" style="padding:8px 14px">AutomatedTranslationJob</td><td class="mono">0 4 * * * <button class="btn sm">编辑</button></td><td class="mono">04:00 ✓</td><td class="mono">明日 04:00</td><td><span class="chip ok">✓ 成功</span></td><td style="text-align:right"><button class="btn sm">▶ 运行</button><div class="switch on" role="switch" aria-checked="true" tabindex="0" style="display:inline-block;vertical-align:middle"></div></td></tr>
                 <tr style="border-top:1px solid var(--line)"><td class="mono" style="padding:8px 14px">SyncMovieJob</td><td class="mono">0 4 * * * <button class="btn sm">编辑</button></td><td class="mono">04:00 ✓</td><td class="mono">明日 04:00</td><td><span class="chip ok">✓ 成功</span></td><td style="text-align:right"><button class="btn sm">▶ 运行</button><div class="switch on" role="switch" aria-checked="true" tabindex="0" style="display:inline-block;vertical-align:middle"></div></td></tr>
                 <tr style="border-top:1px solid var(--line)"><td class="mono" style="padding:8px 14px">SyncShowJob</td><td class="mono">0 4 * * * <button class="btn sm">编辑</button></td><td class="mono">04:00 ✓</td><td class="mono">明日 04:00</td><td><span class="chip ok">✓ 成功</span></td><td style="text-align:right"><button class="btn sm">▶ 运行</button><div class="switch on" role="switch" aria-checked="true" tabindex="0" style="display:inline-block;vertical-align:middle"></div></td></tr>
                 <tr style="border-top:1px solid var(--line)"><td class="mono" style="padding:8px 14px">StatisticsJob</td><td class="mono">0 0 * * * <button class="btn sm">编辑</button></td><td class="mono">00:00 ✓</td><td class="mono">明日 00:00</td><td><span class="chip ok">✓ 成功</span></td><td style="text-align:right"><button class="btn sm">▶ 运行</button><div class="switch on" role="switch" aria-checked="true" tabindex="0" style="display:inline-block;vertical-align:middle"></div></td></tr>

@@ -615,8 +615,6 @@
             "description": "设置自动化。注意:启用自动化后,还需要配置所需的",
             "servicesLink": "服务",
             "descriptionSuffix": "。",
-            "movieIndexer": "设置电影索引计划:",
-            "showIndexer": "设置剧集索引计划:",
             "cronFormat": "Cron 格式:分 时 日 月 星期(例如 '0 * * * *' 表示每小时)",
             "limitPerSchedule": "限制每次计划执行的翻译数量",
             "movieAgeDelay": "电影文件延迟(单位:小时)",
@@ -626,8 +624,6 @@
             "dailyRow": "每日补缺",
             "dailyHint": "限额 {limit} 任务/次 · 新片延迟 电影 {movie}h / 剧集 {show}h",
             "edit": "编辑",
-            "editInSchedule": "去任务计划修改",
-            "scheduleField": "调度(cron)",
             "editFailed": "请检查标红的字段。",
             "toggleFailed": "开关切换失败，请重试。"
         },

@@ -5,6 +5,11 @@ import { scheduleService } from '@/cells/settings/services/scheduleService'
 
 const scheduleApi = scheduleService(axios)
 
+/// Batches card and jobs table both hydrate from the job list on mount —
+/// concurrent fetches share one request; the slot clears on settle so
+/// later refreshes (toggles, reload) fetch again.
+let jobsFetch: Promise<void> | null = null
+
 export const useScheduleStore = defineStore('schedule', {
     state: (): IUseScheduleStore => ({
         recurringJobs: [],
@@ -17,7 +22,15 @@ export const useScheduleStore = defineStore('schedule', {
     },
     actions: {
         async fetchRecurringJobs(): Promise<void> {
-            this.recurringJobs = await scheduleApi.recurringJobs()
+            jobsFetch ??= scheduleApi
+                .recurringJobs<IRecurringJob[]>()
+                .then((jobs) => {
+                    this.recurringJobs = jobs
+                })
+                .finally(() => {
+                    jobsFetch = null
+                })
+            return jobsFetch
         },
         async fetchQueueDepths(): Promise<void> {
             this.queueDepths = await scheduleApi.depth()
@@ -25,6 +38,7 @@ export const useScheduleStore = defineStore('schedule', {
         /// The schedule screen labels cron/next-run with the zone jobs run
         /// in — fetched separately so a failure hides the label, not the table.
         async fetchTimeZone(): Promise<void> {
+            if (this.timeZone) return
             this.timeZone = await scheduleApi.timeZone()
         },
         /// Enable/disable land through the store so the row state and the

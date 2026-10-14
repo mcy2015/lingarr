@@ -615,8 +615,6 @@
             "description": "Set up automation. Note that if automation is implemented, you also need to configure the necessary",
             "servicesLink": "services",
             "descriptionSuffix": ".",
-            "movieIndexer": "Set movie indexer:",
-            "showIndexer": "Set tv show indexer:",
             "cronFormat": "Cron format: minute hour day month weekday (e.g., '0 * * * *' for hourly)",
             "limitPerSchedule": "Limit the amount of translations per schedule",
             "movieAgeDelay": "Movie file age delay in 'hours'",
@@ -626,8 +624,6 @@
             "dailyRow": "Daily catch-up",
             "dailyHint": "limit {limit} tasks/run · new-media delay {movie}h movie / {show}h show",
             "edit": "Edit",
-            "editInSchedule": "Edit in job schedule",
-            "scheduleField": "Schedule (cron)",
             "editFailed": "Please check the highlighted fields.",
             "toggleFailed": "Failed to toggle, please retry."
         },

@@ -1,8 +1,9 @@
 <template>
-    <!-- ═══ 定时任务卡(自 screen-12 下钻屏收编,IA 重构批 3):任务目录固定
-         为 5 个内置任务(±存量 custom 行)——表 = cron 唯一编辑入口·启停·触发·
-         上次/下次。「＋ 新建任务」已移除(PM 裁决:复制单例运维任务无独立价值);
-         队列深度/成功率归概览,不进设置。 -->
+    <!-- ═══ 定时任务卡(设置 · 自动化 tab):运维任务目录——4 个内置任务
+         (±存量 custom 行)。AutomatedTranslationJob 收归上方自动化批次卡
+         (开关/触发/cron/策略单点驻留),本表不再渲染,勿再此行加回。
+         表 = cron 唯一编辑入口·启停·触发·上次/下次;「＋ 新建任务」已移除
+         (PM 裁决:复制单例运维任务无独立价值);队列深度/成功率归概览,不进设置。 -->
     <div
         id="jobs"
         class="border-line bg-secondary scroll-mt-24 rounded-md border"
@@ -199,7 +200,10 @@ const toastStore = useToastStore()
 const router = useRouter()
 const { t } = useI18n()
 const hubConnection = ref<Hub>()
-const jobs = computed(() => scheduleStore.getRecurringJobs)
+/// AutomatedTranslationJob 归自动化批次卡,本表只列运维任务(4 内置±custom)。
+const jobs = computed(() =>
+    scheduleStore.getRecurringJobs.filter((job) => job.id !== 'AutomatedTranslationJob')
+)
 const timeZone = computed(() => scheduleStore.timeZone)
 
 /// 应用表格惯用法(与媒体库矩阵一致,原型 th 规范:12px/字重 500/次级色)

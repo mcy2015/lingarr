@@ -1,22 +1,25 @@
 // @vitest-environment happy-dom
-// AutomationBatchesCard (设置 · 自动化 tab):每日补缺行 hint 只报策略(限额/
-// 延迟,cron 归任务计划),开关走 schedule enable/disable 端点(落库+即时注册),
-// 编辑模态为只读 cron(下钻任务计划)+ 三个策略字段,与开关解耦。「每周全库巡检」
-// 服务端不存在,不显示。
+// AutomationBatchesCard (设置 · 自动化 tab):AutomatedTranslationJob 的唯一前端
+// 驻留位——开关读任务表真值(schedule store,任务表不再渲染该行)、行内
+// 下次执行(带解释时区)、手动触发、编辑模态 cron(本卡即编辑入口)+ 三策略
+// 字段,与开关解耦。「每周全库巡检」服务端不存在,不显示。
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
-import { createMemoryHistory, createRouter } from 'vue-router'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, VueWrapper } from '@vue/test-utils'
 import AutomationBatchesCard from '@/cells/settings/components/AutomationBatchesCard.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
-import { ISettings, SETTINGS } from '@/types'
+import { IRecurringJob, ISettings, SETTINGS } from '@/types'
 import en from '@/i18n/locales/en.json'
 
 const setSettingMock = vi.hoisted(() => vi.fn())
 const disableJobMock = vi.hoisted(() => vi.fn())
 const enableJobMock = vi.hoisted(() => vi.fn())
+const updateJobCronMock = vi.hoisted(() => vi.fn())
+const startJobMock = vi.hoisted(() => vi.fn())
+const recurringJobsMock = vi.hoisted(() => vi.fn())
+const timeZoneMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({
@@ -30,7 +33,10 @@ vi.mock('@/cells/settings/services/scheduleService', () => ({
     scheduleService: () => ({
         disableJob: disableJobMock,
         enableJob: enableJobMock,
-        recurringJobs: vi.fn().mockResolvedValue([])
+        updateJobCron: updateJobCronMock,
+        startJob: startJobMock,
+        recurringJobs: recurringJobsMock,
+        timeZone: timeZoneMock
     })
 }))
 
@@ -42,13 +48,42 @@ const i18n = createI18n({
     fallbackWarn: false
 })
 
-beforeEach(() => {
-    setSettingMock.mockClear().mockResolvedValue(undefined)
-    disableJobMock.mockClear().mockResolvedValue(undefined)
-    enableJobMock.mockClear().mockResolvedValue(undefined)
-})
+// ── fixtures ───────────────────────────────────────────────────────
+const makeAutomationJob = (overrides: Partial<IRecurringJob> = {}): IRecurringJob =>
+    ({
+        id: 'AutomatedTranslationJob',
+        cron: '0 4 * * *',
+        queue: 'translation',
+        jobMethod: 'Execute',
+        nextExecution: '2026-10-15T04:00:00Z',
+        lastJobId: null,
+        lastJobState: null,
+        lastExecution: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        timeZoneId: null,
+        currentState: 'Planned',
+        isCurrentlyRunning: false,
+        currentJobId: null,
+        enabled: true,
+        ...overrides
+    }) as IRecurringJob
 
-async function mountCard(settings: Record<string, string> = {}) {
+/// The toggle's status label renders in ToggleButton's slot (a sibling of
+/// the switch button), so the row text is where it is readable.
+const switchLabel = (wrapper: VueWrapper): string =>
+    wrapper.find('[data-test="batch-row-daily"]').text()
+
+type Mounted = {
+    wrapper: VueWrapper
+    pinia: ReturnType<typeof createPinia>
+    settingStore: ReturnType<typeof useSettingStore>
+    toastStore: ReturnType<typeof useToastStore>
+}
+
+async function mountCard(
+    settings: Record<string, string> = {},
+    jobs: IRecurringJob[] = [makeAutomationJob()]
+): Promise<Mounted> {
     const pinia = createPinia()
     const settingStore = useSettingStore(pinia)
     const defaults: Record<string, string> = {
@@ -62,27 +97,24 @@ async function mountCard(settings: Record<string, string> = {}) {
         settingStore.storeSetting(key as keyof ISettings, value)
     }
 
-    const router = createRouter({
-        history: createMemoryHistory(),
-        routes: [
-            {
-                path: '/settings/automation',
-                name: 'settings-automation',
-                component: { template: '<div />' }
-            },
-            { path: '/schedule', name: 'schedule', component: { template: '<div />' } }
-        ]
-    })
-    await router.push('/')
-    await router.isReady()
+    recurringJobsMock.mockReset().mockResolvedValue(jobs)
+    timeZoneMock.mockReset().mockResolvedValue({ ianaId: 'Europe/Amsterdam', warning: null })
 
     const wrapper = mount(AutomationBatchesCard, {
-        global: { plugins: [pinia, i18n, router] }
+        global: { plugins: [pinia, i18n] }
     })
     onTestFinished(() => wrapper.unmount())
     await flushPromises()
-    return { wrapper, pinia, router, settingStore, toastStore: useToastStore(pinia) }
+    return { wrapper, pinia, settingStore, toastStore: useToastStore(pinia) }
 }
+
+beforeEach(() => {
+    setSettingMock.mockClear().mockResolvedValue(undefined)
+    disableJobMock.mockClear().mockResolvedValue(undefined)
+    enableJobMock.mockClear().mockResolvedValue(undefined)
+    updateJobCronMock.mockClear().mockResolvedValue(undefined)
+    startJobMock.mockClear().mockResolvedValue(undefined)
+})
 
 describe('AutomationBatchesCard · 行渲染', () => {
     it('renders the daily catch-up row with the strategy-only hint', async () => {
@@ -94,7 +126,7 @@ describe('AutomationBatchesCard · 行渲染', () => {
         expect(row.text()).toContain('50')
         expect(row.text()).toContain('48')
         expect(row.text()).toContain('24')
-        // cron moved to the job table — the row hint no longer carries it
+        // cron moved out of the hint — it lives in the edit modal now
         expect(row.text()).not.toContain('0 4 * * *')
     })
 
@@ -103,52 +135,103 @@ describe('AutomationBatchesCard · 行渲染', () => {
         expect(wrapper.text()).not.toContain('weekly')
     })
 
-    it('no longer renders the media indexer cron rows', async () => {
-        const { wrapper } = await mountCard({
-            [SETTINGS.MOVIE_SCHEDULE]: '0 4 * * *',
-            [SETTINGS.SHOW_SCHEDULE]: '0 5 * * *'
+    it('shows the next execution labelled with the interpretation zone', async () => {
+        const { wrapper } = await mountCard()
+
+        const next = wrapper.find('[data-test="batch-next-execution"]')
+        expect(next.exists()).toBe(true)
+        expect(next.text()).toContain('Europe/Amsterdam')
+    })
+
+    it('hides the next execution until the job list hydrates', async () => {
+        // never-settling fetch: release the store's dedupe slot on teardown
+        let release: (jobs: IRecurringJob[]) => void = () => {}
+        recurringJobsMock.mockReset().mockReturnValue(
+            new Promise<IRecurringJob[]>((resolve) => {
+                release = resolve
+            })
+        )
+        timeZoneMock.mockReset().mockResolvedValue({ ianaId: 'Europe/Amsterdam', warning: null })
+        onTestFinished(() => {
+            release([])
         })
-        expect(wrapper.find('[data-test="batch-row-movie-index"]').exists()).toBe(false)
-        expect(wrapper.find('[data-test="batch-row-show-index"]').exists()).toBe(false)
+
+        const pinia = createPinia()
+        const settingStore = useSettingStore(pinia)
+        settingStore.storeSetting(SETTINGS.AUTOMATION_ENABLED, 'true')
+        const wrapper = mount(AutomationBatchesCard, { global: { plugins: [pinia, i18n] } })
+        onTestFinished(() => wrapper.unmount())
+        await flushPromises()
+
+        // switch bridges from the settings copy — no wrong-state flash
+        expect(switchLabel(wrapper)).toContain(en.settings.status.enabled)
+        expect(wrapper.find('[data-test="batch-next-execution"]').exists()).toBe(false)
     })
 })
 
-describe('AutomationBatchesCard · 开关', () => {
-    it('toggles the recurring job through the schedule endpoint', async () => {
-        const { wrapper, settingStore, toastStore } = await mountCard()
+describe('AutomationBatchesCard · 开关(任务真值单源)', () => {
+    it('derives the switch state from the recurring job, not the settings copy', async () => {
+        // settings say enabled, live job says disabled — the job wins
+        const { wrapper } = await mountCard(
+            { [SETTINGS.AUTOMATION_ENABLED]: 'true' },
+            [makeAutomationJob({ enabled: false, nextExecution: null })]
+        )
 
-        await wrapper.find('[data-test="batch-row-daily"] [role="switch"]').trigger('click')
+        expect(switchLabel(wrapper)).toContain(en.settings.status.disabled)
+    })
+
+    it('toggles through the job endpoint and follows the refetched state', async () => {
+        const mounted = await mountCard()
+        // refetch after the toggle returns the disabled registration
+        recurringJobsMock.mockResolvedValue([makeAutomationJob({ enabled: false })])
+
+        await mounted.wrapper
+            .find('[data-test="batch-row-daily"] [role="switch"]')
+            .trigger('click')
         await flushPromises()
 
         // the job endpoint persists + registers; no bare setting write
         expect(disableJobMock).toHaveBeenCalledWith('AutomatedTranslationJob')
         expect(setSettingMock.mock.calls.map((call) => call[0])).not.toContain('automation_enabled')
-        // the local cache follows so the switch reflects the new state
-        expect(settingStore.getSetting(SETTINGS.AUTOMATION_ENABLED)).toBe('false')
-        expect(settingStore.getSetting(SETTINGS.TRANSLATION_SCHEDULE)).toBe('0 4 * * *')
-        expect(toastStore.toasts[0].message).toContain(en.common.saved)
+        // the switch now reads the refetched job — no reload needed
+        expect(switchLabel(mounted.wrapper)).toContain(en.settings.status.disabled)
+        expect(mounted.settingStore.getSetting(SETTINGS.TRANSLATION_SCHEDULE)).toBe('0 4 * * *')
+        expect(mounted.toastStore.toasts[0].message).toContain(en.common.saved)
     })
 
     it('leaves the switch state untouched when the endpoint fails', async () => {
         disableJobMock.mockRejectedValueOnce(new Error('boom'))
-        const { wrapper, settingStore, toastStore } = await mountCard()
+        const { wrapper, toastStore } = await mountCard()
 
         await wrapper.find('[data-test="batch-row-daily"] [role="switch"]').trigger('click')
         await flushPromises()
 
-        expect(settingStore.getSetting(SETTINGS.AUTOMATION_ENABLED)).toBe('true')
+        expect(switchLabel(wrapper)).toContain(en.settings.status.enabled)
         expect(toastStore.toasts[0].message).toContain(en.settings.automation.toggleFailed)
+    })
+
+    it('offers the manual trigger only while the job is enabled', async () => {
+        const { wrapper } = await mountCard()
+        expect(wrapper.findComponent({ name: 'TriggerJob' }).exists()).toBe(true)
+
+        await wrapper.findComponent({ name: 'TriggerJob' }).vm.$emit('toggle:trigger')
+        expect(startJobMock).toHaveBeenCalledWith('AutomatedTranslationJob')
+
+        const disabled = await mountCard({}, [makeAutomationJob({ enabled: false })])
+        expect(disabled.wrapper.findComponent({ name: 'TriggerJob' }).exists()).toBe(false)
     })
 })
 
-describe('AutomationBatchesCard · 编辑(参数与开关解耦)', () => {
-    it('offers exactly one close entry and a constant Save label (UI 批一 · 1/2)', async () => {
-        const { wrapper } = await mountCard()
-
-        await wrapper.find('[data-test="batch-edit"]').trigger('click')
+describe('AutomationBatchesCard · 编辑(cron 归位本卡,参数与开关解耦)', () => {
+    const openModal = async (mounted: Mounted): Promise<HTMLElement> => {
+        await mounted.wrapper.find('[data-test="batch-edit"]').trigger('click')
         await flushPromises()
+        return document.querySelector('[data-test="batch-modal"]')!
+    }
 
-        const modal = document.querySelector('[data-test="batch-modal"]')!
+    it('offers exactly one close entry and a constant Save label (UI 批一 · 1/2)', async () => {
+        const modal = await openModal(await mountCard())
+
         const closeButtons = [...modal.querySelectorAll('button')].filter(
             (button) => button.textContent?.trim() === en.common.close
         )
@@ -160,53 +243,86 @@ describe('AutomationBatchesCard · 编辑(参数与开关解耦)', () => {
         expect(save.textContent?.trim()).not.toBe(en.common.saved)
     })
 
-    it('shows the cron read-only with a drill link to the job schedule', async () => {
-        const { wrapper, router } = await mountCard()
+    it('edits the cron here: prefilled input, zone hint, no read-only row', async () => {
+        const modal = await openModal(await mountCard())
 
-        await wrapper.find('[data-test="batch-edit"]').trigger('click')
-        await flushPromises()
+        const inputs = [...(modal.querySelectorAll('input') ?? [])] as HTMLInputElement[]
+        expect(inputs).toHaveLength(4) // cron + three strategy fields
+        expect(inputs[0].value).toBe('0 4 * * *')
 
-        const cronRow = document.querySelector('[data-test="batch-modal-cron"]')!
-        expect(cronRow.textContent).toContain('0 4 * * *')
-        // no cron input anywhere in the modal — the job table is the editor
-        const inputs = [...(document.querySelectorAll('[data-test="batch-modal"] input') ?? [])]
-        expect(inputs).toHaveLength(3)
-
-        ;(cronRow.querySelector('[data-test="batch-open-schedule"]') as HTMLElement).click()
-        await flushPromises()
-        // the link stays inside the automation tab, anchored to the jobs table
-        expect(router.currentRoute.value.name).toBe('settings-automation')
-        expect(router.currentRoute.value.hash).toBe('#jobs')
-    })
-
-    it('echoes the stored parameters when the modal opens', async () => {
-        const { wrapper } = await mountCard()
-
-        await wrapper.find('[data-test="batch-edit"]').trigger('click')
-        await flushPromises()
-
-        const modal = document.querySelector('[data-test="batch-modal"]')
-        expect(modal).not.toBeNull()
-        const values = [...(modal?.querySelectorAll('input') ?? [])].map(
-            (input) => (input as HTMLInputElement).value
+        // the interpretation zone is stated where the cron is written
+        expect(modal.querySelector('[data-test="batch-cron-timezone"]')!.textContent).toContain(
+            'Europe/Amsterdam'
         )
-        expect(values).toEqual(['50', '48', '24'])
+        // the read-only cron row is gone — this modal is the editor now
+        expect(modal.querySelector('[data-test="batch-modal-cron"]')).toBeNull()
     })
 
-    it('saves the three strategy parameters in one pass and toasts', async () => {
-        const { wrapper, toastStore } = await mountCard()
+    it('saves the three strategy parameters in one pass, skipping an unchanged cron', async () => {
+        const mounted = await mountCard()
+        const modal = await openModal(mounted)
 
-        await wrapper.find('[data-test="batch-edit"]').trigger('click')
-        await flushPromises()
-        ;(document.querySelector('[data-test="batch-save"]') as HTMLElement).click()
+        ;(modal.querySelector('[data-test="batch-save"]') as HTMLElement).click()
         await flushPromises()
 
         const written = Object.fromEntries(setSettingMock.mock.calls)
         expect(written['max_translations_per_run']).toBe('50')
         expect(written['movie_age_threshold']).toBe('48')
         expect(written['show_age_threshold']).toBe('24')
-        // cron is not writable from here — the job table owns it
-        expect(written['translation_schedule']).toBeUndefined()
-        expect(toastStore.toasts[0].message).toContain(en.common.saved)
+        // cron untouched — no re-registration for an identical expression
+        expect(updateJobCronMock).not.toHaveBeenCalled()
+        expect(mounted.toastStore.toasts[0].message).toContain(en.common.saved)
+    })
+
+    it('routes a changed cron through the cron endpoint alongside the strategy save', async () => {
+        const mounted = await mountCard()
+        const modal = await openModal(mounted)
+
+        const cronInput = modal.querySelector('input') as HTMLInputElement
+        cronInput.value = '30 5 * * *'
+        cronInput.dispatchEvent(new Event('input'))
+        await flushPromises()
+        ;(modal.querySelector('[data-test="batch-save"]') as HTMLElement).click()
+        await flushPromises()
+
+        expect(updateJobCronMock).toHaveBeenCalledWith('AutomatedTranslationJob', '30 5 * * *')
+        expect(setSettingMock.mock.calls.map((call) => call[0])).toContain(
+            'max_translations_per_run'
+        )
+        expect(mounted.toastStore.toasts[0].type).toBe('success')
+        expect(document.querySelector('[data-test="batch-modal"]')).toBeNull()
+    })
+
+    it('blocks saving an invalid cron', async () => {
+        const modal = await openModal(await mountCard())
+
+        const cronInput = modal.querySelector('input') as HTMLInputElement
+        cronInput.value = '77 * * * *'
+        cronInput.dispatchEvent(new Event('input'))
+        await flushPromises()
+
+        expect(
+            (modal.querySelector('[data-test="batch-save"]') as HTMLButtonElement).disabled
+        ).toBe(true)
+        expect(updateJobCronMock).not.toHaveBeenCalled()
+    })
+
+    it('toasts the mapped error and keeps the modal open when the cron write fails', async () => {
+        updateJobCronMock.mockRejectedValueOnce({
+            isAxiosError: true,
+            response: { status: 400 }
+        })
+        const mounted = await mountCard()
+        const modal = await openModal(mounted)
+
+        const cronInput = modal.querySelector('input') as HTMLInputElement
+        cronInput.value = '30 5 * * *'
+        cronInput.dispatchEvent(new Event('input'))
+        await flushPromises()
+        ;(modal.querySelector('[data-test="batch-save"]') as HTMLElement).click()
+        await flushPromises()
+
+        expect(mounted.toastStore.toasts[0].message).toContain(en.settings.schedule.cronInvalid)
+        expect(document.querySelector('[data-test="batch-modal"]')).not.toBeNull()
     })
 })

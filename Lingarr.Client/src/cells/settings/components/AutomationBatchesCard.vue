@@ -1,7 +1,8 @@
 <template>
-    <!-- ═══ 每日补缺策略卡(设置 · 自动化 tab):行 hint 只报策略(限额/新片延迟),
-         cron 归任务计划页任务表唯一编辑;编辑模态留三个策略字段,cron 只读展示
-         + 下钻链接。「每周全库巡检」服务端不存在,不显示。 -->
+    <!-- ═══ 每日补缺卡(设置 · 自动化 tab):AutomatedTranslationJob 的唯一前端
+         驻留位——开关/下次执行/手动触发/cron 编辑/策略参数全在此,任务表不再
+         渲染该行(单开关单源,重复展示的同步问题随之消失)。行 hint 只报策略
+         (限额/新片延迟);「每周全库巡检」服务端不存在,不显示。 -->
     <div class="border-line bg-secondary rounded-md border" data-test="batches-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.automation.batchesTitle') }}</h2>
@@ -17,7 +18,21 @@
             <span class="text-secondary-content mono min-w-0 flex-1 truncate text-xs" :title="dailyHint">
                 {{ dailyHint }}
             </span>
+            <!-- 下次执行:与 cron 解释同源时区,编辑 cron 的现场即可核对生效时间 -->
+            <span
+                v-if="automationJob"
+                class="text-secondary-content mono flex-none text-xs"
+                :title="t('settings.schedule.nextExecution')"
+                data-test="batch-next-execution">
+                {{ automationJob.nextExecution ? formatDateTime(automationJob.nextExecution) : '—' }}
+                <span v-if="timeZone" class="text-secondary-content/60 text-[10.5px]">
+                    {{ timeZone.ianaId }}
+                </span>
+            </span>
             <span class="ml-auto flex flex-none items-center gap-2.5">
+                <TriggerJob
+                    v-if="automationEnabled === 'true'"
+                    @toggle:trigger="scheduleStore.startJob('AutomatedTranslationJob')" />
                 <button
                     type="button"
                     class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
@@ -37,7 +52,7 @@
             </span>
         </div>
 
-        <!-- 编辑模态:cron 只读(编辑入口在任务计划)+ 单次限额 + 新片延迟,与开关解耦 -->
+        <!-- 编辑模态:cron(本卡即编辑入口)+ 三策略字段,与开关解耦 ───────── -->
         <Teleport to="body">
             <Transition
                 enter-active-class="transition-opacity duration-200 ease-in-out"
@@ -60,24 +75,21 @@
                         </div>
 
                         <div class="space-y-3">
-                            <!-- cron 只读行:任务表是 cron 的唯一编辑入口 -->
-                            <div
-                                class="border-line flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border px-3 py-2.5"
-                                data-test="batch-modal-cron">
-                                <b class="text-[13px] font-semibold">
-                                    {{ t('settings.automation.scheduleField') }}
-                                </b>
-                                <span class="mono text-secondary-content min-w-0 flex-1 truncate text-xs">
-                                    {{ translationSchedule || '—' }}
-                                </span>
-                                <button
-                                    type="button"
-                                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                                    data-test="batch-open-schedule"
-                                    @click="openSchedule">
-                                    {{ t('settings.automation.editInSchedule') }}
-                                </button>
-                            </div>
+                            <InputComponent
+                                v-model="draftCron"
+                                :label="t('settings.schedule.cronField')"
+                                :validation-type="INPUT_VALIDATION_TYPE.CRON"
+                                :error-message="t('settings.automation.cronFormat')"
+                                :placeholder="'0 5 * * *'"
+                                :debounce="0"
+                                @update:validation="(val) => (draftCronValid = val)" />
+                            <!-- cron 与执行时间均按此时区解释/显示 -->
+                            <p
+                                v-if="timeZone"
+                                class="text-secondary-content/70 text-[11px]"
+                                data-test="batch-cron-timezone">
+                                {{ t('settings.schedule.cronTimeZone', { timeZone: timeZone.ianaId }) }}
+                            </p>
                             <InputComponent
                                 v-model="draftLimit"
                                 :type="INPUT_TYPE.NUMBER"
@@ -130,33 +142,42 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import axios from 'axios'
 import { INPUT_TYPE, INPUT_VALIDATION_TYPE, SETTINGS } from '@/types'
+import { formatDateTime } from '@/cells/app/utils/date'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useScheduleStore } from '@/cells/settings/stores/schedule'
 import { useToastStore } from '@/cells/app/stores/toast'
 import InputComponent from '@/cells/settings/components/InputComponent.vue'
 import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
+import TriggerJob from '@/cells/settings/components/TriggerJob.vue'
 
-const router = useRouter()
 const settingsStore = useSettingStore()
 const scheduleStore = useScheduleStore()
 const toastStore = useToastStore()
 const { t } = useI18n()
 
+const timeZone = computed(() => scheduleStore.timeZone)
+
+/// AutomatedTranslationJob 的唯一驻留位(任务表已过滤该行)。
+const automationJob = computed(() =>
+    scheduleStore.getRecurringJobs.find((job) => job.id === 'AutomatedTranslationJob')
+)
+
 const automationEnabled = computed({
-    get: (): string => (settingsStore.getSetting(SETTINGS.AUTOMATION_ENABLED) as string) ?? 'false',
-    // The job enable/disable endpoint is the same source of truth as the
-    // schedule table toggle: it persists automation_enabled AND registers
-    // the Hangfire job immediately — a bare setting write never registered
-    // anything until the next restart.
+    get: (): string =>
+        automationJob.value
+            ? String(automationJob.value.enabled)
+            : // 任务列表异步水合前的首屏桥接值
+              ((settingsStore.getSetting(SETTINGS.AUTOMATION_ENABLED) as string) ?? 'false'),
+    // 走任务启停端点:落库 automation_enabled 并即时注册/注销 Hangfire,
+    // 裸写设置直到下次重启都不会生效。
     set: (newValue: string): void => {
         scheduleStore
             .setJobEnabled('AutomatedTranslationJob', newValue === 'true')
             .then(() => {
-                settingsStore.storeSetting(SETTINGS.AUTOMATION_ENABLED, newValue)
                 toastStore.push({ message: t('common.saved'), type: 'success' })
             })
             .catch(() => {
@@ -189,25 +210,30 @@ const dailyHint = computed(() =>
     })
 )
 
-function openSchedule(): void {
-    router.push({ name: 'settings-automation', hash: '#jobs' })
-}
+// 本卡自带取数,不依赖同页任务表先挂载(store 内已做并发去重/幂等)
+onMounted(() => {
+    scheduleStore.fetchRecurringJobs()
+    scheduleStore.fetchTimeZone()
+})
 
-// ── 编辑模态:本地草稿,保存时一次性写回(参数与开关解耦) ────────────
+// ── 编辑模态:本地草稿,保存时一次性写回(参数与开关解耦) ───────────
 const editOpen = ref(false)
 const saveBlocked = ref(false)
 
+const draftCron = ref('')
 const draftLimit = ref('')
 const draftMovieAge = ref('')
 const draftShowAge = ref('')
+const draftCronValid = ref(false)
 const draftLimitValid = ref(false)
 const draftMovieAgeValid = ref(false)
 const draftShowAgeValid = ref(false)
 
-/// 限额正整数 / 延迟非负整数(InputComponent 数字校验已覆盖数值性,
-/// 这里再钳必填)
+/// cron 走表达式校验;限额正整数 / 延迟非负整数(InputComponent 数字校验
+/// 已覆盖数值性,这里再钳必填)
 const canSave = computed(
     () =>
+        draftCronValid.value &&
         draftLimitValid.value &&
         draftMovieAgeValid.value &&
         draftShowAgeValid.value &&
@@ -220,10 +246,12 @@ const canSave = computed(
 )
 
 function openEdit(): void {
+    draftCron.value = automationJob.value?.cron || translationSchedule.value
     draftLimit.value = maxTranslationsPerRun.value
     draftMovieAge.value = movieAgeThreshold.value
     draftShowAge.value = showAgeThreshold.value
-    // 回显值来自已持久化设置,先按有效处理;用户改动后由 InputComponent 校验接管
+    // 回显值来自已注册/已持久化的表达式,先按有效处理;改动后由校验接管
+    draftCronValid.value = true
     draftLimitValid.value = true
     draftMovieAgeValid.value = true
     draftShowAgeValid.value = true
@@ -236,18 +264,39 @@ async function save(): Promise<void> {
         saveBlocked.value = true
         return
     }
-    await Promise.all([
-        settingsStore.updateSetting(SETTINGS.MAX_TRANSLATIONS_PER_RUN, draftLimit.value, true),
-        settingsStore.updateSetting(SETTINGS.MOVIE_AGE_THRESHOLD, draftMovieAge.value, true),
-        settingsStore.updateSetting(SETTINGS.SHOW_AGE_THRESHOLD, draftShowAge.value, true)
-    ])
-    toastStore.push({
-        message:
-            automationEnabled.value === 'true'
-                ? t('common.saved')
-                : `${t('common.saved')} · ${t('settings.status.disabled')}`,
-        type: 'success'
-    })
-    editOpen.value = false
+    try {
+        const writes: Promise<unknown>[] = [
+            settingsStore.updateSetting(SETTINGS.MAX_TRANSLATIONS_PER_RUN, draftLimit.value, true),
+            settingsStore.updateSetting(SETTINGS.MOVIE_AGE_THRESHOLD, draftMovieAge.value, true),
+            settingsStore.updateSetting(SETTINGS.SHOW_AGE_THRESHOLD, draftShowAge.value, true)
+        ]
+        // cron 未变不重写,避免无谓的重注册
+        if (draftCron.value !== (automationJob.value?.cron ?? translationSchedule.value)) {
+            writes.push(scheduleStore.updateJobCron('AutomatedTranslationJob', draftCron.value))
+        }
+        await Promise.all(writes)
+        toastStore.push({
+            message:
+                automationEnabled.value === 'true'
+                    ? t('common.saved')
+                    : `${t('common.saved')} · ${t('settings.status.disabled')}`,
+            type: 'success'
+        })
+        editOpen.value = false
+    } catch (error) {
+        toastStore.push({ message: cronEditErrorMessage(error), type: 'error' })
+    }
+}
+
+/// 400 = cron 无效,404 = 未知任务,409 = 设置行缺失(迁移未跑);其余通用失败。
+function cronEditErrorMessage(error: unknown): string {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined
+    if (status === 400) {
+        return t('settings.schedule.cronInvalid')
+    }
+    if (status === 404) {
+        return t('settings.schedule.jobNotFound')
+    }
+    return t('settings.schedule.cronUpdateFailed')
 }
 </script>

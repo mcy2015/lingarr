@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// ScheduleJobsCard (自 screen-12 下钻屏收编进自动化 tab, IA 重构批 3):任务表
-// 行启停走 store、cron 列是全产品唯一编辑入口(含停用行)。任务目录固定为
-// 5 个内置任务——「＋ 新建任务」已移除(创建 API 一并删除,存量 custom 行
-// 仍可管理);队列深度/成功率已随下钻屏退役。
+// ScheduleJobsCard (设置 · 自动化 tab):运维任务表(4 内置±custom)——
+// AutomatedTranslationJob 收归自动化批次卡,本表不渲染该行。行启停走 store、
+// cron 列是运维任务唯一编辑入口(含停用行);「＋ 新建任务」已移除;队列深度/
+// 成功率归概览。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -161,13 +161,24 @@ describe('ScheduleJobsCard (自动化 tab · 任务表)', () => {
         expect(useToastStore().toasts[0].message).toBe('Disabled: StatisticsJob')
     })
 
-    it('exposes no new-job entry — the catalogue is the five fixed jobs', async () => {
+    it('exposes no new-job entry — the catalogue is the fixed ops jobs', async () => {
         const page = await mountCard()
 
         expect(page.find('[data-test="schedule-new-job"]').exists()).toBe(false)
         expect(page.find('[data-test="schedule-new-job-menu"]').exists()).toBe(false)
         expect(page.find('[data-test="schedule-custom-cron"]').exists()).toBe(false)
         expect(page.find('[data-test="schedule-new-job-form"]').exists()).toBe(false)
+    })
+
+    it('no longer lists AutomatedTranslationJob — it lives in the batches card', async () => {
+        scheduleApi.recurringJobs.mockResolvedValue([
+            makeJob({ id: 'AutomatedTranslationJob', queue: 'translation' }),
+            makeJob()
+        ])
+        const page = await mountCard()
+
+        expect(page.find('[data-test="schedule-row-AutomatedTranslationJob"]').exists()).toBe(false)
+        expect(page.find('[data-test="schedule-row-StatisticsJob"]').exists()).toBe(true)
     })
 
     // ── cron 编辑:任务表 = 唯一编辑入口 ────────────────────────────
