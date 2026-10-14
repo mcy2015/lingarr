@@ -343,13 +343,6 @@
     background: var(--line);
 }
 
-.fade-enter-active {
-    transition: opacity 0.2s;
-}
-.fade-enter-from {
-    opacity: 0;
-}
-
 /* Collapse decorative motion (spinners, drawer slide, toasts) when the user
    opts out; state indicators stay visible, only the motion goes away. */
 @media (prefers-reduced-motion: reduce) {

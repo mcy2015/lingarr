@@ -67,12 +67,13 @@
             <!-- Main Content -->
             <main id="main-content" class="min-h-0 flex-1 overflow-y-auto">
                 <router-view v-slot="{ Component }">
-                    <!-- enter-only fade: mode="out-in" dead-locks page swaps
-                         in the embedded webview (leave hooks never settle and
-                         the next component never mounts) -->
-                    <transition name="fade">
-                        <component :is="Component" :key="String($route.name)" />
-                    </transition>
+                    <!-- no <transition> at all: this is the second webview
+                         dead-lock caused by page-swap transitions here (first
+                         was mode="out-in", then plain enter fade after the
+                         route-tree promotion made drill-downs swap at this
+                         level). The animation is cosmetic; the keyed
+                         component alone swaps reliably. -->
+                    <component :is="Component" :key="String($route.name)" />
                 </router-view>
             </main>
         </div>
