@@ -21,7 +21,10 @@ WORKDIR /app
 # architecture-neutral (native assets for every RID ship in runtimes/),
 # so one build feeds both the amd64 and arm64 runtime bases — no
 # cross-arch restore/build, which fails on GitHub runners (MSB4181).
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Pinned: the floating 10.0 tag (10.0.402 as of 2026-10) fails
+# dotnet restore instantly on GitHub amd64 runners (MSB4181, no NU
+# error) while 10.0.401 — the band upstream last built with — works.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 ARG BUILD_CONFIGURATION
 ARG VERSION=0.0.0-dev
 WORKDIR /src
