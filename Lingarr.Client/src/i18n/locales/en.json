@@ -628,7 +628,6 @@
             "heading": "Scheduled jobs",
             "subLine": "Hangfire · {queues} queues · {jobs} recurring jobs",
             "subLineBase": "Hangfire recurring",
-            "openPanel": "Open panel",
             "viewQueue": "View task queue",
             "jobName": "Job Name",
             "cron": "Cron",
@@ -656,23 +655,15 @@
             "enabledToast": "Enabled: {job}",
             "disabledToast": "Disabled: {job}",
             "toggleFailed": "Failed to change the job state",
+            "cronUpdated": "Updated {job} → {cron}",
+            "jobNotFound": "Job not found, refresh and retry.",
+            "cronUpdateFailed": "Failed to update cron, please retry.",
             "createFailed": "Failed to create the job",
             "cronInvalid": "Invalid cron expression",
             "jobExists": "A job with this id already exists",
             "jobIdWhitespace": "The job id must not contain whitespace",
-            "depth": {
-                "translationQueued": "translation queued",
-                "executing": "executing",
-                "systemQueued": "system queued",
-                "mediaQueued": "movies / shows",
-                "webhookQueued": "webhook / default",
-                "successRate": "30-day success rate"
-            },
             "preset": {
-                "automatedTranslation": "Daily gap-fill · automated translation",
                 "statistics": "Statistics snapshot",
-                "syncShow": "Media sync · Sonarr (shows)",
-                "syncMovie": "Media sync · Radarr (movies)",
                 "cleanup": "Weekly cleanup"
             }
         },

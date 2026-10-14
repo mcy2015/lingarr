@@ -190,7 +190,7 @@ const dailyHint = computed(() =>
 )
 
 function openSchedule(): void {
-    router.push({ name: 'schedule' })
+    router.push({ name: 'settings-automation', hash: '#jobs' })
 }
 
 // ── 编辑模态:本地草稿,保存时一次性写回(参数与开关解耦) ────────────

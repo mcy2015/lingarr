@@ -64,7 +64,14 @@ async function mountCard(settings: Record<string, string> = {}) {
 
     const router = createRouter({
         history: createMemoryHistory(),
-        routes: [{ path: '/schedule', name: 'schedule', component: { template: '<div />' } }]
+        routes: [
+            {
+                path: '/settings/automation',
+                name: 'settings-automation',
+                component: { template: '<div />' }
+            },
+            { path: '/schedule', name: 'schedule', component: { template: '<div />' } }
+        ]
     })
     await router.push('/')
     await router.isReady()
@@ -167,7 +174,9 @@ describe('AutomationBatchesCard · 编辑(参数与开关解耦)', () => {
 
         ;(cronRow.querySelector('[data-test="batch-open-schedule"]') as HTMLElement).click()
         await flushPromises()
-        expect(router.currentRoute.value.name).toBe('schedule')
+        // the link stays inside the automation tab, anchored to the jobs table
+        expect(router.currentRoute.value.name).toBe('settings-automation')
+        expect(router.currentRoute.value.hash).toBe('#jobs')
     })
 
     it('echoes the stored parameters when the modal opens', async () => {

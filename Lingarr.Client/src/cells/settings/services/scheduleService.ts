@@ -28,6 +28,11 @@ const service = (http: AxiosStatic, resource = '/api/schedule'): IScheduleServic
     },
     createJob<T>(request: ICreateRecurringJobRequest): Promise<T> {
         return http.post(`${resource}/job`, request).then((response) => response.data)
+    },
+    updateJobCron<T>(jobId: string, cron: string): Promise<T> {
+        return http
+            .put(`${resource}/job/${jobId}/cron`, { cron })
+            .then((response) => response.data)
     }
 })
 

@@ -159,10 +159,12 @@ const settingsEntries = computed<SettingsEntry[]>(() => [
         route: { name: 'logs' }
     },
     {
+        // kept as its own ⌘K entry (users search by task, not by tab) —
+        // deep-links to the automation tab's job table anchor
         key: 'schedule',
         title: t('settings.schedule.heading'),
         keywords: 'schedule hangfire cron 定时任务 调度',
-        route: { name: 'schedule' }
+        route: { name: 'settings-automation', hash: '#jobs' }
     }
 ])
 

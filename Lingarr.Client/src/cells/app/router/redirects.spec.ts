@@ -11,8 +11,9 @@ describe('settings legacy redirects', () => {
         ['/settings/services', 'settings-providers'],
         ['/settings/integration', 'settings-sources'],
         ['/settings/subtitle', 'settings-quality'],
-        ['/settings/tasks', 'schedule'],
-        ['/settings/logs', 'logs']
+        ['/settings/tasks', 'settings-automation'],
+        ['/settings/logs', 'logs'],
+        ['/schedule', 'settings-automation']
     ])('%s resolves to %s', async (path, expected) => {
         const router = createRouter({ history: createMemoryHistory(), routes })
         await router.push(path)
@@ -23,5 +24,12 @@ describe('settings legacy redirects', () => {
         const router = createRouter({ history: createMemoryHistory(), routes })
         await router.push('/settings/automation')
         expect(router.currentRoute.value.name).toBe('settings-automation')
+    })
+
+    it('schedule bookmarks land on the automation tab with the #jobs anchor', async () => {
+        const router = createRouter({ history: createMemoryHistory(), routes })
+        await router.push('/schedule')
+        expect(router.currentRoute.value.name).toBe('settings-automation')
+        expect(router.currentRoute.value.hash).toBe('#jobs')
     })
 })

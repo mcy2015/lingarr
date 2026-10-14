@@ -1,13 +1,13 @@
 # Screen 06 · 设置(`data-screen="settings"`)
 
-主导航第 6 屏。四组 tab:翻译服务 / 媒体与自动化 / 字幕与质量 / 系统。**无顶栏 CTA**(自动保存模型,按钮隐藏)。滚动收进当前 panel。
+主导航第 6 屏。五组 tab(IA 重构批 2/3):翻译服务 / 媒体源 / 自动化 / 字幕与质量 / 系统。tab 顺序 = 首配依赖顺序(服务→源→自动化)。**无顶栏 CTA**(自动保存模型,按钮隐藏)。滚动收进当前 panel。
 
 - **入口**:侧栏「设置」/ 快捷键 `6` / 概览 KPI(成本)/ ⌘K(可带 data-panel 深链)/ 校对台术语回流(→quality)
-- **顶栏**:设置 · 四组:服务 / 媒体与自动化 / 字幕与质量 / 系统
+- **顶栏**:设置 · 五组:服务 / 媒体源 / 自动化 / 字幕与质量 / 系统
 
 ## tab 与深链
 
-`data-p` = providers / sources / quality / system,与 `.panel[data-panel]` 对应切换。`setSettingsTab(name)` 供外部调用(⌘K 的 `data-panel`、校对台回流、媒体库无)。
+`data-p` = providers / sources / automation / quality / system,与 `.panel[data-panel]` 对应切换。`setSettingsTab(name)` 供外部调用(⌘K 的 `data-panel`、校对台回流、媒体库无)。
 
 ## A. 翻译服务(providers)
 
@@ -58,7 +58,7 @@
 - 输出示例:`EN→ZH 3/3 · JA→ZH 3/3`;有缺口 → 前缀 ⚠ + warning 色 + 不支持名单,如 `EN→ZH 2/3(Gemini 不支持)`。
 - 链为空 → 「链上无服务」(warning)。**回退链任何增删/移位(renum 被包装)都会触发重算。**
 
-## B. 媒体与自动化(sources)
+## B. 媒体源(sources)
 
 ### 媒体源卡(meta:「Sonarr / Radarr · webhook 实时 + 轮询兜底」)
 
@@ -70,18 +70,33 @@
 
 重新同步 → toast「xx 同步已触发 · 完成后媒体库自动刷新」;编辑(表单:地址 mono + API Key password)→ toast「配置已保存」。
 
-### 自动化批次卡(meta mono:「cron」)
+## C. 自动化(automation,IA 重构批 2/3 新增)
+
+### 每日补缺策略卡(meta mono:「cron」)
 
 | 行 | hint | 控件 |
 |---|---|---|
-| 每日补缺 | `0 4 * * * · 限额 50 任务/次 · 延迟新片 48h` | 编辑 + switch(on) |
-| 每周全库巡检 | `0 5 * * 0 · 只检不翻 · 生成缺字幕报告` | 编辑 + switch(off) |
-| ＋新增批次 | — | 点击开表单 |
+| 每日补缺 | `限额 50 任务/次 · 新片延迟 电影 48h / 剧集 24h`(cron 归任务表,不在此) | 编辑 + switch(on) |
 
-**编辑表单**(参数与开关解耦):每日补缺 = cron + 单次限额(任务/次)+ 新片延迟(h),校验 cron 必填 / 限额正整数 / 延迟非负整数(失败 toast);巡检 = 仅 cron;保存回写 hint + toast(批次未启用时附「批次未启用」)。
-**新增批次**(表单:名称 + cron,均必填)→ 插入行(默认未启用,switch 可切)+ 绑定编辑逻辑 + toast。
+**编辑表单**(参数与开关解耦):cron **只读** mono + 「去任务计划修改」链接(页内锚到任务表)+ 单次限额(任务/次)+ 新片延迟(电影/剧集 h);校验限额正整数 / 延迟非负整数(失败 toast);保存回写 hint + toast(批次未启用时附「批次未启用」)。
+**开关**走任务 enable/disable 端点(与任务表同源,落库+即时注册)。
+**首用守卫**:0 个已配置服务时卡上方警示行 + 跳翻译服务 tab 链接。
 
-## C. 字幕与质量(quality)
+### 定时任务卡(自 screen-12 收编;id=`jobs`,#jobs 深链锚点)
+
+卡头 meta mono:`Hangfire · N 个 recurring 任务 · M 队列`;卡头操作:⟳刷新 / 「查看任务队列」→ queue / 「＋ 新建任务」菜单(**预设仅运维类**:统计快照 / 每周清理 + 自定义 cron 表单——业务 job 为全库单例,不可造重复实例)。
+
+| 列 | 说明 |
+|---|---|
+| 任务名称 | mono job id |
+| **Cron** | mono 表达式 + 「编辑」——**全产品唯一 cron 编辑入口**(停用行亦可改,启用即生效);模态:InputComponent CRON 校验 |
+| 上次/下次执行 | mono 时间;空为 — |
+| 状态 | chip:关闭(dim)/ ▸ 运行中 / ✓ 成功 / — |
+| 操作 | ▶ 触发(仅启用行)+ 启停 switch |
+
+队列深度六卡与 30 天成功率**随下钻屏退役**——监控数字归概览,不进设置。
+
+## D. 字幕与质量(quality)
 
 ### 字幕输出卡
 
@@ -109,7 +124,7 @@
 | 源语言白名单 | `EN · JA` | 编辑(逗号分隔) |
 | 链上语言覆盖 | **派生只读**,title 说明「派生值:回退链成员语言能力 ∩(源白名单 × 目标语言),随回退顺序卡增删实时重算」 | — |
 
-## D. 系统(system)
+## E. 系统(system)
 
 卡头 meta mono:`v1.4.0 · sqlite · /app/config`。
 
@@ -117,7 +132,8 @@
 |---|---|---|---|
 | 认证 | ok | 单用户 henry · PBKDF2 · Cookie + API Key(webhook) | chip ok「API Key 已发放」 |
 | 日志 | ok | `Information · 环形缓冲 2 000 条` | 「打开日志」→ logs |
-| 定时任务 | ok | `Hangfire · 6 队列 · 并发 2` | 「面板」→ schedule |
+
+(定时任务行已删——归自动化 tab。)
 
 ## 状态完备(迁移时补)
 

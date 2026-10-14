@@ -114,9 +114,10 @@ export const routes: RouteRecordRaw[] = [
                 component: () => import('@/cells/settings/pages/LogsPage.vue')
             },
             {
+                // IA 重构批 3:定时任务页收编为自动化 tab 的任务卡,旧书签
+                // 落到 #jobs 锚点直接定位任务表
                 path: '/schedule',
-                name: 'schedule',
-                component: () => import('@/cells/settings/pages/SchedulePage.vue')
+                redirect: { name: 'settings-automation', hash: '#jobs' }
             },
             {
                 // settings sub-drill-downs promoted to top level (same paths,
@@ -187,11 +188,12 @@ export const routes: RouteRecordRaw[] = [
                         redirect: { name: 'settings-quality' }
                     },
                     {
-                        // logs / schedule were promoted from settings children
-                        // to top-level drill-down routes (screens 11/12) — the
-                        // old bookmarks follow them
+                        // logs was promoted from a settings child to a
+                        // top-level drill-down route (screen 11) — the old
+                        // bookmark follows it. The tasks bookmark lands on
+                        // the automation tab's job table (IA refactor batch 3).
                         path: 'tasks',
-                        redirect: { name: 'schedule' }
+                        redirect: { name: 'settings-automation', hash: '#jobs' }
                     },
                     {
                         path: 'logs',

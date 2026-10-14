@@ -1,80 +1,64 @@
-﻿<template>
-    <!-- ═══ 定时任务下钻屏(原型 screen-12 完整形态):pb-head(← 系统 +
-         Hangfire 副行 + 查看任务队列 + 「＋ 新建任务」CTA 菜单)→ 队列深度
-         六卡(qdepth)→ 任务表(启停 chip 联动 + 触发)。深度/启停/新建走
-         /api/schedule 的 depth、job/{id}/enable|disable、job 端点。 -->
-    <DrillDownPage
-        :back-to="{ name: 'settings-system' }"
-        :back-label="t('settings.menu.groups.system')"
-        :title="t('settings.schedule.heading')"
-        :sub="subLine">
-        <template #actions>
-            <ReloadComponent @toggle:update="refresh" />
-            <button
-                type="button"
-                class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                data-test="schedule-view-queue"
-                @click="router.push({ name: 'queue' })">
-                {{ t('settings.schedule.viewQueue') }}
-            </button>
-            <!-- 「＋ 新建任务」:预设(现有 job 类型)+ 自定义 cron 表单 -->
-            <div ref="menuAnchor" class="relative">
+<template>
+    <!-- ═══ 定时任务卡(自 screen-12 下钻屏收编,IA 重构批 3):全部 recurring
+         任务表(cron 唯一编辑入口·启停·触发·上次/下次)+「＋ 新建任务」菜单
+         (预设仅运维类 + 自定义 cron 表单)。队列深度/成功率归概览,不进设置。 -->
+    <div
+        id="jobs"
+        class="border-line bg-secondary scroll-mt-24 rounded-md border"
+        data-test="jobs-card">
+        <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
+            <h2 class="text-[13px] font-semibold">{{ t('settings.schedule.heading') }}</h2>
+            <span class="text-secondary-content mono ml-auto text-[11px]">{{ subLine }}</span>
+            <span class="flex flex-none items-center gap-1.5">
+                <ReloadComponent @toggle:update="refresh" />
                 <button
                     type="button"
-                    class="bg-accent text-accent-content hover:brightness-106 focus-visible:ring-accent cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    data-test="schedule-new-job"
-                    @click="newJobMenuOpen = !newJobMenuOpen">
-                    {{ t('settings.schedule.newJob') }}
+                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                    data-test="schedule-view-queue"
+                    @click="router.push({ name: 'queue' })">
+                    {{ t('settings.schedule.viewQueue') }}
                 </button>
-                <div
-                    v-if="newJobMenuOpen"
-                    class="border-line bg-secondary absolute right-0 z-30 mt-1.5 w-64 rounded-md border py-1 shadow-lg"
-                    role="menu"
-                    data-test="schedule-new-job-menu">
-                    <button
-                        v-for="preset in presets"
-                        :key="preset.id"
-                        type="button"
-                        class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
-                        role="menuitem"
-                        @click="createPreset(preset)">
-                        <span class="min-w-0 flex-1 truncate">{{ preset.label }}</span>
-                        <span class="mono text-secondary-content flex-none text-[11px]">
-                            {{ preset.cron }}
-                        </span>
-                    </button>
-                    <div class="border-line my-1 border-t"></div>
+                <!-- 「＋ 新建任务」:预设(运维 job 类型)+ 自定义 cron 表单 -->
+                <div ref="menuAnchor" class="relative">
                     <button
                         type="button"
-                        class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
-                        role="menuitem"
-                        data-test="schedule-custom-cron"
-                        @click="openCustomForm">
-                        {{ t('settings.schedule.customCron') }}
+                        class="bg-accent text-accent-content hover:brightness-106 focus-visible:ring-accent cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                        data-test="schedule-new-job"
+                        @click="newJobMenuOpen = !newJobMenuOpen">
+                        {{ t('settings.schedule.newJob') }}
                     </button>
+                    <div
+                        v-if="newJobMenuOpen"
+                        class="border-line bg-secondary absolute right-0 z-30 mt-1.5 w-64 rounded-md border py-1 shadow-lg"
+                        role="menu"
+                        data-test="schedule-new-job-menu">
+                        <button
+                            v-for="preset in presets"
+                            :key="preset.id"
+                            type="button"
+                            class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
+                            role="menuitem"
+                            @click="createPreset(preset)">
+                            <span class="min-w-0 flex-1 truncate">{{ preset.label }}</span>
+                            <span class="mono text-secondary-content flex-none text-[11px]">
+                                {{ preset.cron }}
+                            </span>
+                        </button>
+                        <div class="border-line my-1 border-t"></div>
+                        <button
+                            type="button"
+                            class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
+                            role="menuitem"
+                            data-test="schedule-custom-cron"
+                            @click="openCustomForm">
+                            {{ t('settings.schedule.customCron') }}
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </template>
-
-        <!-- ═══ 队列深度六卡(原型 .qdepth):translation 排队(accent)/
-             正在执行 / system 排队 / movies+shows / webhook+default /
-             30 天成功率(既有统计)。 -->
-        <div class="grid shrink-0 grid-cols-2 gap-2.5 md:grid-cols-3" data-test="schedule-qdepth">
-            <div
-                v-for="card in depthCards"
-                :key="card.label"
-                class="border-line bg-secondary rounded-md border px-4 py-2.5">
-                <div
-                    class="mono text-[20px] leading-tight font-semibold"
-                    :class="card.accent ? 'text-accent' : ''">
-                    {{ card.value }}
-                </div>
-                <div class="text-secondary-content mt-0.5 text-[11.5px]">{{ card.label }}</div>
-            </div>
+            </span>
         </div>
 
-        <div
-            class="border-line bg-secondary shell-scroll min-h-0 flex-1 overflow-y-auto rounded-md border">
+        <div class="overflow-x-auto">
             <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
                 <div class="px-4 py-2">{{ t('settings.schedule.jobName') }}</div>
                 <div class="px-4 py-2">{{ t('settings.schedule.cron') }}</div>
@@ -97,8 +81,18 @@
                         <JobToggle :job="job" @toggle="setEnabled" />
                     </span>
                 </div>
-                <div class="mono text-secondary-content md:col-span-2 md:px-4 md:py-2">
-                    {{ job.cron || '—' }}
+                <!-- cron 列:唯一编辑入口(停用行亦可改,启用即生效) -->
+                <div
+                    class="flex items-center gap-1.5 md:col-span-2 md:px-4 md:py-2"
+                    :data-test="`schedule-row-${job.id}`">
+                    <span class="mono text-secondary-content truncate">{{ job.cron || '—' }}</span>
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-1.5 py-px text-[10.5px] transition-colors"
+                        :data-test="`schedule-cron-edit-${job.id}`"
+                        @click="openCronEdit(job)">
+                        {{ t('settings.automation.edit') }}
+                    </button>
                 </div>
                 <div
                     :class="job.lastExecution ? 'flex' : 'hidden md:flex'"
@@ -144,7 +138,60 @@
             </div>
         </div>
 
-        <!-- ═══ 自定义 cron 表单(原型 openForm):名称 + job 类型 + cron -->
+        <!-- ═══ cron 编辑模态:任务表的 cron 是全产品唯一编辑入口 ───────── -->
+        <Teleport to="body">
+            <Transition
+                enter-active-class="transition-opacity duration-200 ease-in-out"
+                leave-active-class="transition-opacity duration-200 ease-in-out"
+                enter-from-class="opacity-0"
+                leave-to-class="opacity-0">
+                <div
+                    v-if="cronEditId !== null"
+                    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    @click="cronEditId = null"
+                    @keydown.escape="cronEditId = null">
+                    <div
+                        class="bg-secondary border-line shell-scroll max-h-[85vh] w-full max-w-md overflow-y-auto rounded-lg border p-5"
+                        role="dialog"
+                        aria-modal="true"
+                        data-test="schedule-cron-modal"
+                        @click.stop>
+                        <div class="mb-4 flex items-center gap-2.5">
+                            <h2 class="mono text-[15px] font-semibold">{{ cronEditId }}</h2>
+                        </div>
+                        <div class="space-y-3">
+                            <InputComponent
+                                v-model="draftCron"
+                                :label="t('settings.schedule.cronField')"
+                                :validation-type="INPUT_VALIDATION_TYPE.CRON"
+                                :error-message="t('settings.automation.cronFormat')"
+                                :placeholder="'0 5 * * *'"
+                                :debounce="0"
+                                @update:validation="(val) => (draftCronValid = val)" />
+                            <div class="flex justify-end gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors"
+                                    data-test="schedule-cron-close"
+                                    @click="cronEditId = null">
+                                    {{ t('common.close') }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                    :disabled="!draftCronValid"
+                                    data-test="schedule-cron-save"
+                                    @click="saveCron">
+                                    {{ t('common.save') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </Transition>
+        </Teleport>
+
+        <!-- ═══ 自定义 cron 表单(名称 + 运维 job 类型 + cron) ─────────── -->
         <Teleport to="body">
             <Transition
                 enter-active-class="transition-opacity duration-200 ease-in-out"
@@ -219,7 +266,7 @@
                 </div>
             </Transition>
         </Teleport>
-    </DrillDownPage>
+    </div>
 </template>
 
 <script setup lang="ts">
@@ -230,19 +277,17 @@ import axios from 'axios'
 import { Hub, IRecurringJob, INPUT_VALIDATION_TYPE } from '@/types'
 import { formatDateTime } from '@/cells/app/utils/date'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
-import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
-import { statisticsService } from '@/cells/app/api/statisticsService'
 import { useScheduleStore } from '@/cells/settings/stores/schedule'
 import useClickOutside from '@/cells/kernel/composables/useClickOutside'
-import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import ReloadComponent from '@/cells/kernel/components/ReloadComponent.vue'
 import TriggerJob from '@/cells/settings/components/TriggerJob.vue'
 import JobToggle from '@/cells/settings/components/JobToggle.vue'
 import InputComponent from '@/cells/settings/components/InputComponent.vue'
 
-/// 预设 = 现有 job 类型(服务端 RegisteredJobTypes)+ 默认 cron;
-/// id 为可读 slug,与内置 id 不冲突,重复创建由 409 拦截。
+/// 预设 = 运维类 job 类型(服务端 CreatableJobTypes 对齐;业务 job 为全库
+/// 单例,不可造重复实例)+ 默认 cron;id 为可读 slug,与内置 id 不冲突,
+/// 重复创建由 409 拦截。
 interface JobPreset {
     id: string
     jobType: string
@@ -252,40 +297,18 @@ interface JobPreset {
 
 const scheduleStore = useScheduleStore()
 const signalR = useSignalR()
-const uiStore = useUiStore()
 const toastStore = useToastStore()
 const router = useRouter()
 const { t } = useI18n()
-const statisticsApi = statisticsService(axios)
 const hubConnection = ref<Hub>()
 const jobs = computed(() => scheduleStore.getRecurringJobs)
-const depths = computed(() => scheduleStore.getQueueDepths)
-const successRate = ref<number | null>(null)
 
 const presets = computed<JobPreset[]>(() => [
-    {
-        id: 'daily-gap-fill',
-        jobType: 'AutomatedTranslationJob',
-        cron: '0 4 * * *',
-        label: t('settings.schedule.preset.automatedTranslation')
-    },
     {
         id: 'statistics-snapshot',
         jobType: 'StatisticsJob',
         cron: '0 3 * * *',
         label: t('settings.schedule.preset.statistics')
-    },
-    {
-        id: 'media-sync-shows',
-        jobType: 'SyncShowJob',
-        cron: '*/30 * * * *',
-        label: t('settings.schedule.preset.syncShow')
-    },
-    {
-        id: 'media-sync-movies',
-        jobType: 'SyncMovieJob',
-        cron: '0 */2 * * *',
-        label: t('settings.schedule.preset.syncMovie')
     },
     {
         id: 'weekly-cleanup',
@@ -295,8 +318,8 @@ const presets = computed<JobPreset[]>(() => [
     }
 ])
 
-/// mono 副行只用真实数据:任务未加载时仅「Hangfire recurring」,加载后
-/// 附任务数与队列数(并发上限无端点/设置可读,不展示)。
+/// 卡头 meta 只用真实数据:任务未加载时仅「Hangfire recurring」,加载后
+/// 附任务数与队列数。
 const subLine = computed(() => {
     if (jobs.value.length === 0) {
         return t('settings.schedule.subLineBase')
@@ -304,47 +327,6 @@ const subLine = computed(() => {
     const queues = new Set(jobs.value.map((job) => job.queue).filter((queue) => queue))
     return t('settings.schedule.subLine', { jobs: jobs.value.length, queues: queues.size })
 })
-
-/// 深度卡聚合:translation 单列(accent),执行中为全部队列 processing 之和,
-/// movies+shows、webhook+default 合并卡;成功率卡用既有统计端点。
-const depthValue = (queue: string): number =>
-    depths.value.find((depth) => depth.queue === queue)?.enqueued ?? 0
-
-const depthCards = computed(() => [
-    {
-        label: t('settings.schedule.depth.translationQueued'),
-        value: depthValue('translation'),
-        accent: true
-    },
-    {
-        label: t('settings.schedule.depth.executing'),
-        value: depths.value.reduce((sum, depth) => sum + depth.processing, 0),
-        accent: false
-    },
-    {
-        label: t('settings.schedule.depth.systemQueued'),
-        value: depthValue('system'),
-        accent: false
-    },
-    {
-        label: t('settings.schedule.depth.mediaQueued'),
-        value: depthValue('movies') + depthValue('shows'),
-        accent: false
-    },
-    {
-        label: t('settings.schedule.depth.webhookQueued'),
-        value: depthValue('webhook') + depthValue('default'),
-        accent: false
-    },
-    {
-        label: t('settings.schedule.depth.successRate'),
-        value:
-            successRate.value != null
-                ? `${Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(successRate.value)}%`
-                : '—',
-        accent: false
-    }
-])
 
 const stateChipClass = (job: IRecurringJob): string => {
     if (!job.enabled) {
@@ -375,7 +357,7 @@ const stateChipLabel = (job: IRecurringJob): string => {
     return job.lastJobState
 }
 
-// ── 启用/停用(与设置·自动化批次开关同源) ───────────────────────
+// ── 启用/停用(与策略卡开关同源) ─────────────────────────────────
 async function setEnabled(job: IRecurringJob, enabled: boolean): Promise<void> {
     try {
         await scheduleStore.setJobEnabled(job.id, enabled)
@@ -385,10 +367,47 @@ async function setEnabled(job: IRecurringJob, enabled: boolean): Promise<void> {
                 : t('settings.schedule.disabledToast', { job: job.id }),
             type: 'success'
         })
-        void scheduleStore.fetchQueueDepths()
     } catch {
         toastStore.push({ message: t('settings.schedule.toggleFailed'), type: 'error' })
     }
+}
+
+// ── cron 编辑:任务表 = 全产品唯一编辑入口 ────────────────────────
+const cronEditId = ref<string | null>(null)
+const draftCron = ref('')
+const draftCronValid = ref(false)
+
+function openCronEdit(job: IRecurringJob): void {
+    cronEditId.value = job.id
+    draftCron.value = job.cron
+    // 回显值来自已注册/已持久化的表达式,先按有效处理;改动后由校验接管
+    draftCronValid.value = true
+}
+
+async function saveCron(): Promise<void> {
+    if (cronEditId.value === null || !draftCronValid.value) return
+    try {
+        await scheduleStore.updateJobCron(cronEditId.value, draftCron.value)
+        toastStore.push({
+            message: t('settings.schedule.cronUpdated', { job: cronEditId.value, cron: draftCron.value }),
+            type: 'success'
+        })
+        cronEditId.value = null
+    } catch (error) {
+        toastStore.push({ message: cronEditErrorMessage(error), type: 'error' })
+    }
+}
+
+/// 400 = cron 无效,404 = 未知任务,409 = 设置行缺失(迁移未跑);其余通用失败。
+function cronEditErrorMessage(error: unknown): string {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined
+    if (status === 400) {
+        return t('settings.schedule.cronInvalid')
+    }
+    if (status === 404) {
+        return t('settings.schedule.jobNotFound')
+    }
+    return t('settings.schedule.cronUpdateFailed')
 }
 
 // ── 新建任务:菜单 + 预设 + 自定义表单 ───────────────────────────
@@ -484,20 +503,7 @@ function createErrorMessage(error: unknown): string {
 }
 
 async function refresh(): Promise<void> {
-    await Promise.allSettled([
-        scheduleStore.fetchRecurringJobs(),
-        scheduleStore.fetchQueueDepths(),
-        loadSuccessRate()
-    ])
-}
-
-async function loadSuccessRate(): Promise<void> {
-    try {
-        const pipeline = await statisticsApi.getPipelineStatistics()
-        successRate.value = pipeline.successRate30Days
-    } catch {
-        successRate.value = null
-    }
+    await scheduleStore.fetchRecurringJobs()
 }
 
 const onJobStateUpdated = (jobId: string, state: string) => {
@@ -506,16 +512,6 @@ const onJobStateUpdated = (jobId: string, state: string) => {
         job.currentState = state
     }
 }
-
-// 顶栏 CTA 与页内按钮共用同一菜单(global-interactions:CTA 动作集中)
-onMounted(() => {
-    uiStore.registerCta(t('settings.schedule.newJob'), () => {
-        newJobMenuOpen.value = true
-    })
-})
-onUnmounted(() => {
-    uiStore.clearCta()
-})
 
 onMounted(async () => {
     await refresh()

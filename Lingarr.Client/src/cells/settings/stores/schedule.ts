@@ -42,6 +42,12 @@ export const useScheduleStore = defineStore('schedule', {
             await this.fetchRecurringJobs()
             return status
         },
+        /// Cron edits land through the store so the table reflects the
+        /// re-registered schedule right away.
+        async updateJobCron(jobId: string, cron: string): Promise<void> {
+            await scheduleApi.updateJobCron(jobId, cron)
+            await this.fetchRecurringJobs()
+        },
         async startJob(jobName: string): Promise<void> {
             await scheduleApi.startJob(jobName)
         },

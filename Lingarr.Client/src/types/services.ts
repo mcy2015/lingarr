@@ -311,6 +311,9 @@ export interface IScheduleService {
     /// Create a recurring job from a registered job type; 400 on invalid
     /// cron/type, 409 when the id is taken.
     createJob<T>(request: ICreateRecurringJobRequest): Promise<T>
+    /// Update a recurring job's cron — the single edit entry for schedules;
+    /// 400 invalid cron, 404 unknown id, 409 missing settings row.
+    updateJobCron<T>(jobId: string, cron: string): Promise<T>
 }
 
 export interface IMappingService {

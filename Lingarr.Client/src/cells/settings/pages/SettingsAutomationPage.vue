@@ -1,7 +1,8 @@
 <template>
-    <!-- ═══ 设置 · 自动化(新 tab,IA 重构批 2):每日补缺策略卡 + 定时任务下钻行
-         (批 3 任务表收编后此行退役)。0 个已配置服务时首用守卫:警示 + 跳翻译
-         服务 tab,复用既有 description/servicesLink 文案。 -->
+    <!-- ═══ 设置 · 自动化(IA 重构批 3 完整形态):每日补缺策略卡 + 定时任务卡
+         (任务表收编,cron 唯一编辑入口)。0 个已配置服务时首用守卫:警示 +
+         跳翻译服务 tab,复用既有 description/servicesLink 文案。#jobs 深链
+         供旧 /schedule 书签 redirect 定位任务表。 -->
     <div class="space-y-3 px-4">
         <div
             v-if="noProviders"
@@ -22,38 +23,21 @@
         </div>
 
         <AutomationBatchesCard />
-
-        <!-- 定时任务下钻行:行式样式与系统页一致 -->
-        <div
-            class="border-line bg-secondary flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-4 py-2.5 text-[13px]"
-            data-test="automation-row-schedule">
-            <span class="dot bg-success flex-none"></span>
-            <b class="flex-none">{{ t('settings.schedule.heading') }}</b>
-            <span class="text-secondary-content min-w-0 flex-1 truncate text-xs">
-                {{ t('settings.schedule.subLineBase') }}
-            </span>
-            <span class="ml-auto flex flex-none items-center gap-2">
-                <button
-                    type="button"
-                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    data-test="automation-open-schedule"
-                    @click="router.push({ name: 'schedule' })">
-                    {{ t('settings.schedule.openPanel') }}
-                </button>
-            </span>
-        </div>
+        <ScheduleJobsCard />
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import AutomationBatchesCard from '@/cells/settings/components/AutomationBatchesCard.vue'
+import ScheduleJobsCard from '@/cells/settings/components/schedule/ScheduleJobsCard.vue'
 
 const router = useRouter()
+const route = useRoute()
 const settingStore = useSettingStore()
 const { t } = useI18n()
 
@@ -66,6 +50,16 @@ const noProviders = computed(() => {
         return true
     }
 })
+
+/// 旧 /schedule、/settings/tasks 书签 redirect 到本页 #jobs — 定位任务表。
+const scrollToJobs = (): void => {
+    if (route.hash === '#jobs') {
+        document.getElementById('jobs')?.scrollIntoView({ block: 'start' })
+    }
+}
+
+onMounted(scrollToJobs)
+watch(() => route.hash, scrollToJobs)
 </script>
 
 <style scoped>

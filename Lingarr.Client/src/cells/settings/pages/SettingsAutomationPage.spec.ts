@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// SettingsAutomationPage (设置 · 自动化 tab, IA 重构批 2):策略卡 + 定时任务
-// 下钻行;SERVICE_TYPE 为空数组时首用守卫(警示 + 跳翻译服务 tab)。
+// SettingsAutomationPage (设置 · 自动化 tab, IA 重构批 3 完整形态):策略卡 +
+// 定时任务卡;SERVICE_TYPE 为空数组时首用守卫(警示 + 跳翻译服务 tab)。
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -29,6 +29,10 @@ vi.mock('@/cells/settings/services/scheduleService', () => ({
 
 vi.mock('@/cells/settings/components/AutomationBatchesCard.vue', () => ({
     default: { name: 'AutomationBatchesCard', template: '<div data-test="batches-card" />' }
+}))
+
+vi.mock('@/cells/settings/components/schedule/ScheduleJobsCard.vue', () => ({
+    default: { name: 'ScheduleJobsCard', template: '<div data-test="jobs-card" />' }
 }))
 
 const i18n = createI18n({
@@ -70,20 +74,12 @@ async function mountPage(serviceType: string) {
 }
 
 describe('SettingsAutomationPage', () => {
-    it('renders the strategy card and the schedule drill row', async () => {
+    it('renders the strategy card and the jobs card', async () => {
         const { wrapper } = await mountPage('["libretranslate"]')
 
         expect(wrapper.find('[data-test="batches-card"]').exists()).toBe(true)
-        expect(wrapper.find('[data-test="automation-row-schedule"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="jobs-card"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="automation-no-providers"]').exists()).toBe(false)
-    })
-
-    it('drills to the schedule page from the entry row', async () => {
-        const { wrapper, router } = await mountPage('["libretranslate"]')
-
-        await wrapper.find('[data-test="automation-open-schedule"]').trigger('click')
-        await flushPromises()
-        expect(router.currentRoute.value.name).toBe('schedule')
     })
 
     it('shows the first-use guard with a link to providers when none are configured', async () => {

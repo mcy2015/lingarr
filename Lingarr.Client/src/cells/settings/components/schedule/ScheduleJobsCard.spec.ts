@@ -1,19 +1,16 @@
 // @vitest-environment happy-dom
-// Schedule screen (prototype screen-12 full form): the six queue-depth
-// cards aggregate the depth endpoint plus the pipeline success rate, rows
-// toggle enable/disable through the store, and the「＋ New job」CTA opens
-// a preset menu with a custom-cron form.
+// ScheduleJobsCard (自 screen-12 下钻屏收编进自动化 tab, IA 重构批 3):任务表
+// 行启停走 store、cron 列是全产品唯一编辑入口(含停用行)、「＋ 新建任务」
+// 预设仅运维类 + 自定义 cron 表单。队列深度/成功率已随下钻屏退役。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { DOMWrapper, flushPromises, mount, VueWrapper } from '@vue/test-utils'
-import SchedulePage from '@/cells/settings/pages/SchedulePage.vue'
-import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
+import ScheduleJobsCard from '@/cells/settings/components/schedule/ScheduleJobsCard.vue'
 import en from '@/i18n/locales/en.json'
 import { useToastStore } from '@/cells/app/stores/toast'
-import { useUiStore } from '@/cells/app/stores/ui'
-import { IQueueDepth, IRecurringJob } from '@/types'
+import { IRecurringJob } from '@/types'
 
 const scheduleApi = vi.hoisted(() => ({
     recurringJobs: vi.fn(),
@@ -21,20 +18,15 @@ const scheduleApi = vi.hoisted(() => ({
     enableJob: vi.fn(),
     disableJob: vi.fn(),
     createJob: vi.fn(),
+    updateJobCron: vi.fn(),
     startJob: vi.fn(),
     indexShows: vi.fn(),
     indexMovies: vi.fn(),
     remove: vi.fn()
 }))
-const statisticsApi = vi.hoisted(() => ({
-    getPipelineStatistics: vi.fn()
-}))
 
 vi.mock('@/cells/settings/services/scheduleService', () => ({
     scheduleService: () => scheduleApi
-}))
-vi.mock('@/cells/app/api/statisticsService', () => ({
-    statisticsService: () => statisticsApi
 }))
 
 // joining the JobProgress hub would negotiate over the network — stub it
@@ -71,37 +63,27 @@ const makeJob = (overrides: Partial<IRecurringJob> = {}): IRecurringJob =>
         ...overrides
     }) as IRecurringJob
 
-const depths: IQueueDepth[] = [
-    { queue: 'movies', enqueued: 0, processing: 0 },
-    { queue: 'shows', enqueued: 2, processing: 0 },
-    { queue: 'system', enqueued: 1, processing: 0 },
-    { queue: 'translation', enqueued: 12, processing: 2 },
-    { queue: 'webhook', enqueued: 0, processing: 0 },
-    { queue: 'default', enqueued: 0, processing: 0 }
-]
-
 let wrapper: VueWrapper | null = null
 
-/// The custom-cron form teleports to body — queries go through the document.
+/// Teleported modals live on body — queries go through the document.
 const q = (selector: string): DOMWrapper<Element> | null => {
     const element = document.querySelector(selector)
     return element ? new DOMWrapper(element) : null
 }
 
-const mountPage = async (): Promise<VueWrapper> => {
+const mountCard = async (): Promise<VueWrapper> => {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
             { path: '/', name: 'dashboard', component: { template: '<div />' } },
-            { path: '/queue', name: 'queue', component: { template: '<div />' } },
-            { path: '/settings/system', name: 'settings-system', component: { template: '<div />' } }
+            { path: '/queue', name: 'queue', component: { template: '<div />' } }
         ]
     })
     await router.push('/')
     await router.isReady()
 
     const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
-    wrapper = mount(SchedulePage, {
+    wrapper = mount(ScheduleJobsCard, {
         attachTo: document.body,
         global: { plugins: [createPinia(), router, i18n] }
     })
@@ -109,21 +91,24 @@ const mountPage = async (): Promise<VueWrapper> => {
     return wrapper
 }
 
+const openPresetMenu = async (page: VueWrapper): Promise<void> => {
+    await page.find('[data-test="schedule-new-job"]').trigger('click')
+    await flushPromises()
+}
+
 beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(scheduleApi.recurringJobs).mockReset()
-    vi.mocked(scheduleApi.depth).mockReset()
     vi.mocked(scheduleApi.enableJob).mockReset()
     vi.mocked(scheduleApi.disableJob).mockReset()
     vi.mocked(scheduleApi.createJob).mockReset()
-    vi.mocked(statisticsApi.getPipelineStatistics).mockReset()
+    vi.mocked(scheduleApi.updateJobCron).mockReset()
 
     scheduleApi.recurringJobs.mockResolvedValue([makeJob()])
-    scheduleApi.depth.mockResolvedValue(depths)
-    statisticsApi.getPipelineStatistics.mockResolvedValue({ successRate30Days: 98.2 })
     scheduleApi.enableJob.mockResolvedValue(undefined)
     scheduleApi.disableJob.mockResolvedValue(undefined)
     scheduleApi.createJob.mockResolvedValue({ id: 'x', cron: 'y', jobMethod: 'z', enabled: true })
+    scheduleApi.updateJobCron.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -132,44 +117,21 @@ afterEach(() => {
     document.body.innerHTML = ''
 })
 
-describe('SchedulePage (screen-12)', () => {
-    it('roots on the shared DrillDownPage skeleton (dd-page)', async () => {
-        const page = await mountPage()
+describe('ScheduleJobsCard (自动化 tab · 任务表)', () => {
+    it('renders as the jobs card with the job rows and no depth strip', async () => {
+        const page = await mountCard()
 
-        const skeleton = page.findComponent(DrillDownPage)
-        expect(skeleton.exists()).toBe(true)
-        const root = page.find('[data-test="dd-page"]')
-        expect(root.exists()).toBe(true)
-        // root-ness: the skeleton div is the first element under the mount point
-        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
-    })
-
-    it('renders the six depth cards from the depth endpoint and the success rate', async () => {
-        const page = await mountPage()
-
-        const cards = page.findAll('[data-test="schedule-qdepth"] > div')
-        expect(cards).toHaveLength(6)
-        expect(cards[0].text()).toContain('12') // translation queued (accent card)
-        expect(cards[1].text()).toContain('2') // executing (processing sum)
-        expect(cards[2].text()).toContain('1') // system queued
-        expect(cards[3].text()).toContain('2') // movies + shows
-        expect(cards[4].text()).toContain('0') // webhook + default
-        expect(cards[5].text()).toContain('98.2%') // pipeline success rate
-    })
-
-    it('renders an em-dash success rate when statistics are unavailable', async () => {
-        statisticsApi.getPipelineStatistics.mockResolvedValue({ successRate30Days: null })
-        const page = await mountPage()
-
-        const cards = page.findAll('[data-test="schedule-qdepth"] > div')
-        expect(cards[5].text()).toContain('—')
+        expect(page.find('[data-test="jobs-card"]').exists()).toBe(true)
+        expect(page.find('[data-test="schedule-row-StatisticsJob"]').exists()).toBe(true)
+        // monitoring numbers retired from settings — the dashboard owns them
+        expect(page.find('[data-test="schedule-qdepth"]').exists()).toBe(false)
     })
 
     it('shows dimmed rows with an Enable action for disabled jobs', async () => {
         scheduleApi.recurringJobs.mockResolvedValue([
             makeJob({ id: 'CleanupJob', cron: '0 2 * * 0', enabled: false })
         ])
-        const page = await mountPage()
+        const page = await mountCard()
 
         const enableButton = page.find('[data-test="schedule-enable"]')
         expect(enableButton.exists()).toBe(true)
@@ -181,7 +143,7 @@ describe('SchedulePage (screen-12)', () => {
         scheduleApi.recurringJobs.mockResolvedValue([
             makeJob({ id: 'CleanupJob', enabled: false })
         ])
-        const page = await mountPage()
+        const page = await mountCard()
 
         await page.find('[data-test="schedule-enable"]').trigger('click')
         await flushPromises()
@@ -194,7 +156,7 @@ describe('SchedulePage (screen-12)', () => {
     })
 
     it('disabling an enabled job calls the disable endpoint and toasts', async () => {
-        const page = await mountPage()
+        const page = await mountCard()
 
         await page.find('[data-test="schedule-disable"]').trigger('click')
         await flushPromises()
@@ -203,30 +165,24 @@ describe('SchedulePage (screen-12)', () => {
         expect(useToastStore().toasts[0].message).toBe('Disabled: StatisticsJob')
     })
 
-    it('registers the new-job CTA that opens the preset menu', async () => {
-        const page = await mountPage()
-
-        const uiStore = useUiStore()
-        expect(uiStore.cta?.label).toBe(en.settings.schedule.newJob)
+    it('opens the preset menu with maintenance presets + custom cron only', async () => {
+        const page = await mountCard()
 
         expect(page.find('[data-test="schedule-new-job-menu"]').exists()).toBe(false)
-        uiStore.cta?.handler()
-        await flushPromises()
-        expect(page.find('[data-test="schedule-new-job-menu"]').exists()).toBe(true)
+        await openPresetMenu(page)
 
-        // one preset per registered job type + the custom-cron entry
         const items = page.findAll('[data-test="schedule-new-job-menu"] [role="menuitem"]')
-        expect(items).toHaveLength(6)
+        expect(items).toHaveLength(3) // statistics + cleanup + custom cron
         expect(page.find('[data-test="schedule-custom-cron"]').exists()).toBe(true)
+        const menuText = page.find('[data-test="schedule-new-job-menu"]').text()
+        expect(menuText).not.toContain('Daily')
+        expect(menuText).not.toContain('media-sync')
     })
 
     it('creating from a preset posts the definition and refreshes the list', async () => {
-        const page = await mountPage()
+        const page = await mountCard()
 
-        const uiStore = useUiStore()
-        uiStore.cta?.handler()
-        await flushPromises()
-
+        await openPresetMenu(page)
         const preset = page
             .findAll('[data-test="schedule-new-job-menu"] [role="menuitem"]')
             .find((item) => item.text().includes('Statistics snapshot'))
@@ -242,11 +198,9 @@ describe('SchedulePage (screen-12)', () => {
     })
 
     it('the custom-cron form offers exactly one close entry — the footer button (UI 批一 · 1)', async () => {
-        const page = await mountPage()
+        const page = await mountCard()
 
-        const uiStore = useUiStore()
-        uiStore.cta?.handler()
-        await flushPromises()
+        await openPresetMenu(page)
         await page.find('[data-test="schedule-custom-cron"]').trigger('click')
         await flushPromises()
 
@@ -260,11 +214,9 @@ describe('SchedulePage (screen-12)', () => {
     })
 
     it('the custom-cron form validates and submits job id, type and cron', async () => {
-        const page = await mountPage()
+        const page = await mountCard()
 
-        const uiStore = useUiStore()
-        uiStore.cta?.handler()
-        await flushPromises()
+        await openPresetMenu(page)
         await page.find('[data-test="schedule-custom-cron"]').trigger('click')
         await flushPromises()
 
@@ -294,11 +246,9 @@ describe('SchedulePage (screen-12)', () => {
         scheduleApi.createJob.mockRejectedValue(
             Object.assign(new Error('conflict'), { response: { status: 409 }, isAxiosError: true })
         )
-        const page = await mountPage()
+        const page = await mountCard()
 
-        const uiStore = useUiStore()
-        uiStore.cta?.handler()
-        await flushPromises()
+        await openPresetMenu(page)
         const preset = page
             .findAll('[data-test="schedule-new-job-menu"] [role="menuitem"]')
             .find((item) => item.text().includes('Weekly cleanup'))
@@ -310,16 +260,67 @@ describe('SchedulePage (screen-12)', () => {
         expect(toast.toasts[0].message).toBe(en.settings.schedule.jobExists)
     })
 
-    it('refetches jobs and depths through the reload button', async () => {
-        const page = await mountPage()
+    it('refetches jobs through the reload button', async () => {
+        const page = await mountCard()
 
         scheduleApi.recurringJobs.mockClear()
-        scheduleApi.depth.mockClear()
         await page.find('[data-test="schedule-view-queue"]').exists() // page settled
         page.findComponent({ name: 'ReloadComponent' }).vm.$emit('toggle:update')
         await flushPromises()
 
         expect(scheduleApi.recurringJobs).toHaveBeenCalled()
-        expect(scheduleApi.depth).toHaveBeenCalled()
+    })
+
+    // ── cron 编辑:任务表 = 唯一编辑入口 ────────────────────────────
+
+    it('edits a cron through the row modal: PUT, refresh, toast, close', async () => {
+        const page = await mountCard()
+
+        await page.find('[data-test="schedule-cron-edit-StatisticsJob"]').trigger('click')
+        await flushPromises()
+
+        const modal = q('[data-test="schedule-cron-modal"]')
+        expect(modal).not.toBeNull()
+        const input = modal!.element.querySelector('input') as HTMLInputElement
+        expect(input.value).toBe('0 3 * * *')
+
+        input.value = '30 5 * * *'
+        input.dispatchEvent(new Event('input'))
+        await flushPromises()
+        await q('[data-test="schedule-cron-save"]')!.trigger('click')
+        await flushPromises()
+
+        expect(scheduleApi.updateJobCron).toHaveBeenCalledWith('StatisticsJob', '30 5 * * *')
+        expect(scheduleApi.recurringJobs).toHaveBeenCalledTimes(2)
+        expect(useToastStore().toasts[0].type).toBe('success')
+        expect(q('[data-test="schedule-cron-modal"]')).toBeNull()
+    })
+
+    it('blocks saving an invalid cron in the edit modal', async () => {
+        const page = await mountCard()
+
+        await page.find('[data-test="schedule-cron-edit-StatisticsJob"]').trigger('click')
+        await flushPromises()
+
+        const input = q('[data-test="schedule-cron-modal"]')!.element.querySelector(
+            'input'
+        ) as HTMLInputElement
+        input.value = '77 * * * *'
+        input.dispatchEvent(new Event('input'))
+        await flushPromises()
+
+        expect(
+            q('[data-test="schedule-cron-save"]')!.attributes('disabled')
+        ).toBeDefined()
+        expect(scheduleApi.updateJobCron).not.toHaveBeenCalled()
+    })
+
+    it('offers cron editing on disabled rows too', async () => {
+        scheduleApi.recurringJobs.mockResolvedValue([
+            makeJob({ id: 'CleanupJob', enabled: false })
+        ])
+        const page = await mountCard()
+
+        expect(page.find('[data-test="schedule-cron-edit-CleanupJob"]').exists()).toBe(true)
     })
 })

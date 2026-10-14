@@ -1,3 +1,5 @@
+> **已退役(IA 重构批 3,2026-10-14)**:任务表收编进设置 · 自动化 tab(见 screen-06 §C),`/schedule` 与 `/settings/tasks` 重定向至 `/settings/automation#jobs`;队列深度/成功率归概览。以下为退役前的历史形态,仅供溯源。
+
 # Screen 12 · 定时任务(`data-screen="schedule"`)
 
 下钻屏。Hangfire recurring 任务一览:队列深度、cron、启停与手动触发。
