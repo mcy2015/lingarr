@@ -19,7 +19,9 @@ const service = (http: AxiosStatic, resource = '/api/setting'): ISettingService 
     setSettings(settings: ISettings): Promise<void> {
         return http.post(`${resource}/multiple/set`, settings).then((response) => response.data)
     },
-    getEncryptedSettings<T>(keys: string[]): Promise<T> {
+    /// Security walk fix: same endpoint as before, but the server now answers
+    /// {key: configured} booleans instead of decrypted plaintext.
+    getEncryptedSettingStates<T>(keys: string[]): Promise<T> {
         return http
             .post(`${resource}/multiple/encrypted/get`, keys)
             .then((response) => response.data)

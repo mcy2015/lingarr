@@ -23,14 +23,15 @@ const i18n = createI18n({
 
 async function mountPage(options: {
     authEnabled: string
-    apiKey?: string
+    apiKeyConfigured?: boolean
     version?: string
 }) {
     const pinia = createPinia()
     const settingStore = useSettingStore(pinia)
     settingStore.storeSetting(SETTINGS.AUTH_ENABLED, options.authEnabled)
-    if (options.apiKey !== undefined) {
-        settingStore.encrypted_settings.api_key = options.apiKey
+    if (options.apiKeyConfigured !== undefined) {
+        // Security walk fix: only the boolean configured flag exists client-side.
+        settingStore.encrypted_settings.api_key = options.apiKeyConfigured
     }
     const instanceStore = useInstanceStore(pinia)
     if (options.version) {
@@ -80,13 +81,13 @@ describe('SettingsSystemPage · 版本 meta', () => {
 })
 
 describe('SettingsSystemPage · 认证行', () => {
-    it('derives the API Key chip from the issued key state', async () => {
-        const withKey = await mountPage({ authEnabled: 'true', apiKey: 'lk-secret' })
+    it('derives the API Key chip from the configured flag', async () => {
+        const withKey = await mountPage({ authEnabled: 'true', apiKeyConfigured: true })
         expect(withKey.wrapper.find('[data-test="apikey-chip"]').text()).toBe(
             en.settings.system.apiKeyIssued
         )
 
-        const withoutKey = await mountPage({ authEnabled: 'true', apiKey: '' })
+        const withoutKey = await mountPage({ authEnabled: 'true', apiKeyConfigured: false })
         expect(withoutKey.wrapper.find('[data-test="apikey-chip"]').exists()).toBe(false)
     })
 

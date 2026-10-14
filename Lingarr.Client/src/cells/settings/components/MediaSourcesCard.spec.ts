@@ -52,7 +52,7 @@ vi.mock('@/cells/app/api/settingService', () => ({
         setSetting: vi.fn().mockResolvedValue(undefined),
         setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettings: vi.fn().mockResolvedValue({})
+        getEncryptedSettingStates: vi.fn().mockResolvedValue({})
     })
 }))
 
@@ -77,8 +77,10 @@ async function mountCard() {
     const settingStore = useSettingStore(pinia)
     settingStore.storeSetting(SETTINGS.RADARR_URL, 'http://radarr:7878')
     settingStore.storeSetting(SETTINGS.SONARR_URL, 'http://sonarr:8989')
-    settingStore.encrypted_settings.radarr_api_key = 'x'.repeat(32)
-    settingStore.encrypted_settings.sonarr_api_key = 'x'.repeat(32)
+    // Security walk fix: encrypted settings are boolean "configured" flags
+    // server-side — no key material exists client-side to seed or leak.
+    settingStore.encrypted_settings.radarr_api_key = true
+    settingStore.encrypted_settings.sonarr_api_key = true
 
     const router = createRouter({
         history: createMemoryHistory(),
@@ -171,8 +173,6 @@ describe('MediaSourcesCard · 编辑模态', () => {
         expect(inputs[1].type).toBe('password')
         expect(inputs[1].value).toBe('')
         expect(inputs[1].placeholder).toBe(en.services.integration.apiKeyConfigured)
-        // 完整明文不在 DOM(store 中的 32 位真实 key 不被渲染)
-        expect(modal?.innerHTML).not.toContain('x'.repeat(32))
     })
 
     it('keeps the stored key when the input is cleared (no empty overwrite)', async () => {
@@ -192,9 +192,9 @@ describe('MediaSourcesCard · 编辑模态', () => {
             await flushPromises()
 
             expect(setEncryptedSettingMock).not.toHaveBeenCalled()
-            expect(useSettingStore(pinia).getEncryptedSetting('radarr_api_key' as never)).toBe(
-                'x'.repeat(32)
-            )
+            expect(
+                useSettingStore(pinia).isEncryptedSettingConfigured('radarr_api_key' as never)
+            ).toBe(true)
         } finally {
             vi.useRealTimers()
         }

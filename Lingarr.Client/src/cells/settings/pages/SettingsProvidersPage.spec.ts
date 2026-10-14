@@ -35,7 +35,7 @@ vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({
         setSetting: setSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettings: vi.fn().mockResolvedValue({}),
+        getEncryptedSettingStates: vi.fn().mockResolvedValue({}),
         setEncryptedSetting: setEncryptedSettingMock
     })
 }))
@@ -733,7 +733,7 @@ describe('SettingsProvidersPage · 删除服务', () => {
         const settingStore = useSettingStore(pinia)
         expect(settingStore.getSetting(SETTINGS.SERVICE_TYPE)).toBe('["deepl"]')
         expect(settingStore.getSetting(SETTINGS.OPENAI_MODEL)).toBe('')
-        expect(settingStore.getEncryptedSetting('openai_api_key' as never)).toBe('')
+        expect(settingStore.isEncryptedSettingConfigured('openai_api_key' as never)).toBe(false)
 
         // default migrated: the toast names the removed service and the new head
         const toastStore = useToastStore(pinia)

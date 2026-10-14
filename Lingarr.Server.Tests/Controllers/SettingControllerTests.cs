@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Controllers;
@@ -77,6 +78,68 @@ public class SettingControllerTests
 
         AssertInformationLog(count: 1, containing: "api_key", notContaining: "super-secret-key");
         AssertInformationLog(count: 1, containing: "encrypted");
+    }
+
+    // ===== Batch encrypted read: configured flags only, never plaintext =====
+
+    [Fact]
+    public async Task GetEncryptedSettings_ReturnsConfiguredFlagsPerKey()
+    {
+        // Security walk finding: this endpoint used to hand every decrypted
+        // secret to any logged-in session. The response is now a per-key
+        // "configured" flag; the dictionary value type pins that shape.
+        _settingService
+            .Setup(s => s.GetEncryptedSettingStates(It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new Dictionary<string, bool>
+            {
+                ["radarr_api_key"] = true,
+                ["openai_api_key"] = false
+            });
+
+        var action = await _controller.GetEncryptedSettings(
+            new[] { "radarr_api_key", "openai_api_key" });
+
+        var ok = Assert.IsType<OkObjectResult>(action.Result);
+        var states = Assert.IsType<Dictionary<string, bool>>(ok.Value);
+        Assert.True(states["radarr_api_key"]);
+        Assert.False(states["openai_api_key"]);
+        Assert.All(states.Values, value => Assert.IsType<bool>(value));
+    }
+
+    [Fact]
+    public async Task GetEncryptedSettings_DelegatesToTheStatesMethodNotThePlaintextRead()
+    {
+        // The controller must never call a plaintext-valued bulk decrypt again.
+        _settingService
+            .Setup(s => s.GetEncryptedSettingStates(It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new Dictionary<string, bool>());
+
+        await _controller.GetEncryptedSettings(new[] { "api_key" });
+
+        _settingService.Verify(
+            s => s.GetEncryptedSettingStates(It.Is<IEnumerable<string>>(keys => keys.SequenceEqual(new[] { "api_key" }))),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetEncryptedSettings_ReadIsNotAudited()
+    {
+        // Encrypted reads intentionally add no log lines (audit requirement);
+        // only writes log.
+        _settingService
+            .Setup(s => s.GetEncryptedSettingStates(It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new Dictionary<string, bool>());
+
+        await _controller.GetEncryptedSettings(new[] { "api_key" });
+
+        _logger.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("api_key")),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
     }
 
     /// <summary>

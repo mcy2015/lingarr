@@ -115,16 +115,26 @@ public class SettingController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves and decrypts sensitive settings values.
-    /// Returns an empty string for keys not found or that contain a non-decryptable value.
+    /// Reports which encrypted settings are configured.
     /// </summary>
-    /// <param name="keys">A list of setting keys to retrieve and decrypt.</param>
-    /// <returns>Returns an HTTP 200 OK response with a dictionary of decrypted setting values.</returns>
+    /// <remarks>
+    /// Security walk finding: this endpoint used to decrypt and return every
+    /// requested secret (api_key, radarr/sonarr keys, provider secrets) as
+    /// plaintext to any logged-in session. It now answers only "configured:
+    /// true/false" per key — the values are decrypted server-side to test for
+    /// non-emptiness but never leave the process. The API key itself is only
+    /// readable through the explicit reveal endpoint
+    /// (<see cref="AuthController.GetApiKey"/>), which is guarded like key
+    /// generation. Provider secrets are write-only from the client's view.
+    /// Reads are deliberately not audited (no new log lines).
+    /// </remarks>
+    /// <param name="keys">A list of setting keys to check.</param>
+    /// <returns>Returns an HTTP 200 OK response with a dictionary of setting keys and configured flags.</returns>
     [HttpPost("multiple/encrypted/get")]
-    public async Task<ActionResult<Dictionary<string, string>>> GetEncryptedSettings(
+    public async Task<ActionResult<Dictionary<string, bool>>> GetEncryptedSettings(
         [FromBody] IEnumerable<string> keys)
     {
-        var settings = await _settingService.GetEncryptedSettings(keys);
-        return Ok(settings);
+        var states = await _settingService.GetEncryptedSettingStates(keys);
+        return Ok(states);
     }
 }

@@ -480,8 +480,8 @@ public class AuthServiceTests
         public Task<string?> GetEncryptedSetting(string key) =>
             Task.FromResult(Encrypted.GetValueOrDefault(key));
 
-        public Task<System.Collections.Generic.Dictionary<string, string>> GetEncryptedSettings(
+        public Task<System.Collections.Generic.Dictionary<string, bool>> GetEncryptedSettingStates(
             System.Collections.Generic.IEnumerable<string> keys) =>
-            Task.FromResult(new System.Collections.Generic.Dictionary<string, string>());
+            Task.FromResult(new System.Collections.Generic.Dictionary<string, bool>());
     }
 }

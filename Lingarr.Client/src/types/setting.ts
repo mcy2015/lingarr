@@ -156,19 +156,19 @@ export const ENCRYPTED_SETTINGS = {
     LOCAL_AI_API_KEY: 'local_ai_api_key'
 } as const
 
-export interface IEncryptedSettings {
-    api_key: string
-    radarr_api_key: string
-    sonarr_api_key: string
-    openai_api_key: string
-    anthropic_api_key: string
-    gemini_api_key: string
-    deepseek_api_key: string
-    mistral_api_key: string
-    xai_api_key: string
-    deepl_api_key: string
-    libretranslate_api_key: string
-    local_ai_api_key: string
+export interface IEncryptedSettingStates {
+    api_key: boolean
+    radarr_api_key: boolean
+    sonarr_api_key: boolean
+    openai_api_key: boolean
+    anthropic_api_key: boolean
+    gemini_api_key: boolean
+    deepseek_api_key: boolean
+    mistral_api_key: boolean
+    xai_api_key: boolean
+    deepl_api_key: boolean
+    libretranslate_api_key: boolean
+    local_ai_api_key: boolean
 }
 
 export const SERVICE_TYPE = {

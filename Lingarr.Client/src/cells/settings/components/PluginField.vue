@@ -38,7 +38,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-    IEncryptedSettings,
+    IEncryptedSettingStates,
     INPUT_TYPE,
     INPUT_VALIDATION_TYPE,
     InputValidationType,
@@ -74,13 +74,15 @@ const remoteOptions = ref<LabelValue[]>([])
 const remoteError = ref<string | null>(null)
 const remoteSelect = ref<SelectComponentExpose | null>(null)
 
-/// 敏感值统一策略(输入型):Secret 编辑态不回显旧值 —— 服务端虽回传明文,
-/// 前端至少不渲染进 DOM;空输入 = 「留空保持不变」,不写空串覆盖已存密钥。
+/// 敏感值统一策略(输入型):Secret 编辑态不回显旧值 —— 服务端只回
+/// 「已配置」布尔(不回明文),输入恒从空开始;空输入 = 「留空保持不变」,
+/// 不写空串覆盖已存密钥。
 const isSecret = computed(() => props.field.type === PLUGIN_SETTING_TYPE.SECRET)
 const secretConfigured = computed(() => {
     if (!isSecret.value) return false
-    const stored = settingsStore.getEncryptedSetting(props.field.key as keyof IEncryptedSettings)
-    return typeof stored === 'string' && stored.trim() !== ''
+    return settingsStore.isEncryptedSettingConfigured(
+        props.field.key as keyof IEncryptedSettingStates
+    )
 })
 
 const secretPlaceholder = computed(() => {
@@ -118,7 +120,7 @@ const fieldValue = computed<string>({
             // 空输入 = 保持已配置的密钥不变,不做任何写入
             if (newValue === '') return
             settingsStore.updateEncryptedSetting(
-                props.field.key as keyof IEncryptedSettings,
+                props.field.key as keyof IEncryptedSettingStates,
                 newValue,
                 isValid.value
             )

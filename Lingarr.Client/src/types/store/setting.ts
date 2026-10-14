@@ -1,6 +1,8 @@
-import { IEncryptedSettings, ISettings } from '@/types'
+import { IEncryptedSettingStates, ISettings } from '@/types'
 
 export interface IUseSettingStore {
     settings: ISettings
-    encrypted_settings: IEncryptedSettings
+    /// Write-only mirror of the encrypted settings: per key only whether a
+    /// value is configured (server answers booleans, never plaintext).
+    encrypted_settings: IEncryptedSettingStates
 }

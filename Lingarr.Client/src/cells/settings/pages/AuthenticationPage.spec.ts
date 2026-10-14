@@ -16,6 +16,7 @@ import { ENCRYPTED_SETTINGS, SETTINGS } from '@/types'
 
 const hasAnyUsersMock = vi.hoisted(() => vi.fn())
 const generateApiKeyMock = vi.hoisted(() => vi.fn())
+const getApiKeyMock = vi.hoisted(() => vi.fn())
 const revokeApiKeyMock = vi.hoisted(() => vi.fn())
 const setSettingMock = vi.hoisted(() => vi.fn())
 const setEncryptedSettingMock = vi.hoisted(() => vi.fn())
@@ -24,6 +25,7 @@ vi.mock('@/cells/app/api/authService', () => ({
     authService: () => ({
         hasAnyUsers: hasAnyUsersMock,
         generateApiKey: generateApiKeyMock,
+        getApiKey: getApiKeyMock,
         revokeApiKey: revokeApiKeyMock
     })
 }))
@@ -33,7 +35,7 @@ vi.mock('@/cells/app/api/settingService', () => ({
         setSetting: setSettingMock,
         setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettings: vi.fn().mockResolvedValue({})
+        getEncryptedSettingStates: vi.fn().mockResolvedValue({})
     })
 }))
 
@@ -71,6 +73,7 @@ async function mountPage() {
 beforeEach(() => {
     hasAnyUsersMock.mockReset().mockResolvedValue(true)
     generateApiKeyMock.mockReset().mockResolvedValue({ apiKey: 'fresh-key' })
+    getApiKeyMock.mockReset().mockResolvedValue({ apiKey: 'fresh-key' })
     revokeApiKeyMock.mockReset().mockResolvedValue(undefined)
     setSettingMock.mockReset().mockResolvedValue(undefined)
     setEncryptedSettingMock.mockReset().mockResolvedValue(undefined)
@@ -161,45 +164,48 @@ describe('AuthenticationPage · API Key 区(原功能)', () => {
         await flushPromises()
 
         expect(generateApiKeyMock).toHaveBeenCalledTimes(1)
-        // 敏感值统一策略:默认掩码渲染,完整明文不进 DOM,只进 store
+        // 敏感值统一策略:默认掩码渲染,完整明文不进 DOM;
+        // store 只落「已配置」布尔(密钥明文仅存于本会话组件内)
         expect(wrapper.find('[data-test="apikey-value"]').text()).toBe('fres•••-key')
         expect(wrapper.html()).not.toContain('fresh-key')
-        expect(settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY)).toBe('fresh-key')
+        expect(settingStore.isEncryptedSettingConfigured(ENCRYPTED_SETTINGS.API_KEY)).toBe(true)
     })
 })
 
 describe('AuthenticationPage · API Key 吊销(P2-4)', () => {
-    it('shows the revoke button only while a key exists', async () => {
+    it('shows the revoke button only while the configured flag is set', async () => {
         const { wrapper, pinia } = await mountPage()
         const settingStore = useSettingStore(pinia)
         settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'true')
-        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = ''
+        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = false
         await flushPromises()
         expect(wrapper.find('[data-test="apikey-revoke"]').exists()).toBe(false)
 
-        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = 'existing-key'
+        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = true
         await flushPromises()
         expect(wrapper.find('[data-test="apikey-revoke"]').exists()).toBe(true)
     })
 
-    it('revokes through the auth endpoint, clears the stored key and toasts', async () => {
+    it('revokes through the auth endpoint, flips the flag locally and toasts', async () => {
         const { wrapper, pinia } = await mountPage()
         const settingStore = useSettingStore(pinia)
         settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'true')
-        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = 'existing-key'
+        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = true
         await flushPromises()
 
         await wrapper.find('[data-test="apikey-revoke"]').trigger('click')
         await flushPromises()
 
         expect(revokeApiKeyMock).toHaveBeenCalledTimes(1)
-        // The revoke path writes the empty string back through the encrypted
-        // settings channel — an empty stored key never validates server-side.
-        const written = setEncryptedSettingMock.mock.calls.find(
-            (call) => call[0] === ENCRYPTED_SETTINGS.API_KEY
-        )
-        expect(written?.[1]).toBe('')
-        expect(settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY)).toBe('')
+        // The revoke endpoint clears the key server-side; locally only the
+        // configured flag flips back — no redundant write through the
+        // settings channel.
+        expect(
+            setEncryptedSettingMock.mock.calls.find(
+                (call) => call[0] === ENCRYPTED_SETTINGS.API_KEY
+            )
+        ).toBeUndefined()
+        expect(settingStore.isEncryptedSettingConfigured(ENCRYPTED_SETTINGS.API_KEY)).toBe(false)
     })
 })
 

@@ -267,7 +267,7 @@ import useServiceChain from '@/cells/settings/composables/useServiceChain'
 import useClampedMenu from '@/cells/settings/composables/useClampedMenu'
 import useClickOutside from '@/cells/kernel/composables/useClickOutside'
 import {
-    IEncryptedSettings,
+    IEncryptedSettingStates,
     ISettings,
     ITranslationServiceHealth,
     ITranslationTestResponse,
@@ -551,7 +551,7 @@ async function confirmDelete(): Promise<void> {
             for (const field of manifest.settings) {
                 if (field.type === PLUGIN_SETTING_TYPE.SECRET) {
                     await settingStore.updateEncryptedSetting(
-                        field.key as keyof IEncryptedSettings,
+                        field.key as keyof IEncryptedSettingStates,
                         '',
                         true
                     )

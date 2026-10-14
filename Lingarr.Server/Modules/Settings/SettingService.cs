@@ -190,16 +190,16 @@ public class SettingService : ISettingService
     }
 
     /// <inheritdoc />
-    public async Task<Dictionary<string, string>> GetEncryptedSettings(IEnumerable<string> keys)
+    public async Task<Dictionary<string, bool>> GetEncryptedSettingStates(IEnumerable<string> keys)
     {
         var settings = await GetSettings(keys);
 
-        var decrypted = new Dictionary<string, string>();
+        var states = new Dictionary<string, bool>();
         foreach (var setting in settings)
         {
-            decrypted[setting.Key] = _encryptionService.Decrypt(setting.Value);
+            states[setting.Key] = !string.IsNullOrEmpty(_encryptionService.Decrypt(setting.Value));
         }
 
-        return decrypted;
+        return states;
     }
 }

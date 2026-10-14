@@ -1,8 +1,10 @@
 <template>
-    <!-- ═══ API Key 区卡(敏感值统一策略样板):卡头唯一「API 密钥」标题 +
-         状态语义(已生成/未生成),值行默认掩码(前4+•••+后4,短值全掩码),
-         眼睛按钮显/隐、复制按钮写入完整值;掩码态 DOM 不含完整明文。
-         用法折叠区 curl 恒占位符。生成/吊销走 /api/auth 既有端点(数据流零变化)。 -->
+    <!-- ═══ API Key 区卡(敏感值统一策略样板):挂载态只有布尔(已生成/
+         未生成,无值)—— 加密设置批量读取已改回布尔,前端不再持有密文值。
+         「显示密钥」为用户显式动作:点击调 GET /api/auth/apikey 取值(与铸钥
+         同等守卫),本会话内可显示/复制/隐藏;生成响应直接带回值。值行默认
+         掩码(前4+•••+后4,短值/未取值全掩码),掩码态 DOM 不含完整明文。
+         用法折叠区 curl 恒占位符。 -->
     <div
         v-if="authEnabled == 'true'"
         class="border-line bg-secondary rounded-md border"
@@ -12,13 +14,13 @@
             <span
                 class="mono ml-auto rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold"
                 :class="
-                    apiKey
+                    apiKeyConfigured
                         ? 'border-success/40 bg-success/10 text-success'
                         : 'border-line bg-tertiary text-secondary-content'
                 "
                 data-test="apikey-status">
                 {{
-                    apiKey
+                    apiKeyConfigured
                         ? t('settings.apiKey.statusGenerated')
                         : t('settings.apiKey.statusNotGenerated')
                 }}
@@ -30,21 +32,21 @@
             <div class="flex flex-wrap items-center gap-2">
                 <code
                     class="mono border-line bg-primary min-w-0 flex-1 overflow-x-auto rounded-md border p-3 text-xs break-all"
-                    :class="apiKey ? 'text-success' : 'text-secondary-content'"
+                    :class="apiKeyConfigured ? 'text-success' : 'text-secondary-content'"
                     data-test="apikey-value">
                     {{ displayValue }}
                 </code>
                 <button
-                    v-if="apiKey"
+                    v-if="apiKeyConfigured"
                     type="button"
                     class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1.5 text-xs transition-colors"
                     :title="revealed ? t('settings.apiKey.hide') : t('settings.apiKey.show')"
                     data-test="apikey-visibility"
-                    @click="revealed = !revealed">
+                    @click="toggleReveal()">
                     <Icon :name="revealed ? 'eyeOn' : 'eyeOff'" class="h-4 w-4" />
                 </button>
                 <button
-                    v-if="apiKey"
+                    v-if="hasSessionValue"
                     type="button"
                     class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1.5 text-xs transition-colors"
                     :title="t('settings.apiKey.copy')"
@@ -56,7 +58,7 @@
 
             <div class="flex flex-wrap items-center gap-2">
                 <ButtonComponent
-                    v-if="apiKey"
+                    v-if="apiKeyConfigured"
                     variant="secondary"
                     size="sm"
                     :loading="revoking"
@@ -123,10 +125,12 @@ const authApi = authService(axios)
 const toastStore = useToastStore()
 const loading = ref(false)
 const revoking = ref(false)
+const revealing = ref(false)
 
-/// 敏感值统一策略:默认掩码(短值全掩码),显/隐仅切换渲染文本;
-/// 掩码态下完整明文不进入 DOM(值不在模板、不在属性,仅存于内存与剪贴板)。
+/// 挂载态 = 布尔(已生成/未生成,无值):加密设置批量读取只回 configured
+/// 标志,密钥明文仅存于两个显式来源 —— 生成响应 / 显示密钥读取端点。
 const revealed = ref(false)
+const sessionKeyValue = ref<string | null>(null)
 const usageOpen = ref(false)
 
 const authEnabled = computed({
@@ -137,22 +141,50 @@ const authEnabled = computed({
     }
 })
 
-const apiKey = computed({
-    get: () => settingsStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY),
-    set: (newValue: string): void => {
-        settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY, newValue.toString())
-        toastStore.push({ message: t('common.saved'), type: 'success' })
-    }
-})
+const apiKeyConfigured = computed(() =>
+    settingsStore.isEncryptedSettingConfigured(ENCRYPTED_SETTINGS.API_KEY)
+)
 
+/// 本会话已取到值(生成带回或显示时拉取)才可复制/纯显隐切换。
+const hasSessionValue = computed(
+    () => apiKeyConfigured.value && (sessionKeyValue.value ?? '') !== ''
+)
+
+/// 值行展示:未生成 → '—';已生成未取值 → 通用掩码(值不在前端);
+/// 已取值 → 默认掩码(短值全掩码),显/隐仅切换渲染文本 —— 掩码态下完整
+/// 明文不进入 DOM(值不在模板、不在属性,仅存于内存与剪贴板)。
 const displayValue = computed(() => {
-    const value = apiKey.value ?? ''
-    if (value === '') return '—'
+    if (!apiKeyConfigured.value) return '—'
+    const value = sessionKeyValue.value
+    if (value === null || value === '') return maskSecret('')
     return revealed.value ? value : maskSecret(value)
 })
 
+/// 显示密钥 = 用户显式动作(与铸钥同等暴露面):首次点击调
+/// GET /api/auth/apikey 取值,之后本会话内纯显隐切换,不再请求。
+const toggleReveal = async () => {
+    if (!apiKeyConfigured.value || revealing.value) return
+    if (sessionKeyValue.value === null) {
+        revealing.value = true
+        try {
+            const response = await authApi.getApiKey()
+            if ((response.apiKey ?? '') === '') {
+                // 密钥已被其它会话吊销:静默回「未生成」。
+                settingsStore.setEncryptedSettingState(ENCRYPTED_SETTINGS.API_KEY, false)
+                return
+            }
+            sessionKeyValue.value = response.apiKey
+            revealed.value = true
+        } finally {
+            revealing.value = false
+        }
+        return
+    }
+    revealed.value = !revealed.value
+}
+
 const copyApiKey = async () => {
-    const value = apiKey.value ?? ''
+    const value = sessionKeyValue.value ?? ''
     if (value === '') return
     try {
         await navigator.clipboard.writeText(value)
@@ -167,20 +199,23 @@ const generateApiKey = async () => {
     try {
         const response = await authApi.generateApiKey()
         revealed.value = false
-        await settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY, response.apiKey)
+        // 生成响应直接带回值:本会话立即可显示/复制,无需再调读取端点。
+        sessionKeyValue.value = response.apiKey
+        settingsStore.setEncryptedSettingState(ENCRYPTED_SETTINGS.API_KEY, true)
     } finally {
         loading.value = false
     }
 }
 
-/// P2-4: 吊销 = 服务端清空加密 api_key(空串即失效),本地展示同步清空。
-/// 沿用 /api/auth 的既有加密写回通道,无需新的设置语义。
+/// P2-4: 吊销 = 服务端清空加密 api_key(空串即失效)。本地只同步布尔状态
+/// 回「未生成」并丢弃会话值 —— 不再经由设置通道写回。
 const revokeApiKey = async () => {
     revoking.value = true
     try {
         revealed.value = false
         await authApi.revokeApiKey()
-        await settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY, '')
+        sessionKeyValue.value = null
+        settingsStore.setEncryptedSettingState(ENCRYPTED_SETTINGS.API_KEY, false)
         toastStore.push({ message: t('settings.apiKey.revoked'), type: 'success' })
     } finally {
         revoking.value = false

@@ -379,8 +379,8 @@ public class TranslationJobTests
         public Task<List<T>> GetSettingAsJson<T>(string key) where T : class => Task.FromResult(new List<T>());
         public Task<bool> SetEncryptedSetting(string key, string value) => Task.FromResult(true);
         public Task<string?> GetEncryptedSetting(string key) => Task.FromResult<string?>(null);
-        public Task<Dictionary<string, string>> GetEncryptedSettings(IEnumerable<string> keys) =>
-            Task.FromResult(new Dictionary<string, string>());
+        public Task<Dictionary<string, bool>> GetEncryptedSettingStates(IEnumerable<string> keys) =>
+            Task.FromResult(new Dictionary<string, bool>());
     }
 
     private sealed class FakeTranslationServiceFactory : ITranslationServiceFactory

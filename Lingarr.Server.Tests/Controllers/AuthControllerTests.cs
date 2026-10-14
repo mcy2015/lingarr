@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -157,6 +158,107 @@ public class AuthControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<ApiKeyResponse>(ok.Value);
         Assert.Equal("fresh-key", response.ApiKey);
+    }
+
+    // ===== API key reveal: cookie sessions only, audited without the value =====
+
+    [Fact]
+    public async Task GetApiKey_AnonymousCaller_Returns401()
+    {
+        var result = await _controller.GetApiKey();
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
+        _settingService.Verify(s => s.GetEncryptedSetting(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetApiKey_ApiKeyPrincipal_Returns403()
+    {
+        _controller.HttpContext.User = ApiKeyPrincipal();
+
+        var result = await _controller.GetApiKey();
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        _settingService.Verify(s => s.GetEncryptedSetting(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetApiKey_CookieSession_ReturnsStoredKey()
+    {
+        _controller.HttpContext.User = CookiePrincipal("henry");
+        _settingService
+            .Setup(s => s.GetEncryptedSetting(Lingarr.Core.Configuration.SettingKeys.Authentication.ApiKey))
+            .ReturnsAsync("stored-key");
+
+        var result = await _controller.GetApiKey();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ApiKeyResponse>(ok.Value);
+        Assert.Equal("stored-key", response.ApiKey);
+    }
+
+    [Fact]
+    public async Task GetApiKey_CookieSessionWithNoStoredKey_ReturnsEmptyKey()
+    {
+        _controller.HttpContext.User = CookiePrincipal("henry");
+        _settingService
+            .Setup(s => s.GetEncryptedSetting(Lingarr.Core.Configuration.SettingKeys.Authentication.ApiKey))
+            .ReturnsAsync(string.Empty);
+
+        var result = await _controller.GetApiKey();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ApiKeyResponse>(ok.Value);
+        Assert.Equal(string.Empty, response.ApiKey);
+    }
+
+    [Fact]
+    public async Task GetApiKey_CookieSession_LogsRevealWithoutTheValue()
+    {
+        var logger = new Mock<ILogger<AuthController>>();
+        var controller = new AuthController(
+            _authService.Object,
+            _settingService.Object,
+            _loginRateLimiter.Object,
+            _sessionStore.Object,
+            logger.Object);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+        controller.HttpContext.User = CookiePrincipal("henry");
+        _settingService
+            .Setup(s => s.GetEncryptedSetting(Lingarr.Core.Configuration.SettingKeys.Authentication.ApiKey))
+            .ReturnsAsync("stored-key");
+
+        await controller.GetApiKey();
+
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) =>
+                    state.ToString()!.Contains("API key revealed")
+                    && state.ToString()!.Contains("henry")
+                    && !state.ToString()!.Contains("stored-key")),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public void GetApiKey_IsGuardedByTheLingarrAccessPolicy_LikeGeneration()
+    {
+        // Reveal shares the generate/revoke guard chain: LingarrAccess lets
+        // anonymous through only while auth is disabled, and the cookie-session
+        // check then rejects them — asserted by the 401/403 tests above.
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.GetApiKey));
+        Assert.NotNull(method);
+        Assert.Contains(method.GetCustomAttributes(true), a => a is AuthorizeAttribute authorize
+            && authorize.Policy == "LingarrAccess");
+        Assert.DoesNotContain(method.GetCustomAttributes(true), a => a is AllowAnonymousAttribute);
     }
 
     // ===== API key revocation (P2-4): cookie sessions only =====

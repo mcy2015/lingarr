@@ -29,6 +29,12 @@ const service = (http: AxiosStatic, resource = '/api/auth'): IAuthService => ({
         return http.post(`${resource}/apikey/generate`).then((response) => response.data)
     },
 
+    /// Security walk fix: explicit key reveal. Guarded like generation
+    /// (cookie sessions only) — showing the key is as sensitive as minting it.
+    getApiKey(): Promise<IApiKeyResponse> {
+        return http.get(`${resource}/apikey`).then((response) => response.data)
+    },
+
     revokeApiKey(): Promise<void> {
         return http.post(`${resource}/apikey/revoke`).then((response) => response.data)
     },

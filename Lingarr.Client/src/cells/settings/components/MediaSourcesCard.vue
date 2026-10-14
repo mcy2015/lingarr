@@ -279,8 +279,9 @@ async function resync(source: ISourceRow): Promise<void> {
 const radarrValid = reactive({ url: false, key: false })
 const sonarrValid = reactive({ url: false, key: false })
 
-/// 敏感值统一策略(输入型):API Key 编辑态不回显旧值(输入恒从空开始),
-/// 已配置时占位符说明「留空保持不变」;空输入不写空串覆盖已存密钥。
+/// 敏感值统一策略(输入型):API Key 编辑态不回显旧值(输入恒从空开始,
+/// 服务端只回「已配置」布尔),已配置时占位符说明「留空保持不变」;
+/// 空输入不写空串覆盖已存密钥。
 function keyConfigured(kind: 'radarr' | 'sonarr' | null): boolean {
     const key =
         kind === 'radarr'
@@ -289,7 +290,7 @@ function keyConfigured(kind: 'radarr' | 'sonarr' | null): boolean {
               ? ENCRYPTED_SETTINGS.SONARR_API_KEY
               : null
     if (key === null) return false
-    return (settingStore.getEncryptedSetting(key) ?? '').trim() !== ''
+    return settingStore.isEncryptedSettingConfigured(key)
 }
 
 const editingKeyConfigured = computed(() => keyConfigured(editing.value))

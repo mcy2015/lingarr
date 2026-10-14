@@ -309,6 +309,50 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Read the current API key.
+    /// </summary>
+    /// <remarks>
+    /// Security walk finding: the settings UI used to learn the key from the
+    /// bulk encrypted-settings read, which decrypted every secret for any
+    /// logged-in session. Revealing the key is now this dedicated endpoint with
+    /// exactly the guard of <see cref="GenerateNewApiKey"/>: showing the key is
+    /// an explicit user action, so its exposure surface equals minting one —
+    /// anonymous callers get 401, API-key principals 403, only interactive
+    /// cookie sessions get the value. The one Information audit line ("API key
+    /// revealed") never contains the key itself. Provider secrets have no such
+    /// endpoint: they are write-only from the client's view.
+    /// </remarks>
+    [HttpGet("apikey")]
+    [Authorize("LingarrAccess")]
+    public async Task<ActionResult<ApiKeyResponse>> GetApiKey()
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!User.IsCookieSession())
+        {
+            _logger.LogWarning(
+                "Rejected API key reveal request without a cookie session " +
+                "(authenticated: {IsAuthenticated}) from {RemoteIp}.",
+                User.Identity?.IsAuthenticated ?? false,
+                remoteIp);
+
+            return User.Identity?.IsAuthenticated == true
+                ? StatusCode(StatusCodes.Status403Forbidden,
+                    new { message = "API key display requires a logged-in browser session" })
+                : Unauthorized(new { message = "API key display requires a logged-in browser session" });
+        }
+
+        var apiKey = await _settingService.GetEncryptedSetting(SettingKeys.Authentication.ApiKey);
+
+        // Audit line: user + action only, never the value.
+        _logger.LogInformation("API key revealed by user {Username}.", User.Identity?.Name);
+
+        return Ok(new ApiKeyResponse
+        {
+            ApiKey = apiKey ?? string.Empty
+        });
+    }
+
+    /// <summary>
     /// Revoke the current API key (P2-4) by clearing the encrypted api_key
     /// setting; an empty stored key never validates.
     /// </summary>

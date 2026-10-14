@@ -518,8 +518,8 @@ public class StartupServiceTests : IDisposable
 
         public Task<string?> GetEncryptedSetting(string key) => Task.FromResult<string?>(null);
 
-        public Task<Dictionary<string, string>> GetEncryptedSettings(IEnumerable<string> keys) =>
-            Task.FromResult(new Dictionary<string, string>());
+        public Task<Dictionary<string, bool>> GetEncryptedSettingStates(IEnumerable<string> keys) =>
+            Task.FromResult(new Dictionary<string, bool>());
     }
 }
 

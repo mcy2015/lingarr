@@ -96,9 +96,9 @@ const authEnabled = computed(
     () => (settingStore.getSetting(SETTINGS.AUTH_ENABLED) as string) ?? 'false'
 )
 
-/// API Key chip:由发放状态派生(ApiKeyConfiguration 写入的加密设置)
-const apiKeyIssued = computed(
-    () => (settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY) ?? '').trim() !== ''
+/// API Key chip:由发放状态派生(批量加密读取只回「已配置」布尔)
+const apiKeyIssued = computed(() =>
+    settingStore.isEncryptedSettingConfigured(ENCRYPTED_SETTINGS.API_KEY)
 )
 
 /// 版本 meta:实例 store 的真实版本

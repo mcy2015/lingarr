@@ -40,6 +40,10 @@ export interface IAuthService {
     /// session on success, so the caller must sign in again afterwards.
     changePassword(request: IChangePasswordRequest): Promise<ILoginResponse>
     generateApiKey(): Promise<IApiKeyResponse>
+    /// Security walk fix: explicit reveal of the stored API key. Same guard
+    /// as generation on the server (cookie sessions only); the only other
+    /// place the plaintext key exists is the generate response.
+    getApiKey(): Promise<IApiKeyResponse>
     /// P2-4: revoke the current API key. Requires a browser session on the
     /// server side; clears the stored key so subsequent API-key calls 401.
     revokeApiKey(): Promise<void>
@@ -81,7 +85,10 @@ export interface ISettingService {
     getSettings<T>(keys: string[]): Promise<T>
     setSetting(key: string, value: string): Promise<void>
     setSettings(keys: ISettings): Promise<void>
-    getEncryptedSettings<T>(keys: string[]): Promise<T>
+    /// Security walk fix: the bulk encrypted read answers booleans only
+    /// (configured per key) — the server never returns secret plaintext.
+    /// T is the client-side states map (all-boolean values).
+    getEncryptedSettingStates<T>(keys: string[]): Promise<T>
     setEncryptedSetting(key: string, value: string): Promise<void>
 }
 

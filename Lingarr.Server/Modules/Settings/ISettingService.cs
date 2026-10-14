@@ -63,16 +63,21 @@ public interface ISettingService
     Task<bool> SetEncryptedSetting(string key, string value);
 
     /// <summary>
-    /// Retrieves and decrypts a single setting value.
+    /// Retrieves and decrypts a single setting value. Server-internal use only
+    /// (translation providers, integration calls, the API-key read endpoint);
+    /// never expose the result through a settings read endpoint.
     /// </summary>
     /// <param name="key">The key of the setting to retrieve.</param>
     /// <returns>The decrypted plaintext value, or <c>null</c> if the key is not found or the value cannot be decrypted.</returns>
     Task<string?> GetEncryptedSetting(string key);
 
     /// <summary>
-    /// Retrieves and decrypts multiple setting values.
+    /// Reports, per key, whether an encrypted setting is configured (decrypts
+    /// internally and checks for a non-empty value). The response never
+    /// carries plaintext — this is the only shape the settings read endpoint
+    /// may return for encrypted keys.
     /// </summary>
-    /// <param name="keys">An enumerable collection of keys for the settings to retrieve.</param>
-    /// <returns>A dictionary of decrypted values. Keys whose values cannot be decrypted are returned as empty string.</returns>
-    Task<Dictionary<string, string>> GetEncryptedSettings(IEnumerable<string> keys);
+    /// <param name="keys">An enumerable collection of keys to check.</param>
+    /// <returns>A dictionary of keys to configured flags. Keys with no stored row are absent.</returns>
+    Task<Dictionary<string, bool>> GetEncryptedSettingStates(IEnumerable<string> keys);
 }

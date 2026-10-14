@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // PluginField · 敏感值统一策略(输入型)验收:Secret 字段编辑态不回显旧值
-// (服务端虽回传明文,前端不渲染进 DOM),占位符说明「留空保持不变」,
-// 空输入不写空串覆盖已存密钥;非 Secret 字段回显行为保持不变。
+// (加密设置批量读取只回「已配置」布尔,前端从头就没有明文),占位符说明
+// 「留空保持不变」,空输入不写空串覆盖已存密钥;非 Secret 字段回显行为不变。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -19,7 +19,7 @@ vi.mock('@/cells/app/api/settingService', () => ({
         setSetting: setSettingMock,
         setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettings: vi.fn().mockResolvedValue({})
+        getEncryptedSettingStates: vi.fn().mockResolvedValue({})
     })
 }))
 
@@ -30,8 +30,6 @@ const i18n = createI18n({
     missingWarn: false,
     fallbackWarn: false
 })
-
-const STORED_SECRET = 'sk-live-plaintext-secret-0123456789'
 
 const secretField: IPluginSettingField = {
     key: 'openai_api_key',
@@ -48,8 +46,11 @@ const textField: IPluginSettingField = {
     default: 'gpt-4o-mini'
 }
 
-async function mountField(field: IPluginSettingField) {
+async function mountField(field: IPluginSettingField, secretConfigured = false) {
     const pinia = createPinia()
+    if (secretConfigured) {
+        useSettingStore(pinia).encrypted_settings.openai_api_key = true
+    }
     const wrapper = mount(PluginField, {
         props: { field },
         global: { plugins: [pinia, i18n] }
@@ -68,22 +69,17 @@ afterEach(() => {
 })
 
 describe('PluginField · Secret 输入型策略', () => {
-    it('renders Secret as a password input and never echoes the stored value into the DOM', async () => {
-        const { wrapper, pinia } = await mountField(secretField)
-        useSettingStore(pinia).encrypted_settings.openai_api_key = STORED_SECRET
-        await flushPromises()
+    it('renders Secret as a password input starting empty (no value exists client-side)', async () => {
+        const { wrapper } = await mountField(secretField, true)
 
         const input = wrapper.find('input')
         expect(input.attributes('type')).toBe('password')
-        // 不回显:输入框值为空,完整明文不在 DOM
+        // 不回显:输入框恒从空开始 —— store 里只有布尔状态,无明文可渲染
         expect((input.element as HTMLInputElement).value).toBe('')
-        expect(wrapper.html()).not.toContain(STORED_SECRET)
     })
 
-    it('hints with the keep-unchanged placeholder while a secret is configured', async () => {
-        const { wrapper, pinia } = await mountField(secretField)
-        useSettingStore(pinia).encrypted_settings.openai_api_key = STORED_SECRET
-        await flushPromises()
+    it('hints with the keep-unchanged placeholder while the secret is configured', async () => {
+        const { wrapper } = await mountField(secretField, true)
 
         expect(wrapper.find('input').attributes('placeholder')).toBe(
             en.services.plugins.secretConfigured
@@ -97,9 +93,7 @@ describe('PluginField · Secret 输入型策略', () => {
 
     it('never writes when the input stays or becomes empty (keep-unchanged semantics)', async () => {
         vi.useFakeTimers()
-        const { wrapper, pinia } = await mountField(secretField)
-        useSettingStore(pinia).encrypted_settings.openai_api_key = STORED_SECRET
-        await flushPromises()
+        const { wrapper, pinia } = await mountField(secretField, true)
         setEncryptedSettingMock.mockClear()
 
         const input = wrapper.find('input')
@@ -109,16 +103,14 @@ describe('PluginField · Secret 输入型策略', () => {
         await flushPromises()
 
         expect(setEncryptedSettingMock).not.toHaveBeenCalled()
-        expect(useSettingStore(pinia).getEncryptedSetting('openai_api_key' as never)).toBe(
-            STORED_SECRET
-        )
+        expect(
+            useSettingStore(pinia).isEncryptedSettingConfigured('openai_api_key' as never)
+        ).toBe(true)
     })
 
-    it('writes the new secret only once the input is valid, and emits save', async () => {
+    it('writes the new secret only once the input is valid, flips the flag, and emits save', async () => {
         vi.useFakeTimers()
-        const { wrapper, pinia } = await mountField({ ...secretField, minLength: 20 })
-        useSettingStore(pinia).encrypted_settings.openai_api_key = STORED_SECRET
-        await flushPromises()
+        const { wrapper, pinia } = await mountField({ ...secretField, minLength: 20 }, true)
         setEncryptedSettingMock.mockClear()
 
         const input = wrapper.find('input')
@@ -130,6 +122,10 @@ describe('PluginField · Secret 输入型策略', () => {
             'openai_api_key',
             'new-secret-value-4200'
         )
+        // 写入后本地只记「已配置」布尔,不存明文
+        expect(
+            useSettingStore(pinia).isEncryptedSettingConfigured('openai_api_key' as never)
+        ).toBe(true)
         expect(wrapper.emitted('save')).toBeTruthy()
     })
 })

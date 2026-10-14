@@ -1,6 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import {
-    IEncryptedSettings,
+    IEncryptedSettingStates,
     ILanguage,
     IPluginSettingField,
     ISettings,
@@ -18,7 +18,7 @@ const settingApi = settingService(axios)
 export const useSettingStore = defineStore('setting', {
     state: (): IUseSettingStore => ({
         settings: {} as ISettings,
-        encrypted_settings: {} as IEncryptedSettings
+        encrypted_settings: {} as IEncryptedSettingStates
     }),
     getters: {
         getSettings: (state: IUseSettingStore): ISettings => {
@@ -29,7 +29,10 @@ export const useSettingStore = defineStore('setting', {
             }
         },
         getSetting: (state: IUseSettingStore) => (key: keyof ISettings) => state.settings[key],
-        getEncryptedSetting: (state: IUseSettingStore) => (key: keyof IEncryptedSettings) => state.encrypted_settings[key]
+        /// Security walk fix: encrypted settings are boolean "configured"
+        /// flags server-side — the store never holds secret plaintext.
+        isEncryptedSettingConfigured: (state: IUseSettingStore) => (key: keyof IEncryptedSettingStates) =>
+            state.encrypted_settings[key] === true
     },
     actions: {
         async updateSetting(
@@ -53,14 +56,21 @@ export const useSettingStore = defineStore('setting', {
             }
         },
         async updateEncryptedSetting(
-            key: keyof IEncryptedSettings,
+            key: keyof IEncryptedSettingStates,
             value: string,
             isValid: boolean = true
         ): Promise<void> {
-            this.encrypted_settings[key] = value
+            // Write-only mirror: locally we keep just the configured flag.
+            this.encrypted_settings[key] = value.trim() !== ''
             if (isValid) {
                 await settingApi.setEncryptedSetting(key, value)
             }
+        },
+        /// Local-only flag sync for flows whose endpoint already persisted the
+        /// value (auth generate/revoke store or clear the key server-side), so
+        /// the UI state follows without a redundant settings write.
+        setEncryptedSettingState(key: keyof IEncryptedSettingStates, configured: boolean) {
+            this.encrypted_settings[key] = configured
         },
         storeSetting(key: keyof ISettings, value: string | boolean | unknown[]) {
             this.settings[key] = value as never
@@ -80,24 +90,26 @@ export const useSettingStore = defineStore('setting', {
                 }
             }
 
-            const [plainValues, encryptedValues] = await Promise.all([
+            const [plainValues, encryptedStates] = await Promise.all([
                 plainKeys.length > 0
                     ? settingApi.getSettings<Partial<ISettings>>(plainKeys)
                     : Promise.resolve({} as Partial<ISettings>),
                 encryptedKeys.length > 0
-                    ? settingApi.getEncryptedSettings<Partial<IEncryptedSettings>>(encryptedKeys)
-                    : Promise.resolve({} as Partial<IEncryptedSettings>)
+                    ? settingApi.getEncryptedSettingStates<Partial<IEncryptedSettingStates>>(encryptedKeys)
+                    : Promise.resolve({} as Partial<IEncryptedSettingStates>)
             ])
 
             this.settings = { ...this.settings, ...plainValues }
-            this.encrypted_settings = { ...this.encrypted_settings, ...encryptedValues }
+            this.encrypted_settings = { ...this.encrypted_settings, ...encryptedStates }
         },
 
         async applySettingsOnLoad(): Promise<void> {
             const instanceStore = useInstanceStore()
-            const [settings, encryptedSettings] = await Promise.all([
+            const [settings, encryptedStates] = await Promise.all([
                 settingApi.getSettings<ISettings>(Object.values(SETTINGS)),
-                settingApi.getEncryptedSettings<IEncryptedSettings>(Object.values(ENCRYPTED_SETTINGS))
+                settingApi.getEncryptedSettingStates<IEncryptedSettingStates>(
+                    Object.values(ENCRYPTED_SETTINGS)
+                )
             ])
 
             this.settings = {
@@ -105,7 +117,7 @@ export const useSettingStore = defineStore('setting', {
                 source_languages: JSON.parse(settings.source_languages as string),
                 target_languages: JSON.parse(settings.target_languages as string)
             }
-            this.encrypted_settings = encryptedSettings
+            this.encrypted_settings = encryptedStates
 
             instanceStore.storeTheme(settings.theme)
         }
