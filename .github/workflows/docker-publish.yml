@@ -13,15 +13,14 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # Temporary A/B: the sparse restore the image build performs, run with
-  # plain `docker run` instead of through buildx. If this job succeeds
-  # while the buildx job fails, the problem is buildx-side.
+  # Temporary A/B: minimal buildx restore repro, single platform, no cache
+  # backends, detailed verbosity — surfaces the error MSB4181 swallows.
   diagnose-restore:
-    name: Diagnose restore (no buildx)
+    name: Diagnose restore (buildx minimal)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Sparse restore in the SDK container
+      - name: Sparse restore through buildx
         run: |
           mkdir -p sparse/Lingarr.Contracts sparse/Lingarr.Server sparse/Lingarr.Core sparse/Lingarr.Migrations
           cp Directory.Packages.props global.json sparse/
@@ -29,9 +28,13 @@ jobs:
           cp Lingarr.Server/Lingarr.Server.csproj sparse/Lingarr.Server/
           cp Lingarr.Core/Lingarr.Core.csproj sparse/Lingarr.Core/
           cp Lingarr.Migrations/Lingarr.Migrations.csproj sparse/Lingarr.Migrations/
+          printf 'FROM mcr.microsoft.com/dotnet/sdk:10.0.401\nWORKDIR /src\nCOPY . .\nRUN dotnet restore Lingarr.Server/Lingarr.Server.csproj -v d\n' > sparse/Dockerfile
           docker run --rm -v "$PWD/sparse:/src" -w /src \
             mcr.microsoft.com/dotnet/sdk:10.0.401 \
-            dotnet restore Lingarr.Server/Lingarr.Server.csproj -v d
+            dotnet restore Lingarr.Server/Lingarr.Server.csproj 2>&1 | tail -3
+          echo '--- plain docker run above, buildx below ---'
+          docker buildx create --use --name diag
+          docker buildx build --no-cache --progress=plain sparse 2>&1 | tail -150
 
   build-and-push:
     name: Build and push (amd64 + arm64)
