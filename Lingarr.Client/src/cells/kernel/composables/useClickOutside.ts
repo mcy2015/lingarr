@@ -27,11 +27,16 @@ export default function useClickOutside(
         }
     }
 
+    // Capture phase: overlays and card bodies often call stopPropagation on
+    // click (e.g. modals shielding themselves from overlay-close handlers),
+    // which would swallow a bubble-phase window listener and leave dropdowns
+    // opened inside those modals. Capturing on the way down still sees the
+    // click before any intermediate node can stop it.
     onMounted(() => {
-        window.addEventListener('click', listener)
+        window.addEventListener('click', listener, true)
     })
 
     onBeforeUnmount(() => {
-        window.removeEventListener('click', listener)
+        window.removeEventListener('click', listener, true)
     })
 }
