@@ -40,6 +40,9 @@ export interface IAuthService {
     /// session on success, so the caller must sign in again afterwards.
     changePassword(request: IChangePasswordRequest): Promise<ILoginResponse>
     generateApiKey(): Promise<IApiKeyResponse>
+    /// P2-4: revoke the current API key. Requires a browser session on the
+    /// server side; clears the stored key so subsequent API-key calls 401.
+    revokeApiKey(): Promise<void>
     hasAnyUsers(): Promise<boolean>
 }
 

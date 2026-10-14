@@ -15,13 +15,15 @@ import { ENCRYPTED_SETTINGS, SETTINGS } from '@/types'
 
 const hasAnyUsersMock = vi.hoisted(() => vi.fn())
 const generateApiKeyMock = vi.hoisted(() => vi.fn())
+const revokeApiKeyMock = vi.hoisted(() => vi.fn())
 const setSettingMock = vi.hoisted(() => vi.fn())
 const setEncryptedSettingMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/authService', () => ({
     authService: () => ({
         hasAnyUsers: hasAnyUsersMock,
-        generateApiKey: generateApiKeyMock
+        generateApiKey: generateApiKeyMock,
+        revokeApiKey: revokeApiKeyMock
     })
 }))
 
@@ -68,6 +70,7 @@ async function mountPage() {
 beforeEach(() => {
     hasAnyUsersMock.mockReset().mockResolvedValue(true)
     generateApiKeyMock.mockReset().mockResolvedValue({ apiKey: 'fresh-key' })
+    revokeApiKeyMock.mockReset().mockResolvedValue(undefined)
     setSettingMock.mockReset().mockResolvedValue(undefined)
     setEncryptedSettingMock.mockReset().mockResolvedValue(undefined)
 })
@@ -149,6 +152,41 @@ describe('AuthenticationPage · API Key 区(原功能)', () => {
         expect(generateApiKeyMock).toHaveBeenCalledTimes(1)
         expect(wrapper.find('[data-test="apikey-value"]').text()).toContain('fresh-key')
         expect(settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY)).toBe('fresh-key')
+    })
+})
+
+describe('AuthenticationPage · API Key 吊销(P2-4)', () => {
+    it('shows the revoke button only while a key exists', async () => {
+        const { wrapper, pinia } = await mountPage()
+        const settingStore = useSettingStore(pinia)
+        settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'true')
+        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = ''
+        await flushPromises()
+        expect(wrapper.find('[data-test="apikey-revoke"]').exists()).toBe(false)
+
+        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = 'existing-key'
+        await flushPromises()
+        expect(wrapper.find('[data-test="apikey-revoke"]').exists()).toBe(true)
+    })
+
+    it('revokes through the auth endpoint, clears the stored key and toasts', async () => {
+        const { wrapper, pinia } = await mountPage()
+        const settingStore = useSettingStore(pinia)
+        settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'true')
+        settingStore.encrypted_settings[ENCRYPTED_SETTINGS.API_KEY] = 'existing-key'
+        await flushPromises()
+
+        await wrapper.find('[data-test="apikey-revoke"]').trigger('click')
+        await flushPromises()
+
+        expect(revokeApiKeyMock).toHaveBeenCalledTimes(1)
+        // The revoke path writes the empty string back through the encrypted
+        // settings channel — an empty stored key never validates server-side.
+        const written = setEncryptedSettingMock.mock.calls.find(
+            (call) => call[0] === ENCRYPTED_SETTINGS.API_KEY
+        )
+        expect(written?.[1]).toBe('')
+        expect(settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY)).toBe('')
     })
 })
 

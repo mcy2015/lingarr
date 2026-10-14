@@ -16,6 +16,15 @@
                     {{ t('settings.apiKey.label') }}
                 </b>
                 <ButtonComponent
+                    v-if="apiKey"
+                    variant="secondary"
+                    size="sm"
+                    :loading="revoking"
+                    data-test="apikey-revoke"
+                    @click="revokeApiKey()">
+                    {{ revoking ? t('settings.apiKey.revoking') : t('settings.apiKey.revoke') }}
+                </ButtonComponent>
+                <ButtonComponent
                     variant="primary"
                     size="sm"
                     :loading="loading"
@@ -68,6 +77,7 @@ const authApi = authService(axios)
 
 const toastStore = useToastStore()
 const loading = ref(false)
+const revoking = ref(false)
 
 const authEnabled = computed({
     get: () => settingsStore.getSetting(SETTINGS.AUTH_ENABLED) as string,
@@ -92,6 +102,19 @@ const generateApiKey = async () => {
         await settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY, response.apiKey)
     } finally {
         loading.value = false
+    }
+}
+
+/// P2-4: 吊销 = 服务端清空加密 api_key(空串即失效),本地展示同步清空。
+/// 沿用 /api/auth 的既有加密写回通道,无需新的设置语义。
+const revokeApiKey = async () => {
+    revoking.value = true
+    try {
+        await authApi.revokeApiKey()
+        await settingsStore.updateEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY, '')
+        toastStore.push({ message: t('settings.apiKey.revoked'), type: 'success' })
+    } finally {
+        revoking.value = false
     }
 }
 </script>

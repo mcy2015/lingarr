@@ -11,14 +11,34 @@ namespace Lingarr.Server.Modules.Auth;
 public class AuthService : IAuthService
 {
     /// <summary>
+    /// PBKDF2 iteration count for newly created hashes (P2-2), following the
+    /// OWASP recommendation for PBKDF2-HMAC-SHA256 (600,000).
+    /// </summary>
+    public const int Pbkdf2Iterations = 600_000;
+
+    /// <summary>
+    /// Iteration count of the legacy <c>salt:hash</c> format. Kept only for
+    /// verification of existing hashes; successful logins transparently
+    /// re-hash them at <see cref="Pbkdf2Iterations"/>.
+    /// </summary>
+    public const int LegacyPbkdf2Iterations = 100_000;
+
+    /// <summary>
+    /// Upper bound accepted for the iteration count embedded in a stored
+    /// hash. Generous headroom over <see cref="Pbkdf2Iterations"/> while
+    /// keeping a single verification bounded.
+    /// </summary>
+    private const int MaxEmbeddedIterations = 10_000_000;
+
+    /// <summary>
     /// Pre-generated PBKDF2 hash of a fixed throwaway password, in the exact
-    /// salt:hash format and cost (100k iterations, HMAC-SHA256) of real
-    /// hashes. The login path verifies against it when the username is
+    /// iterations.salt.hash format and cost (600k iterations, HMAC-SHA256) of
+    /// real hashes. The login path verifies against it when the username is
     /// unknown so both failure branches burn the same PBKDF2 work and the
     /// response timing does not reveal whether the account exists (P1-3).
     /// </summary>
     public const string DummyPasswordHash =
-        "AAECAwQFBgcICQoLDA0ODw==:3xUL2UmIys+lU+eoOQw8rwNOeMRUsaiasDQGsdUWVlA=";
+        "600000.AAECAwQFBgcICQoLDA0ODw==.uVUP6Bfaqv24wxSvx1/MafMXbPZdNy29mT7DT4Pmlbw=";
 
     private readonly LingarrDbContext _context;
     private readonly ISettingService _settingService;
@@ -45,33 +65,112 @@ public class AuthService : IAuthService
         return Convert.ToBase64String(bytes).Replace("/", "_").Replace("+", "-").Substring(0, 43);
     }
 
+    /// <summary>
+    /// Verifies a plaintext password against a stored hash in either format
+    /// (P2-2): the current <c>iterations.salt.hash</c> form verifies with the
+    /// embedded iteration count, the legacy <c>salt:hash</c> form with the
+    /// historical 100k iterations. Callers that also own the user should
+    /// prefer <see cref="VerifyPasswordAndUpgradeAsync"/> so legacy hashes are
+    /// transparently re-hashed on success.
+    /// </summary>
     public bool VerifyPassword(string password, string passwordHash)
     {
         try
         {
-            var parts = passwordHash.Split(':');
-            if (parts.Length != 2)
+            var hashInfo = ParseStoredHash(passwordHash);
+            if (hashInfo is null)
             {
                 return false;
             }
 
-            var salt = Convert.FromBase64String(parts[0]);
-            var storedHash = parts[1];
-
             var hashToVerify = Convert.ToBase64String(KeyDerivation.Pbkdf2(
                 password: password,
-                salt: salt,
+                salt: hashInfo.Salt,
                 prf: KeyDerivationPrf.HMACSHA256,
-                iterationCount: 100000,
+                iterationCount: hashInfo.Iterations,
                 numBytesRequested: 256 / 8));
 
-            return FixedTimeEquals(hashToVerify, storedHash);
+            return FixedTimeEquals(hashToVerify, hashInfo.Hash);
         }
         catch
         {
             return false;
         }
     }
+
+    /// <summary>
+    /// Verifies the password of a persisted user and, when the stored hash is
+    /// still in the legacy 100k-iteration format, transparently re-hashes it
+    /// with the current parameters and saves it (P2-2). The upgrade only runs
+    /// after a successful verification, so a wrong password never rewrites
+    /// anything.
+    /// </summary>
+    public async Task<bool> VerifyPasswordAndUpgradeAsync(User user, string password)
+    {
+        if (!VerifyPassword(password, user.PasswordHash))
+        {
+            return false;
+        }
+
+        if (IsLegacyHashFormat(user.PasswordHash))
+        {
+            user.PasswordHash = HashPassword(password);
+            await _context.SaveChangesAsync();
+        }
+
+        return true;
+    }
+
+    /// <summary>True when the hash predates the iterations.salt.hash format.</summary>
+    internal static bool IsLegacyHashFormat(string passwordHash) =>
+        !passwordHash.Contains('.');
+
+    /// <summary>
+    /// Parses a stored hash into salt/hash bytes and the iteration count.
+    /// Supports the current <c>iterations.salt.hash</c> format and the legacy
+    /// <c>salt:hash</c> format (P2-2); anything else returns null.
+    /// </summary>
+    private static StoredHash? ParseStoredHash(string passwordHash)
+    {
+        if (string.IsNullOrEmpty(passwordHash))
+        {
+            return null;
+        }
+
+        // Current format: iterations.salt.hash — the iteration count travels
+        // with the hash so future cost bumps stay verifiable. The sanity cap
+        // bounds a single verification even if the stored row ever holds a
+        // pathological value (only HashPassword writes these rows normally).
+        var dotParts = passwordHash.Split('.');
+        if (dotParts.Length == 3)
+        {
+            if (!int.TryParse(dotParts[0], out var iterations)
+                || iterations <= 0
+                || iterations > MaxEmbeddedIterations)
+            {
+                return null;
+            }
+
+            return new StoredHash(
+                Convert.FromBase64String(dotParts[1]),
+                dotParts[2],
+                iterations);
+        }
+
+        // Legacy format: salt:hash, always hashed at the historical cost.
+        var colonParts = passwordHash.Split(':');
+        if (colonParts.Length == 2)
+        {
+            return new StoredHash(
+                Convert.FromBase64String(colonParts[0]),
+                colonParts[1],
+                LegacyPbkdf2Iterations);
+        }
+
+        return null;
+    }
+
+    private sealed record StoredHash(byte[] Salt, string Hash, int Iterations);
 
     public async Task<User?> GetUserByUsername(string username)
     {
@@ -141,10 +240,10 @@ public class AuthService : IAuthService
             password: password,
             salt: salt,
             prf: KeyDerivationPrf.HMACSHA256,
-            iterationCount: 100000,
+            iterationCount: Pbkdf2Iterations,
             numBytesRequested: 256 / 8));
 
-        return $"{Convert.ToBase64String(salt)}:{hashed}";
+        return $"{Pbkdf2Iterations}.{Convert.ToBase64String(salt)}.{hashed}";
     }
 
     public async Task<bool> HasAnyUsers()

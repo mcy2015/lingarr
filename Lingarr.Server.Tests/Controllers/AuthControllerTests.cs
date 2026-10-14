@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Models.Auth;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -75,6 +76,43 @@ public class AuthControllerTests
         Assert.Equal(false, ok.Value);
     }
 
+    [Fact]
+    public void HasAnyUsers_IsAllowAnonymous_SoTheUiProbeSurvivesLockedInstances()
+    {
+        // P2-6: with auth enabled and no session, the settings UI still needs
+        // this probe — otherwise enabling auth dead-ends behind its own 401.
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.HasAnyUsers));
+        Assert.NotNull(method);
+        Assert.Contains(method.GetCustomAttributes(true), a => a is AllowAnonymousAttribute);
+    }
+
+    // ===== Login uses the upgrade-capable verification (P2-2) =====
+
+    [Fact]
+    public async Task Login_VerifiesThroughPasswordAndUpgradeWrapper()
+    {
+        var controller = CreateController(_loginRateLimiter.Object);
+        var user = SetupSuccessfulLogin(controller, "henry");
+
+        await controller.Login(new LoginRequest { Username = "henry", Password = "pw" });
+
+        _authService.Verify(a => a.VerifyPasswordAndUpgradeAsync(user, "pw"), Times.Once);
+    }
+
+    [Fact]
+    public async Task Login_FailedUpgradeVerification_Returns401WithoutSignIn()
+    {
+        var controller = CreateController(_loginRateLimiter.Object);
+        var user = new Lingarr.Core.Entities.User { Id = 1, Username = "henry", PasswordHash = "hash" };
+        _authService.Setup(a => a.GetUserByUsername("henry")).ReturnsAsync(user);
+        _authService.Setup(a => a.VerifyPasswordAndUpgradeAsync(user, "wrong")).ReturnsAsync(false);
+
+        var result = await controller.Login(new LoginRequest { Username = "henry", Password = "wrong" });
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+        _loginRateLimiter.Verify(l => l.RecordFailure("henry", RemoteIp.ToString()), Times.Once);
+    }
+
     // ===== API key minting: cookie sessions only =====
 
     [Fact]
@@ -119,6 +157,48 @@ public class AuthControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<ApiKeyResponse>(ok.Value);
         Assert.Equal("fresh-key", response.ApiKey);
+    }
+
+    // ===== API key revocation (P2-4): cookie sessions only =====
+
+    [Fact]
+    public async Task RevokeApiKey_AnonymousCaller_Returns401AndKeepsStoredKey()
+    {
+        var result = await _controller.RevokeApiKey();
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
+        _settingService.Verify(
+            s => s.SetEncryptedSetting(It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RevokeApiKey_ApiKeyPrincipal_Returns403AndKeepsStoredKey()
+    {
+        _controller.HttpContext.User = ApiKeyPrincipal();
+
+        var result = await _controller.RevokeApiKey();
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        _settingService.Verify(
+            s => s.SetEncryptedSetting(It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RevokeApiKey_CookieSession_ClearsStoredKeyToEmpty()
+    {
+        _controller.HttpContext.User = CookiePrincipal("henry");
+        _settingService
+            .Setup(s => s.SetEncryptedSetting("api_key", string.Empty))
+            .ReturnsAsync(true);
+
+        var result = await _controller.RevokeApiKey();
+
+        Assert.IsType<OkObjectResult>(result);
+        _settingService.Verify(s => s.SetEncryptedSetting("api_key", string.Empty), Times.Once);
     }
 
     // ===== Login: rate limiting + mustChangePassword contract =====
@@ -174,12 +254,14 @@ public class AuthControllerTests
     [Fact]
     public async Task Login_DummyHashConstant_IsAWellFormedPbkdf2Hash()
     {
-        // If the constant ever drifts out of the salt:hash format, the dummy
-        // verification would shortcut and reopen the timing side channel.
-        var parts = AuthService.DummyPasswordHash.Split(':');
-        Assert.Equal(2, parts.Length);
-        Assert.NotEmpty(Convert.FromBase64String(parts[0]));
+        // If the constant ever drifts out of the iterations.salt.hash format,
+        // the dummy verification would shortcut and reopen the timing side
+        // channel (P1-3 + P2-2).
+        var parts = AuthService.DummyPasswordHash.Split('.');
+        Assert.Equal(3, parts.Length);
+        Assert.Equal(AuthService.Pbkdf2Iterations.ToString(), parts[0]);
         Assert.NotEmpty(Convert.FromBase64String(parts[1]));
+        Assert.NotEmpty(Convert.FromBase64String(parts[2]));
     }
 
     [Fact]
@@ -484,7 +566,7 @@ public class AuthControllerTests
         return CreateController(limiter);
     }
 
-    private void SetupSuccessfulLogin(AuthController controller, string username)
+    private Lingarr.Core.Entities.User SetupSuccessfulLogin(AuthController controller, string username)
     {
         var user = new Lingarr.Core.Entities.User
         {
@@ -493,7 +575,8 @@ public class AuthControllerTests
             PasswordHash = "hash"
         };
         _authService.Setup(a => a.GetUserByUsername(username)).ReturnsAsync(user);
-        _authService.Setup(a => a.VerifyPassword("pw", "hash")).Returns(true);
+        // Login verifies through the upgrade-capable wrapper (P2-2).
+        _authService.Setup(a => a.VerifyPasswordAndUpgradeAsync(user, "pw")).ReturnsAsync(true);
 
         // SignInAsync resolves IAuthenticationService from RequestServices.
         var authentication = new Mock<IAuthenticationService>();
@@ -509,6 +592,7 @@ public class AuthControllerTests
             .Setup(p => p.GetService(typeof(IAuthenticationService)))
             .Returns(authentication.Object);
         controller.HttpContext.RequestServices = provider.Object;
+        return user;
     }
 
     private static ClaimsPrincipal CookiePrincipal(string username) =>

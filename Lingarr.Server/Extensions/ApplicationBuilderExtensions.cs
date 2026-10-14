@@ -26,12 +26,20 @@ public static class ApplicationBuilderExtensions
         await app.ApplyMigrations();
         await app.MigrateApiKeyEncryption();
 
+        app.UseAuthentication();
+        app.UseAuthorization();
+
         if (app.Environment.IsDevelopment())
         {
-            app.UseHangfireDashboard("/hangfire", new DashboardOptions
-            {
-                Authorization = []
-            });
+            // P1-4: the dev panels sit behind the same LingarrAccess policy as
+            // the API. They must be registered AFTER UseAuthentication so
+            // cookie principals are populated — Hangfire's dashboard filters
+            // and the Swagger guard middleware evaluate the policy themselves
+            // (registered before, they would only ever see anonymous users).
+            // While authentication is disabled the policy still lets everyone
+            // through, preserving plain-http LAN dev convenience; new installs
+            // ship with auth_enabled=true, so their panels are protected too.
+            app.UseLingarrAccessGuard("/swagger");
             app.UseSwagger();
             app.UseSwaggerUI(options =>
             {
@@ -39,10 +47,12 @@ public static class ApplicationBuilderExtensions
                     $"Lingarr HTTP API {LingarrVersion.Number}");
                 options.EnableTryItOutByDefault();
             });
+            app.UseHangfireDashboard("/hangfire", new DashboardOptions
+            {
+                Authorization = [new LingarrDashboardAuthorizationFilter()]
+            });
         }
 
-        app.UseAuthentication();
-        app.UseAuthorization();
         app.MapControllers();
         app.UseStaticFiles();
         app.ConfigureSpa(basePath);

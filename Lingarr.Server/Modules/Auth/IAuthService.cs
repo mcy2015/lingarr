@@ -17,6 +17,15 @@ public interface IAuthService
     bool VerifyPassword(string password, string passwordHash);
 
     /// <summary>
+    /// Verifies the password of a persisted user and transparently upgrades
+    /// a legacy-format hash to the current parameters after a successful
+    /// verification (P2-2).
+    /// </summary>
+    /// <param name="user">The user whose hash is verified (and possibly upgraded).</param>
+    /// <param name="password">The plaintext password to verify.</param>
+    Task<bool> VerifyPasswordAndUpgradeAsync(User user, string password);
+
+    /// <summary>
     /// Retrieves a user from the database by username.
     /// </summary>
     /// <param name="username">The username to search for.</param>

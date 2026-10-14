@@ -29,6 +29,10 @@ const service = (http: AxiosStatic, resource = '/api/auth'): IAuthService => ({
         return http.post(`${resource}/apikey/generate`).then((response) => response.data)
     },
 
+    revokeApiKey(): Promise<void> {
+        return http.post(`${resource}/apikey/revoke`).then((response) => response.data)
+    },
+
     hasAnyUsers(): Promise<boolean> {
         return http.get(`${resource}/users/any`).then((response) => response.data)
     }

@@ -172,6 +172,17 @@ public static class SettingKeys
         public const string ApiKey = "api_key";
 
         /// <summary>
+        /// Dead setting (P2-4): seeded by the M0001 baseline but read by
+        /// nothing — the API-key gate is the presence of a non-empty
+        /// <see cref="ApiKey"/> value, independent of auth_enabled. The row
+        /// is deliberately kept in existing databases (touching the squashed
+        /// baseline would break verification against already-migrated
+        /// installs); no code path may reference this key.
+        /// </summary>
+        [Obsolete("Dead setting: never read; the api_key value itself gates API-key auth.")]
+        public const string ApiKeyEnabled = "api_key_enabled";
+
+        /// <summary>
         /// "true" while the seeded default admin still uses the well-known
         /// admin/admin credentials; flipped to "false" by the first successful
         /// password change. Seeded "false" by M0002 for existing databases.

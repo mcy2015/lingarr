@@ -5,6 +5,7 @@ using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Models;
+using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Xunit;
@@ -92,6 +93,153 @@ public class AuthServiceTests
         var service = CreateService();
 
         Assert.False(service.VerifyPassword("anything", malformed));
+    }
+
+    // ===== P2-2: 600k iterations, iterations.salt.hash format, legacy compat =====
+
+    [Fact]
+    public void HashPassword_ProducesCurrentFormatAndIterationCount()
+    {
+        var service = CreateService();
+
+        var hash = service.HashPassword("a-secure-password");
+
+        var parts = hash.Split('.');
+        Assert.Equal(3, parts.Length);
+        Assert.Equal(AuthService.Pbkdf2Iterations.ToString(), parts[0]);
+        Assert.Equal(600_000, AuthService.Pbkdf2Iterations);
+        Assert.DoesNotContain(':', hash);
+    }
+
+    /// <summary>
+    /// Builds a hash in the legacy pre-P2-2 <c>salt:hash</c> format at the
+    /// historical 100k iteration count — what existing databases still hold.
+    /// </summary>
+    private static string LegacyHash(string password)
+    {
+        var salt = Convert.FromBase64String("AAECAwQFBgcICQoLDA0ODw==");
+        var hashed = Convert.ToBase64String(KeyDerivation.Pbkdf2(
+            password: password,
+            salt: salt,
+            prf: KeyDerivationPrf.HMACSHA256,
+            iterationCount: AuthService.LegacyPbkdf2Iterations,
+            numBytesRequested: 256 / 8));
+        return $"{Convert.ToBase64String(salt)}:{hashed}";
+    }
+
+    /// <summary>
+    /// Builds a hash in the current <c>iterations.salt.hash</c> format at an
+    /// arbitrary iteration count.
+    /// </summary>
+    private static string HashWithIterations(string password, int iterations)
+    {
+        var salt = Convert.FromBase64String("AAECAwQFBgcICQoLDA0ODw==");
+        var hashed = Convert.ToBase64String(KeyDerivation.Pbkdf2(
+            password: password,
+            salt: salt,
+            prf: KeyDerivationPrf.HMACSHA256,
+            iterationCount: iterations,
+            numBytesRequested: 256 / 8));
+        return $"{iterations}.{Convert.ToBase64String(salt)}.{hashed}";
+    }
+
+    [Fact]
+    public void VerifyPassword_AcceptsLegacyFormatHash()
+    {
+        var service = CreateService();
+
+        Assert.True(service.VerifyPassword("legacy-password", LegacyHash("legacy-password")));
+        Assert.False(service.VerifyPassword("wrong-password", LegacyHash("legacy-password")));
+    }
+
+    [Fact]
+    public void VerifyPassword_HonoursIterationsEmbeddedInTheHash()
+    {
+        var service = CreateService();
+
+        // A non-default embedded count must still verify (self-describing
+        // format), not silently fall back to the current or legacy default —
+        // this is what keeps future cost bumps backward compatible.
+        var cheaper = HashWithIterations("cheap-password", 150_000);
+        Assert.True(service.VerifyPassword("cheap-password", cheaper));
+        Assert.False(service.VerifyPassword("wrong-password", cheaper));
+    }
+
+    [Theory]
+    [InlineData("0.AAECAwQFBgcICQoLDA0ODw==.AAAA")]
+    [InlineData("-5.AAECAwQFBgcICQoLDA0ODw==.AAAA")]
+    [InlineData("notanumber.AAECAwQFBgcICQoLDA0ODw==.AAAA")]
+    [InlineData("2000000000.AAECAwQFBgcICQoLDA0ODw==.AAAA")]
+    [InlineData("600000.!!!!.AAAA")]
+    [InlineData("600000.AAECAwQFBgcICQoLDA0ODw==")]
+    [InlineData("a.b.c.d")]
+    public void VerifyPassword_ToleratesMalformedNewFormatHashes(string malformed)
+    {
+        var service = CreateService();
+
+        // Includes a pathological iteration count: rejected without ever
+        // running the derivation, bounding a single verification.
+        Assert.False(service.VerifyPassword("anything", malformed));
+    }
+
+    [Fact]
+    public void VerifyPassword_DummyHashStaysNewFormatAndRejectsWrongPassword()
+    {
+        var service = CreateService();
+
+        // The unknown-user timing decoy must track the current cost/format.
+        Assert.StartsWith(AuthService.Pbkdf2Iterations + ".", AuthService.DummyPasswordHash);
+        Assert.False(service.VerifyPassword("any-login-attempt", AuthService.DummyPasswordHash));
+    }
+
+    [Fact]
+    public async Task VerifyPasswordAndUpgradeAsync_UpgradesLegacyHashTransparently()
+    {
+        var context = BuildContext();
+        var service = CreateService(context);
+        var user = new User { Username = "henry", PasswordHash = LegacyHash("OldPass123") };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        Assert.True(await service.VerifyPasswordAndUpgradeAsync(user, "OldPass123"));
+
+        var stored = await context.Users.SingleAsync(u => u.Username == "henry");
+        Assert.StartsWith(AuthService.Pbkdf2Iterations + ".", stored.PasswordHash);
+        Assert.DoesNotContain(':', stored.PasswordHash);
+        // The cleartext password still verifies against the upgraded hash.
+        Assert.True(service.VerifyPassword("OldPass123", stored.PasswordHash));
+        Assert.False(service.VerifyPassword("wrong", stored.PasswordHash));
+    }
+
+    [Fact]
+    public async Task VerifyPasswordAndUpgradeAsync_LeavesCurrentFormatHashUntouched()
+    {
+        var context = BuildContext();
+        var service = CreateService(context);
+        var user = new User { Username = "henry", PasswordHash = service.HashPassword("Passw0rd") };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var hashBefore = user.PasswordHash;
+
+        Assert.True(await service.VerifyPasswordAndUpgradeAsync(user, "Passw0rd"));
+
+        Assert.Equal(hashBefore, user.PasswordHash);
+    }
+
+    [Fact]
+    public async Task VerifyPasswordAndUpgradeAsync_WrongPasswordReturnsFalseAndKeepsHash()
+    {
+        var context = BuildContext();
+        var service = CreateService(context);
+        var user = new User { Username = "henry", PasswordHash = LegacyHash("right") };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var hashBefore = user.PasswordHash;
+
+        Assert.False(await service.VerifyPasswordAndUpgradeAsync(user, "wrong"));
+
+        // Failed verification must never rewrite the stored hash.
+        Assert.Equal(hashBefore, (await context.Users.SingleAsync(u => u.Username == "henry")).PasswordHash);
     }
 
     // ===== API key =====

@@ -73,7 +73,10 @@ public class AuthController : ControllerBase
             return LoginFailed(request.Username, remoteIp);
         }
 
-        if (!_authService.VerifyPassword(request.Password, user.PasswordHash))
+        // P2-2: verification honours the format embedded in the stored hash
+        // (legacy 100k or current 600k iterations) and transparently re-hashes
+        // legacy hashes at the current cost on success.
+        if (!await _authService.VerifyPasswordAndUpgradeAsync(user, request.Password))
         {
             return LoginFailed(request.Username, remoteIp);
         }
@@ -122,7 +125,16 @@ public class AuthController : ControllerBase
     /// Check whether any user account exists. The settings UI calls this before
     /// enabling authentication so it cannot lock the instance out with zero users.
     /// </summary>
+    /// <remarks>
+    /// Deliberately anonymous (P2-6): the probe must also work while
+    /// authentication is enabled but no session exists yet — otherwise the UI
+    /// precondition check itself 401s and the user-enable flow dead-ends.
+    /// This reveals whether at least one user exists; in the single-user model
+    /// that answer is always "yes" for any working instance, so it discloses
+    /// nothing an attacker could act on.
+    /// </remarks>
     [HttpGet("users/any")]
+    [AllowAnonymous]
     public async Task<ActionResult<bool>> HasAnyUsers()
     {
         return Ok(await _authService.HasAnyUsers());
@@ -294,5 +306,40 @@ public class AuthController : ControllerBase
         {
             ApiKey = apiKey
         });
+    }
+
+    /// <summary>
+    /// Revoke the current API key (P2-4) by clearing the encrypted api_key
+    /// setting; an empty stored key never validates.
+    /// </summary>
+    /// <remarks>
+    /// Guarded like generation: interactive cookie sessions only. A leaked
+    /// API key must not be able to revoke the legitimate one (which would
+    /// force a re-login-to-regenerate denial of the admin's tooling), just as
+    /// it must not mint its own replacement.
+    /// </remarks>
+    [HttpPost("apikey/revoke")]
+    [Authorize("LingarrAccess")]
+    public async Task<ActionResult> RevokeApiKey()
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!User.IsCookieSession())
+        {
+            _logger.LogWarning(
+                "Rejected API key revocation request without a cookie session " +
+                "(authenticated: {IsAuthenticated}) from {RemoteIp}.",
+                User.Identity?.IsAuthenticated ?? false,
+                remoteIp);
+
+            return User.Identity?.IsAuthenticated == true
+                ? StatusCode(StatusCodes.Status403Forbidden,
+                    new { message = "API key revocation requires a logged-in browser session" })
+                : Unauthorized(new { message = "API key revocation requires a logged-in browser session" });
+        }
+
+        await _settingService.SetEncryptedSetting(SettingKeys.Authentication.ApiKey, string.Empty);
+
+        _logger.LogInformation("User {Username} revoked the API key.", User.Identity?.Name);
+        return Ok(new { message = "API key revoked" });
     }
 }

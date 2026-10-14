@@ -11,10 +11,14 @@ namespace Lingarr.Server.Controllers;
 public class SettingController : ControllerBase
 {
     private readonly ISettingService _settingService;
+    private readonly ILogger<SettingController> _logger;
 
-    public SettingController(ISettingService settingService)
+    public SettingController(
+        ISettingService settingService,
+        ILogger<SettingController> logger)
     {
         _settingService = settingService;
+        _logger = logger;
     }
     
     /// <summary>
@@ -59,6 +63,10 @@ public class SettingController : ControllerBase
         var value = await _settingService.SetSetting(setting.Key, setting.Value);
         if (value)
         {
+            // P2-5 audit line: key only, never the value (it may be a secret
+            // or personal data); whether the write was plain follows from
+            // which endpoint ran.
+            _logger.LogInformation("Setting '{SettingKey}' updated (plain).", setting.Key);
             return Ok();
         }
 
@@ -77,6 +85,10 @@ public class SettingController : ControllerBase
         var success = await _settingService.SetSettings(settings);
         if (success)
         {
+            // P2-5 audit line: keys only, values are never logged.
+            _logger.LogInformation(
+                "Settings updated (plain): {SettingKeys}.",
+                string.Join(", ", settings.Keys));
             return Ok();
         }
 
@@ -92,7 +104,14 @@ public class SettingController : ControllerBase
     public async Task<ActionResult> SetEncryptedSetting([FromBody] Setting setting)
     {
         var success = await _settingService.SetEncryptedSetting(setting.Key, setting.Value);
-        return success ? Ok() : BadRequest("Setting could not be updated.");
+        if (success)
+        {
+            // P2-5 audit line: key + encryption flag, never the value.
+            _logger.LogInformation("Setting '{SettingKey}' updated (encrypted).", setting.Key);
+            return Ok();
+        }
+
+        return BadRequest("Setting could not be updated.");
     }
 
     /// <summary>
