@@ -2,7 +2,9 @@ import { createRouter, createWebHistory, RouteLocationNormalized, RouteLocationR
 import { useInstanceStore } from '@/cells/app/stores/instance'
 import { baseUrl } from '@/cells/app/utils/baseUrl'
 
-const routes: RouteRecordRaw[] = [
+/// Exported for the redirect regression spec — the table itself stays the
+/// single source of truth for every route and legacy bookmark redirect.
+export const routes: RouteRecordRaw[] = [
     // Auth
     {
         path: '/auth',
@@ -154,7 +156,12 @@ const routes: RouteRecordRaw[] = [
                     {
                         path: 'sources',
                         name: 'settings-sources',
-                        component: () => import('@/cells/settings/pages/SettingsSourcesPage.vue')
+                        component: () => import('@/cells/settings/pages/SettingsMediaPage.vue')
+                    },
+                    {
+                        path: 'automation',
+                        name: 'settings-automation',
+                        component: () => import('@/cells/settings/pages/SettingsAutomationPage.vue')
                     },
                     {
                         path: 'quality',
@@ -166,17 +173,13 @@ const routes: RouteRecordRaw[] = [
                         name: 'settings-system',
                         component: () => import('@/cells/settings/pages/SettingsSystemPage.vue')
                     },
+                    // legacy settings paths -> grouped panels (bookmarks kept alive)
                     {
-                        // legacy settings paths -> grouped panels (bookmarks kept alive)
                         path: 'services',
                         redirect: { name: 'settings-providers' }
                     },
                     {
                         path: 'integration',
-                        redirect: { name: 'settings-sources' }
-                    },
-                    {
-                        path: 'automation',
                         redirect: { name: 'settings-sources' }
                     },
                     {

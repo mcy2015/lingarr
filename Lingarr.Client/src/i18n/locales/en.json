@@ -561,20 +561,15 @@
     },
     "settings": {
         "menu": {
-            "authentication": "Authentication",
-            "services": "Services",
-            "automation": "Automation",
             "plugins": "Plugins",
-            "tasks": "Tasks",
-            "logs": "Logs",
             "logout": "Logout",
             "groups": {
                 "providers": "Translation services",
-                "sources": "Media & automation",
+                "sources": "Media sources",
+                "automation": "Automation",
                 "quality": "Subtitles & quality",
                 "system": "System"
-            },
-            "mapping": "Language mapping"
+            }
         },
         "status": {
             "enabled": "Enabled",
@@ -610,27 +605,21 @@
             "subLine": "{count} plugins loaded"
         },
         "automation": {
-            "title": "Automation",
             "description": "Set up automation. Note that if automation is implemented, you also need to configure the necessary",
             "servicesLink": "services",
             "descriptionSuffix": ".",
-            "indexingTitle": "Indexing",
-            "indexingDescription": "The media indexing schedule controls the iteration with which Lingarr should sync with Sonarr and Radarr.",
             "movieIndexer": "Set movie indexer:",
             "showIndexer": "Set tv show indexer:",
             "cronFormat": "Cron format: minute hour day month weekday (e.g., '0 * * * *' for hourly)",
-            "automatedTranslation": "Automated translation:",
-            "translationSchedule": "Set translation schedule:",
-            "limits": "Limits:",
             "limitPerSchedule": "Limit the amount of translations per schedule",
-            "fileAgeDelay": "Default file age delay for translation:",
             "movieAgeDelay": "Movie file age delay in 'hours'",
             "showAgeDelay": "TV Show file age delay in 'hours'",
             "batchesTitle": "Automation batches",
             "batchesMeta": "cron",
             "dailyRow": "Daily catch-up",
-            "dailyHint": "{cron} · limit {limit} tasks/run · new-media delay {movie}h movie / {show}h show",
+            "dailyHint": "limit {limit} tasks/run · new-media delay {movie}h movie / {show}h show",
             "edit": "Edit",
+            "editInSchedule": "Edit in job schedule",
             "scheduleField": "Schedule (cron)",
             "editFailed": "Please check the highlighted fields.",
             "toggleFailed": "Failed to toggle, please retry."
@@ -900,9 +889,7 @@
             "mapping": "Path mapping",
             "mappingHint": "{count} mapping | {count} mappings",
             "manage": "Manage",
-            "edit": "Edit",
-            "movieIndexer": "Movie indexer",
-            "showIndexer": "TV show indexer"
+            "edit": "Edit"
         },
         "subtitleOutput": {
             "title": "Subtitle output",

@@ -561,20 +561,15 @@
     },
     "settings": {
         "menu": {
-            "authentication": "身份验证",
-            "services": "服务",
-            "automation": "自动化",
             "plugins": "插件",
-            "tasks": "任务",
-            "logs": "日志",
             "logout": "退出登录",
             "groups": {
                 "providers": "翻译服务",
-                "sources": "媒体与自动化",
+                "sources": "媒体源",
+                "automation": "自动化",
                 "quality": "字幕与质量",
                 "system": "系统"
-            },
-            "mapping": "语言映射"
+            }
         },
         "status": {
             "enabled": "已启用",
@@ -610,27 +605,21 @@
             "subLine": "已加载 {count} 个插件"
         },
         "automation": {
-            "title": "自动化",
             "description": "设置自动化。注意:启用自动化后,还需要配置所需的",
             "servicesLink": "服务",
             "descriptionSuffix": "。",
-            "indexingTitle": "索引",
-            "indexingDescription": "媒体索引计划控制 Lingarr 与 Sonarr 和 Radarr 同步的频率。",
             "movieIndexer": "设置电影索引计划:",
             "showIndexer": "设置剧集索引计划:",
             "cronFormat": "Cron 格式:分 时 日 月 星期(例如 '0 * * * *' 表示每小时)",
-            "automatedTranslation": "自动翻译:",
-            "translationSchedule": "设置翻译计划:",
-            "limits": "限制:",
             "limitPerSchedule": "限制每次计划执行的翻译数量",
-            "fileAgeDelay": "翻译的默认文件延迟:",
             "movieAgeDelay": "电影文件延迟(单位:小时)",
             "showAgeDelay": "剧集文件延迟(单位:小时)",
             "batchesTitle": "自动化批次",
             "batchesMeta": "cron",
             "dailyRow": "每日补缺",
-            "dailyHint": "{cron} · 限额 {limit} 任务/次 · 新片延迟 电影 {movie}h / 剧集 {show}h",
+            "dailyHint": "限额 {limit} 任务/次 · 新片延迟 电影 {movie}h / 剧集 {show}h",
             "edit": "编辑",
+            "editInSchedule": "去任务计划修改",
             "scheduleField": "调度(cron)",
             "editFailed": "请检查标红的字段。",
             "toggleFailed": "开关切换失败，请重试。"
@@ -900,9 +889,7 @@
             "mapping": "路径映射",
             "mappingHint": "{count} 条映射",
             "manage": "管理",
-            "edit": "编辑",
-            "movieIndexer": "电影索引",
-            "showIndexer": "剧集索引"
+            "edit": "编辑"
         },
         "subtitleOutput": {
             "title": "字幕输出",

@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
-// AutomationBatchesCard (screen-06 B): the daily catch-up row renders cron +
-// limit + delays from the store, the switch toggles the recurring job through
-// the schedule enable/disable endpoint (persist + immediate registration — a
-// bare setting write never registered anything), and the edit modal echoes +
-// saves the four batch parameters decoupled from the switch. The「每周全库巡检」
-// batch has no server counterpart and is not shown.
+// AutomationBatchesCard (设置 · 自动化 tab):每日补缺行 hint 只报策略(限额/
+// 延迟,cron 归任务计划),开关走 schedule enable/disable 端点(落库+即时注册),
+// 编辑模态为只读 cron(下钻任务计划)+ 三个策略字段,与开关解耦。「每周全库巡检」
+// 服务端不存在,不显示。
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import AutomationBatchesCard from '@/cells/settings/components/AutomationBatchesCard.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
@@ -63,92 +62,47 @@ async function mountCard(settings: Record<string, string> = {}) {
         settingStore.storeSetting(key as keyof ISettings, value)
     }
 
+    const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/schedule', name: 'schedule', component: { template: '<div />' } }]
+    })
+    await router.push('/')
+    await router.isReady()
+
     const wrapper = mount(AutomationBatchesCard, {
-        global: { plugins: [pinia, i18n] }
+        global: { plugins: [pinia, i18n, router] }
     })
     onTestFinished(() => wrapper.unmount())
     await flushPromises()
-    return { wrapper, pinia, settingStore, toastStore: useToastStore(pinia) }
+    return { wrapper, pinia, router, settingStore, toastStore: useToastStore(pinia) }
 }
 
 describe('AutomationBatchesCard · 行渲染', () => {
-    it('renders the daily catch-up row with the derived hint', async () => {
+    it('renders the daily catch-up row with the strategy-only hint', async () => {
         const { wrapper } = await mountCard()
 
         const row = wrapper.find('[data-test="batch-row-daily"]')
         expect(row.exists()).toBe(true)
         expect(row.text()).toContain(en.settings.automation.dailyRow)
-        expect(row.text()).toContain('0 4 * * *')
         expect(row.text()).toContain('50')
         expect(row.text()).toContain('48')
         expect(row.text()).toContain('24')
+        // cron moved to the job table — the row hint no longer carries it
+        expect(row.text()).not.toContain('0 4 * * *')
     })
 
     it('never renders the weekly full-library scan (no server job)', async () => {
         const { wrapper } = await mountCard()
         expect(wrapper.text()).not.toContain('weekly')
     })
-})
 
-describe('AutomationBatchesCard · 媒体源同步 cron 行组(自 MediaSourcesCard 迁入)', () => {
-    it('renders the movie/show indexer rows with the stored cron values', async () => {
+    it('no longer renders the media indexer cron rows', async () => {
         const { wrapper } = await mountCard({
             [SETTINGS.MOVIE_SCHEDULE]: '0 4 * * *',
             [SETTINGS.SHOW_SCHEDULE]: '0 5 * * *'
         })
-
-        const movie = wrapper.find('[data-test="batch-row-movie-index"]')
-        expect(movie.text()).toContain(en.settings.sources.movieIndexer)
-        expect(movie.text()).toContain(en.settings.automation.indexingDescription)
-        expect(movie.text()).toContain('0 4 * * *')
-
-        const show = wrapper.find('[data-test="batch-row-show-index"]')
-        expect(show.text()).toContain(en.settings.sources.showIndexer)
-        expect(show.text()).toContain('0 5 * * *')
-    })
-
-    it('echoes the stored cron in the index edit modal and saves it back', async () => {
-        const { wrapper } = await mountCard({
-            [SETTINGS.MOVIE_SCHEDULE]: '0 4 * * *'
-        })
-
-        await wrapper.find('[data-test="batch-edit-movie-index"]').trigger('click')
-        await flushPromises()
-
-        const modal = document.querySelector('[data-test="index-modal"]')
-        expect(modal).not.toBeNull()
-        const input = modal?.querySelector('input') as HTMLInputElement
-        expect(input.value).toBe('0 4 * * *')
-
-        input.value = '0 6 * * *'
-        input.dispatchEvent(new Event('input'))
-        await flushPromises()
-        ;(document.querySelector('[data-test="index-save"]') as HTMLElement).click()
-        await flushPromises()
-
-        const written = Object.fromEntries(setSettingMock.mock.calls)
-        expect(written['movie_schedule']).toBe('0 6 * * *')
-        expect(document.querySelector('[data-test="index-modal"]')).toBeNull()
-    })
-
-    it('blocks saving an invalid cron in the index modal', async () => {
-        const { wrapper } = await mountCard({
-            [SETTINGS.SHOW_SCHEDULE]: '0 5 * * *'
-        })
-
-        await wrapper.find('[data-test="batch-edit-show-index"]').trigger('click')
-        await flushPromises()
-
-        const input = document.querySelector(
-            '[data-test="index-modal"] input'
-        ) as HTMLInputElement
-        input.value = 'not-a-cron'
-        input.dispatchEvent(new Event('input'))
-        await flushPromises()
-
-        const save = document.querySelector('[data-test="index-save"]') as HTMLButtonElement
-        expect(save.disabled).toBe(true)
-        expect(setSettingMock).not.toHaveBeenCalled()
+        expect(wrapper.find('[data-test="batch-row-movie-index"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="batch-row-show-index"]').exists()).toBe(false)
     })
 })
 
@@ -199,6 +153,23 @@ describe('AutomationBatchesCard · 编辑(参数与开关解耦)', () => {
         expect(save.textContent?.trim()).not.toBe(en.common.saved)
     })
 
+    it('shows the cron read-only with a drill link to the job schedule', async () => {
+        const { wrapper, router } = await mountCard()
+
+        await wrapper.find('[data-test="batch-edit"]').trigger('click')
+        await flushPromises()
+
+        const cronRow = document.querySelector('[data-test="batch-modal-cron"]')!
+        expect(cronRow.textContent).toContain('0 4 * * *')
+        // no cron input anywhere in the modal — the job table is the editor
+        const inputs = [...(document.querySelectorAll('[data-test="batch-modal"] input') ?? [])]
+        expect(inputs).toHaveLength(3)
+
+        ;(cronRow.querySelector('[data-test="batch-open-schedule"]') as HTMLElement).click()
+        await flushPromises()
+        expect(router.currentRoute.value.name).toBe('schedule')
+    })
+
     it('echoes the stored parameters when the modal opens', async () => {
         const { wrapper } = await mountCard()
 
@@ -210,10 +181,10 @@ describe('AutomationBatchesCard · 编辑(参数与开关解耦)', () => {
         const values = [...(modal?.querySelectorAll('input') ?? [])].map(
             (input) => (input as HTMLInputElement).value
         )
-        expect(values).toEqual(['0 4 * * *', '50', '48', '24'])
+        expect(values).toEqual(['50', '48', '24'])
     })
 
-    it('saves the four parameters in one pass and toasts', async () => {
+    it('saves the three strategy parameters in one pass and toasts', async () => {
         const { wrapper, toastStore } = await mountCard()
 
         await wrapper.find('[data-test="batch-edit"]').trigger('click')
@@ -222,26 +193,11 @@ describe('AutomationBatchesCard · 编辑(参数与开关解耦)', () => {
         await flushPromises()
 
         const written = Object.fromEntries(setSettingMock.mock.calls)
-        expect(written['translation_schedule']).toBe('0 4 * * *')
         expect(written['max_translations_per_run']).toBe('50')
         expect(written['movie_age_threshold']).toBe('48')
         expect(written['show_age_threshold']).toBe('24')
-        // automation_enabled untouched by the edit modal
-        expect(setSettingMock.mock.calls.map((call) => call[0])).not.toContain('automation_enabled')
+        // cron is not writable from here — the job table owns it
+        expect(written['translation_schedule']).toBeUndefined()
         expect(toastStore.toasts[0].message).toContain(en.common.saved)
-    })
-
-    it('blocks saving when the cron is missing (cron 必填)', async () => {
-        const { wrapper } = await mountCard({ [SETTINGS.TRANSLATION_SCHEDULE]: '' })
-
-        await wrapper.find('[data-test="batch-edit"]').trigger('click')
-        await flushPromises()
-        ;(document.querySelector('[data-test="batch-save"]') as HTMLButtonElement).click()
-        await flushPromises()
-
-        // save stays disabled with an empty cron and nothing is written
-        const save = document.querySelector('[data-test="batch-save"]') as HTMLButtonElement
-        expect(save.disabled).toBe(true)
-        expect(setSettingMock).not.toHaveBeenCalled()
     })
 })

@@ -131,8 +131,14 @@ const settingsEntries = computed<SettingsEntry[]>(() => [
     {
         key: 'settings-sources',
         title: t('settings.menu.groups.sources'),
-        keywords: 'media automation sonarr radarr source 媒体 自动化 来源',
+        keywords: 'media sonarr radarr source webhook 媒体源 来源 接线',
         route: { name: 'settings-sources' }
+    },
+    {
+        key: 'settings-automation',
+        title: t('settings.menu.groups.automation'),
+        keywords: 'automation cron batch daily catch-up 自动化 补缺 限额',
+        route: { name: 'settings-automation' }
     },
     {
         key: 'settings-quality',

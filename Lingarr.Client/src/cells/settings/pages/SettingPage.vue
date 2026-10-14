@@ -41,7 +41,7 @@ const settings = useSettingStore()
 const { t } = useI18n()
 const authApi = authService(axios)
 
-const GROUPS = ['providers', 'sources', 'quality', 'system'] as const
+const GROUPS = ['providers', 'sources', 'automation', 'quality', 'system'] as const
 type Group = (typeof GROUPS)[number]
 
 // drill-down child pages keep their parent group's tab highlighted

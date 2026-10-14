@@ -1,7 +1,7 @@
 <template>
     <!-- ═══ 设置 · 系统(原型 screen-06 D):单张行式卡 —— 认证行(API Key
-         chip 派生 + 管理下钻)、日志/定时任务下钻行(批次 1 已建,归卡)、
-         卡头 meta 为实例 store 真实版本。 -->
+         chip 派生 + 管理下钻)、日志下钻行,卡头 meta 为实例 store 真实版本。
+         定时任务行归自动化 tab(IA 重构批 2)。 -->
     <div class="space-y-2">
         <div class="border-line bg-secondary mx-4 rounded-md border" data-test="system-card">
             <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
@@ -38,24 +38,6 @@
                         {{ t('settings.system.manage') }}
                     </button>
                 </span>
-            </div>
-
-            <!-- 定时任务行 -->
-            <div
-                class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 text-[13px]"
-                data-test="system-row-schedule">
-                <span class="dot bg-success flex-none"></span>
-                <b class="flex-none">{{ t('settings.schedule.heading') }}</b>
-                <span class="text-secondary-content min-w-0 flex-1 truncate text-xs">
-                    {{ t('settings.schedule.subLineBase') }}
-                </span>
-                <button
-                    type="button"
-                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    data-test="system-open-schedule"
-                    @click="router.push({ name: 'schedule' })">
-                    {{ t('settings.schedule.openPanel') }}
-                </button>
             </div>
 
             <!-- 日志行 -->

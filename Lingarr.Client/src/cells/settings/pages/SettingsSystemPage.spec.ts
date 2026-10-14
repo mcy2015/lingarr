@@ -113,16 +113,14 @@ describe('SettingsSystemPage · 认证行', () => {
     })
 })
 
-describe('SettingsSystemPage · 日志/定时任务下钻行', () => {
-    it('keeps the logs and schedule drill rows', async () => {
+describe('SettingsSystemPage · 日志下钻行', () => {
+    it('keeps the logs drill row and drops the schedule row (moved to automation tab)', async () => {
         const { wrapper, router } = await mountPage({ authEnabled: 'true' })
 
         await wrapper.find('[data-test="system-open-logs"]').trigger('click')
         await flushPromises()
         expect(router.currentRoute.value.name).toBe('logs')
 
-        await wrapper.find('[data-test="system-open-schedule"]').trigger('click')
-        await flushPromises()
-        expect(router.currentRoute.value.name).toBe('schedule')
+        expect(wrapper.find('[data-test="system-row-schedule"]').exists()).toBe(false)
     })
 })
