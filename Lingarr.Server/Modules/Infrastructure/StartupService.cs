@@ -310,13 +310,33 @@ public class StartupService : IHostedService
             {
                 continue;
             }
-            
+
             if (settingKey == SettingKeys.Translation.ServiceType)
             {
                 value = TranslationServices.Normalise(value, _logger);
             }
 
             var setting = await dbContext.Settings.FirstOrDefaultAsync(s => s.Key == settingKey);
+
+            if (settingKey == SettingKeys.Authentication.AuthEnabled)
+            {
+                // AUTH_ENABLED only seeds the initial value for databases that
+                // have no stored setting yet (fresh installs). Existing
+                // databases keep whatever the UI last chose — an environment
+                // variable must never silently re-enable or disable auth on an
+                // already-configured instance.
+                if (setting != null)
+                {
+                    continue;
+                }
+
+                dbContext.Settings.Add(new Setting { Key = settingKey, Value = value });
+                await dbContext.SaveChangesAsync();
+                _logger.LogInformation(
+                    $"Seeded setting '{settingKey}' from environment variable '{envVar}' (no stored value present).");
+                continue;
+            }
+
             if (setting != null)
             {
                 setting.Value = value;

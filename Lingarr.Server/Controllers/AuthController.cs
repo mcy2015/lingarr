@@ -18,12 +18,18 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ISettingService _settingService;
+    private readonly ILoginRateLimiter _loginRateLimiter;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ISettingService settingService, ILogger<AuthController> logger)
+    public AuthController(
+        IAuthService authService,
+        ISettingService settingService,
+        ILoginRateLimiter loginRateLimiter,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
         _settingService = settingService;
+        _loginRateLimiter = loginRateLimiter;
         _logger = logger;
     }
 
@@ -39,9 +45,28 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Username and password are required" });
         }
 
+        var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        if (_loginRateLimiter.IsBlocked(request.Username, remoteIp))
+        {
+            _logger.LogWarning(
+                "Login rate limit exceeded for user {Username} from {RemoteIp}.",
+                request.Username,
+                remoteIp);
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                message = "Too many failed login attempts. Please try again in a minute."
+            });
+        }
+
         var user = await _authService.GetUserByUsername(request.Username);
         if (user == null || !_authService.VerifyPassword(request.Password, user.PasswordHash))
         {
+            _loginRateLimiter.RecordFailure(request.Username, remoteIp);
+            _logger.LogWarning(
+                "Failed login attempt for user {Username} from {RemoteIp}.",
+                request.Username,
+                remoteIp);
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
@@ -65,7 +90,9 @@ public class AuthController : ControllerBase
 
         _logger.LogInformation("User {Username} logged in", user.Username);
 
-        return Ok();
+        // Reserved for the upcoming forced-password-change flow; always false
+        // until that lands so clients can start reading it today.
+        return Ok(new { mustChangePassword = false });
     }
 
     /// <summary>
@@ -90,7 +117,7 @@ public class AuthController : ControllerBase
         // If authentication is disabled, always return true
         if (authEnabled == "false")
         {
-            return Ok(new { authenticated = true, authType = "disabled" });
+            return Ok(new { authenticated = true, authType = "disabled", mustChangePassword = false });
         }
 
         // If authentication is enabled, check if user is authenticated via Cookie
@@ -99,7 +126,7 @@ public class AuthController : ControllerBase
             return Unauthorized(new { authenticated = false });
         }
 
-        return Ok(new { authenticated = true, authType = "Cookie" });
+        return Ok(new { authenticated = true, authType = "Cookie", mustChangePassword = false });
     }
 
     /// <summary>
@@ -116,10 +143,32 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Generate a new API key
     /// </summary>
+    /// <remarks>
+    /// The <c>LingarrAccess</c> policy lets anonymous callers through while
+    /// authentication is disabled, and accepts API-key principals otherwise —
+    /// neither may mint a key. Minting is restricted to interactive cookie
+    /// sessions so a leaked API key can never mint its own replacement and an
+    /// open instance cannot hand out credentials to strangers.
+    /// </remarks>
     [HttpPost("apikey/generate")]
     [Authorize("LingarrAccess")]
     public async Task<ActionResult<ApiKeyResponse>> GenerateNewApiKey()
     {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!User.IsCookieSession())
+        {
+            _logger.LogWarning(
+                "Rejected API key generation request without a cookie session " +
+                "(authenticated: {IsAuthenticated}) from {RemoteIp}.",
+                User.Identity?.IsAuthenticated ?? false,
+                remoteIp);
+
+            return User.Identity?.IsAuthenticated == true
+                ? StatusCode(StatusCodes.Status403Forbidden,
+                    new { message = "API key generation requires a logged-in browser session" })
+                : Unauthorized(new { message = "API key generation requires a logged-in browser session" });
+        }
+
         var apiKey = _authService.GenerateApiKey();
         await _settingService.SetEncryptedSetting(SettingKeys.Authentication.ApiKey, apiKey);
         return Ok(new ApiKeyResponse

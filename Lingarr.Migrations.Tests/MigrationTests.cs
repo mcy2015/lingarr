@@ -39,6 +39,10 @@ public class MigrationTests
                 "SELECT COUNT(*) FROM settings"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
+
+            // Fresh installs ship with authentication enabled (secure default).
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'auth_enabled' AND value = 'true'"));
         }
         finally
         {

@@ -271,7 +271,10 @@ public class M0001_Baseline : Migration
         Insert.IntoTable("settings").Row(new { key = "anthropic_version", value = "" });
         Insert.IntoTable("settings").Row(new { key = "api_key", value = "" });
         Insert.IntoTable("settings").Row(new { key = "api_key_enabled", value = "" });
-        Insert.IntoTable("settings").Row(new { key = "auth_enabled", value = "false" });
+        // Secure default: fresh installs boot with authentication enabled
+        // (login page, seeded admin/admin). Existing databases keep their
+        // stored value; this row is only inserted on first migration.
+        Insert.IntoTable("settings").Row(new { key = "auth_enabled", value = "true" });
         Insert.IntoTable("settings").Row(new { key = "automation_enabled", value = "false" });
         Insert.IntoTable("settings").Row(new { key = "bilingual_subtitle_output", value = "false" });
         Insert.IntoTable("settings").Row(new { key = "deepl_api_key", value = "" });

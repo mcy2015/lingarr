@@ -58,7 +58,7 @@ secrets:
 
 | **Environment Variable** | **Description**                                                                  |
 |--------------------------|----------------------------------------------------------------------------------|
-| `AUTH_ENABLED`           | Enables or disables authentication.                                              |
+| `AUTH_ENABLED`           | Seeds the initial authentication on/off value. Only applied when the database has no stored setting yet (fresh installs); existing installs keep the value configured in the UI. Defaults to enabled. |
 | `ENCRYPTION_KEYS`        | The path for storing encryption keys, stored by default in the config directory. |
 
 ---

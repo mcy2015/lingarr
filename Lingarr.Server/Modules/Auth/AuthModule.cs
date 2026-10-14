@@ -47,6 +47,10 @@ public static class AuthModule
         services.AddSingleton<IAuthorizationHandler, LingarrAccessHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, LingarrAuthorizationResponseHandler>();
 
+        // Login rate limiting: in-memory sliding window, single instance by design.
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ILoginRateLimiter, LoginRateLimiter>();
+
         // Register auth
         services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(
             Environment.GetEnvironmentVariable("ENCRYPTION_KEYS")?.ToLower()

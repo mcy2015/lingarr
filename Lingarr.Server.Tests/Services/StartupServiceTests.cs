@@ -56,6 +56,14 @@ public class StartupServiceTests : IDisposable
         ("AUTH_ENABLED", SettingKeys.Authentication.AuthEnabled)
     };
 
+    /// <summary>
+    /// AUTH_ENABLED only seeds fresh databases and never overwrites a stored
+    /// value, so it is excluded from the generic overwrite theory and covered
+    /// by its own tests below.
+    /// </summary>
+    private static readonly (string EnvVar, string SettingKey)[] OverwritableEnvMap =
+        EnvMap.Where(entry => entry.SettingKey != SettingKeys.Authentication.AuthEnabled).ToArray();
+
     private readonly string _tempDir;
 
     public StartupServiceTests()
@@ -79,7 +87,7 @@ public class StartupServiceTests : IDisposable
     }
 
     public static IEnumerable<object[]> EnvMapData() =>
-        EnvMap.Select(entry => new object[] { entry.EnvVar, entry.SettingKey });
+        OverwritableEnvMap.Select(entry => new object[] { entry.EnvVar, entry.SettingKey });
 
     [Theory]
     [MemberData(nameof(EnvMapData))]
@@ -187,6 +195,96 @@ public class StartupServiceTests : IDisposable
 
         // Assert
         Assert.Equal("fallback-env-value", await GetSettingValue(serviceProvider, settingKey));
+    }
+
+    // ===== AUTH_ENABLED: first-boot seeding only =====
+
+    [Fact]
+    public async Task ApplySettingsFromEnvironment_AuthEnabled_RowExists_KeepsStoredValue()
+    {
+        // Arrange: an existing install that deliberately disabled auth in the UI.
+        Environment.SetEnvironmentVariable("AUTH_ENABLED", "true");
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            (await seedDb.Settings.FindAsync(SettingKeys.Authentication.AuthEnabled))!.Value = "false";
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: the stored value wins; the env var never re-enables auth.
+        Assert.Equal("false", await GetSettingValue(serviceProvider, SettingKeys.Authentication.AuthEnabled));
+    }
+
+    [Fact]
+    public async Task ApplySettingsFromEnvironment_AuthEnabled_RowMissing_SeedsFromEnvironment()
+    {
+        // Arrange: a database without the auth_enabled row at all.
+        Environment.SetEnvironmentVariable("AUTH_ENABLED", "false");
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            var row = await seedDb.Settings.FindAsync(SettingKeys.Authentication.AuthEnabled);
+            seedDb.Settings.Remove(row!);
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: the missing row is seeded from the environment.
+        Assert.Equal("false", await GetSettingValue(serviceProvider, SettingKeys.Authentication.AuthEnabled));
+    }
+
+    [Fact]
+    public async Task ApplySettingsFromEnvironment_AuthEnabled_FileVariable_RowMissing_SeedsFromFileValue()
+    {
+        // Arrange: same, through the docker-secret _FILE indirection.
+        var path = Path.Combine(_tempDir, "auth_enabled");
+        await File.WriteAllTextAsync(path, "false");
+        Environment.SetEnvironmentVariable("AUTH_ENABLED_FILE", path);
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            var row = await seedDb.Settings.FindAsync(SettingKeys.Authentication.AuthEnabled);
+            seedDb.Settings.Remove(row!);
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal("false", await GetSettingValue(serviceProvider, SettingKeys.Authentication.AuthEnabled));
+    }
+
+    [Fact]
+    public async Task ApplySettingsFromEnvironment_AuthEnabled_Unset_RowMissing_LeavesNoRow()
+    {
+        // Arrange: no env var, no row — nothing is invented at startup.
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            var row = await seedDb.Settings.FindAsync(SettingKeys.Authentication.AuthEnabled);
+            seedDb.Settings.Remove(row!);
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Null(await GetSettingValue(serviceProvider, SettingKeys.Authentication.AuthEnabled));
     }
 
     // ===== Default user seeding =====
