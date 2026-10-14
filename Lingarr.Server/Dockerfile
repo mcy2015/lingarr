@@ -13,13 +13,16 @@ RUN npm run build
 
 # Step 2: Prepare the base image for the server
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-ARG TARGETARCH
 WORKDIR /app
 
 # Step 3: Build the server
+# Runs on the native build platform (FROM --platform=$BUILDPLATFORM) and
+# publishes RID-less with UseAppHost=false: the managed output is
+# architecture-neutral (native assets for every RID ship in runtimes/),
+# so one build feeds both the amd64 and arm64 runtime bases — no
+# cross-arch restore/build, which fails on GitHub runners (MSB4181).
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION
-ARG TARGETARCH
 ARG VERSION=0.0.0-dev
 WORKDIR /src
 COPY ["Directory.Packages.props", "global.json", "./"]
@@ -27,18 +30,17 @@ COPY ["Lingarr.Contracts/Lingarr.Contracts.csproj", "Lingarr.Contracts/"]
 COPY ["Lingarr.Server/Lingarr.Server.csproj", "Lingarr.Server/"]
 COPY ["Lingarr.Core/Lingarr.Core.csproj", "Lingarr.Core/"]
 COPY ["Lingarr.Migrations/Lingarr.Migrations.csproj", "Lingarr.Migrations/"]
-RUN dotnet restore "./Lingarr.Server/./Lingarr.Server.csproj" --arch $TARGETARCH
+RUN dotnet restore "./Lingarr.Server/./Lingarr.Server.csproj"
 COPY . .
 WORKDIR "/src/Lingarr.Server"
 COPY --from=client /Client/dist/ ./wwwroot
-RUN dotnet build "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build --arch $TARGETARCH /p:Version=$VERSION
+RUN dotnet build "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:Version=$VERSION
 
 # Step 4: Publish the application
 FROM --platform=$BUILDPLATFORM build AS publish
 ARG BUILD_CONFIGURATION
-ARG TARGETARCH
 ARG VERSION=0.0.0-dev
-RUN dotnet publish "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false --arch $TARGETARCH /p:Version=$VERSION
+RUN dotnet publish "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION
 
 # Step 5: Final image
 FROM base AS final
