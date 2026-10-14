@@ -110,11 +110,10 @@
                         @click="openEdit(card.provider)">
                         {{ card.configured ? t('settings.providers.edit') : t('settings.providers.configure') }}
                     </button>
-                    <!-- 删除(ops 行末):仅链上服务(移出回退链 + 清空配置);唯一链成员另有守卫。
-                         恒 configured 的免配置服务不在链时无删除按钮;上链后出现,删除 = 移出链,
-                         卡因 configured 仍默认展示。 -->
+                    <!-- 删除(ops 行末,②A 恒在):所有可见卡都有删除按钮。
+                         在链 → 确认模态(移出回退链 + 清空配置),唯一链成员另有守卫;
+                         不在链 → info toast「未在回退链上,无需移除」,不开模态零写入。 -->
                     <button
-                        v-if="isDeletable(card.provider)"
                         type="button"
                         class="border-danger/50 text-danger hover:bg-danger/10 focus-visible:ring-danger cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
                         :data-test="`delete-${card.provider}`"
@@ -497,15 +496,20 @@ const deleteDisplayName = computed(() =>
     deleteCandidate.value !== null ? displayNameFor(deleteCandidate.value) : ''
 )
 
-/// 仅链上服务可删除(移出回退链 + 清空配置)。恒 configured 的免配置服务
-/// 不在链时删除无意义;在链时删除 = 移出链,卡因 configured 仍默认展示。
-function isDeletable(provider: string): boolean {
-    return isOnChain(provider)
-}
-
+/// 删除入口(②A):按钮在所有可见卡上恒在。不在链 → info toast,零写入;
+/// 在链 → 确认模态(唯一链成员另有守卫)。
 function requestDelete(provider: string): void {
+    if (!isOnChain(provider)) {
+        toastStore.push({
+            message: t('settings.providers.deleteNotChained', {
+                service: displayNameFor(provider)
+            }),
+            type: 'info'
+        })
+        return
+    }
     // 唯一链成员守卫:删空链会让默认服务悬空
-    if (chain.value.includes(provider) && chain.value.length <= 1) {
+    if (chain.value.length <= 1) {
         toastStore.push({ message: t('settings.providers.deleteLastGuard'), type: 'error' })
         return
     }

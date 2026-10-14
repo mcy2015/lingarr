@@ -810,6 +810,7 @@
             "deleteDone": "{service} deleted · configuration cleared",
             "deleteDefaultMigrated": "{service} deleted · {next} is now the default service",
             "deleteLastGuard": "Keep at least one service on the fallback chain",
+            "deleteNotChained": "{service} is not on the fallback chain — nothing to remove",
             "deletePartial": "{service} was removed from the fallback chain, but clearing its configuration failed — check the plugin manifest.",
             "deleteFailed": "Removing {service} from the fallback chain failed."
         },
@@ -860,9 +861,11 @@
             "langcapUnknownTitle": "Language table could not be fetched",
             "langcapReadonly": "Derived read-only",
             "add": "＋ Add service to the fallback chain",
-            "allChained": "All configured services are already on the chain",
-            "removed": "{service} removed from the fallback chain",
-            "added": "{service} joined the fallback chain"
+            "allChained": "All services are already on the fallback chain",
+            "addCancel": "Cancel",
+            "addConfirm": "Add {count}",
+            "addedCount": "Added {count} services to the fallback chain",
+            "removed": "{service} removed from the fallback chain"
         },
         "requests": {
             "title": "Requests & retries"

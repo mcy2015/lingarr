@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 // FallbackOrderCard (screen-06 A / batch-2 A2): the single editor of the
-// service_type JSON array — rows render in chain order, ↑↓/remove/add all
-// write the array back, and the langcap chips are derived read-only from
-// GET /api/translate/languages/{serviceType}.
+// service_type JSON array — rows render in chain order, ↑↓/remove write the
+// array back, and the langcap chips are derived read-only from
+// GET /api/translate/languages/{serviceType}. Batch-2 ①A: the add entry is a
+// checkbox confirm panel — candidates only tick locally, the chain is written
+// once on「添加 N 项」and cancel writes nothing.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -148,29 +150,116 @@ describe('FallbackOrderCard · 移除', () => {
     })
 })
 
-describe('FallbackOrderCard · 添加', () => {
-    it('appends the first configured service not yet on the chain and toasts', async () => {
+describe('FallbackOrderCard · 添加(①A 勾选确认)', () => {
+    it('expands a checkbox panel listing every off-chain service (configured or not); chained ones excluded', async () => {
+        const { wrapper } = await mountCard(
+            '["openai"]',
+            [
+                health('openai', 'OpenAI'),
+                health('deepl', 'DeepL'),
+                health('libretranslate', 'LibreTranslate', false)
+            ]
+        )
+
+        expect(wrapper.find('[data-test="fb-add-panel"]').exists()).toBe(false)
+        await wrapper.find('[data-test="fb-add"]').trigger('click')
+
+        expect(wrapper.find('[data-test="fb-add-panel"]').exists()).toBe(true)
+        // off-chain candidates — configured AND unconfigured
+        expect(wrapper.find('[data-test="fb-add-candidate-deepl"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="fb-add-candidate-libretranslate"]').exists()).toBe(true)
+        // the chained member is not a candidate
+        expect(wrapper.find('[data-test="fb-add-candidate-openai"]').exists()).toBe(false)
+    })
+
+    it('clicking a candidate only toggles the checkbox — the chain is not written', async () => {
+        const { wrapper, settingStore } = await mountCard(
+            '["openai"]',
+            [health('openai', 'OpenAI'), health('deepl', 'DeepL'), health('ollama', 'Ollama')]
+        )
+
+        await wrapper.find('[data-test="fb-add"]').trigger('click')
+        await wrapper.find('[data-test="fb-add-candidate-check-deepl"]').setValue(true)
+        await wrapper.find('[data-test="fb-add-candidate-check-ollama"]').setValue(true)
+        await wrapper.find('[data-test="fb-add-candidate-check-deepl"]').setValue(false)
+
+        // selection is local only: one service picked, the chain untouched
+        expect(chainOf(settingStore)).toEqual(['openai'])
+        expect(wrapper.find('[data-test="fb-add-confirm"]').text()).toBe(
+            en.settings.fallback.addConfirm.replace('{count}', '1')
+        )
+    })
+
+    it('confirm appends every selected service to the chain tail in one JSON write and toasts the count', async () => {
         const { wrapper, settingStore, toastStore } = await mountCard(
             '["openai"]',
             [health('openai', 'OpenAI'), health('deepl', 'DeepL'), health('ollama', 'Ollama')]
         )
 
         await wrapper.find('[data-test="fb-add"]').trigger('click')
+        await wrapper.find('[data-test="fb-add-candidate-check-deepl"]').setValue(true)
+        await wrapper.find('[data-test="fb-add-candidate-check-ollama"]').setValue(true)
+        await wrapper.find('[data-test="fb-add-confirm"]').trigger('click')
+        await flushPromises()
 
-        expect(chainOf(settingStore)).toEqual(['openai', 'deepl'])
-        expect(toastStore.toasts[0].message).toBe(en.settings.fallback.added.replace('{service}', 'DeepL'))
+        expect(chainOf(settingStore)).toEqual(['openai', 'deepl', 'ollama'])
+        expect(toastStore.toasts[0].message).toBe(
+            en.settings.fallback.addedCount.replace('{count}', '2')
+        )
+        // panel closes after the write
+        expect(wrapper.find('[data-test="fb-add-panel"]').exists()).toBe(false)
     })
 
-    it('toasts when every configured service is already chained', async () => {
+    it('keeps the confirm button disabled at zero selection', async () => {
+        const { wrapper, settingStore } = await mountCard(
+            '["openai"]',
+            [health('openai', 'OpenAI'), health('deepl', 'DeepL')]
+        )
+
+        await wrapper.find('[data-test="fb-add"]').trigger('click')
+
+        const confirm = wrapper.find('[data-test="fb-add-confirm"]')
+        expect(confirm.attributes('disabled')).toBeDefined()
+        expect(confirm.text()).toBe(en.settings.fallback.addConfirm.replace('{count}', '0'))
+
+        await confirm.trigger('click')
+        expect(chainOf(settingStore)).toEqual(['openai'])
+    })
+
+    it('cancel closes the panel without writing anything', async () => {
         const { wrapper, settingStore, toastStore } = await mountCard(
             '["openai"]',
+            [health('openai', 'OpenAI'), health('deepl', 'DeepL')]
+        )
+
+        await wrapper.find('[data-test="fb-add"]').trigger('click')
+        await wrapper.find('[data-test="fb-add-candidate-check-deepl"]').setValue(true)
+        await wrapper.find('[data-test="fb-add-cancel"]').trigger('click')
+
+        expect(wrapper.find('[data-test="fb-add-panel"]').exists()).toBe(false)
+        expect(chainOf(settingStore)).toEqual(['openai'])
+        expect(toastStore.toasts).toHaveLength(0)
+
+        // reopening starts from a clean selection
+        await wrapper.find('[data-test="fb-add"]').trigger('click')
+        expect(
+            (wrapper.find('[data-test="fb-add-candidate-check-deepl"]').element as HTMLInputElement)
+                .checked
+        ).toBe(false)
+    })
+
+    it('toasts when every service is already on the chain instead of opening the panel', async () => {
+        const { wrapper, settingStore, toastStore } = await mountCard(
+            '["openai","libretranslate"]',
             [health('openai', 'OpenAI'), health('libretranslate', 'LibreTranslate', false)]
         )
 
         await wrapper.find('[data-test="fb-add"]').trigger('click')
 
-        expect(chainOf(settingStore)).toEqual(['openai'])
+        expect(wrapper.find('[data-test="fb-add-panel"]').exists()).toBe(false)
         expect(toastStore.toasts[0].message).toBe(en.settings.fallback.allChained)
+        expect(toastStore.toasts[0].type).toBe('info')
+        expect(chainOf(settingStore)).toEqual(['openai', 'libretranslate'])
     })
 })
 

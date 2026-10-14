@@ -67,19 +67,58 @@
             </span>
         </div>
 
-        <!-- 末行:添加已配置但未上链的服务 -->
+        <!-- 末行:添加未上链的服务(①A 勾选确认)。卡片位于页面下部,面板行内
+             向下展开 —— 正常文档流不会被滚动容器裁切,比 fixed 钳制菜单更稳。 -->
         <button
             type="button"
             class="text-secondary-content hover:text-primary-content w-full cursor-pointer px-4 py-2.5 text-left text-[13px] transition-colors"
+            :aria-expanded="addPanelOpen"
             data-test="fb-add"
-            @click="addMember">
+            @click="toggleAddPanel">
             {{ t('settings.fallback.add') }}
         </button>
+
+        <!-- 复选面板:候选 = 未上链服务;点行仅勾选,确认才写链(支持全不选) -->
+        <div
+            v-if="addPanelOpen"
+            class="border-line border-t px-4 py-3"
+            data-test="fb-add-panel">
+            <label
+                v-for="candidate in addCandidates"
+                :key="candidate.provider"
+                class="hover:bg-tertiary flex cursor-pointer items-center gap-2.5 rounded px-1 py-1.5 text-[13px] transition-colors"
+                :data-test="`fb-add-candidate-${candidate.provider}`">
+                <input
+                    type="checkbox"
+                    class="accent-accent cursor-pointer"
+                    :data-test="`fb-add-candidate-check-${candidate.provider}`"
+                    :value="candidate.provider"
+                    v-model="addSelection" />
+                <b class="min-w-0 truncate">{{ candidate.displayName }}</b>
+            </label>
+            <div class="mt-2.5 flex justify-end gap-2">
+                <button
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                    data-test="fb-add-cancel"
+                    @click="cancelAdd">
+                    {{ t('settings.fallback.addCancel') }}
+                </button>
+                <button
+                    type="button"
+                    class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="addSelection.length === 0"
+                    data-test="fb-add-confirm"
+                    @click="confirmAdd">
+                    {{ t('settings.fallback.addConfirm', { count: addSelection.length }) }}
+                </button>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { ITranslationServiceHealth, SETTINGS } from '@/types'
@@ -201,17 +240,39 @@ function remove(index: number): void {
     toastStore.push({ message: t('settings.fallback.removed', { service: nameFor(member) }), type: 'success' })
 }
 
-/// 候选 = 已配置但不在链上的服务(与页面「＋添加服务」共用 offChain 派生,
-/// 此处收紧到 configured);无候选 → toast
-function addMember(): void {
-    const candidates = offChain(props.health).filter((row) => row.configured)
-    if (candidates.length === 0) {
+// ── 添加未上链服务(①A 勾选确认)─────────────────────────────────
+// 候选 = 全部未上链服务(与页面网格「＋添加服务」同源 offChain 派生);
+// 勾选只改本地 selection,「添加 N 项」确认才逐个追加链尾并写回 service_type。
+const addPanelOpen = ref(false)
+const addSelection = ref<string[]>([])
+
+const addCandidates = computed(() => offChain(props.health))
+
+function toggleAddPanel(): void {
+    if (addCandidates.value.length === 0) {
         toastStore.push({ message: t('settings.fallback.allChained'), type: 'info' })
         return
     }
-    const candidate = candidates[0]
-    writeChain([...rows.value, candidate.provider])
-    toastStore.push({ message: t('settings.fallback.added', { service: candidate.displayName }), type: 'success' })
+    addPanelOpen.value = !addPanelOpen.value
+    if (!addPanelOpen.value) addSelection.value = []
+}
+
+function cancelAdd(): void {
+    addPanelOpen.value = false
+    addSelection.value = []
+}
+
+async function confirmAdd(): Promise<void> {
+    const picked = addCandidates.value.filter((row) => addSelection.value.includes(row.provider))
+    if (picked.length === 0) return
+    const next = [...rows.value, ...picked.map((row) => row.provider)]
+    addPanelOpen.value = false
+    addSelection.value = []
+    await writeChain(next)
+    toastStore.push({
+        message: t('settings.fallback.addedCount', { count: picked.length }),
+        type: 'success'
+    })
 }
 </script>
 

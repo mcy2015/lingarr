@@ -810,6 +810,7 @@
             "deleteDone": "已删除 {service} · 配置已清空",
             "deleteDefaultMigrated": "已删除 {service} · 新链首 {next} 自动成为默认服务",
             "deleteLastGuard": "链上至少保留一个服务",
+            "deleteNotChained": "{service} 未在回退链上,无需移除",
             "deletePartial": "已将 {service} 移出回退链,但清空其配置失败 —— 请检查插件清单。",
             "deleteFailed": "从回退链移除 {service} 失败。"
         },
@@ -860,9 +861,11 @@
             "langcapUnknownTitle": "语言表无法获取",
             "langcapReadonly": "派生只读",
             "add": "＋ 添加服务到回退链",
-            "allChained": "所有已配置服务都已在链上",
-            "removed": "已从回退链移除 {service}",
-            "added": "{service} 已加入回退链"
+            "allChained": "所有服务都已在回退链上",
+            "addCancel": "取消",
+            "addConfirm": "添加 {count} 项",
+            "addedCount": "已添加 {count} 个服务到回退链",
+            "removed": "已从回退链移除 {service}"
         },
         "requests": {
             "title": "请求与重试"

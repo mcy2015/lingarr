@@ -348,7 +348,7 @@ describe('SettingsProvidersPage · 卡片展示规则(configured || 在链)', ()
         expect(wrapper.find('[data-test="card-head-libretranslate"]').exists()).toBe(false)
     })
 
-    it('renders a configured off-chain (config-free) card without a delete button, then chains it via the add menu', async () => {
+    it('renders a configured off-chain (config-free) card WITH a delete button (②A), then chains it via the add menu', async () => {
         getHealthMock.mockResolvedValue([openai, bing]) // both configured
         listPluginsMock.mockResolvedValue([
             {
@@ -367,15 +367,15 @@ describe('SettingsProvidersPage · 卡片展示规则(configured || 在链)', ()
         setSettingMock.mockClear()
         const { wrapper, pinia } = await mountPage('["openai"]')
 
-        // configured -> visible; off-chain -> no delete button (delete is chained-only)
+        // configured -> visible; off-chain -> delete button is still there (②A)
         expect(wrapper.find('[data-test="card-head-bing"]').exists()).toBe(true)
-        expect(wrapper.find('[data-test="delete-bing"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="delete-bing"]').exists()).toBe(true)
 
         await wrapper.find('[data-test="add-service-toggle"]').trigger('click')
         await wrapper.find('[data-test="add-candidate-bing"]').trigger('click')
         await flushPromises()
 
-        // config-free service joined the chain: array written back, delete button appears
+        // config-free service joined the chain: array written back, card stays
         expect(useSettingStore(pinia).getSetting(SETTINGS.SERVICE_TYPE)).toBe('["openai","bing"]')
         expect(wrapper.find('[data-test="delete-bing"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="card-head-bing"]').exists()).toBe(true)
@@ -600,16 +600,55 @@ describe('SettingsProvidersPage · 删除服务', () => {
         displayName: 'DeepL'
     }
 
-    it('offers delete only for chained services — not for configured off-chain cards', async () => {
+    it('offers delete on every visible card (②A) — chained and configured off-chain alike', async () => {
         getHealthMock.mockResolvedValue([openai, libre, deepl]) // deepl configured but off-chain
         const { wrapper } = await mountPage('["openai"]')
 
         expect(wrapper.find('[data-test="delete-openai"]').exists()).toBe(true)
-        // configured yet off-chain: the card renders but has no delete button
+        // configured yet off-chain: the card renders and now carries delete too
         expect(wrapper.find('[data-test="card-head-deepl"]').exists()).toBe(true)
-        expect(wrapper.find('[data-test="delete-deepl"]').exists()).toBe(false)
-        // unconfigured and off-chain: no card at all
+        expect(wrapper.find('[data-test="delete-deepl"]').exists()).toBe(true)
+        // unconfigured and off-chain: no card at all — hence no delete button
         expect(wrapper.find('[data-test="delete-libretranslate"]').exists()).toBe(false)
+    })
+
+    it('delete on an off-chain card only toasts「未在回退链上」 — no modal, zero writes', async () => {
+        getHealthMock.mockResolvedValue([openai, deepl]) // deepl configured but off-chain
+        setSettingMock.mockClear()
+        setEncryptedSettingMock.mockClear()
+        getManifestMock.mockClear()
+        const { wrapper, pinia } = await mountPage('["openai"]', { shallow: false })
+
+        await wrapper.find('[data-test="delete-deepl"]').trigger('click')
+        await flushPromises()
+
+        const toastStore = useToastStore(pinia)
+        expect(toastStore.toasts[0].message).toBe(
+            en.settings.providers.deleteNotChained.replace('{service}', 'DeepL')
+        )
+        expect(toastStore.toasts[0].type).toBe('info')
+        // no confirm modal, nothing written or cleared
+        expect(document.querySelector('[data-test="provider-delete-modal"]')).toBeNull()
+        expect(setSettingMock).not.toHaveBeenCalled()
+        expect(setEncryptedSettingMock).not.toHaveBeenCalled()
+        expect(getManifestMock).not.toHaveBeenCalled()
+        expect(useSettingStore(pinia).getSetting(SETTINGS.SERVICE_TYPE)).toBe('["openai"]')
+    })
+
+    it('delete on a chained card still opens the confirm modal (既有流程不回归)', async () => {
+        getHealthMock.mockResolvedValue([openai, deepl])
+        setSettingMock.mockClear()
+        const { wrapper } = await mountPage('["openai","deepl"]', { shallow: false })
+
+        await wrapper.find('[data-test="delete-deepl"]').trigger('click')
+        await flushPromises()
+
+        expect(document.querySelector('[data-test="provider-delete-modal"]')).not.toBeNull()
+
+        // close the teleported modal again — later specs query the same body
+        ;(document.querySelector('[data-test="provider-delete-cancel"]') as HTMLElement).click()
+        await flushPromises()
+        expect(document.querySelector('[data-test="provider-delete-modal"]')).toBeNull()
     })
 
     it('offers delete for an unconfigured service that still sits on the chain', async () => {
@@ -733,5 +772,50 @@ describe('SettingsProvidersPage · 删除服务', () => {
         expect(toastStore.toasts[0].message).toBe(
             en.settings.providers.deleteDone.replace('{service}', 'DeepL')
         )
+    })
+})
+
+describe('SettingsProvidersPage · 设为默认 → 回退顺序卡实时同步(批次二 · 3)', () => {
+    const deepl: ITranslationServiceHealth = {
+        ...openai,
+        provider: 'deepl',
+        displayName: 'DeepL'
+    }
+
+    it('reorders the fallback card live on the same mounted page — no remount needed', async () => {
+        getHealthMock.mockResolvedValue([openai, deepl])
+        const { wrapper, pinia } = await mountPage('["openai","deepl"]', { shallow: false })
+
+        // before: openai is the primary, both rows render on the same page
+        expect(wrapper.find('[data-test="fb-row-0"]').text()).toContain('OpenAI')
+        expect(wrapper.find('[data-test="fb-row-1"]').text()).toContain('DeepL')
+
+        await wrapper.find('[data-test="set-default-deepl"]').trigger('click')
+        await flushPromises()
+
+        // the store carries the reordered chain…
+        expect(useSettingStore(pinia).getSetting(SETTINGS.SERVICE_TYPE)).toBe(
+            '["deepl","openai"]'
+        )
+        // …and the fallback card below the grid reflects it immediately
+        expect(wrapper.find('[data-test="fb-row-0"]').text()).toContain('DeepL')
+        expect(wrapper.find('[data-test="fb-row-1"]').text()).toContain('OpenAI')
+    })
+
+    it('keeps a third member in place while the new default jumps to the head', async () => {
+        const ollama: ITranslationServiceHealth = {
+            ...openai,
+            provider: 'ollama',
+            displayName: 'Ollama'
+        }
+        getHealthMock.mockResolvedValue([openai, deepl, ollama])
+        const { wrapper } = await mountPage('["openai","deepl","ollama"]', { shallow: false })
+
+        await wrapper.find('[data-test="set-default-deepl"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="fb-row-0"]').text()).toContain('DeepL')
+        expect(wrapper.find('[data-test="fb-row-1"]').text()).toContain('OpenAI')
+        expect(wrapper.find('[data-test="fb-row-2"]').text()).toContain('Ollama')
     })
 })

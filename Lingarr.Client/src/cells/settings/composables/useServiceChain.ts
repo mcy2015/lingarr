@@ -5,9 +5,10 @@ import { SETTINGS } from '@/types'
 
 /**
  * service_type 回退链的共享视图(settings cell 内收敛):
- * 服务卡网格的展示过滤/删除可见性/「＋添加服务」候选与 FallbackOrderCard
- * 的行渲染/快捷添加,都从这一个 store 派生的 computed 出发,不再各自
- * 重复 parseServiceChain。链本身仍是数组读写(首位 = 默认服务)。
+ * 服务卡网格的展示过滤/删除按钮行为(在链 → 删除模态;不在链 → info toast)
+ * 与 FallbackOrderCard 的行渲染/勾选添加候选,都从这一个 store 派生的
+ * computed 出发,不再各自重复 parseServiceChain。链本身仍是数组读写
+ * (首位 = 默认服务)。
  */
 export default function useServiceChain() {
     const settingStore = useSettingStore()
@@ -16,7 +17,8 @@ export default function useServiceChain() {
         parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string)
     )
 
-    /// 链上成员判定:卡可见性(在链 || configured)与删除按钮(仅在链)共用。
+    /// 链上成员判定:卡可见性(在链 || configured)与删除按钮行为
+    /// (②A 按钮恒在:在链走确认模态,不在链 info toast)共用。
     function isOnChain(provider: string): boolean {
         return chain.value.includes(provider)
     }
