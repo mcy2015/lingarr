@@ -361,6 +361,87 @@ public class StartupServiceTests : IDisposable
         Assert.Equal("existing", user.Username);
     }
 
+    // ===== P0-3: first-boot forced password change seeding =====
+
+    [Fact]
+    public async Task SeedDefaultUser_DefaultAdminCredentials_SetsMustChangePasswordTrue()
+    {
+        // Arrange: no LINGARR_ADMIN_* set — the well-known admin/admin default
+        // is used, so the first login must force a password change.
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var user = await dbContext.Users.SingleAsync();
+        Assert.Equal("admin", user.Username);
+        Assert.Equal("true", await GetSettingValue(
+            serviceProvider, SettingKeys.Authentication.MustChangePassword));
+    }
+
+    [Fact]
+    public async Task SeedDefaultUser_EnvironmentCredentials_SetsMustChangePasswordFalse()
+    {
+        // Arrange: credentials fully supplied through the environment — the
+        // operator owns them, no forced change.
+        Environment.SetEnvironmentVariable(AdminUserEnvVar, "henry");
+        Environment.SetEnvironmentVariable(AdminPasswordEnvVar, "sup3r-secret-pw");
+
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal("false", await GetSettingValue(
+            serviceProvider, SettingKeys.Authentication.MustChangePassword));
+    }
+
+    [Fact]
+    public async Task SeedDefaultUser_PartialEnvironmentCredentials_FallsBackAndFlagsChange()
+    {
+        // Arrange: only the username is supplied; the password falls back to
+        // the well-known default, so the pair is still default credentials.
+        Environment.SetEnvironmentVariable(AdminUserEnvVar, "henry");
+
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal("true", await GetSettingValue(
+            serviceProvider, SettingKeys.Authentication.MustChangePassword));
+    }
+
+    [Fact]
+    public async Task SeedDefaultUser_UserExists_LeavesMustChangePasswordUntouched()
+    {
+        // Arrange: existing install — the flag row keeps whatever it held.
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            seedDb.Users.Add(new User { Username = "existing", PasswordHash = "x", CreatedAt = DateTimeOffset.UtcNow });
+            seedDb.Settings.Add(new Setting { Key = SettingKeys.Authentication.MustChangePassword, Value = "false" });
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal("false", await GetSettingValue(
+            serviceProvider, SettingKeys.Authentication.MustChangePassword));
+    }
+
     private static void ClearEnv()
     {
         foreach (var (envVar, _) in EnvMap)
@@ -378,6 +459,7 @@ public class StartupServiceTests : IDisposable
         var databaseName = Guid.NewGuid().ToString();
         var services = new ServiceCollection();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddMemoryCache();
         services.AddScoped<ISettingService, StubSettingService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddDbContext<LingarrDbContext>(options =>

@@ -58,5 +58,13 @@ public static class AuthModule
             ));
         services.AddSingleton<IEncryptionService, EncryptionService>();
         services.AddScoped<IAuthService, AuthService>();
+
+        // Server-side ticket storage (P0-2): the cookie only carries an opaque
+        // key, the ticket lives in auth_sessions. Singleton because cookie
+        // authentication options (and their SessionStore) are cached once.
+        services.AddSingleton<IAuthSessionStore, SqliteTicketStore>();
+        services
+            .AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
+            .Configure<IAuthSessionStore>((options, store) => options.SessionStore = store);
     }
 }

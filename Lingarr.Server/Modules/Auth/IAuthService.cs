@@ -23,6 +23,11 @@ public interface IAuthService
     Task<User?> GetUserByUsername(string username);
 
     /// <summary>
+    /// Retrieves a user from the database by primary key.
+    /// </summary>
+    Task<User?> GetUserById(int id);
+
+    /// <summary>
     /// Creates a new user with the specified credentials.
     /// </summary>
     /// <param name="username">The username for the new user.</param>
@@ -49,4 +54,28 @@ public interface IAuthService
     /// Stamps the login timestamp and persists it.
     /// </summary>
     Task RecordLoginAsync(User user);
+
+    /// <summary>
+    /// Overwrites the user's password hash with a fresh PBKDF2 hash of the
+    /// new password (P0-3).
+    /// </summary>
+    Task ChangePasswordAsync(User user, string newPassword);
+
+    /// <summary>
+    /// True when the stored must_change_password setting is "true" (the
+    /// default admin/admin account has not changed its password yet).
+    /// </summary>
+    Task<bool> GetMustChangePasswordAsync();
+
+    /// <summary>
+    /// Upserts the must_change_password setting and invalidates its cached
+    /// value so subsequent reads observe the new state immediately.
+    /// </summary>
+    Task SetMustChangePasswordAsync(bool value);
+
+    /// <summary>
+    /// Minimal password policy (P0-3): at least 8 characters with at least
+    /// one letter and one digit.
+    /// </summary>
+    bool IsPasswordStrong(string password);
 }

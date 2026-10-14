@@ -6,6 +6,7 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 using Lingarr.Server.Modules.Auth;
 using Lingarr.Server.Modules.Settings;
@@ -39,6 +40,7 @@ public class AuthServiceTests
         return new AuthService(
             context ?? BuildContext(),
             settings,
+            new MemoryCache(new MemoryCacheOptions()),
             NullLogger);
     }
 
@@ -180,9 +182,130 @@ public class AuthServiceTests
         Assert.True(await service.HasAnyUsers());
     }
 
+    // ===== P0-3: password change =====
+
+    [Fact]
+    public async Task ChangePasswordAsync_ReplacesHashWithVerifiableOne()
+    {
+        var context = BuildContext();
+        var service = CreateService(context);
+        var user = new User { Username = "henry", PasswordHash = service.HashPassword("OldPass123") };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var oldHash = user.PasswordHash;
+
+        await service.ChangePasswordAsync(user, "NewPass123");
+
+        var stored = await context.Users.SingleAsync(u => u.Username == "henry");
+        Assert.NotEqual(oldHash, stored.PasswordHash);
+        Assert.False(service.VerifyPassword("OldPass123", stored.PasswordHash));
+        Assert.True(service.VerifyPassword("NewPass123", stored.PasswordHash));
+    }
+
+    [Theory]
+    [InlineData("Passw0rd", true)]
+    [InlineData("a1b2c3d4", true)]
+    [InlineData("Passw0r", false)]      // 7 chars: too short
+    [InlineData("nodigitshere", false)] // no digit
+    [InlineData("12345678", false)]     // no letter
+    [InlineData("", false)]
+    public void IsPasswordStrong_EnforcesLengthLetterAndDigit(string password, bool expected)
+    {
+        var service = CreateService();
+
+        Assert.Equal(expected, service.IsPasswordStrong(password));
+    }
+
+    // ===== P0-3: must_change_password flag =====
+
+    [Fact]
+    public async Task SetMustChangePasswordAsync_CreatesRowWhenMissing()
+    {
+        var context = BuildContext();
+        var service = CreateService(context);
+
+        await service.SetMustChangePasswordAsync(true);
+
+        var row = await context.Settings.FindAsync(SettingKeys.Authentication.MustChangePassword);
+        Assert.NotNull(row);
+        Assert.Equal("true", row!.Value);
+    }
+
+    [Fact]
+    public async Task SetMustChangePasswordAsync_UpdatesExistingRow()
+    {
+        var context = BuildContext();
+        context.Settings.Add(new Setting { Key = SettingKeys.Authentication.MustChangePassword, Value = "true" });
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        await service.SetMustChangePasswordAsync(false);
+
+        var row = await context.Settings.FindAsync(SettingKeys.Authentication.MustChangePassword);
+        Assert.Equal("false", row!.Value);
+    }
+
+    [Fact]
+    public async Task SetMustChangePasswordAsync_InvalidatesCachedReads()
+    {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var settings = new StubSettingService();
+        settings.Plain[SettingKeys.Authentication.MustChangePassword] = "true";
+        cache.Set(SettingKeys.Authentication.MustChangePassword, "true");
+        var service = new AuthService(BuildContext(), settings, cache, NullLogger);
+
+        Assert.True(await service.GetMustChangePasswordAsync()); // still cached
+        await service.SetMustChangePasswordAsync(false);
+        settings.Plain[SettingKeys.Authentication.MustChangePassword] = "false";
+
+        Assert.False(await service.GetMustChangePasswordAsync()); // cache dropped, fresh read
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData(null, false)]
+    public async Task GetMustChangePasswordAsync_ParsesStoredValue(string? stored, bool expected)
+    {
+        var settings = new StubSettingService();
+        if (stored is not null)
+        {
+            settings.Plain[SettingKeys.Authentication.MustChangePassword] = stored;
+        }
+        var service = new AuthService(BuildContext(), settings, new MemoryCache(new MemoryCacheOptions()), NullLogger);
+
+        Assert.Equal(expected, await service.GetMustChangePasswordAsync());
+    }
+
+    // ===== P0-2/P0-3: user lookup by id =====
+
+    [Fact]
+    public async Task GetUserById_ReturnsNullForUnknownId()
+    {
+        var service = CreateService();
+
+        Assert.Null(await service.GetUserById(42));
+    }
+
+    [Fact]
+    public async Task GetUserById_ReturnsUser()
+    {
+        var context = BuildContext();
+        var service = CreateService(context);
+        var created = await service.CreateUser("henry", "a-secure-password");
+
+        var fetched = await service.GetUserById(created.Id);
+
+        Assert.NotNull(fetched);
+        Assert.Equal("henry", fetched!.Username);
+    }
+
     private sealed class StubSettingService : ISettingService
     {
         public Dictionary<string, string> Encrypted { get; } = new();
+
+        /// <summary>Plain (unencrypted) values served by GetSetting.</summary>
+        public Dictionary<string, string> Plain { get; } = new();
 
         public event SettingChangedHandler? SettingChanged
         {
@@ -190,7 +313,8 @@ public class AuthServiceTests
             remove { }
         }
 
-        public Task<string?> GetSetting(string key) => Task.FromResult<string?>(null);
+        public Task<string?> GetSetting(string key) =>
+            Task.FromResult<string?>(Plain.GetValueOrDefault(key));
 
         public Task<System.Collections.Generic.Dictionary<string, string>> GetSettings(
             System.Collections.Generic.IEnumerable<string> keys) =>

@@ -3,19 +3,36 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Modules.Auth;
 
 public class AuthService : IAuthService
 {
+    /// <summary>
+    /// Pre-generated PBKDF2 hash of a fixed throwaway password, in the exact
+    /// salt:hash format and cost (100k iterations, HMAC-SHA256) of real
+    /// hashes. The login path verifies against it when the username is
+    /// unknown so both failure branches burn the same PBKDF2 work and the
+    /// response timing does not reveal whether the account exists (P1-3).
+    /// </summary>
+    public const string DummyPasswordHash =
+        "AAECAwQFBgcICQoLDA0ODw==:3xUL2UmIys+lU+eoOQw8rwNOeMRUsaiasDQGsdUWVlA=";
+
     private readonly LingarrDbContext _context;
     private readonly ISettingService _settingService;
+    private readonly IMemoryCache _memoryCache;
 
-    public AuthService(LingarrDbContext context, ISettingService settingService, ILogger<AuthService> logger)
+    public AuthService(
+        LingarrDbContext context,
+        ISettingService settingService,
+        IMemoryCache memoryCache,
+        ILogger<AuthService> logger)
     {
         _context = context;
         _settingService = settingService;
+        _memoryCache = memoryCache;
     }
 
     public string GenerateApiKey()
@@ -59,6 +76,12 @@ public class AuthService : IAuthService
     public async Task<User?> GetUserByUsername(string username)
     {
         return await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+    }
+
+    /// <inheritdoc />
+    public async Task<User?> GetUserById(int id)
+    {
+        return await _context.Users.FindAsync(id);
     }
 
     public async Task<User> CreateUser(string username, string password)
@@ -134,5 +157,53 @@ public class AuthService : IAuthService
     {
         user.LastLoginAt = DateTimeOffset.UtcNow;
         await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task ChangePasswordAsync(User user, string newPassword)
+    {
+        user.PasswordHash = HashPassword(newPassword);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> GetMustChangePasswordAsync()
+    {
+        return await _settingService.GetSetting(SettingKeys.Authentication.MustChangePassword) == "true";
+    }
+
+    /// <inheritdoc />
+    public async Task SetMustChangePasswordAsync(bool value)
+    {
+        var serialized = value ? "true" : "false";
+        var setting = await _context.Settings
+            .FirstOrDefaultAsync(s => s.Key == SettingKeys.Authentication.MustChangePassword);
+
+        if (setting is null)
+        {
+            _context.Settings.Add(new Setting
+            {
+                Key = SettingKeys.Authentication.MustChangePassword,
+                Value = serialized
+            });
+        }
+        else
+        {
+            setting.Value = serialized;
+        }
+
+        await _context.SaveChangesAsync();
+
+        // The setting service caches reads for up to an hour; drop the entry
+        // so login/authenticated responses observe the flip immediately.
+        _memoryCache.Remove(SettingKeys.Authentication.MustChangePassword);
+    }
+
+    /// <inheritdoc />
+    public bool IsPasswordStrong(string password)
+    {
+        return password.Length >= 8
+               && password.Any(char.IsLetter)
+               && password.Any(char.IsDigit);
     }
 }

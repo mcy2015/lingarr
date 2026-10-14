@@ -12,6 +12,7 @@
 
         <AuthenticationSettings />
         <ApiKeyConfiguration />
+        <ChangePasswordCard />
     </div>
 </template>
 <script setup lang="ts">
@@ -22,6 +23,7 @@ import { useSettingStore } from '@/cells/app/stores/setting'
 import PbHead from '@/cells/app/components/PbHead.vue'
 import AuthenticationSettings from '@/cells/settings/components/AuthenticationSettings.vue'
 import ApiKeyConfiguration from '@/cells/settings/components/authentication/ApiKeyConfiguration.vue'
+import ChangePasswordCard from '@/cells/settings/components/authentication/ChangePasswordCard.vue'
 
 const { t } = useI18n()
 const settingStore = useSettingStore()

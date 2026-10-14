@@ -170,5 +170,12 @@ public static class SettingKeys
     {
         public const string AuthEnabled = "auth_enabled";
         public const string ApiKey = "api_key";
+
+        /// <summary>
+        /// "true" while the seeded default admin still uses the well-known
+        /// admin/admin credentials; flipped to "false" by the first successful
+        /// password change. Seeded "false" by M0002 for existing databases.
+        /// </summary>
+        public const string MustChangePassword = "must_change_password";
     }
 }

@@ -6,6 +6,9 @@ export interface IUseInstanceStore {
     theme: ITheme
     poster: string
     authenticated: boolean
+    /// P0-3: server-side must_change_password flag — true until the seeded
+    /// default credentials are replaced; drives the forced change screen.
+    mustChangePassword: boolean
 }
 
 export const THEMES = {

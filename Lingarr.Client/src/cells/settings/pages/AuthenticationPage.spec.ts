@@ -151,3 +151,31 @@ describe('AuthenticationPage · API Key 区(原功能)', () => {
         expect(settingStore.getEncryptedSetting(ENCRYPTED_SETTINGS.API_KEY)).toBe('fresh-key')
     })
 })
+
+describe('AuthenticationPage · 修改密码卡(P0-3)', () => {
+    it('shows the change-password card only while auth is enabled', async () => {
+        const { wrapper, pinia } = await mountPage()
+        const settingStore = useSettingStore(pinia)
+
+        settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'true')
+        await flushPromises()
+        expect(wrapper.find('[data-test="change-password-card"]').exists()).toBe(true)
+
+        settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'false')
+        await flushPromises()
+        expect(wrapper.find('[data-test="change-password-card"]').exists()).toBe(false)
+    })
+
+    it('carries the shared change-password form inside the card', async () => {
+        const { wrapper, pinia } = await mountPage()
+        const settingStore = useSettingStore(pinia)
+        settingStore.storeSetting(SETTINGS.AUTH_ENABLED, 'true')
+        await flushPromises()
+
+        const card = wrapper.find('[data-test="change-password-card"]')
+        expect(card.find('[data-test="change-password-form"]').exists()).toBe(true)
+        expect(card.find('[data-test="change-password-current"]').exists()).toBe(true)
+        expect(card.find('[data-test="change-password-new"]').exists()).toBe(true)
+        expect(card.find('[data-test="change-password-confirm"]').exists()).toBe(true)
+    })
+})

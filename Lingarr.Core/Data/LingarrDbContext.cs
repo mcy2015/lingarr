@@ -21,6 +21,7 @@ public class LingarrDbContext : DbContext
     public DbSet<Statistics> Statistics { get; set; }
     public DbSet<DailyStatistics> DailyStatistics { get; set; }
     public DbSet<User> Users { get; set; }
+    public DbSet<AuthSession> AuthSessions { get; set; }
 
     public LingarrDbContext(DbContextOptions options) : base(options)
     {

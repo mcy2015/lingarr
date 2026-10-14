@@ -22,7 +22,8 @@ export const useInstanceStore = defineStore('instance', {
         isOpen: false,
         theme: THEMES.LINGARR,
         poster: '',
-        authenticated: false
+        authenticated: false,
+        mustChangePassword: false
     }),
     getters: {
         getVersion: (state: IUseInstanceStore): IVersion => state.version,
@@ -34,14 +35,24 @@ export const useInstanceStore = defineStore('instance', {
         setIsOpen(isOpen: boolean): void {
             this.isOpen = isOpen
         },
+        setAuthenticated(authenticated: boolean): void {
+            this.authenticated = authenticated
+        },
+        /// P0-3: while true (server-side must_change_password setting) the
+        /// router funnels every authenticated route into the forced
+        /// password-change screen.
+        setMustChangePassword(mustChangePassword: boolean): void {
+            this.mustChangePassword = mustChangePassword
+        },
         async ensureAuthenticated(): Promise<boolean> {
             if (this.authenticated) {
                 return true
             }
 
             try {
-                await authApi.authenticated()
+                const response = await authApi.authenticated()
                 this.authenticated = true
+                this.mustChangePassword = response.mustChangePassword ?? false
                 return true
             } catch (error: unknown) {
                 console.log(error)

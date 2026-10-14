@@ -1121,5 +1121,25 @@
             "tasks": "Tasks",
             "settings": "Settings"
         }
+    },
+    "changePassword": {
+        "title": "Change password",
+        "forcedTitle": "Set a new password",
+        "forcedIntro": "This instance still uses the default administrator credentials. Choose a new password to continue — you will sign in again with it afterwards.",
+        "cardNote": "Signing in again is required after a change",
+        "currentPassword": "Current password",
+        "newPassword": "New password",
+        "confirmPassword": "Confirm new password",
+        "submit": "Change password",
+        "submitting": "Changing…",
+        "hint": "At least 8 characters, including at least one letter and one digit.",
+        "success": "Password changed. Please sign in with your new password.",
+        "errors": {
+            "required": "All fields are required",
+            "mismatch": "The new passwords do not match",
+            "weak": "The new password must be at least 8 characters long and contain a letter and a digit",
+            "invalidCurrent": "The current password is incorrect",
+            "generic": "Failed to change the password. Please try again."
+        }
     }
 }

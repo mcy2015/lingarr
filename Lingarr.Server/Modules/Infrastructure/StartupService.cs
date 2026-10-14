@@ -59,6 +59,9 @@ public class StartupService : IHostedService
     /// Creates the single admin user at startup when the database holds no users yet.
     /// Credentials come from the LINGARR_ADMIN_USER / LINGARR_ADMIN_PASSWORD environment
     /// variables; missing values fall back to admin/admin with a warning.
+    /// The must_change_password flag is raised when (and only when) the well-known
+    /// default credentials were used, so a first boot forces a password change while
+    /// instances provisioned through environment variables are left alone (P0-3).
     /// </summary>
     /// <param name="serviceProvider">Scoped service provider used to resolve the auth service.</param>
     private async Task SeedDefaultUser(IServiceProvider serviceProvider)
@@ -71,7 +74,8 @@ public class StartupService : IHostedService
 
         var username = Environment.GetEnvironmentVariable(AdminUserEnvVar)?.Trim();
         var password = Environment.GetEnvironmentVariable(AdminPasswordEnvVar)?.Trim();
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        var usedDefaultCredentials = string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password);
+        if (usedDefaultCredentials)
         {
             _logger.LogWarning(
                 "No users found and {UserEnv}/{PasswordEnv} are not fully set; default credentials are used. " +
@@ -85,7 +89,11 @@ public class StartupService : IHostedService
         }
 
         await authService.CreateUser(username, password);
-        _logger.LogInformation("Seeded default user {Username}.", username);
+        await authService.SetMustChangePasswordAsync(usedDefaultCredentials);
+        _logger.LogInformation(
+            "Seeded default user {Username} (must_change_password: {MustChangePassword}).",
+            username,
+            usedDefaultCredentials);
     }
 
     /// <summary>

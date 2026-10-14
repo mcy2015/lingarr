@@ -1121,5 +1121,25 @@
             "tasks": "任务",
             "settings": "设置"
         }
+    },
+    "changePassword": {
+        "title": "修改密码",
+        "forcedTitle": "设置新密码",
+        "forcedIntro": "此实例仍在使用默认管理员凭据。请设置新密码后继续,完成后需使用新密码重新登录。",
+        "cardNote": "修改成功后需重新登录",
+        "currentPassword": "当前密码",
+        "newPassword": "新密码",
+        "confirmPassword": "确认新密码",
+        "submit": "修改密码",
+        "submitting": "修改中…",
+        "hint": "至少 8 个字符,且需包含字母和数字。",
+        "success": "密码已修改,请使用新密码重新登录。",
+        "errors": {
+            "required": "请填写所有字段",
+            "mismatch": "两次输入的新密码不一致",
+            "weak": "新密码长度至少 8 位,且需包含字母和数字",
+            "invalidCurrent": "当前密码不正确",
+            "generic": "修改密码失败,请重试。"
+        }
     }
 }

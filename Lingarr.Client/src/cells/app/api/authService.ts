@@ -1,17 +1,28 @@
 import { AxiosStatic } from 'axios'
-import { IApiKeyResponse, IAuthService, ILoginRequest } from '@/types'
+import {
+    IApiKeyResponse,
+    IAuthenticatedResponse,
+    IAuthService,
+    IChangePasswordRequest,
+    ILoginRequest,
+    ILoginResponse
+} from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/auth'): IAuthService => ({
-    login(request: ILoginRequest): Promise<void> {
+    login(request: ILoginRequest): Promise<ILoginResponse> {
         return http.post(`${resource}/login`, request).then((response) => response.data)
     },
 
-    authenticated(): Promise<void> {
+    authenticated(): Promise<IAuthenticatedResponse> {
         return http.get(`${resource}/authenticated`).then((response) => response.data)
     },
 
     logout(): Promise<void> {
         return http.post(`${resource}/logout`).then((response) => response.data)
+    },
+
+    changePassword(request: IChangePasswordRequest): Promise<ILoginResponse> {
+        return http.post(`${resource}/password`, request).then((response) => response.data)
     },
 
     generateApiKey(): Promise<IApiKeyResponse> {

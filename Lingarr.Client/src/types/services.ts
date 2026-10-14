@@ -10,6 +10,9 @@ import {
     MediaType,
     IPathMapping,
     ILoginRequest,
+    ILoginResponse,
+    IAuthenticatedResponse,
+    IChangePasswordRequest,
     IApiKeyResponse,
     IIncludeSummary,
     IPluginManifest,
@@ -30,9 +33,12 @@ export interface IPluginService {
 }
 
 export interface IAuthService {
-    authenticated(): Promise<void>
-    login(request: ILoginRequest): Promise<void>
+    authenticated(): Promise<IAuthenticatedResponse>
+    login(request: ILoginRequest): Promise<ILoginResponse>
     logout(): Promise<void>
+    /// P0-3: change the logged-in user's password. The server revokes every
+    /// session on success, so the caller must sign in again afterwards.
+    changePassword(request: IChangePasswordRequest): Promise<ILoginResponse>
     generateApiKey(): Promise<IApiKeyResponse>
     hasAnyUsers(): Promise<boolean>
 }

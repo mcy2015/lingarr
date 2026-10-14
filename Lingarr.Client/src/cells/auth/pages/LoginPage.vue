@@ -59,12 +59,14 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { authService } from '@/cells/app/api/authService'
+import { useInstanceStore } from '@/cells/app/stores/instance'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import CardComponent from '@/cells/kernel/components/CardComponent.vue'
 
 const router = useRouter()
 const { t } = useI18n()
+const instanceStore = useInstanceStore()
 const authApi = authService(axios)
 
 const loading = ref(false)
@@ -83,12 +85,19 @@ const handleLogin = async () => {
     error.value = ''
 
     try {
-        await authApi.login({
+        const response = await authApi.login({
             username: username.value,
             password: password.value
         })
 
-        router.replace({ name: 'dashboard' })
+        instanceStore.setAuthenticated(true)
+        instanceStore.setMustChangePassword(response.mustChangePassword)
+
+        // P0-3: a fresh install that still uses the default credentials is
+        // funnelled into the forced password change instead of the app.
+        router.replace({
+            name: response.mustChangePassword ? 'change-password' : 'dashboard'
+        })
     } catch (err: any) {
         console.error('Login error:', err)
         error.value = err?.data?.message || t('login.errors.invalidCredentials')

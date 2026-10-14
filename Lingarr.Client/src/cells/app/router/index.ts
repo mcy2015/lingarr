@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, RouteLocationNormalized, RouteLocationRaw, RouteRecordRaw } from 'vue-router'
 import { useInstanceStore } from '@/cells/app/stores/instance'
 import { baseUrl } from '@/cells/app/utils/baseUrl'
 
@@ -13,6 +13,16 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/cells/auth/pages/LoginPage.vue'),
                 name: 'login',
                 meta: { authenticated: false }
+            },
+            {
+                // P0-3 forced password change: reached from the login flow or
+                // the router guard while must_change_password is set. The
+                // guard funnels every other authenticated route here until the
+                // default credentials are replaced.
+                path: '/auth/change-password',
+                component: () => import('@/cells/auth/pages/ChangePasswordPage.vue'),
+                name: 'change-password',
+                meta: { authenticated: true }
             }
         ]
     },
@@ -200,12 +210,12 @@ const routes: RouteRecordRaw[] = [
     }
 ]
 
-const router = createRouter({
-    history: createWebHistory(baseUrl()),
-    routes
-})
-
-router.beforeEach(async (to) => {
+/**
+ * Global guard (P0-2/P0-3): authenticated routes require a session, and
+ * while the server-side must_change_password flag is set every authenticated
+ * route except the forced change screen funnels into it.
+ */
+export const authGuard = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     if (!to.meta.authenticated) {
         return true
     }
@@ -217,7 +227,20 @@ router.beforeEach(async (to) => {
         return { name: 'login' }
     }
 
+    // P0-3: until the seeded default credentials are replaced, everything
+    // except the change screen itself funnels into the forced change.
+    if (instanceStore.mustChangePassword && to.name !== 'change-password') {
+        return { name: 'change-password' }
+    }
+
     return true
+}
+
+const router = createRouter({
+    history: createWebHistory(baseUrl()),
+    routes
 })
+
+router.beforeEach(authGuard)
 
 export default router

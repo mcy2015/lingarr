@@ -27,6 +27,7 @@ public class AuthControllerTests
     private readonly Mock<IAuthService> _authService = new();
     private readonly Mock<ISettingService> _settingService = new();
     private readonly Mock<ILoginRateLimiter> _loginRateLimiter = new();
+    private readonly Mock<IAuthSessionStore> _sessionStore = new();
     private readonly AuthController _controller;
 
     public AuthControllerTests()
@@ -40,6 +41,7 @@ public class AuthControllerTests
             _authService.Object,
             _settingService.Object,
             rateLimiter,
+            _sessionStore.Object,
             NullLogger<AuthController>.Instance);
         controller.ControllerContext = new ControllerContext
         {
@@ -154,17 +156,59 @@ public class AuthControllerTests
         _loginRateLimiter.Verify(l => l.RecordFailure("henry", RemoteIp.ToString()), Times.Once);
     }
 
+    // ===== P1-3: timing alignment on unknown usernames =====
+
+    [Fact]
+    public async Task Login_UnknownUser_RunsDummyVerificationAgainstFixedHash()
+    {
+        // The "no such user" branch must burn the same PBKDF2 work as the
+        // "wrong password" branch, so login timing cannot reveal which
+        // usernames exist.
+        _authService.Setup(a => a.GetUserByUsername("ghost")).ReturnsAsync((Lingarr.Core.Entities.User?)null);
+
+        await _controller.Login(new LoginRequest { Username = "ghost", Password = "wrong" });
+
+        _authService.Verify(a => a.VerifyPassword("wrong", AuthService.DummyPasswordHash), Times.Once);
+    }
+
+    [Fact]
+    public async Task Login_DummyHashConstant_IsAWellFormedPbkdf2Hash()
+    {
+        // If the constant ever drifts out of the salt:hash format, the dummy
+        // verification would shortcut and reopen the timing side channel.
+        var parts = AuthService.DummyPasswordHash.Split(':');
+        Assert.Equal(2, parts.Length);
+        Assert.NotEmpty(Convert.FromBase64String(parts[0]));
+        Assert.NotEmpty(Convert.FromBase64String(parts[1]));
+    }
+
     [Fact]
     public async Task Login_Success_ReturnsMustChangePasswordFalse()
     {
         var controller = CreateController(_loginRateLimiter.Object);
         SetupSuccessfulLogin(controller, "henry");
+        _authService.Setup(a => a.GetMustChangePasswordAsync()).ReturnsAsync(false);
 
         var result = await controller.Login(new LoginRequest { Username = "henry", Password = "pw" });
 
         var ok = Assert.IsType<OkObjectResult>(result);
         var response = new ResponseAdapter(ok.Value!);
         Assert.False((bool)response.Get("mustChangePassword")!);
+    }
+
+    [Fact]
+    public async Task Login_Success_MustChangePasswordPending_ReturnsTrueAndPurgesExpiredSessions()
+    {
+        var controller = CreateController(_loginRateLimiter.Object);
+        SetupSuccessfulLogin(controller, "henry");
+        _authService.Setup(a => a.GetMustChangePasswordAsync()).ReturnsAsync(true);
+
+        var result = await controller.Login(new LoginRequest { Username = "henry", Password = "pw" });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = new ResponseAdapter(ok.Value!);
+        Assert.True((bool)response.Get("mustChangePassword")!);
+        _sessionStore.Verify(s => s.RemoveExpiredAsync(), Times.Once);
     }
 
     // ===== Authenticated response contract =====
@@ -188,6 +232,7 @@ public class AuthControllerTests
     {
         _settingService.Setup(s => s.GetSetting("auth_enabled")).ReturnsAsync("true");
         _controller.HttpContext.User = CookiePrincipal("henry");
+        _authService.Setup(a => a.GetMustChangePasswordAsync()).ReturnsAsync(false);
 
         var result = await _controller.Authenticated();
 
@@ -196,6 +241,162 @@ public class AuthControllerTests
         Assert.True((bool)response.Get("authenticated")!);
         Assert.Equal("Cookie", response.Get("authType"));
         Assert.False((bool)response.Get("mustChangePassword")!);
+    }
+
+    [Fact]
+    public async Task Authenticated_CookieUser_MustChangePasswordPending_ReturnsTrue()
+    {
+        _settingService.Setup(s => s.GetSetting("auth_enabled")).ReturnsAsync("true");
+        _controller.HttpContext.User = CookiePrincipal("henry");
+        _authService.Setup(a => a.GetMustChangePasswordAsync()).ReturnsAsync(true);
+
+        var result = await _controller.Authenticated();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = new ResponseAdapter(ok.Value!);
+        Assert.True((bool)response.Get("mustChangePassword")!);
+    }
+
+    // ===== Logout: server-side revocation wiring =====
+
+    [Fact]
+    public async Task Logout_SignsOutCookieScheme_AndPurgesExpiredSessions()
+    {
+        // SignOutAsync drives the cookie handler to delete the auth_sessions
+        // row behind the browser's cookie key (asserted end-to-end in
+        // CookieTicketRevocationTests).
+        var authentication = new Mock<IAuthenticationService>();
+        authentication
+            .Setup(a => a.SignOutAsync(It.IsAny<HttpContext>(), "Cookies", It.IsAny<AuthenticationProperties>()))
+            .Returns(Task.CompletedTask);
+        var provider = new Mock<IServiceProvider>();
+        provider
+            .Setup(p => p.GetService(typeof(IAuthenticationService)))
+            .Returns(authentication.Object);
+        _controller.HttpContext.RequestServices = provider.Object;
+
+        var result = await _controller.Logout();
+
+        Assert.IsType<OkObjectResult>(result);
+        authentication.Verify(
+            a => a.SignOutAsync(It.IsAny<HttpContext>(), "Cookies", It.IsAny<AuthenticationProperties>()),
+            Times.Once);
+        _sessionStore.Verify(s => s.RemoveExpiredAsync(), Times.Once);
+    }
+
+    // ===== POST /api/auth/password (P0-3) =====
+
+    [Fact]
+    public async Task ChangePassword_AnonymousCaller_Returns401()
+    {
+        var result = await _controller.ChangePassword(new ChangePasswordRequest
+        {
+            CurrentPassword = "old",
+            NewPassword = "NewPass123"
+        });
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
+        _authService.Verify(a => a.ChangePasswordAsync(It.IsAny<Lingarr.Core.Entities.User>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangePassword_ApiKeyPrincipal_Returns403()
+    {
+        _controller.HttpContext.User = ApiKeyPrincipal();
+
+        var result = await _controller.ChangePassword(new ChangePasswordRequest
+        {
+            CurrentPassword = "old",
+            NewPassword = "NewPass123"
+        });
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        _authService.Verify(a => a.ChangePasswordAsync(It.IsAny<Lingarr.Core.Entities.User>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangePassword_MissingFields_Returns400WithValidationReason()
+    {
+        _controller.HttpContext.User = CookiePrincipal("henry");
+
+        var result = await _controller.ChangePassword(new ChangePasswordRequest
+        {
+            CurrentPassword = "",
+            NewPassword = ""
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, bad.StatusCode);
+        Assert.Equal("validation", new ResponseAdapter(bad.Value!).Get("reason"));
+        _authService.Verify(a => a.VerifyPassword(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("short1")]       // too short
+    [InlineData("nodigits")]     // no digit
+    [InlineData("12345678")]     // no letter
+    public async Task ChangePassword_WeakNewPassword_Returns400WithWeakPasswordReason(string weak)
+    {
+        _controller.HttpContext.User = CookiePrincipal("henry");
+
+        var result = await _controller.ChangePassword(new ChangePasswordRequest
+        {
+            CurrentPassword = "old-password",
+            NewPassword = weak
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, bad.StatusCode);
+        Assert.Equal("weak_password", new ResponseAdapter(bad.Value!).Get("reason"));
+        // The policy check runs before the PBKDF2 verification of the old password.
+        _authService.Verify(a => a.VerifyPassword(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangePassword_WrongCurrentPassword_Returns401WithReason()
+    {
+        _controller.HttpContext.User = CookiePrincipal("henry");
+        var user = new Lingarr.Core.Entities.User { Id = 1, Username = "henry", PasswordHash = "hash" };
+        _authService.Setup(a => a.GetUserById(1)).ReturnsAsync(user);
+        _authService.Setup(a => a.IsPasswordStrong("NewPass123")).Returns(true);
+        _authService.Setup(a => a.VerifyPassword("wrong-old", "hash")).Returns(false);
+
+        var result = await _controller.ChangePassword(new ChangePasswordRequest
+        {
+            CurrentPassword = "wrong-old",
+            NewPassword = "NewPass123"
+        });
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
+        Assert.Equal("invalid_current_password", new ResponseAdapter(unauthorized.Value!).Get("reason"));
+        _authService.Verify(a => a.ChangePasswordAsync(It.IsAny<Lingarr.Core.Entities.User>(), It.IsAny<string>()), Times.Never);
+        _sessionStore.Verify(s => s.RemoveAllForUserAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangePassword_Success_UpdatesHashClearsFlagAndRevokesAllSessions()
+    {
+        _controller.HttpContext.User = CookiePrincipal("henry");
+        var user = new Lingarr.Core.Entities.User { Id = 1, Username = "henry", PasswordHash = "hash" };
+        _authService.Setup(a => a.GetUserById(1)).ReturnsAsync(user);
+        _authService.Setup(a => a.VerifyPassword("OldPass123", "hash")).Returns(true);
+        _authService.Setup(a => a.IsPasswordStrong("NewPass123")).Returns(true);
+
+        var result = await _controller.ChangePassword(new ChangePasswordRequest
+        {
+            CurrentPassword = "OldPass123",
+            NewPassword = "NewPass123"
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.False((bool)new ResponseAdapter(ok.Value!).Get("mustChangePassword")!);
+        _authService.Verify(a => a.ChangePasswordAsync(user, "NewPass123"), Times.Once);
+        _authService.Verify(a => a.SetMustChangePasswordAsync(false), Times.Once);
+        // Every session of the user — including the caller's own — is revoked.
+        _sessionStore.Verify(s => s.RemoveAllForUserAsync(1), Times.Once);
     }
 
     // ===== Rate limiter integration through the controller =====

@@ -28,14 +28,14 @@ public class MigrationTests
             await using var connection = new SqliteConnection(connectionString);
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
-            // The single baseline is the only applied version.
-            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+            // The baseline plus the auth-sessions migration are applied.
+            Assert.Equal(2L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(1L, await ExecuteScalarAsync(connection,
-                "SELECT version FROM version_info"));
+            Assert.Equal(2L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
-            Assert.Equal(85L, await ExecuteScalarAsync(connection,
+            Assert.Equal(86L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
@@ -43,6 +43,11 @@ public class MigrationTests
             // Fresh installs ship with authentication enabled (secure default).
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'auth_enabled' AND value = 'true'"));
+
+            // M0002 seeds the forced-change flag off (a fresh default
+            // admin/admin seed flips it at startup).
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'must_change_password' AND value = 'false'"));
         }
         finally
         {
@@ -83,11 +88,49 @@ public class MigrationTests
             await using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync(TestContext.Current.CancellationToken);
-                Assert.Equal(15L, await ExecuteScalarAsync(connection,
+                Assert.Equal(16L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
                 Assert.Equal(1L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request'"));
             }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// M0002 must be reversible on its own: rolling it back drops
+    /// auth_sessions and the must_change_password seed, leaving the baseline
+    /// state.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_AuthSessionsMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(1);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            // Back to the baseline version; auth_sessions and the flag row are gone.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'auth_sessions'"));
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'must_change_password'"));
         }
         finally
         {
@@ -144,6 +187,7 @@ public class MigrationTests
                     "translations_by_model_json", "created_at", "updated_at"],
                 ["daily_statistics"] = ["id", "date", "translation_count", "created_at", "updated_at"],
                 ["users"] = ["id", "username", "password_hash", "created_at", "last_login_at"],
+                ["auth_sessions"] = ["key", "value", "user_id", "expires_at"],
                 ["version_info"] = ["version", "applied_on", "description"],
             };
 
@@ -161,6 +205,14 @@ public class MigrationTests
                 ["episodes"] = ["ix_episodes_season_id"],
                 ["images"] = ["ix_images_movie_id", "ix_images_show_id"],
                 ["seasons"] = ["ix_seasons_show_id"],
+                // The TEXT primary key adds an implicit autoindex alongside
+                // the two explicit ones.
+                ["auth_sessions"] =
+                [
+                    "ix_auth_sessions_expires_at",
+                    "ix_auth_sessions_user_id",
+                    "sqlite_autoindex_auth_sessions_1"
+                ],
                 ["translation_glossaries"] = ["ix_glossary_source_term"],
                 ["translation_request_events"] = ["ix_translation_request_events_translation_request_id"],
                 ["translation_request_lines"] = ["ix_translation_request_lines_translation_request_id"],
