@@ -57,6 +57,48 @@ docker compose up -d
 
 使用 LibreTranslate 时可独立部署(见 dev compose 中注释掉的服务块),应用内服务地址按实际可达地址填写;其余内置服务在界面配置密钥即用。
 
+## 部署到 NAS / 远程主机
+
+推送到 `main` 后 CI 会自动构建多架构镜像(`linux/amd64` + `linux/arm64`)发布到 `ghcr.io/mcy2015/lingarr`。NAS 上照原版模式拉取即可:
+
+```bash
+# 1. 首次:登录 GHCR(包默认私有;用带 read:packages 权限的 GitHub PAT,
+#    或在 GitHub 包设置里把 lingarr 设为 public 免登录)
+docker login ghcr.io -u mcy2015
+
+# 2. 建目录
+mkdir -p /volume1/docker/lingarr/config
+
+# 3. 写 docker-compose.yml(见下)后拉起
+docker compose pull && docker compose up -d
+```
+
+```yaml
+services:
+  lingarr:
+    image: ghcr.io/mcy2015/lingarr:latest
+    container_name: lingarr
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_URLS=http://+:9876
+      - TZ=Europe/Amsterdam          # cron 解释与界面时间时区,按 NAS 实际调整
+    ports:
+      - "9876:9876"
+    volumes:
+      - /volume1/docker/lingarr/config:/app/config   # SQLite + Hangfire + 加密密钥
+      - /volume1/media/movies:/movies:ro             # 路径按 NAS 实际布局
+      - /volume1/media/tv:/tv:ro
+    networks: [media]
+
+networks:
+  media:
+    external: true    # 与 radarr/sonarr/LibreTranslate 同一 docker 网络时互相按容器名访问
+```
+
+- **升级**:NAS 上 `docker compose pull && docker compose up -d`,迁移自动执行。
+- **迁移现有数据**:停容器 → 把本机 `./data/` 整目录内容(含 `keys/`,服务商密钥加密密钥在内)拷入 NAS 的 config 卷 → 起容器即沿用全部配置。
+- **不想走 registry 的替代**:本机 `docker build --platform linux/amd64 -t lingarr:latest .`(NAS 是 Intel/AMD 必须带 platform;ARM NAS 直接原生构建)→ `docker save lingarr:latest | gzip > lingarr.tar.gz` → 传到 NAS `docker load`,compose 里 `image: lingarr:latest`。
+
 ## 配置(环境变量)
 
 | 变量 | 默认 | 说明 |
