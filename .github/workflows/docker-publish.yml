@@ -75,5 +75,3 @@ jobs:
           build-args: |
             BUILD_CONFIGURATION=Release
             VERSION=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
