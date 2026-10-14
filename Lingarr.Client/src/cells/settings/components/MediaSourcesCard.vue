@@ -1,7 +1,7 @@
 <template>
     <!-- ═══ 媒体源卡(原型 screen-06 B 组 setlist 形态):Sonarr/Radarr 行
          (dot + mono 地址 + 同步计数 + 重新同步 + 编辑模态)、Webhook 折叠说明、
-         媒体源同步 cron 行组(原 Indexing 卡)、路径映射行下钻。 -->
+         路径映射行下钻。媒体源同步 cron 行组已迁至自动化批次卡。 -->
     <div class="border-line bg-secondary rounded-md border" data-test="media-sources-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.sources.title') }}</h2>
@@ -39,7 +39,8 @@
             </span>
         </div>
 
-        <!-- Webhook URL 折叠说明区(保留) -->
+        <!-- Webhook URL 折叠说明区(原型 setlist/meta 层级:折叠头 13px →
+             说明 12px hint → 每源一行「名称 b + mono URL」) -->
         <div class="border-line border-b">
             <button
                 type="button"
@@ -49,53 +50,30 @@
                 @click="webhookOpen = !webhookOpen">
                 <span class="text-xs">{{ webhookOpen ? '▾' : '▸' }}</span>
                 {{ t('settings.sources.webhook') }}
+                <span class="mono ml-auto hidden text-[11px] sm:inline">/api/webhook</span>
             </button>
-            <div v-if="webhookOpen" class="text-secondary-content space-y-2 px-4 pb-3 text-xs">
-                <span>
+            <div v-if="webhookOpen" class="space-y-2 px-4 pb-3">
+                <p class="text-secondary-content text-[12px] leading-snug">
                     {{ t('services.webhook.description') }}
                     {{ t('services.webhook.goTo') }}
                     <b>Settings → Connect → Connections → +</b>
                     {{ t('services.webhook.andUseThisUrl') }}
-                </span>
-                <div>
-                    <span class="font-semibold">Radarr</span>
-                    <CodeSnippet class="mt-1 block overflow-x-auto">{{ radarrWebhookUrl }}</CodeSnippet>
+                </p>
+                <div
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]"
+                    data-test="webhook-url-radarr">
+                    <b class="flex-none font-semibold">Radarr</b>
+                    <CodeSnippet class="mono min-w-0 flex-1 overflow-x-auto text-xs">
+                        {{ radarrWebhookUrl }}
+                    </CodeSnippet>
                 </div>
-                <div>
-                    <span class="font-semibold">Sonarr</span>
-                    <CodeSnippet class="mt-1 block overflow-x-auto">{{ sonarrWebhookUrl }}</CodeSnippet>
-                </div>
-            </div>
-        </div>
-
-        <!-- 媒体源同步(轮询 cron,原 Indexing 卡归入本卡行组) -->
-        <div class="border-line border-b px-4 py-2.5">
-            <div class="text-secondary-content mb-2 text-[11px] font-semibold tracking-wider uppercase">
-                {{ t('settings.sources.indexHeading') }}
-            </div>
-            <div class="space-y-2">
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
-                    <b class="min-w-0 flex-1">
-                        {{ t('settings.sources.movieIndexer') }}
-                        <span class="text-secondary-content mt-0.5 block text-[11.5px] font-normal">
-                            {{ t('settings.automation.indexingDescription') }}
-                        </span>
-                    </b>
-                    <InputComponent
-                        v-model="movieSchedule"
-                        class="w-36"
-                        :validation-type="INPUT_VALIDATION_TYPE.CRON"
-                        :placeholder="'0 * * * *'"
-                        @update:validation="(val) => (movieScheduleIsValid = val)" />
-                </div>
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
-                    <b class="min-w-0 flex-1">{{ t('settings.sources.showIndexer') }}</b>
-                    <InputComponent
-                        v-model="showSchedule"
-                        class="w-36"
-                        :validation-type="INPUT_VALIDATION_TYPE.CRON"
-                        :placeholder="'0 * * * *'"
-                        @update:validation="(val) => (showScheduleIsValid = val)" />
+                <div
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]"
+                    data-test="webhook-url-sonarr">
+                    <b class="flex-none font-semibold">Sonarr</b>
+                    <CodeSnippet class="mono min-w-0 flex-1 overflow-x-auto text-xs">
+                        {{ sonarrWebhookUrl }}
+                    </CodeSnippet>
                 </div>
             </div>
         </div>
@@ -371,30 +349,6 @@ const editingSource = computed(() => {
         }
     }
     return null
-})
-
-
-// ── 媒体源同步 cron(原 Indexing 卡设置)────────────────────────────
-const movieScheduleIsValid = ref(false)
-const showScheduleIsValid = ref(false)
-
-const movieSchedule = computed({
-    get: (): string => (settingStore.getSetting(SETTINGS.MOVIE_SCHEDULE) as string) ?? '',
-    set: (newValue: string): void => {
-        if (movieScheduleIsValid.value) {
-            settingStore.updateSetting(SETTINGS.MOVIE_SCHEDULE, newValue, true)
-            toastStore.push({ message: t('common.saved'), type: 'success' })
-        }
-    }
-})
-const showSchedule = computed({
-    get: (): string => (settingStore.getSetting(SETTINGS.SHOW_SCHEDULE) as string) ?? '',
-    set: (newValue: string): void => {
-        if (showScheduleIsValid.value) {
-            settingStore.updateSetting(SETTINGS.SHOW_SCHEDULE, newValue, true)
-            toastStore.push({ message: t('common.saved'), type: 'success' })
-        }
-    }
 })
 </script>
 

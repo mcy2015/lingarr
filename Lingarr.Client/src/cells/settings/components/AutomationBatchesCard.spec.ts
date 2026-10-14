@@ -58,11 +58,11 @@ async function mountCard(settings: Record<string, string> = {}) {
 }
 
 describe('AutomationBatchesCard · 行渲染', () => {
-    it('renders exactly one batch row (daily catch-up) with the derived hint', async () => {
+    it('renders the daily catch-up row with the derived hint', async () => {
         const { wrapper } = await mountCard()
 
-        expect(wrapper.findAll('[data-test^="batch-row-"]')).toHaveLength(1)
         const row = wrapper.find('[data-test="batch-row-daily"]')
+        expect(row.exists()).toBe(true)
         expect(row.text()).toContain(en.settings.automation.dailyRow)
         expect(row.text()).toContain('0 4 * * *')
         expect(row.text()).toContain('50')
@@ -73,6 +73,68 @@ describe('AutomationBatchesCard · 行渲染', () => {
     it('never renders the weekly full-library scan (no server job)', async () => {
         const { wrapper } = await mountCard()
         expect(wrapper.text()).not.toContain('weekly')
+    })
+})
+
+describe('AutomationBatchesCard · 媒体源同步 cron 行组(自 MediaSourcesCard 迁入)', () => {
+    it('renders the movie/show indexer rows with the stored cron values', async () => {
+        const { wrapper } = await mountCard({
+            [SETTINGS.MOVIE_SCHEDULE]: '0 4 * * *',
+            [SETTINGS.SHOW_SCHEDULE]: '0 5 * * *'
+        })
+
+        const movie = wrapper.find('[data-test="batch-row-movie-index"]')
+        expect(movie.text()).toContain(en.settings.sources.movieIndexer)
+        expect(movie.text()).toContain(en.settings.automation.indexingDescription)
+        expect(movie.text()).toContain('0 4 * * *')
+
+        const show = wrapper.find('[data-test="batch-row-show-index"]')
+        expect(show.text()).toContain(en.settings.sources.showIndexer)
+        expect(show.text()).toContain('0 5 * * *')
+    })
+
+    it('echoes the stored cron in the index edit modal and saves it back', async () => {
+        const { wrapper } = await mountCard({
+            [SETTINGS.MOVIE_SCHEDULE]: '0 4 * * *'
+        })
+
+        await wrapper.find('[data-test="batch-edit-movie-index"]').trigger('click')
+        await flushPromises()
+
+        const modal = document.querySelector('[data-test="index-modal"]')
+        expect(modal).not.toBeNull()
+        const input = modal?.querySelector('input') as HTMLInputElement
+        expect(input.value).toBe('0 4 * * *')
+
+        input.value = '0 6 * * *'
+        input.dispatchEvent(new Event('input'))
+        await flushPromises()
+        ;(document.querySelector('[data-test="index-save"]') as HTMLElement).click()
+        await flushPromises()
+
+        const written = Object.fromEntries(setSettingMock.mock.calls)
+        expect(written['movie_schedule']).toBe('0 6 * * *')
+        expect(document.querySelector('[data-test="index-modal"]')).toBeNull()
+    })
+
+    it('blocks saving an invalid cron in the index modal', async () => {
+        const { wrapper } = await mountCard({
+            [SETTINGS.SHOW_SCHEDULE]: '0 5 * * *'
+        })
+
+        await wrapper.find('[data-test="batch-edit-show-index"]').trigger('click')
+        await flushPromises()
+
+        const input = document.querySelector(
+            '[data-test="index-modal"] input'
+        ) as HTMLInputElement
+        input.value = 'not-a-cron'
+        input.dispatchEvent(new Event('input'))
+        await flushPromises()
+
+        const save = document.querySelector('[data-test="index-save"]') as HTMLButtonElement
+        expect(save.disabled).toBe(true)
+        expect(setSettingMock).not.toHaveBeenCalled()
     })
 })
 

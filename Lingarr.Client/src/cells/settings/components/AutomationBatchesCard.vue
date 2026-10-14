@@ -1,6 +1,7 @@
 <template>
     <!-- ═══ 自动化批次卡(原型 screen-06 B 组 setlist 行式):每日补缺行
-         (cron + 限额 + 新片延迟的「编辑」模态,参数与开关解耦)+ switch。
+         (cron + 限额 + 新片延迟的「编辑」模态,参数与开关解耦)+ switch,
+         以及媒体源同步(电影/剧集轮询 cron)行组(自 MediaSourcesCard 迁入)。
          「每周全库巡检」服务端不存在,不显示。 -->
     <div class="border-line bg-secondary rounded-md border" data-test="batches-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
@@ -11,7 +12,7 @@
         </div>
 
         <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-[13px]"
+            class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 text-[13px]"
             data-test="batch-row-daily">
             <b class="flex-none">{{ t('settings.automation.dailyRow') }}</b>
             <span class="text-secondary-content mono min-w-0 flex-1 truncate text-xs" :title="dailyHint">
@@ -34,6 +35,52 @@
                         }}
                     </span>
                 </ToggleButton>
+            </span>
+        </div>
+
+        <!-- 媒体源同步(轮询 cron,自 MediaSourcesCard 行组迁入,与每日补缺同组):
+             行式(名称 + cron mono + 编辑模态),设置键与校验不变 -->
+        <div
+            class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 text-[13px]"
+            data-test="batch-row-movie-index">
+            <div class="min-w-0 flex-1">
+                <b class="font-semibold">{{ t('settings.sources.movieIndexer') }}</b>
+                <div class="text-secondary-content mt-0.5 text-xs leading-snug">
+                    {{ t('settings.automation.indexingDescription') }}
+                </div>
+            </div>
+            <span
+                class="mono text-secondary-content min-w-0 flex-none truncate text-xs"
+                :title="movieSchedule || '—'">
+                {{ movieSchedule || '—' }}
+            </span>
+            <span class="ml-auto flex flex-none items-center">
+                <button
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                    data-test="batch-edit-movie-index"
+                    @click="openIndexEdit('movie')">
+                    {{ t('settings.automation.edit') }}
+                </button>
+            </span>
+        </div>
+        <div
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-[13px]"
+            data-test="batch-row-show-index">
+            <b class="flex-none">{{ t('settings.sources.showIndexer') }}</b>
+            <span
+                class="mono text-secondary-content min-w-0 flex-1 truncate text-xs"
+                :title="showSchedule || '—'">
+                {{ showSchedule || '—' }}
+            </span>
+            <span class="ml-auto flex flex-none items-center">
+                <button
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                    data-test="batch-edit-show-index"
+                    @click="openIndexEdit('show')">
+                    {{ t('settings.automation.edit') }}
+                </button>
             </span>
         </div>
 
@@ -115,6 +162,61 @@
                 </div>
             </Transition>
         </Teleport>
+
+        <!-- 索引 cron 编辑模态:cron 必填校验(与原行内输入同规则),保存写回同一设置键 -->
+        <Teleport to="body">
+            <Transition
+                enter-active-class="transition-opacity duration-200 ease-in-out"
+                leave-active-class="transition-opacity duration-200 ease-in-out"
+                enter-from-class="opacity-0"
+                leave-to-class="opacity-0">
+                <div
+                    v-if="indexEdit !== null"
+                    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    @click="indexEdit = null"
+                    @keydown.escape="indexEdit = null">
+                    <div
+                        class="bg-secondary border-line shell-scroll max-h-[85vh] w-full max-w-md overflow-y-auto rounded-lg border p-5"
+                        role="dialog"
+                        aria-modal="true"
+                        data-test="index-modal"
+                        @click.stop>
+                        <div class="mb-4 flex items-center gap-2.5">
+                            <h2 class="text-[15px] font-semibold">{{ indexEditTitle }}</h2>
+                        </div>
+
+                        <div class="space-y-3">
+                            <InputComponent
+                                v-model="draftIndexCron"
+                                :label="t('settings.automation.scheduleField')"
+                                :validation-type="INPUT_VALIDATION_TYPE.CRON"
+                                :error-message="t('settings.automation.cronFormat')"
+                                :placeholder="'0 * * * *'"
+                                :debounce="0"
+                                @update:validation="(val) => (draftIndexCronValid = val)" />
+
+                            <div class="flex justify-end gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors"
+                                    data-test="index-modal-close"
+                                    @click="indexEdit = null">
+                                    {{ t('common.close') }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                    :disabled="!draftIndexCronValid"
+                                    data-test="index-save"
+                                    @click="saveIndex">
+                                    {{ t('common.save') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </Transition>
+        </Teleport>
     </div>
 </template>
 
@@ -160,6 +262,39 @@ const dailyHint = computed(() =>
         show: showAgeThreshold.value || '0'
     })
 )
+
+// ── 媒体源同步 cron(原 MediaSourcesCard 行组迁入:同一设置键/校验) ──
+const movieSchedule = computed(
+    (): string => (settingsStore.getSetting(SETTINGS.MOVIE_SCHEDULE) as string) ?? ''
+)
+const showSchedule = computed(
+    (): string => (settingsStore.getSetting(SETTINGS.SHOW_SCHEDULE) as string) ?? ''
+)
+
+const indexEdit = ref<'movie' | 'show' | null>(null)
+const draftIndexCron = ref('')
+const draftIndexCronValid = ref(false)
+
+const indexEditTitle = computed(() =>
+    indexEdit.value === 'movie'
+        ? t('settings.sources.movieIndexer')
+        : t('settings.sources.showIndexer')
+)
+
+function openIndexEdit(kind: 'movie' | 'show'): void {
+    draftIndexCron.value = kind === 'movie' ? movieSchedule.value : showSchedule.value
+    // 回显值来自已持久化设置,先按有效处理;用户改动后由 InputComponent 校验接管
+    draftIndexCronValid.value = true
+    indexEdit.value = kind
+}
+
+async function saveIndex(): Promise<void> {
+    if (!draftIndexCronValid.value || indexEdit.value === null) return
+    const key = indexEdit.value === 'movie' ? SETTINGS.MOVIE_SCHEDULE : SETTINGS.SHOW_SCHEDULE
+    await settingsStore.updateSetting(key, draftIndexCron.value, true)
+    toastStore.push({ message: t('common.saved'), type: 'success' })
+    indexEdit.value = null
+}
 
 // ── 编辑模态:本地草稿,保存时一次性写回(参数与开关解耦) ────────────
 const editOpen = ref(false)

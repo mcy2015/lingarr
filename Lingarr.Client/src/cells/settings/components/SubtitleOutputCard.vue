@@ -18,7 +18,7 @@
             :data-test="`subtitle-row-${row.key}`">
             <div class="min-w-0 flex-1">
                 <b class="text-[13px] font-semibold">{{ row.title }}</b>
-                <div class="text-secondary-content mt-0.5 text-[11.5px] leading-snug">
+                <div class="text-secondary-content mt-0.5 text-xs leading-snug">
                     {{ row.description }}
                 </div>
             </div>

@@ -499,7 +499,9 @@
             "destination": "目标",
             "mediaType": "媒体类型",
             "movie": "电影",
-            "show": "剧集"
+            "show": "剧集",
+            "add": "新增映射",
+            "pick": "选择路径"
         },
         "plugins": {
             "title": "插件",
@@ -592,6 +594,10 @@
             "howToUse": "使用方法",
             "headerIntro": "请在 HTTP 请求中使用",
             "headerSuffix": "请求头传入 API 密钥:"
+        },
+        "plugins": {
+            "subLineBase": "外部翻译插件",
+            "subLine": "已加载 {count} 个插件"
         },
         "automation": {
             "title": "自动化",

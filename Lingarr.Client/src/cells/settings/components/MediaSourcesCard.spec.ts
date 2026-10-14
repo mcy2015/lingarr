@@ -172,16 +172,18 @@ describe('MediaSourcesCard · Webhook 折叠与路径映射行', () => {
     })
 })
 
-describe('MediaSourcesCard · 媒体源同步 cron 行组', () => {
-    it('renders the movie/show indexer cron inputs with the stored values', async () => {
+describe('MediaSourcesCard · 媒体源同步 cron 行组(已迁出)', () => {
+    it('no longer renders the indexer cron inputs (moved to AutomationBatchesCard)', async () => {
         const { wrapper, pinia } = await mountCard()
         const settingStore = useSettingStore(pinia)
         settingStore.storeSetting(SETTINGS.MOVIE_SCHEDULE, '0 4 * * *')
         settingStore.storeSetting(SETTINGS.SHOW_SCHEDULE, '0 5 * * *')
         await flushPromises()
 
-        const values = wrapper.findAll('input').map((input) => input.element.value)
-        expect(values).toContain('0 4 * * *')
-        expect(values).toContain('0 5 * * *')
+        expect(wrapper.text()).not.toContain(en.settings.sources.indexHeading)
+        expect(wrapper.text()).not.toContain(en.settings.sources.movieIndexer)
+        expect(wrapper.text()).not.toContain(en.settings.sources.showIndexer)
+        // the only inputs left belong to the source edit modal (closed)
+        expect(wrapper.findAll('input')).toHaveLength(0)
     })
 })

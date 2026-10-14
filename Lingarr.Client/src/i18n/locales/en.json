@@ -499,7 +499,9 @@
             "destination": "Destination",
             "mediaType": "Media Type",
             "movie": "Movie",
-            "show": "Show"
+            "show": "Show",
+            "add": "Add mapping",
+            "pick": "Select path"
         },
         "plugins": {
             "title": "Plugins",
@@ -592,6 +594,10 @@
             "howToUse": "How to Use",
             "headerIntro": "Include the API key in your HTTP requests using the",
             "headerSuffix": "header:"
+        },
+        "plugins": {
+            "subLineBase": "External translation plugins",
+            "subLine": "{count} plugins loaded"
         },
         "automation": {
             "title": "Automation",
