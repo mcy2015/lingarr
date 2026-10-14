@@ -26,7 +26,7 @@ WORKDIR /app
 # error) while 10.0.401 — the band upstream last built with — works.
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 ARG BUILD_CONFIGURATION
-ARG VERSION=0.0.0-dev
+ARG APP_VERSION=0.0.0-dev
 WORKDIR /src
 COPY ["Directory.Packages.props", "global.json", "./"]
 COPY ["Lingarr.Contracts/Lingarr.Contracts.csproj", "Lingarr.Contracts/"]
@@ -37,13 +37,13 @@ RUN dotnet restore "./Lingarr.Server/./Lingarr.Server.csproj"
 COPY . .
 WORKDIR "/src/Lingarr.Server"
 COPY --from=client /Client/dist/ ./wwwroot
-RUN dotnet build "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:Version=$VERSION
+RUN dotnet build "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:Version=$APP_VERSION
 
 # Step 4: Publish the application
 FROM --platform=$BUILDPLATFORM build AS publish
 ARG BUILD_CONFIGURATION
-ARG VERSION=0.0.0-dev
-RUN dotnet publish "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION
+ARG APP_VERSION=0.0.0-dev
+RUN dotnet publish "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$APP_VERSION
 
 # Step 5: Final image
 FROM base AS final

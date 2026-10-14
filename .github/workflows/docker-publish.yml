@@ -4,6 +4,12 @@ name: Docker Publish
 # NAS/remote hosts then deploy exactly like the upstream model:
 # docker compose pull && up. GITHUB_TOKEN carries packages:write,
 # no extra secrets needed; the first package lands private by default.
+#
+# Version note: the build arg is APP_VERSION, never VERSION — Docker
+# ARGs become env vars in RUN steps and MSBuild absorbs a VERSION env
+# as the global Version property, where an invalid semver (e.g. a git
+# sha) crashes restore evaluation with a masked MSB4181. APP_VERSION
+# must always be valid semver.
 on:
   push:
     branches: [ main ]
@@ -13,22 +19,6 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # Temporary bisect: real Dockerfile through the same buildx setup,
-  # (a) single amd64, (b) multi-platform with QEMU — isolates the trigger.
-  diagnose-restore:
-    name: Diagnose restore (bisect)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-      - name: strip host-network from Dockerfile for this bisect
-        run: sed -i 's/RUN --network=host /RUN /' Lingarr.Server/Dockerfile
-      - name: (d1) raw + BUILD_CONFIGURATION arg only
-        run: docker buildx build --no-cache --progress=plain --platform linux/amd64 -f Lingarr.Server/Dockerfile --build-arg BUILD_CONFIGURATION=Release -t diag:d1 . 2>&1 | tail -8
-      - name: (d2) raw + VERSION arg only
-        run: docker buildx build --no-cache --progress=plain --platform linux/amd64 -f Lingarr.Server/Dockerfile --build-arg VERSION=diag -t diag:d2 . 2>&1 | tail -8
-
   build-and-push:
     name: Build and push (amd64 + arm64)
     runs-on: ubuntu-latest
@@ -69,10 +59,10 @@ jobs:
           file: ./Lingarr.Server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          provenance: false
-          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BUILD_CONFIGURATION=Release
-            VERSION=${{ github.sha }}
+            APP_VERSION=0.0.${{ github.run_number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
