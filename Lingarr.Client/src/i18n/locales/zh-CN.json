@@ -646,14 +646,7 @@
             "nextExecution": "下次执行",
             "actions": "操作",
             "run": "运行",
-            "newJob": "＋ 新建任务",
-            "customCron": "自定义 cron…",
-            "createJobTitle": "新建定时任务",
-            "jobIdField": "任务 ID",
-            "jobTypeField": "任务类型",
             "cronField": "Cron 表达式",
-            "create": "创建",
-            "createdToast": "已创建 {job} · {cron}",
             "enable": "启用",
             "disable": "停用",
             "stateDisabled": "关闭",
@@ -663,14 +656,7 @@
             "cronUpdated": "已更新 {job} → {cron}",
             "jobNotFound": "任务不存在,刷新后重试。",
             "cronUpdateFailed": "cron 更新失败,请重试。",
-            "createFailed": "创建任务失败",
-            "cronInvalid": "Cron 表达式无效",
-            "jobExists": "已存在同 ID 的任务",
-            "jobIdWhitespace": "任务 ID 不能包含空白字符",
-            "preset": {
-                "statistics": "统计快照",
-                "cleanup": "每周清理"
-            }
+            "cronInvalid": "Cron 表达式无效"
         },
         "subtitle": {
             "title": "字幕",

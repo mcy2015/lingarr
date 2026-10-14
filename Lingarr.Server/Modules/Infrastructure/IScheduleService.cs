@@ -48,16 +48,6 @@ public interface IScheduleService
     Task<bool> SetJobEnabled(string jobId, bool enabled);
 
     /// <summary>
-    /// Creates a user-defined recurring job from one of the registered job
-    /// types. The definition is persisted so Initialize() re-registers it.
-    /// </summary>
-    /// <param name="jobId">User-chosen recurring job id</param>
-    /// <param name="jobType">Registered job type name</param>
-    /// <param name="cron">5-field cron expression</param>
-    /// <returns>The created status, or null when input is invalid or the id is taken.</returns>
-    Task<RecurringJobStatus?> CreateRecurringJob(string jobId, string jobType, string cron);
-
-    /// <summary>
     /// Updates the cron expression of a recurring job. The schedule screen's
     /// job table is the single place a cron may be edited: built-ins persist
     /// to their settings key, custom jobs to their persisted definition, and

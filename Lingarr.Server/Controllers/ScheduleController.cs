@@ -79,36 +79,6 @@ public class ScheduleController : ControllerBase
     }
 
     /// <summary>
-    /// Creates a new recurring job from one of the creatable job types
-    /// (maintenance jobs only — business jobs are whole-library singletons).
-    /// </summary>
-    /// <param name="request">Job id, job type and cron expression.</param>
-    /// <returns>
-    /// 200 with the created job status; 400 when the job type is not
-    /// creatable, the cron expression is invalid or the id is malformed;
-    /// 409 when a job with the same id already exists.
-    /// </returns>
-    [HttpPost("job")]
-    public async Task<IActionResult> CreateJob([FromBody] CreateRecurringJobRequest request)
-    {
-        if (!ScheduleService.CreatableJobTypes.Contains(request.JobType, StringComparer.Ordinal))
-        {
-            return BadRequest($"Unsupported job type '{request.JobType}'.");
-        }
-        if (!CronExpressionValidator.IsValid(request.Cron))
-        {
-            return BadRequest("Invalid cron expression.");
-        }
-
-        var status = await _scheduleService.CreateRecurringJob(request.JobId, request.JobType, request.Cron);
-        if (status == null)
-        {
-            return Conflict($"A recurring job with id '{request.JobId}' already exists.");
-        }
-        return Ok(status);
-    }
-
-    /// <summary>
     /// Updates the cron of a recurring job. This is the single edit entry
     /// for schedules — built-ins persist to their settings key and are
     /// re-registered immediately.

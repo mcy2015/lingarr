@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // ScheduleJobsCard (自 screen-12 下钻屏收编进自动化 tab, IA 重构批 3):任务表
-// 行启停走 store、cron 列是全产品唯一编辑入口(含停用行)、「＋ 新建任务」
-// 预设仅运维类 + 自定义 cron 表单。队列深度/成功率已随下钻屏退役。
+// 行启停走 store、cron 列是全产品唯一编辑入口(含停用行)。任务目录固定为
+// 5 个内置任务——「＋ 新建任务」已移除(创建 API 一并删除,存量 custom 行
+// 仍可管理);队列深度/成功率已随下钻屏退役。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -17,7 +18,6 @@ const scheduleApi = vi.hoisted(() => ({
     depth: vi.fn(),
     enableJob: vi.fn(),
     disableJob: vi.fn(),
-    createJob: vi.fn(),
     updateJobCron: vi.fn(),
     startJob: vi.fn(),
     indexShows: vi.fn(),
@@ -91,23 +91,16 @@ const mountCard = async (): Promise<VueWrapper> => {
     return wrapper
 }
 
-const openPresetMenu = async (page: VueWrapper): Promise<void> => {
-    await page.find('[data-test="schedule-new-job"]').trigger('click')
-    await flushPromises()
-}
-
 beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(scheduleApi.recurringJobs).mockReset()
     vi.mocked(scheduleApi.enableJob).mockReset()
     vi.mocked(scheduleApi.disableJob).mockReset()
-    vi.mocked(scheduleApi.createJob).mockReset()
     vi.mocked(scheduleApi.updateJobCron).mockReset()
 
     scheduleApi.recurringJobs.mockResolvedValue([makeJob()])
     scheduleApi.enableJob.mockResolvedValue(undefined)
     scheduleApi.disableJob.mockResolvedValue(undefined)
-    scheduleApi.createJob.mockResolvedValue({ id: 'x', cron: 'y', jobMethod: 'z', enabled: true })
     scheduleApi.updateJobCron.mockResolvedValue(undefined)
 })
 
@@ -165,100 +158,16 @@ describe('ScheduleJobsCard (自动化 tab · 任务表)', () => {
         expect(useToastStore().toasts[0].message).toBe('Disabled: StatisticsJob')
     })
 
-    it('opens the preset menu with maintenance presets + custom cron only', async () => {
+    it('exposes no new-job entry — the catalogue is the five fixed jobs', async () => {
         const page = await mountCard()
 
+        expect(page.find('[data-test="schedule-new-job"]').exists()).toBe(false)
         expect(page.find('[data-test="schedule-new-job-menu"]').exists()).toBe(false)
-        await openPresetMenu(page)
-
-        const items = page.findAll('[data-test="schedule-new-job-menu"] [role="menuitem"]')
-        expect(items).toHaveLength(3) // statistics + cleanup + custom cron
-        expect(page.find('[data-test="schedule-custom-cron"]').exists()).toBe(true)
-        const menuText = page.find('[data-test="schedule-new-job-menu"]').text()
-        expect(menuText).not.toContain('Daily')
-        expect(menuText).not.toContain('media-sync')
+        expect(page.find('[data-test="schedule-custom-cron"]').exists()).toBe(false)
+        expect(page.find('[data-test="schedule-new-job-form"]').exists()).toBe(false)
     })
 
-    it('creating from a preset posts the definition and refreshes the list', async () => {
-        const page = await mountCard()
-
-        await openPresetMenu(page)
-        const preset = page
-            .findAll('[data-test="schedule-new-job-menu"] [role="menuitem"]')
-            .find((item) => item.text().includes('Statistics snapshot'))
-        await preset!.trigger('click')
-        await flushPromises()
-
-        expect(scheduleApi.createJob).toHaveBeenCalledWith({
-            jobId: 'statistics-snapshot',
-            jobType: 'StatisticsJob',
-            cron: '0 3 * * *'
-        })
-        expect(useToastStore().toasts[0].message).toBe('Created statistics-snapshot · 0 3 * * *')
-    })
-
-    it('the custom-cron form offers exactly one close entry — the footer button (UI 批一 · 1)', async () => {
-        const page = await mountCard()
-
-        await openPresetMenu(page)
-        await page.find('[data-test="schedule-custom-cron"]').trigger('click')
-        await flushPromises()
-
-        const form = q('[data-test="schedule-new-job-form"]')
-        expect(form).not.toBeNull()
-        const closeButtons = [...form!.element.querySelectorAll('button')].filter(
-            (button) => button.textContent?.trim() === en.common.close
-        )
-        expect(closeButtons).toHaveLength(1)
-        expect(closeButtons[0].getAttribute('data-test')).toBe('schedule-form-close')
-    })
-
-    it('the custom-cron form validates and submits job id, type and cron', async () => {
-        const page = await mountCard()
-
-        await openPresetMenu(page)
-        await page.find('[data-test="schedule-custom-cron"]').trigger('click')
-        await flushPromises()
-
-        const form = q('[data-test="schedule-new-job-form"]')
-        expect(form).not.toBeNull()
-        expect(q('[data-test="schedule-create-save"]')!.attributes('disabled')).toBeDefined()
-
-        const inputs = form!.findAll('input')
-        await inputs[0].setValue('nightly-scan')
-        await form!.find('select').setValue('StatisticsJob')
-        await inputs[1].setValue('0 5 * * *')
-        await flushPromises()
-
-        expect(q('[data-test="schedule-create-save"]')!.attributes('disabled')).toBeUndefined()
-
-        await q('[data-test="schedule-create-save"]')!.trigger('click')
-        await flushPromises()
-
-        expect(scheduleApi.createJob).toHaveBeenCalledWith({
-            jobId: 'nightly-scan',
-            jobType: 'StatisticsJob',
-            cron: '0 5 * * *'
-        })
-    })
-
-    it('surfaces a 409 as the already-exists toast', async () => {
-        scheduleApi.createJob.mockRejectedValue(
-            Object.assign(new Error('conflict'), { response: { status: 409 }, isAxiosError: true })
-        )
-        const page = await mountCard()
-
-        await openPresetMenu(page)
-        const preset = page
-            .findAll('[data-test="schedule-new-job-menu"] [role="menuitem"]')
-            .find((item) => item.text().includes('Weekly cleanup'))
-        await preset!.trigger('click')
-        await flushPromises()
-
-        const toast = useToastStore()
-        expect(toast.toasts[0].type).toBe('error')
-        expect(toast.toasts[0].message).toBe(en.settings.schedule.jobExists)
-    })
+    // ── cron 编辑:任务表 = 唯一编辑入口 ────────────────────────────
 
     it('refetches jobs through the reload button', async () => {
         const page = await mountCard()
@@ -270,8 +179,6 @@ describe('ScheduleJobsCard (自动化 tab · 任务表)', () => {
 
         expect(scheduleApi.recurringJobs).toHaveBeenCalled()
     })
-
-    // ── cron 编辑:任务表 = 唯一编辑入口 ────────────────────────────
 
     it('edits a cron through the row modal: PUT, refresh, toast, close', async () => {
         const page = await mountCard()

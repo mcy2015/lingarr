@@ -184,60 +184,6 @@ public class ScheduleServiceTests : IDisposable
 
     // ── CreateRecurringJob ──────────────────────────────────────────
 
-    [Fact]
-    public async Task CreateRecurringJob_Valid_RegistersAndPersists()
-    {
-        var created = await _service.CreateRecurringJob("nightly-scan", "StatisticsJob", "0 5 * * *");
-
-        Assert.NotNull(created);
-        Assert.Equal("nightly-scan", created.Id);
-        Assert.True(created.Enabled);
-
-        var persisted = ReadCustomJobsSetting();
-        var definition = Assert.Single(persisted);
-        Assert.Equal("nightly-scan", definition.JobId);
-        Assert.Equal("StatisticsJob", definition.JobType);
-        Assert.Equal("0 5 * * *", definition.Cron);
-        Assert.True(definition.Enabled);
-
-        var live = (await _service.GetRecurringJobs()).Single(job => job.Id == "nightly-scan");
-        Assert.True(live.Enabled);
-        Assert.Equal("0 5 * * *", live.Cron);
-    }
-
-    [Fact]
-    public async Task CreateRecurringJob_CustomJobCanBeDisabledAndReEnabled()
-    {
-        await _service.CreateRecurringJob("weekly-wipe", "CleanupJob", "0 2 * * 0");
-
-        Assert.True(await _service.SetJobEnabled("weekly-wipe", false));
-        var disabledRow = (await _service.GetRecurringJobs()).Single(job => job.Id == "weekly-wipe");
-        Assert.False(disabledRow.Enabled);
-
-        Assert.True(await _service.SetJobEnabled("weekly-wipe", true));
-        var enabledRow = (await _service.GetRecurringJobs()).Single(job => job.Id == "weekly-wipe");
-        Assert.True(enabledRow.Enabled);
-        Assert.Equal("0 2 * * 0", enabledRow.Cron);
-    }
-
-    [Fact]
-    public async Task CreateRecurringJob_DuplicateOrBuiltInId_ReturnsNull()
-    {
-        await _service.CreateRecurringJob("nightly-scan", "StatisticsJob", "0 5 * * *");
-
-        Assert.Null(await _service.CreateRecurringJob("nightly-scan", "StatisticsJob", "0 6 * * *"));
-        Assert.Null(await _service.CreateRecurringJob("StatisticsJob", "StatisticsJob", "0 6 * * *"));
-    }
-
-    [Fact]
-    public async Task CreateRecurringJob_InvalidCronOrUnknownType_ReturnsNull()
-    {
-        Assert.Null(await _service.CreateRecurringJob("bad-cron", "StatisticsJob", "77 * * * *"));
-        Assert.Null(await _service.CreateRecurringJob("bad-type", "NotAJob", "0 5 * * *"));
-        Assert.Null(await _service.CreateRecurringJob("bad id", "StatisticsJob", "0 5 * * *"));
-        Assert.Null(await _service.CreateRecurringJob("", "StatisticsJob", "0 5 * * *"));
-    }
-
     // ── Initialize honours persisted state ──────────────────────────
 
     [Fact]
@@ -314,7 +260,11 @@ public class ScheduleServiceTests : IDisposable
     [Fact]
     public async Task UpdateJobCron_CustomJob_UpdatesPersistedCronWhileEnabled()
     {
-        await _service.CreateRecurringJob("nightly-scan", "StatisticsJob", "0 5 * * *");
+        _settingService.Values[SettingKeys.Automation.CustomRecurringJobs] = JsonConvert.SerializeObject(
+            new List<CustomRecurringJob>
+            {
+                new() { JobId = "nightly-scan", JobType = "StatisticsJob", Cron = "0 5 * * *", Enabled = true }
+            });
 
         Assert.Equal(UpdateCronResult.Updated, await _service.UpdateJobCron("nightly-scan", "30 5 * * *"));
 
@@ -327,8 +277,11 @@ public class ScheduleServiceTests : IDisposable
     [Fact]
     public async Task UpdateJobCron_CustomJobDisabled_PersistsOnly()
     {
-        await _service.CreateRecurringJob("nightly-scan", "StatisticsJob", "0 5 * * *");
-        await _service.SetJobEnabled("nightly-scan", false);
+        _settingService.Values[SettingKeys.Automation.CustomRecurringJobs] = JsonConvert.SerializeObject(
+            new List<CustomRecurringJob>
+            {
+                new() { JobId = "nightly-scan", JobType = "StatisticsJob", Cron = "0 5 * * *", Enabled = false }
+            });
 
         Assert.Equal(UpdateCronResult.Updated, await _service.UpdateJobCron("nightly-scan", "15 5 * * *"));
 
@@ -402,14 +355,30 @@ public class ScheduleServiceTests : IDisposable
         Assert.True(jobs.Single(job => job.Id == "AutomatedTranslationJob").Enabled);
     }
 
-    // ── CreateRecurringJob rejects business (singleton) types ──────
+    // ── legacy custom_recurring_jobs stay runnable (frozen chain) ──
 
     [Fact]
-    public async Task CreateRecurringJob_RejectsNonCreatableJobType()
+    public async Task LegacyCustomJob_CanBeToggledAndEditedButNotCreated()
     {
-        Assert.Null(await _service.CreateRecurringJob("another-sync", "SyncMovieJob", "0 5 * * *"));
-        Assert.Null(await _service.CreateRecurringJob("another-translation", "AutomatedTranslationJob", "0 5 * * *"));
-        Assert.NotNull(await _service.CreateRecurringJob("another-wipe", "CleanupJob", "0 5 * * *"));
+        // creation is gone; a pre-existing definition keeps working end to end
+        _settingService.Values[SettingKeys.Automation.CustomRecurringJobs] = JsonConvert.SerializeObject(
+            new List<CustomRecurringJob>
+            {
+                new() { JobId = "weekly-wipe", JobType = "CleanupJob", Cron = "0 2 * * 0", Enabled = true }
+            });
+
+        Assert.True(await _service.SetJobEnabled("weekly-wipe", false));
+        var disabledRow = (await _service.GetRecurringJobs()).Single(job => job.Id == "weekly-wipe");
+        Assert.False(disabledRow.Enabled);
+
+        Assert.True(await _service.SetJobEnabled("weekly-wipe", true));
+        var enabledRow = (await _service.GetRecurringJobs()).Single(job => job.Id == "weekly-wipe");
+        Assert.True(enabledRow.Enabled);
+        Assert.Equal("0 2 * * 0", enabledRow.Cron);
+
+        Assert.Equal(UpdateCronResult.Updated, await _service.UpdateJobCron("weekly-wipe", "30 2 * * 0"));
+        var edited = (await _service.GetRecurringJobs()).Single(job => job.Id == "weekly-wipe");
+        Assert.Equal("30 2 * * 0", edited.Cron);
     }
 
     // ── helpers ─────────────────────────────────────────────────────

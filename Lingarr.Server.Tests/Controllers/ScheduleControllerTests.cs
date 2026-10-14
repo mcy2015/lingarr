@@ -68,17 +68,4 @@ public class ScheduleControllerTests
 
         Assert.IsType<OkResult>(action);
     }
-
-    [Fact]
-    public async Task CreateJob_NonCreatableType_Returns400()
-    {
-        var action = await _controller.CreateJob(new CreateRecurringJobRequest
-        {
-            JobId = "another-sync",
-            JobType = "SyncMovieJob",
-            Cron = "0 5 * * *"
-        });
-
-        Assert.IsType<BadRequestObjectResult>(action);
-    }
 }

@@ -646,14 +646,7 @@
             "nextExecution": "Next Execution",
             "actions": "Actions",
             "run": "Run",
-            "newJob": "＋ New job",
-            "customCron": "Custom cron…",
-            "createJobTitle": "New scheduled job",
-            "jobIdField": "Job ID",
-            "jobTypeField": "Job type",
             "cronField": "Cron expression",
-            "create": "Create",
-            "createdToast": "Created {job} · {cron}",
             "enable": "Enable",
             "disable": "Disable",
             "stateDisabled": "Off",
@@ -663,14 +656,7 @@
             "cronUpdated": "Updated {job} → {cron}",
             "jobNotFound": "Job not found, refresh and retry.",
             "cronUpdateFailed": "Failed to update cron, please retry.",
-            "createFailed": "Failed to create the job",
-            "cronInvalid": "Invalid cron expression",
-            "jobExists": "A job with this id already exists",
-            "jobIdWhitespace": "The job id must not contain whitespace",
-            "preset": {
-                "statistics": "Statistics snapshot",
-                "cleanup": "Weekly cleanup"
-            }
+            "cronInvalid": "Invalid cron expression"
         },
         "subtitle": {
             "title": "Subtitle",

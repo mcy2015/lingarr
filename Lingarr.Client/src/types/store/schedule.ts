@@ -34,18 +34,3 @@ export interface IQueueDepth {
     enqueued: number
     processing: number
 }
-
-/// Body of POST /api/schedule/job — new recurring job creation
-export interface ICreateRecurringJobRequest {
-    jobId: string
-    jobType: string
-    cron: string
-}
-
-/// Response of POST /api/schedule/job — the freshly registered job
-export interface IRecurringJobStatus {
-    id: string
-    cron: string
-    jobMethod: string
-    enabled: boolean
-}

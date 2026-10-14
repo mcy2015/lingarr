@@ -1,12 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import axios from 'axios'
-import {
-    IUseScheduleStore,
-    IRecurringJob,
-    IQueueDepth,
-    ICreateRecurringJobRequest,
-    IRecurringJobStatus
-} from '@/types'
+import { IUseScheduleStore, IRecurringJob, IQueueDepth } from '@/types'
 import { scheduleService } from '@/cells/settings/services/scheduleService'
 
 const scheduleApi = scheduleService(axios)
@@ -36,11 +30,6 @@ export const useScheduleStore = defineStore('schedule', {
                 await scheduleApi.disableJob(jobId)
             }
             await this.fetchRecurringJobs()
-        },
-        async createJob(request: ICreateRecurringJobRequest): Promise<IRecurringJobStatus> {
-            const status = await scheduleApi.createJob<IRecurringJobStatus>(request)
-            await this.fetchRecurringJobs()
-            return status
         },
         /// Cron edits land through the store so the table reflects the
         /// re-registered schedule right away.

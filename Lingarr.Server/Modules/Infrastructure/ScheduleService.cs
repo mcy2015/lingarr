@@ -28,33 +28,25 @@ public class ScheduleService : IScheduleService
     /// Built-in recurring jobs and where their cron comes from. The catalog
     /// backs Initialize(), the enable/disable endpoints, the cron-update
     /// endpoint and the disabled-row merge in GetRecurringJobs() — one
-    /// structure, four consumers.
+    /// structure, four consumers. The five built-ins are the whole job
+    /// catalogue: nothing else creates recurring jobs anymore (legacy
+    /// custom_recurring_jobs entries keep running, frozen per precedent).
     /// </summary>
     private sealed record BuiltinJob(
         string Id,
         string JobType,
         string? CronSetting,
-        string FallbackCron,
-        bool AllowCustomCreation);
+        string FallbackCron);
 
     private static readonly List<BuiltinJob> BuiltinJobs =
     [
-        new("SyncMovieJob", "SyncMovieJob", SettingKeys.Automation.MovieSchedule, "0 4 * * *", false),
-        new("SyncShowJob", "SyncShowJob", SettingKeys.Automation.ShowSchedule, "0 4 * * *", false),
+        new("SyncMovieJob", "SyncMovieJob", SettingKeys.Automation.MovieSchedule, "0 4 * * *"),
+        new("SyncShowJob", "SyncShowJob", SettingKeys.Automation.ShowSchedule, "0 4 * * *"),
         new("AutomatedTranslationJob", "AutomatedTranslationJob",
-            SettingKeys.Automation.TranslationSchedule, "0 4 * * *", false),
-        new("CleanupJob", "CleanupJob", SettingKeys.Automation.CleanupSchedule, Cron.Weekly(), true),
-        new("StatisticsJob", "StatisticsJob", SettingKeys.Automation.StatisticsSchedule, Cron.Daily(), true)
+            SettingKeys.Automation.TranslationSchedule, "0 4 * * *"),
+        new("CleanupJob", "CleanupJob", SettingKeys.Automation.CleanupSchedule, Cron.Weekly()),
+        new("StatisticsJob", "StatisticsJob", SettingKeys.Automation.StatisticsSchedule, Cron.Daily())
     ];
-
-    /// <summary>
-    /// Job types a user may create new recurring jobs from. Business jobs
-    /// (sync/translation) are whole-library singletons — a second instance
-    /// would double-run the same work — so only the maintenance types are
-    /// creatable.
-    /// </summary>
-    public static IReadOnlyList<string> CreatableJobTypes =>
-        BuiltinJobs.Where(job => job.AllowCustomCreation).Select(job => job.JobType).ToList();
 
     private readonly IHubContext<JobProgressHub> _hubContext;
     private readonly IServiceProvider _serviceProvider;
@@ -348,59 +340,6 @@ public class ScheduleService : IScheduleService
             RegisterRecurring(builtin.Id, builtin.JobType, cron);
         }
         return UpdateCronResult.Updated;
-    }
-
-    /// <inheritdoc />
-    public async Task<RecurringJobStatus?> CreateRecurringJob(string jobId, string jobType, string cron)
-    {
-        jobId = jobId.Trim();
-        cron = cron.Trim();
-
-        if (string.IsNullOrEmpty(jobId) || jobId.Any(char.IsWhiteSpace) ||
-            !CreatableJobTypes.Contains(jobType, StringComparer.Ordinal) ||
-            !CronExpressionValidator.IsValid(cron))
-        {
-            return null;
-        }
-
-        var existingIds = JobStorage.Current.GetConnection().GetRecurringJobs()
-            .Select(job => job.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        if (existingIds.Contains(jobId) ||
-            BuiltinJobs.Any(job => string.Equals(job.Id, jobId, StringComparison.Ordinal)))
-        {
-            return null;
-        }
-
-        using var scope = _serviceProvider.CreateScope();
-        var settingService = scope.ServiceProvider.GetRequiredService<ISettingService>();
-        var customJobs = await ReadCustomJobs(settingService);
-        if (customJobs.Any(job => string.Equals(job.JobId, jobId, StringComparison.Ordinal)))
-        {
-            return null;
-        }
-
-        customJobs.Add(new CustomRecurringJob
-        {
-            JobId = jobId,
-            JobType = jobType,
-            Cron = cron,
-            Enabled = true
-        });
-        await settingService.SetSetting(
-            SettingKeys.Automation.CustomRecurringJobs,
-            SerializeCustomJobs(customJobs));
-
-        RegisterRecurring(jobId, jobType, cron);
-
-        return new RecurringJobStatus
-        {
-            Id = jobId,
-            Cron = cron,
-            JobMethod = jobType,
-            Enabled = true,
-            CurrentState = JobStatus.Planned.GetDisplayName()
-        };
     }
 
     public string GetJobState(string jobId)
