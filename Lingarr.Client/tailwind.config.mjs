@@ -59,11 +59,15 @@ export default {
                     '0%': { opacity: 0 },
                     '50%': { opacity: 1 },
                     '100%': { opacity: 0 }
+                },
+                blink: {
+                    '50%': { opacity: 0 }
                 }
             },
             animation: {
                 loading: 'loading 1.5s infinite linear',
-                ellipsis: 'ellipsis 1.5s infinite'
+                ellipsis: 'ellipsis 1.5s infinite',
+                blink: 'blink 1.2s steps(1) infinite'
             }
         }
     },

@@ -20,8 +20,11 @@
                 @click="isOpen = false">
                 <Icon name="times" class="block h-6 w-6" />
             </button>
-            <div class="flex h-16 items-center border-b border-line px-5">
-                <h1 class="text-lg font-bold tracking-wide">LINGARR<span class="text-accent">_</span></h1>
+            <div class="px-5 pt-[18px] pb-4">
+                <h1
+                    class="text-[17px] font-bold tracking-[0.04em] text-primary-content">
+                    LINGARR<span class="text-accent animate-blink">_</span>
+                </h1>
             </div>
             <!-- Navigation -->
             <nav class="grow overflow-y-auto px-3 py-4">
