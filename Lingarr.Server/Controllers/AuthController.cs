@@ -69,6 +69,16 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Check whether any user account exists. The settings UI calls this before
+    /// enabling authentication so it cannot lock the instance out with zero users.
+    /// </summary>
+    [HttpGet("users/any")]
+    public async Task<ActionResult<bool>> HasAnyUsers()
+    {
+        return Ok(await _authService.HasAnyUsers());
+    }
+
+    /// <summary>
     /// Verify if the request is authenticated via Cookie
     /// </summary>
     [HttpGet("authenticated")]
