@@ -2,14 +2,12 @@
     "common": {
         "close": "关闭",
         "save": "保存",
-        "back": "返回",
         "menu": "打开菜单",
         "language": "语言",
         "theme": "主题",
         "skipToContent": "跳到主要内容",
         "saved": "已保存",
         "loading": "加载中…",
-        "retry": "重试",
         "refresh": "刷新",
         "searchMedia": "搜索媒体…",
         "orderBy": "排序",
@@ -22,12 +20,6 @@
             "page": "第",
             "of": "页,共",
             "items": "项"
-        },
-        "activeTranslations": {
-            "running": "进行中",
-            "pending": "等待中",
-            "inProgressTitle": "{count} 个翻译正在进行",
-            "pendingTitle": "{count} 个翻译等待中"
         },
         "noMedia": {
             "title": "未找到媒体",
@@ -52,8 +44,7 @@
             "completed": "已完成",
             "failed": "已失败",
             "cancelled": "已取消",
-            "interrupted": "已中断",
-            "paused": "已暂停"
+            "interrupted": "已中断"
         },
         "runNow": "立即运行",
         "etaHint": "按开始时间与进度线性外推"
@@ -117,10 +108,6 @@
             "import": "导入字幕",
             "detail": "详情"
         },
-        "detail": {
-            "include": "参与翻译",
-            "threshold": "延迟(小时)"
-        },
         "tray": {
             "selected": "已选 {count} 项",
             "translate": "翻译所选",
@@ -149,12 +136,10 @@
         }
     },
     "import": {
-        "title": "导入字幕",
         "tabs": {
             "free": "自由导入",
             "season": "定向导入 · 整季"
         },
-        "planned": "规划中",
         "dropzone": {
             "title": "拖拽字幕文件到此处，或点击选择"
         },
@@ -205,7 +190,6 @@
             "transcode": "转码 UTF-8",
             "bilingual": "双语输出",
             "bilingualHint": "由全局字幕设置在写回时决定",
-            "bilingualFollows": "跟随全局",
             "writeback": "写回",
             "conflict": "冲突",
             "transcodeFixed": "恒定 · 导入统一转码为 UTF-8 存储",
@@ -219,8 +203,6 @@
         "estimateCost": "≈ {cost}",
         "estimateUnknown": "成本未知",
         "match": {
-            "Exact": "精确",
-            "Guess": "猜测",
             "None": "未匹配"
         },
         "status": {
@@ -264,76 +246,6 @@
         },
         "bilingual": {
             "follow": "跟随全局"
-        }
-    },
-    "dashboard": {
-        "mediaOverview": "媒体概览",
-        "translationActivity": "翻译动态",
-        "languageStatistics": "语言统计",
-        "noStatistics": "暂无统计数据",
-        "statCard": {
-            "movies": "电影",
-            "tvShows": "剧集",
-            "translated": "已翻译"
-        },
-        "metricCard": {
-            "linesTranslated": "已翻译行数",
-            "filesProcessed": "已处理文件数",
-            "charactersTranslated": "已翻译字符数"
-        },
-        "translationServices": "翻译服务",
-        "availableSubtitles": "可用字幕",
-        "resetStatistics": "重置统计",
-        "resetConfirm": "确定要重置所有统计数据吗?此操作无法撤销。",
-        "errors": {
-            "fetchFailed": "获取统计数据失败",
-            "resetFailed": "重置统计数据失败"
-        },
-        "noData": "暂无数据",
-        "dailyTranslations": "每日翻译",
-        "sevenDayAverage": "7 日平均",
-        "tooltip": {
-            "average": "平均:{count} 条翻译",
-            "count": "{count} 条翻译"
-        },
-        "roadmap": {
-            "title": "Lingarr 路线图",
-            "description": "改进项,包括已完成与计划中的内容。",
-            "status": {
-                "completed": "已完成",
-                "inProgress": "进行中",
-                "planned": "计划中"
-            },
-            "items": {
-                "aiTranslation": {
-                    "title": "AI 翻译",
-                    "description": "新增 AI 服务以支持 AI 翻译"
-                },
-                "enhancedNotifications": {
-                    "title": "增强通知",
-                    "description": "增强针对请求翻译的通知系统"
-                },
-                "translationHistory": {
-                    "title": "翻译历史",
-                    "description": "新增查看和管理翻译历史的功能"
-                },
-                "scheduleControls": {
-                    "title": "计划任务控制",
-                    "description": "新增对计划任务的控制支持"
-                },
-                "appLocalization": {
-                    "title": "应用本地化",
-                    "description": "为应用提供可配置的本地化选项"
-                },
-                "dashboardImprovements": {
-                    "title": "仪表盘改进",
-                    "description": "统计与仪表盘功能改进"
-                },
-                "versionRelease": {
-                    "title": "1.0 正式版发布",
-                    "description": "正式版本已发布,尽可能减少破坏性变更。"
-                }
-            }
         }
     },
     "overview": {
@@ -462,38 +374,20 @@
         }
     },
     "services": {
-        "title": "服务",
-        "description": "配置用于字幕本地化的翻译服务。可添加回退服务,在主服务失败时按顺序依次尝试。",
-        "translationServices": "翻译服务",
-        "primary": "主服务",
-        "fallback": "回退 {index}",
-        "configureCredentials": "配置凭据",
         "moveUp": "上移",
         "moveDown": "下移",
         "removeService": "移除服务",
-        "addFallbackService": "添加回退服务",
-        "configuringCredentialsFor": "正在配置以下服务的凭据:",
         "noManifest": "没有适用于 {provider} 的清单。",
-        "customizeRequestTemplate": "自定义请求模板与提示词",
-        "requestTemplateHint": "调整用于翻译的 AI 请求体、系统提示词与上下文。",
-        "openRequestSettings": "打开请求设置",
         "integration": {
-            "title": "集成",
-            "description": "配置 Radarr 与 Sonarr 集成的设置。",
-            "radarrSettings": "Radarr 设置:",
-            "sonarrSettings": "Sonarr 设置:",
             "address": "地址",
             "apiKey": "API 密钥",
             "radarrUrlError": "请输入有效的 URL(例如 http://localhost:7878 或 https://example.com)",
             "sonarrUrlError": "请输入有效的 URL(例如 http://localhost:8989 或 https://example.com)",
             "apiKeyLengthError": "API 密钥长度必须为 {minLength} 个字符",
             "apiKeyConfigured": "已配置,留空保持不变",
-            "includeByDefault": "默认包含新导入的内容",
-            "noMediaHint": "看不到媒体?请尝试启动同步任务以重新建立索引",
-            "here": "这里"
+            "includeByDefault": "默认包含新导入的内容"
         },
         "mapping": {
-            "title": "目录映射",
             "source": "源",
             "target": "目标",
             "destination": "目标",
@@ -528,7 +422,6 @@
             "secretConfigured": "已配置,留空保持不变"
         },
         "webhook": {
-            "title": "Webhook",
             "description": "在 Radarr 和 Sonarr 中配置 Webhook,以便在添加新媒体时自动触发翻译。",
             "goTo": "前往",
             "andUseThisUrl": "并使用此 URL:"
@@ -656,7 +549,6 @@
             "timeZoneWarning": "服务器 TZ 环境变量未设置或无效,定时任务已回退 UTC——cron 与显示时间均按 UTC 计算"
         },
         "subtitle": {
-            "title": "字幕",
             "description": "配置字幕的清理与时间轴处理,以防止时间轴重叠并去除多余的格式。",
             "ignoreCaptions": "若存在带标签的字幕则跳过翻译:",
             "ignoreCaptionsDescription": "如果目标字幕已包含听障(Hearing Impaired)或强制(Forced)等标签字幕,则跳过翻译。",
@@ -677,7 +569,6 @@
             "tagLabel": "字幕标签"
         },
         "validation": {
-            "title": "字幕校验",
             "description": "配置字幕校验规则。这些规则将在处理字幕文件时应用,如果校验失败,翻译将被取消。",
             "enable": "启用校验:",
             "minDuration": "字幕最短显示时长(毫秒):",
@@ -687,7 +578,6 @@
             "maxSize": "字幕文件最大大小(字节):"
         },
         "translation": {
-            "title": "翻译请求",
             "description": "通过修改重试选项或批量大小(如果服务支持)来调整翻译请求设置。",
             "useBatch": "使用批量翻译",
             "useBatchDescription": "将多条字幕行合并为批次处理,以提高翻译效率和上下文理解能力。注意,带上下文的单行翻译仍然更可靠、质量更高。",
@@ -724,7 +614,6 @@
             "userPromptDescription": "随每次校对请求一起发送原文及其现有译文。"
         },
         "logs": {
-            "title": "系统日志",
             "heading": "日志",
             "subLine": "环形缓冲 1 000 条 · 24h · SSE 实时 · Information 级",
             "topbarSub": "环形缓冲 1 000 条 · SSE 实时",
@@ -733,25 +622,15 @@
             "levelFilter": "级别过滤",
             "chipAll": "全部",
             "autoScrollLabel": "自动滚动",
-            "allLevels": "所有级别",
-            "information": "信息",
-            "warning": "警告",
-            "error": "错误",
             "export": "导出",
             "exportTitle": "系统日志导出",
             "exportGenerated": "生成时间:{datetime}",
             "exportTotalEntries": "总条数:{count}",
             "exportStackTrace": "堆栈跟踪:",
             "clear": "清空",
-            "enableAutoScroll": "启用自动滚动",
-            "disableAutoScroll": "禁用自动滚动",
             "autoScroll": "自动滚动:",
-            "time": "时间",
             "level": "级别",
-            "source": "来源",
-            "message": "消息",
             "waiting": "等待日志…",
-            "totalEntries": "总条数:{count}",
             "failedToProcessData": "处理日志数据失败:{data}",
             "connectionError": "日志流连接出错,将在 5 秒后尝试重新连接…"
         },
@@ -892,14 +771,6 @@
     "translations": {
         "bilingual": "双语",
         "monolingual": "单语",
-        "columns": {
-            "title": "标题",
-            "source": "源",
-            "target": "目标",
-            "status": "状态",
-            "progress": "进度",
-            "completed": "已完成"
-        },
         "list": {
             "deleteWithCount": "删除 ({count})",
             "cancel": "取消",
@@ -1021,7 +892,6 @@
             "pending": "待校对",
             "rejected": "已驳回"
         },
-        "openWorkbench": "打开校对台",
         "stashed": "已暂存 · {done}/{total} 行",
         "suggestGlossary": "✎ {count} 处修改 → 建议入术语表",
         "suggestGlossaryHint": "跳转到 设置 · 字幕与质量 的术语表区。不会自动创建术语。"
@@ -1037,7 +907,6 @@
             "queueLive": "{count} 个任务 · SignalR 实时",
             "importLive": "处理队列 {files} 个文件 · 翻译 {translate}",
             "proofreadLive": "{title} · 已校对 {done}/{total} 行",
-            "mediaDetailLive": "{title} · {seasons} 季 · {episodes} 集",
             "offlineReconnecting": "离线 · 重连中"
         },
         "search": "⌘K 搜索",

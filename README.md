@@ -95,7 +95,6 @@ cd Lingarr.Client && npx vitest run && npx vue-tsc --noEmit && npx oxlint ./src
 
 - [docs/refactoring-status.zh-CN.md](docs/refactoring-status.zh-CN.md) — 重构全史与各批次验收记录
 - [docs/prototype-spec/](docs/prototype-spec/) — 12 屏原型逐屏规格(元素清单/交互/状态完备性)
-- [docs/settings-guide.zh-CN.md](docs/settings-guide.zh-CN.md) — 设置页各项语义
 - [docs/module-analysis.zh-CN.md](docs/module-analysis.zh-CN.md) — 服务端模块分析
 
 ## 致谢与许可

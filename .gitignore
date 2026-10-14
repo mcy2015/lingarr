@@ -1,64 +1,30 @@
-*.swp
-*.*~
-project.lock.json
+# macOS
 .DS_Store
-*.pyc
-nupkg/
 
-# Visual Studio Code
+# IDE
 .vscode/
-
-# Rider
 .idea/
-
-# Visual Studio
-.vs/
-
-# Fleet
 .fleet/
-
-# Code Rush
+.vs/
 .cr/
+.run/
 
-# User-specific files
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
-
-# Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-build/
-bld/
+# .NET build artifacts
 [Bb]in/
 [Oo]bj/
 [Oo]ut/
-msbuild.log
-msbuild.err
-msbuild.wrn
+*.user
+*.suo
 
-# local
-/SQL
-deployment/
+# Node
+node_modules/
 
-# Logs
-nas_logs.txt
-nas_logs_window.txt
+# Logs & local databases
 *.log
-
-# Local DB
-local_nas.db
 *.db
 
-# Ansible
-ansible_env/
+# Media mounts (host-side data, never commit)
 /media/
-core
 
 # Production compose data volume (SQLite + Hangfire)
 data/

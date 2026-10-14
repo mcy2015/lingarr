@@ -50,7 +50,6 @@ services:
       - ../media/data/tv:/tv
       - ../media/data/series/anime:/anime
       - ../media/data/config:/app/config
-      - ./samples/CloudflarePlugin/bin/Debug/net10.0:/app/plugins:ro # Mount the plugins
     ports:
       - "9877:9876"
     networks:

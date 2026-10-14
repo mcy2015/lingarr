@@ -2,14 +2,12 @@
     "common": {
         "close": "Close",
         "save": "Save",
-        "back": "Back",
         "menu": "Open menu",
         "language": "Language",
         "theme": "Theme",
         "skipToContent": "Skip to content",
         "saved": "Saved",
         "loading": "Loading…",
-        "retry": "Retry",
         "refresh": "Refresh",
         "searchMedia": "Search media…",
         "orderBy": "Order by",
@@ -22,12 +20,6 @@
             "page": "Page",
             "of": "of",
             "items": "items"
-        },
-        "activeTranslations": {
-            "running": "running",
-            "pending": "pending",
-            "inProgressTitle": "1 translation in progress | {count} translations in progress",
-            "pendingTitle": "1 translation pending | {count} translations pending"
         },
         "noMedia": {
             "title": "No Media Found",
@@ -52,8 +44,7 @@
             "completed": "Completed",
             "failed": "Failed",
             "cancelled": "Cancelled",
-            "interrupted": "Interrupted",
-            "paused": "Paused"
+            "interrupted": "Interrupted"
         },
         "runNow": "Run now",
         "etaHint": "Linear estimate from start time and progress"
@@ -117,10 +108,6 @@
             "import": "Import",
             "detail": "Details"
         },
-        "detail": {
-            "include": "Include in translation",
-            "threshold": "Delay (hours)"
-        },
         "tray": {
             "selected": "{count} selected",
             "translate": "Translate selection",
@@ -149,12 +136,10 @@
         }
     },
     "import": {
-        "title": "Import subtitles",
         "tabs": {
             "free": "Free import",
             "season": "Season pack"
         },
-        "planned": "planned",
         "dropzone": {
             "title": "Drag subtitle files here, or click to browse"
         },
@@ -205,7 +190,6 @@
             "transcode": "UTF-8 transcode",
             "bilingual": "Bilingual output",
             "bilingualHint": "Decided by the global subtitle setting at write-back time",
-            "bilingualFollows": "follows global",
             "writeback": "Write-back",
             "conflict": "Conflict",
             "transcodeFixed": "always · imports are stored as UTF-8",
@@ -219,8 +203,6 @@
         "estimateCost": "≈ {cost}",
         "estimateUnknown": "cost unknown",
         "match": {
-            "Exact": "Exact",
-            "Guess": "Guess",
             "None": "Unmatched"
         },
         "status": {
@@ -264,76 +246,6 @@
         },
         "bilingual": {
             "follow": "Follow global"
-        }
-    },
-    "dashboard": {
-        "mediaOverview": "Media Overview",
-        "translationActivity": "Translation Activity",
-        "languageStatistics": "Language Statistics",
-        "noStatistics": "No statistics available",
-        "statCard": {
-            "movies": "Movies",
-            "tvShows": "TV Shows",
-            "translated": "Translated"
-        },
-        "metricCard": {
-            "linesTranslated": "Lines Translated",
-            "filesProcessed": "Files Processed",
-            "charactersTranslated": "Characters Translated"
-        },
-        "translationServices": "Translation Services",
-        "availableSubtitles": "Available Subtitles",
-        "resetStatistics": "Reset statistics",
-        "resetConfirm": "Are you sure you want to reset all statistics? This action cannot be undone.",
-        "errors": {
-            "fetchFailed": "Failed to fetch statistics",
-            "resetFailed": "Failed to reset statistics"
-        },
-        "noData": "No data available",
-        "dailyTranslations": "Daily Translations",
-        "sevenDayAverage": "7-Day Average",
-        "tooltip": {
-            "average": "Average: {count} translations",
-            "count": "{count} translations"
-        },
-        "roadmap": {
-            "title": "Lingarr Roadmap",
-            "description": "Improvements, both completed and planned.",
-            "status": {
-                "completed": "Completed",
-                "inProgress": "In Progress",
-                "planned": "Planned"
-            },
-            "items": {
-                "aiTranslation": {
-                    "title": "AI Translation",
-                    "description": "Added AI services to support AI translation"
-                },
-                "enhancedNotifications": {
-                    "title": "Enhanced Notifications",
-                    "description": "Enhance the notification system for requested translations"
-                },
-                "translationHistory": {
-                    "title": "Translation History",
-                    "description": "Add functionality to view and manage translation history"
-                },
-                "scheduleControls": {
-                    "title": "Schedule controls",
-                    "description": "Adding support for controlling schedules"
-                },
-                "appLocalization": {
-                    "title": "App Localization",
-                    "description": "Configurable localization options for the application"
-                },
-                "dashboardImprovements": {
-                    "title": "Dashboard improvements",
-                    "description": "Statistics and dashboard improvements"
-                },
-                "versionRelease": {
-                    "title": "Version 1.0 release",
-                    "description": "Production version released with a reduced number of breaking changes."
-                }
-            }
         }
     },
     "overview": {
@@ -462,38 +374,20 @@
         }
     },
     "services": {
-        "title": "Services",
-        "description": "Configure the translation service for subtitle localization. Add fallback services to be tried in order when the primary service fails.",
-        "translationServices": "Translation services",
-        "primary": "Primary",
-        "fallback": "Fallback {index}",
-        "configureCredentials": "Configure credentials",
         "moveUp": "Move up",
         "moveDown": "Move down",
         "removeService": "Remove service",
-        "addFallbackService": "Add fallback service",
-        "configuringCredentialsFor": "Configuring credentials for",
         "noManifest": "No manifest available for {provider}.",
-        "customizeRequestTemplate": "Customize request template and prompts",
-        "requestTemplateHint": "Adjust the AI request body, system prompt and context for translations.",
-        "openRequestSettings": "Open Request Settings",
         "integration": {
-            "title": "Integrations",
-            "description": "Configure the settings for Radarr and Sonarr integrations.",
-            "radarrSettings": "Radarr Settings:",
-            "sonarrSettings": "Sonarr Settings:",
             "address": "Address",
             "apiKey": "API key",
             "radarrUrlError": "Please enter a valid URL (e.g., http://localhost:7878 or https://example.com)",
             "sonarrUrlError": "Please enter a valid URL (e.g., http://localhost:8989 or https://example.com)",
             "apiKeyLengthError": "API Key must be {minLength} characters",
             "apiKeyConfigured": "Configured — leave blank to keep the current key",
-            "includeByDefault": "Include new imports by default",
-            "noMediaHint": "No media visible? Try reindexing by starting a sync task",
-            "here": "here"
+            "includeByDefault": "Include new imports by default"
         },
         "mapping": {
-            "title": "Source mapping",
             "source": "Source",
             "target": "Target",
             "destination": "Destination",
@@ -528,7 +422,6 @@
             "secretConfigured": "Configured — leave blank to keep the current value"
         },
         "webhook": {
-            "title": "Webhook",
             "description": "Configure webhooks in Radarr and Sonarr to automatically trigger translations when new media is added.",
             "goTo": "Go to",
             "andUseThisUrl": "and use this URL:"
@@ -656,7 +549,6 @@
             "timeZoneWarning": "Server TZ is unset or invalid — schedules fell back to UTC, so cron and displayed times use UTC"
         },
         "subtitle": {
-            "title": "Subtitle",
             "description": "Configure how subtitles are cleaned, and timed to prevent overlaps and remove unwanted formatting.",
             "ignoreCaptions": "Skip translation if subtitles with caption tags exist:",
             "ignoreCaptionsDescription": "Skip translation if a target subtitle with captions such as Hearing Impaired or Forced already exists.",
@@ -677,7 +569,6 @@
             "tagLabel": "Subtitle tag"
         },
         "validation": {
-            "title": "Subtitle Validation",
             "description": "Configure validation rules for subtitles. These rules will be applied when processing subtitle files. If a validation fails, the translation will be canceled.",
             "enable": "Enable validation:",
             "minDuration": "The minimum time duration in milliseconds that a subtitle must be displayed:",
@@ -687,7 +578,6 @@
             "maxSize": "The maximum size of a subtitle file in bytes:"
         },
         "translation": {
-            "title": "Translation Request",
             "description": "Modify translation request settings by changing retry options or batch size if available in the service.",
             "useBatch": "Use batch translation",
             "useBatchDescription": "Process multiple subtitle lines together in batches to improve translation efficiency and context awareness. Note that single-line translations with context are still more reliable and of higher quality.",
@@ -724,7 +614,6 @@
             "userPromptDescription": "Sent together with the source line and its existing translation for each proofread request."
         },
         "logs": {
-            "title": "System Logs",
             "heading": "Logs",
             "subLine": "Ring buffer 1,000 entries · 24 h · SSE live · Information level",
             "topbarSub": "Ring buffer 1,000 entries · SSE live",
@@ -733,25 +622,15 @@
             "levelFilter": "Level filter",
             "chipAll": "All",
             "autoScrollLabel": "Auto-scroll",
-            "allLevels": "All Levels",
-            "information": "Information",
-            "warning": "Warning",
-            "error": "Error",
             "export": "Export",
             "exportTitle": "System Logs Export",
             "exportGenerated": "Generated: {datetime}",
             "exportTotalEntries": "Total Entries: {count}",
             "exportStackTrace": "Stack Trace:",
             "clear": "Clear",
-            "enableAutoScroll": "Enable Auto-scroll",
-            "disableAutoScroll": "Disable Auto-scroll",
             "autoScroll": "Auto-scroll:",
-            "time": "Time",
             "level": "Level",
-            "source": "Source",
-            "message": "Message",
             "waiting": "Waiting for logs…",
-            "totalEntries": "Total entries: {count}",
             "failedToProcessData": "Failed to process log data: {data}",
             "connectionError": "Log stream connection error. Attempting to reconnect in 5 seconds…"
         },
@@ -892,14 +771,6 @@
     "translations": {
         "bilingual": "Bilingual",
         "monolingual": "Monolingual",
-        "columns": {
-            "title": "Title",
-            "source": "Source",
-            "target": "Target",
-            "status": "Status",
-            "progress": "Progress",
-            "completed": "Completed"
-        },
         "list": {
             "deleteWithCount": "Delete ({count})",
             "cancel": "Cancel",
@@ -1021,7 +892,6 @@
             "pending": "Pending review",
             "rejected": "Rejected"
         },
-        "openWorkbench": "Open proofreading workbench",
         "stashed": "Stashed · {done}/{total} lines",
         "suggestGlossary": "✎ {count} edits → suggest glossary terms",
         "suggestGlossaryHint": "Jump to the glossary in settings · subtitles & quality. Terms are not created automatically."
@@ -1037,7 +907,6 @@
             "queueLive": "{count} tasks · live via SignalR",
             "importLive": "{files} files in the workbench · {translate} to translate",
             "proofreadLive": "{title} · {done}/{total} lines reviewed",
-            "mediaDetailLive": "{title} · {seasons} seasons · {episodes} episodes",
             "offlineReconnecting": "Offline · reconnecting"
         },
         "search": "⌘K 搜索",
