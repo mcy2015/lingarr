@@ -319,6 +319,24 @@ export interface IScheduleService {
 export interface IMappingService {
     getMappings(): Promise<IPathMapping[]>
     setMappings(mappings: IPathMapping[]): Promise<void>
+    /// Ground truth: which stored media directories are not on this filesystem.
+    status(): Promise<IMappingStatus>
+    /// Tries an *arr-style path against the saved mappings (verdict, not 5xx).
+    testMapping(path: string, mediaType: string): Promise<ITestMappingResult>
+}
+
+/// GET /api/mapping/status — reachability of the stored media directories.
+export interface IMappingStatus {
+    checked: number
+    unreachable: { mediaType: string; path: string }[]
+}
+
+/// POST /api/mapping/test — one conversion through the sync pipeline's mapper.
+export interface ITestMappingResult {
+    ok: boolean
+    matched: boolean
+    mappedPath: string
+    exists: boolean
 }
 
 export interface IDirectoryService {

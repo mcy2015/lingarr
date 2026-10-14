@@ -17,4 +17,10 @@ public interface IMappingService
     /// <param name="mappings">The new list of path mappings to set.</param>
     /// <remarks>This operation removes all existing mappings before adding the new ones.</remarks>
     Task SetMapping(List<PathMapping> mappings);
+
+    /// <summary>
+    /// Ground-truth reachability check: every distinct media directory the sync
+    /// pipeline stored, tested against this filesystem.
+    /// </summary>
+    Task<MappingStatusDto> GetMappingStatus();
 }

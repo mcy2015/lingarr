@@ -36,6 +36,10 @@ vi.mock('@/cells/app/api/mediaService', () => ({
     })
 }))
 
+const statusMock = vi.hoisted(() =>
+    vi.fn().mockResolvedValue({ checked: 0, unreachable: [] })
+)
+
 vi.mock('@/cells/settings/services/mappingService', () => ({
     mappingService: () => ({
         getMappings: vi
@@ -43,7 +47,8 @@ vi.mock('@/cells/settings/services/mappingService', () => ({
             .mockResolvedValue([
                 { sourcePath: '/media', destinationPath: '/tv', mediaType: 'Show' }
             ]),
-        setMappings: vi.fn().mockResolvedValue(undefined)
+        setMappings: vi.fn().mockResolvedValue(undefined),
+        status: statusMock
     })
 }))
 
@@ -239,9 +244,35 @@ describe('MediaSourcesCard · Webhook 折叠与路径映射行', () => {
 
         const row = wrapper.find('[data-test="mapping-row"]')
         expect(row.text()).toContain(i18n.global.t('settings.sources.mappingHint', 1))
+        // clean ground truth: no unreachable warning anywhere
+        expect(wrapper.find('[data-test="mapping-unreachable"]').exists()).toBe(false)
         await wrapper.find('[data-test="mapping-open"]').trigger('click')
         await flushPromises()
         expect(router.currentRoute.value.name).toBe('settings-mapping')
+    })
+
+    it('sits between the source rows and the webhook fold, warning when paths are unreachable', async () => {
+        statusMock.mockResolvedValueOnce({
+            checked: 3,
+            unreachable: [
+                { mediaType: 'movie', path: '/nope/a' },
+                { mediaType: 'show', path: '/nope/b' }
+            ]
+        })
+        const { wrapper } = await mountCard()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        // row order: sources → mapping → webhook (mapping follows its cause)
+        const follows = (a: string, b: string) =>
+            (wrapper.find(`[data-test="${a}"]`).element as Element).compareDocumentPosition(
+                wrapper.find(`[data-test="${b}"]`).element as Node
+            ) & Node.DOCUMENT_POSITION_FOLLOWING
+        expect(follows('source-row-radarr', 'mapping-row')).toBeTruthy()
+        expect(follows('mapping-row', 'webhook-fold')).toBeTruthy()
+
+        const warning = wrapper.find('[data-test="mapping-unreachable"]')
+        expect(warning.exists()).toBe(true)
+        expect(warning.text()).toContain('2')
     })
 })
 

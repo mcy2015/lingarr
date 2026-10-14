@@ -502,7 +502,14 @@
             "movie": "Movie",
             "show": "Show",
             "add": "Add mapping",
-            "pick": "Select path"
+            "pick": "Select path",
+            "explain": "Source = the path Sonarr/Radarr reports to Lingarr; destination = the real path inside the Lingarr container. When they differ subtitles cannot land on disk — save first, then verify with the test below.",
+            "sourcePlaceholder": "/data/movies (*arr container view)",
+            "test": "Test mapping",
+            "testPlaceholder": "Paste a path as Sonarr/Radarr reports it, e.g. /data/movies/…",
+            "testOk": "✓ reachable → {path}",
+            "testMissing": "✗ not reachable after mapping → {path}",
+            "testNoHit": "✗ no mapping matched: the path is not contained by any saved source path"
         },
         "plugins": {
             "title": "Plugins",
@@ -878,7 +885,8 @@
             "mapping": "Path mapping",
             "mappingHint": "{count} mapping | {count} mappings",
             "manage": "Manage",
-            "edit": "Edit"
+            "edit": "Edit",
+            "mappingUnreachable": "{count} media paths unreachable"
         },
         "subtitleOutput": {
             "title": "Subtitle output",

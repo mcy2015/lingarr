@@ -43,6 +43,31 @@
             </span>
         </div>
 
+        <!-- 路径映射行:紧随源行(与同步因果相连),下钻保留页面;hint 双态 =
+             映射数 + 不可达体检警示(绑真实磁盘状态,非静态劝导) -->
+        <div
+            class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 text-[13px]"
+            data-test="mapping-row">
+            <b class="flex-none">{{ t('settings.sources.mapping') }}</b>
+            <span class="text-secondary-content mono min-w-0 flex-1 truncate text-xs">
+                {{ t('settings.sources.mappingHint', { count: mappingStore.mappings.length }) }}
+                <span
+                    v-if="mappingStore.unreachableCount > 0"
+                    class="text-warning-content"
+                    data-test="mapping-unreachable"
+                    :title="t('settings.sources.mappingUnreachable', { count: mappingStore.unreachableCount })">
+                    · {{ t('settings.sources.mappingUnreachable', { count: mappingStore.unreachableCount }) }}
+                </span>
+            </span>
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                data-test="mapping-open"
+                @click="router.push({ name: 'settings-mapping' })">
+                {{ t('settings.sources.manage') }}
+            </button>
+        </div>
+
         <!-- Webhook URL 折叠说明区(原型 setlist/meta 层级:折叠头 13px →
              说明 12px hint → 每源一行「名称 b + mono URL」) -->
         <div class="border-line border-b">
@@ -80,23 +105,6 @@
                     </CodeSnippet>
                 </div>
             </div>
-        </div>
-
-        <!-- 路径映射行:下钻保留页面 -->
-        <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-[13px]"
-            data-test="mapping-row">
-            <b class="flex-none">{{ t('settings.sources.mapping') }}</b>
-            <span class="text-secondary-content mono min-w-0 flex-1 truncate text-xs">
-                {{ t('settings.sources.mappingHint', { count: mappingStore.mappings.length }) }}
-            </span>
-            <button
-                type="button"
-                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                data-test="mapping-open"
-                @click="router.push({ name: 'settings-mapping' })">
-                {{ t('settings.sources.manage') }}
-            </button>
         </div>
 
         <!-- 编辑模态:地址 + API Key + 默认包含(复用原 IntegrationSettings 表单逻辑) -->
@@ -204,6 +212,7 @@ const showCount = ref<number | null>(null)
 onMounted(async () => {
     try {
         mappingStore.fetchMappings()
+        mappingStore.fetchStatus()
     } catch {
         // mapping count simply stays at the store default
     }

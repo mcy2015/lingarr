@@ -502,7 +502,14 @@
             "movie": "电影",
             "show": "剧集",
             "add": "新增映射",
-            "pick": "选择路径"
+            "pick": "选择路径",
+            "explain": "源 = Sonarr/Radarr 报给 Lingarr 的路径;目标 = Lingarr 容器内的真实路径。两者不一致时字幕无法落盘,先保存再用下方测试验证。",
+            "sourcePlaceholder": "/data/movies(*arr 容器视角)",
+            "test": "测试映射",
+            "testPlaceholder": "粘贴一条 Sonarr/Radarr 报告的路径,如 /data/movies/…",
+            "testOk": "✓ 可达 → {path}",
+            "testMissing": "✗ 映射后不可达 → {path}",
+            "testNoHit": "✗ 无映射命中:该路径未被任何已保存的源路径包含"
         },
         "plugins": {
             "title": "插件",
@@ -878,7 +885,8 @@
             "mapping": "路径映射",
             "mappingHint": "{count} 条映射",
             "manage": "管理",
-            "edit": "编辑"
+            "edit": "编辑",
+            "mappingUnreachable": "{count} 个媒体路径不可达"
         },
         "subtitleOutput": {
             "title": "字幕输出",

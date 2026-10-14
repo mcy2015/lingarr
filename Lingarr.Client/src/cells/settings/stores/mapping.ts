@@ -9,7 +9,10 @@ const mappingApi = mappingService(axios)
 export const useMappingStore = defineStore('mapping', {
     state: () => ({
         mappings: [] as IPathMapping[],
-        error: null as string | null
+        error: null as string | null,
+        /// Ground truth from /api/mapping/status — count of stored media
+        /// directories that are not on disk (the silent-skip condition).
+        unreachableCount: 0
     }),
     actions: {
         async fetchMappings() {
@@ -29,6 +32,14 @@ export const useMappingStore = defineStore('mapping', {
             } catch (error) {
                 this.error = i18n.global.t('toast.mapping.saveFailed')
                 console.error('Error setting mappings:', error)
+            }
+        },
+        async fetchStatus() {
+            try {
+                const status = await mappingApi.status()
+                this.unreachableCount = status.unreachable.length
+            } catch (error) {
+                console.error('Error fetching mapping status:', error)
             }
         },
         addMapping(mapping: IPathMapping) {

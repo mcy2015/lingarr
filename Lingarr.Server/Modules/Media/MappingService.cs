@@ -35,4 +35,35 @@ public class MappingService : IMappingService
 
         await _context.SaveChangesAsync();
     }
+
+    /// <inheritdoc />
+    public async Task<MappingStatusDto> GetMappingStatus()
+    {
+        // Movie.Path/Episode.Path are stored post-mapping at directory level by
+        // the sync pipeline, so a Directory.Exists probe per distinct value is
+        // exactly the "would subtitles land" ground truth.
+        var movieDirs = await _context.Movies
+            .Where(m => m.Path != null && m.Path != string.Empty)
+            .Select(m => m.Path!)
+            .ToListAsync();
+        var episodeDirs = await _context.Episodes
+            .Where(e => e.Path != null && e.Path != string.Empty)
+            .Select(e => e.Path!)
+            .ToListAsync();
+
+        var status = new MappingStatusDto();
+        foreach (var (dirs, mediaType) in new[] { (movieDirs, "movie"), (episodeDirs, "show") })
+        {
+            foreach (var dir in dirs.Distinct(StringComparer.Ordinal))
+            {
+                status.Checked++;
+                if (!Directory.Exists(dir))
+                {
+                    status.Unreachable.Add(new UnreachablePathDto { MediaType = mediaType, Path = dir });
+                }
+            }
+        }
+
+        return status;
+    }
 }
