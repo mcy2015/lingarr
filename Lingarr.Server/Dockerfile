@@ -33,17 +33,17 @@ COPY ["Lingarr.Contracts/Lingarr.Contracts.csproj", "Lingarr.Contracts/"]
 COPY ["Lingarr.Server/Lingarr.Server.csproj", "Lingarr.Server/"]
 COPY ["Lingarr.Core/Lingarr.Core.csproj", "Lingarr.Core/"]
 COPY ["Lingarr.Migrations/Lingarr.Migrations.csproj", "Lingarr.Migrations/"]
-RUN dotnet restore "./Lingarr.Server/./Lingarr.Server.csproj"
+RUN --network=host dotnet restore "./Lingarr.Server/./Lingarr.Server.csproj"
 COPY . .
 WORKDIR "/src/Lingarr.Server"
 COPY --from=client /Client/dist/ ./wwwroot
-RUN dotnet build "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:Version=$VERSION
+RUN --network=host dotnet build "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build /p:Version=$VERSION
 
 # Step 4: Publish the application
 FROM --platform=$BUILDPLATFORM build AS publish
 ARG BUILD_CONFIGURATION
 ARG VERSION=0.0.0-dev
-RUN dotnet publish "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION
+RUN --network=host dotnet publish "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION
 
 # Step 5: Final image
 FROM base AS final
