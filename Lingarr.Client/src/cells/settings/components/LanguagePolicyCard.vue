@@ -5,7 +5,9 @@
     <div class="border-line bg-secondary rounded-md border" data-test="language-policy-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.languagePolicy.title') }}</h2>
-            <span class="text-secondary-content ml-auto text-[11px]">{{ t('settings.languagePolicy.meta') }}</span>
+            <span class="text-secondary-content ml-auto text-[11px]">
+                {{ t('settings.languagePolicy.meta') }}
+            </span>
         </div>
 
         <!-- 行 1:目标语言(chips + 编辑) -->
@@ -20,7 +22,7 @@
                 <span
                     v-for="code in targetCodes"
                     :key="code"
-                    class="mono flex-none rounded-[3px] border border-success/40 bg-success/10 px-1.5 py-px text-[11px] text-success"
+                    class="mono border-success/40 bg-success/10 text-success flex-none rounded-[3px] border px-1.5 py-px text-[11px]"
                     :data-test="`lp-target-chip-${code.toUpperCase()}`">
                     {{ code.toUpperCase() }} ✓
                 </span>
@@ -70,7 +72,10 @@
                 </span>
             </div>
 
-            <div v-if="chain.length === 0" class="text-warning mt-2 text-[12.5px]" data-test="coverage-empty">
+            <div
+                v-if="chain.length === 0"
+                class="text-warning mt-2 text-[12.5px]"
+                data-test="coverage-empty">
                 ⚠ {{ t('settings.languagePolicy.chainEmpty') }}
             </div>
             <div v-else-if="loadingTables" class="text-secondary-content/60 mt-2 text-[12.5px]">
@@ -108,14 +113,16 @@
                         {{ t('settings.languagePolicy.unknownCount', { count: row.unknown }) }}
                     </span>
                 </div>
-                <div v-if="coverageRows.length === 0" class="text-secondary-content/60 text-[12.5px]">
+                <div
+                    v-if="coverageRows.length === 0"
+                    class="text-secondary-content/60 text-[12.5px]">
                     {{ t('settings.languagePolicy.noPairs') }}
                 </div>
             </div>
         </div>
 
-        <!-- 目标/源语言编辑模态:逗号分隔 ISO 码,保存走 SourceAndTarget 同款
-             store 写回(updateSetting isJson)。 -->
+        <!-- 目标/源语言编辑模态:多选语言选择器(选项=文化表全集),保存走
+             SourceAndTarget 同款 store 写回(updateSetting isJson)。 -->
         <Teleport to="body">
             <Transition
                 enter-active-class="transition-opacity duration-200 ease-in-out"
@@ -145,20 +152,22 @@
                             </button>
                         </div>
 
-                        <label class="text-secondary-content mb-1.5 block text-xs" for="lp-codes-input">
-                            {{ t('settings.languagePolicy.codesField') }}
+                        <label class="text-secondary-content mb-1.5 block text-xs">
+                            {{ t('settings.languagePolicy.languagesField') }}
                         </label>
-                        <input
-                            id="lp-codes-input"
-                            v-model="draftCodes"
-                            type="text"
-                            class="border-line bg-primary text-primary-content mono w-full rounded-md border px-2.5 py-1.5 text-[13px] outline-none"
-                            placeholder="zh, en-US"
-                            data-test="lp-modal-input" />
+                        <!-- 多选语言选择器:选项=文化表全集(code · 名称),输入仅
+                             过滤,不可能产生表外码;已选值预填为现有配置 -->
+                        <LanguageSelect
+                            v-model:selected="draftLanguages"
+                            :options="translateStore.getLanguages"
+                            data-test="lp-modal-select" />
                         <p class="text-secondary-content mt-2 text-[11.5px] leading-relaxed">
                             {{ t('settings.languagePolicy.variantHint') }}
                         </p>
-                        <p v-if="!draftValid" class="text-danger mt-2 text-xs" data-test="lp-modal-error">
+                        <p
+                            v-if="!draftValid"
+                            class="text-danger mt-2 text-xs"
+                            data-test="lp-modal-error">
                             {{ t('settings.languagePolicy.required') }}
                         </p>
 
@@ -197,6 +206,7 @@ import { useTranslateStore } from '@/cells/app/stores/translate'
 import { ILanguage, SETTINGS } from '@/types'
 import { parseServiceChain } from '@/cells/app/utils/serviceChain'
 import { computeChainCoverage, ServiceLanguageTable } from '@/cells/settings/services/chainCoverage'
+import LanguageSelect from '@/cells/settings/components/LanguageSelect.vue'
 
 const { t } = useI18n()
 const settingStore = useSettingStore()
@@ -207,18 +217,29 @@ const translateApi = translateService(axios)
 const tables = ref<Record<string, ServiceLanguageTable>>({})
 const loadingTables = ref(false)
 
-const chain = computed(() => parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string))
+const chain = computed(() =>
+    parseServiceChain(settingStore.getSetting(SETTINGS.SERVICE_TYPE) as string)
+)
 
 // getSettings parses the language JSON regardless of which load path ran;
 // the store type still admits raw strings, so narrow defensively
-const toCodes = (value: string | ILanguage[]): string[] =>
-    (Array.isArray(value) ? value : []).map((language) => language.code)
+const toLanguages = (value: string | ILanguage[]): ILanguage[] =>
+    Array.isArray(value) ? value : []
 
-const sourceCodes = computed<string[]>(() => toCodes(settingStore.getSettings.source_languages))
-const targetCodes = computed<string[]>(() => toCodes(settingStore.getSettings.target_languages))
+const sourceLanguages = computed<ILanguage[]>(() =>
+    toLanguages(settingStore.getSettings.source_languages)
+)
+const targetLanguages = computed<ILanguage[]>(() =>
+    toLanguages(settingStore.getSettings.target_languages)
+)
+
+const sourceCodes = computed(() => sourceLanguages.value.map((language) => language.code))
+const targetCodes = computed(() => targetLanguages.value.map((language) => language.code))
 
 const sourceHint = computed(() =>
-    sourceCodes.value.length > 0 ? sourceCodes.value.map((code) => code.toUpperCase()).join(' · ') : '—'
+    sourceCodes.value.length > 0
+        ? sourceCodes.value.map((code) => code.toUpperCase()).join(' · ')
+        : '—'
 )
 
 const coverageRows = computed(() =>
@@ -229,7 +250,7 @@ const coverageRows = computed(() =>
 type EditTarget = 'targets' | 'sources'
 
 const editing = ref<EditTarget | null>(null)
-const draftCodes = ref('')
+const draftLanguages = ref<ILanguage[]>([])
 
 const editingLabel = computed(() =>
     editing.value === 'targets'
@@ -237,34 +258,31 @@ const editingLabel = computed(() =>
         : t('settings.languagePolicy.sources')
 )
 
-const draftValid = computed(() => draftCodes.value.trim().length > 0)
+const draftValid = computed(() => draftLanguages.value.length > 0)
 
-function openEdit(target: EditTarget): void {
-    const codes = target === 'targets' ? targetCodes.value : sourceCodes.value
-    draftCodes.value = codes.join(', ')
-    editing.value = target
+/// 预填时用文化表补/校显示名:存量值(如 tr/nl)原样回显,表内同名者以
+/// 表内 name 为准(保存的 JSON 保持 {code,name} 形状,ImportPage 等消费方
+/// 渲染 name)。
+function enrichLanguage(language: ILanguage): ILanguage {
+    const known = translateStore.getLanguages.find(
+        (candidate) => candidate.code.toLowerCase() === language.code.toLowerCase()
+    )
+    return known ? { code: known.code, name: known.name } : { ...language }
 }
 
-/// ISO 码 → ILanguage:优先用全量文化表补显示名(ImportPage 等消费方渲染
-/// name),查不到时代码本身兜底。
-function toLanguage(code: string): ILanguage {
-    const known = translateStore.getLanguages.find(
-        (language) => language.code.toLowerCase() === code.toLowerCase()
-    )
-    return known ?? { code, name: code }
+function openEdit(target: EditTarget): void {
+    const current = target === 'targets' ? targetLanguages.value : sourceLanguages.value
+    draftLanguages.value = current.map(enrichLanguage)
+    editing.value = target
 }
 
 async function saveEdit(): Promise<void> {
     if (!editing.value || !draftValid.value) return
 
-    const codes = draftCodes.value
-        .split(',')
-        .map((code) => code.trim())
-        .filter((code) => code.length > 0)
-    if (codes.length === 0) return
-
     const key = editing.value === 'targets' ? SETTINGS.TARGET_LANGUAGES : SETTINGS.SOURCE_LANGUAGES
-    const value = codes.map(toLanguage)
+    // 选择器只能产出文化表内的 {code,name},保存即原样写回(截掉 targets
+    // 等多余字段,保持既有 JSON 形状)
+    const value = draftLanguages.value.map(({ code, name }) => ({ code, name }))
     await settingStore.updateSetting(key, value, true, true)
     editing.value = null
     toastStore.push({ message: t('common.saved'), type: 'success' })
@@ -286,7 +304,9 @@ async function fetchTables(): Promise<void> {
     }
     loadingTables.value = true
     try {
-        const results = await Promise.allSettled(members.map((serviceType) => translateApi.getServiceLanguages(serviceType)))
+        const results = await Promise.allSettled(
+            members.map((serviceType) => translateApi.getServiceLanguages(serviceType))
+        )
         const next: Record<string, ServiceLanguageTable> = {}
         results.forEach((result, index) => {
             if (result.status === 'fulfilled') {
@@ -297,7 +317,11 @@ async function fetchTables(): Promise<void> {
                 }
             } else {
                 // transport failure is also just "unknown" for the coverage row
-                next[members[index]] = { serviceType: members[index], status: 'unknown', languages: [] }
+                next[members[index]] = {
+                    serviceType: members[index],
+                    status: 'unknown',
+                    languages: []
+                }
             }
         })
         tables.value = next

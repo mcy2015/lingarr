@@ -771,8 +771,11 @@
         },
         "languageSelect": {
             "placeholder": "选择语言…",
-            "selectSourceFirst": "请先选择源语言。",
-            "search": "选择或搜索语言"
+            "search": "按代码或名称过滤",
+            "noOptions": "暂无可选语言。",
+            "noResults": "没有匹配的语言。",
+            "remove": "移除 {code}",
+            "clearSearch": "清除过滤"
         },
         "providers": {
             "blurb": "多服务并存，任务级可指定；卡片显示真实用量与健康。默认服务用于自动化批次。",
@@ -838,9 +841,9 @@
             "sources": "源语言白名单",
             "edit": "编辑",
             "empty": "未配置",
-            "codesField": "逗号分隔的 ISO 语言码",
+            "languagesField": "语言",
             "variantHint": "地区变体按根语言回退匹配:en-US 会按 en 匹配。",
-            "required": "请至少填写一个语言码。",
+            "required": "请至少选择一个语言。",
             "coverageDerived": "派生只读 · 随回退链增删实时重算"
         },
         "fallback": {

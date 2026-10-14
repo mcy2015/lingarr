@@ -770,9 +770,12 @@
             "connectionError": "Log stream connection error. Attempting to reconnect in 5 seconds…"
         },
         "languageSelect": {
-            "placeholder": "Select language…",
-            "selectSourceFirst": "Select a source language first.",
-            "search": "Select or search language"
+            "placeholder": "Select languages…",
+            "search": "Filter by code or name",
+            "noOptions": "No languages available.",
+            "noResults": "No matching languages.",
+            "remove": "Remove {code}",
+            "clearSearch": "Clear filter"
         },
         "providers": {
             "blurb": "Multiple services side by side; the default one handles automated batches. Cards show real usage and health.",
@@ -838,9 +841,9 @@
             "sources": "Source language whitelist",
             "edit": "Edit",
             "empty": "Not configured",
-            "codesField": "Comma-separated ISO codes",
+            "languagesField": "Languages",
             "variantHint": "Regional variants fall back to their root language: en-US matches en.",
-            "required": "Enter at least one language code.",
+            "required": "Select at least one language.",
             "coverageDerived": "derived · recalculated with every fallback-chain change"
         },
         "fallback": {
