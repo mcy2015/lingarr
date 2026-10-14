@@ -1,0 +1,37 @@
+# ═══ 生产部署(Lingarr fork 单镜像:前端构建产物已打进镜像) ═══
+# 首次启动: docker compose up -d,然后开 http://localhost:9878 ——
+# 全新库默认启用认证,用 admin/admin 登录后会被强制改密(B 方案安全默认)。
+# 数据全部落在 ./data(SQLite + Hangfire 队列),备份该目录即可。
+# dev 栈(docker-compose.dev.yml,端口 9876/9877/80)与本栈互不影响。
+services:
+  lingarr:
+    container_name: lingarr
+    image: lingarr:latest
+    # 镜像不存在时直接从源码构建(平时用: docker build -f Lingarr.Server/Dockerfile -t lingarr:latest .)
+    build:
+      context: .
+      dockerfile: Lingarr.Server/Dockerfile
+      args:
+        BUILD_CONFIGURATION: Release
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_URLS=http://+:9876
+      # cron 的解释时区与界面显示时区;与 radarr/sonarr 栈保持一致。
+      # 留空/无效会回退 UTC,定时任务页会出警告条提示。
+      - TZ=Europe/Amsterdam
+      # 首启管理员种子,可省略(缺省 admin/admin,首登强制改密)。
+      # - LINGARR_ADMIN_USER=admin
+      # - LINGARR_ADMIN_PASSWORD=set-your-own
+      # 反代需要子路径时再开(默认根路径直出)。
+      # - BASE_PATH=/lingarr
+    volumes:
+      # 应用数据:SQLite(lingarr.db)与 Hangfire.db 都在这里
+      - ./data:/app/config
+      # 媒体目录(只读):按本机实际布局调整;应用内配置媒体源时用容器路径(/movies、/tv)
+      - ../media/data/movies:/movies:ro
+      - ../media/data/tv:/tv:ro
+      - ../media/data/series/anime:/anime:ro
+    ports:
+      - "9878:9876"
+    # 若要用独立启动的 LibreTranslate:它在宿主机 5001 端口时,
+    # 应用内服务地址填 http://host.docker.internal:5001(Docker Desktop 自带解析)。

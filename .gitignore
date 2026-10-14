@@ -59,3 +59,6 @@ local_nas.db
 ansible_env/
 /media/
 core
+
+# Production compose data volume (SQLite + Hangfire)
+data/
