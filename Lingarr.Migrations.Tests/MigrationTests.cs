@@ -28,17 +28,25 @@ public class MigrationTests
             await using var connection = new SqliteConnection(connectionString);
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
-            // The baseline plus the auth-sessions migration are applied.
-            Assert.Equal(2L, await ExecuteScalarAsync(connection,
+            // The baseline plus the auth-sessions and schedule-cron
+            // migrations are applied.
+            Assert.Equal(3L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(2L, await ExecuteScalarAsync(connection,
+            Assert.Equal(3L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
-            Assert.Equal(86L, await ExecuteScalarAsync(connection,
+            Assert.Equal(88L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
+
+            // M0003 seeds the cron rows for the two built-ins that used to
+            // run on hardcoded fallbacks, at exactly those fallback values.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'cleanup_schedule' AND value = '0 0 * * 0'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'statistics_schedule' AND value = '0 0 * * *'"));
 
             // Fresh installs ship with authentication enabled (secure default).
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
