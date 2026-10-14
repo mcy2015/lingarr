@@ -35,36 +35,41 @@
         <div
             v-for="entry in entries"
             :key="entry.id"
-            class="border-line flex items-center gap-3 border-b px-4 py-2.5 text-[13px] last:border-b-0">
+            class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 text-[13px] last:border-b-0">
             <template v-if="editing?.id === entry.id">
                 <input
                     v-model="editing.sourceTerm"
                     type="text"
-                    class="border-line bg-primary text-primary-content w-40 rounded border px-2 py-1 text-xs outline-none"
+                    class="border-line bg-primary text-primary-content w-40 max-w-full rounded border px-2 py-1 text-xs outline-none"
                     :aria-label="t('settings.glossary.source')" />
-                <span class="text-secondary-content">→</span>
+                <span class="text-secondary-content flex-none">→</span>
                 <input
                     v-model="editing.targetTerm"
                     type="text"
-                    class="border-line bg-primary text-primary-content w-40 rounded border px-2 py-1 text-xs outline-none"
+                    class="border-line bg-primary text-primary-content w-40 max-w-full rounded border px-2 py-1 text-xs outline-none"
                     :aria-label="t('settings.glossary.target')" />
-                <label class="text-secondary-content flex items-center gap-1.5 text-xs">
+                <label class="text-secondary-content flex flex-none items-center gap-1.5 text-xs whitespace-nowrap">
                     <input v-model="editing.isLocked" type="checkbox" class="accent-accent cursor-pointer" />
                     {{ t('settings.glossary.locked') }}
                 </label>
-                <span class="flex-1"></span>
-                <button
-                    type="button"
-                    class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold transition-colors"
-                    @click="saveEdit">
-                    {{ t('common.saved') }}
-                </button>
-                <button
-                    type="button"
-                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                    @click="editing = null">
-                    {{ t('common.close') }}
-                </button>
+                <span class="min-w-4 flex-1"></span>
+                <!-- 动作区:恒为同一水平行(窄容器下整组换行,绝不竖排) -->
+                <span class="flex flex-none items-center gap-2" data-test="glossary-edit-actions">
+                    <button
+                        type="button"
+                        class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition-colors"
+                        data-test="glossary-edit-save"
+                        @click="saveEdit">
+                        {{ t('common.save') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs whitespace-nowrap transition-colors"
+                        data-test="glossary-edit-close"
+                        @click="editing = null">
+                        {{ t('common.close') }}
+                    </button>
+                </span>
             </template>
             <template v-else>
                 <b class="mono text-xs font-semibold">{{ entry.sourceTerm }}</b>
@@ -88,37 +93,44 @@
             </template>
         </div>
 
-        <div v-if="editing?.id === 0" class="border-line flex items-center gap-3 border-t px-4 py-2.5 text-[13px]">
+        <div
+            v-if="editing?.id === 0"
+            class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-2.5 text-[13px]">
             <input
                 v-model="editing.sourceTerm"
                 type="text"
-                class="border-line bg-primary text-primary-content w-40 rounded border px-2 py-1 text-xs outline-none"
+                class="border-line bg-primary text-primary-content w-40 max-w-full rounded border px-2 py-1 text-xs outline-none"
                 :placeholder="t('settings.glossary.source')"
                 :aria-label="t('settings.glossary.source')" />
-            <span class="text-secondary-content">→</span>
+            <span class="text-secondary-content flex-none">→</span>
             <input
                 v-model="editing.targetTerm"
                 type="text"
-                class="border-line bg-primary text-primary-content w-40 rounded border px-2 py-1 text-xs outline-none"
+                class="border-line bg-primary text-primary-content w-40 max-w-full rounded border px-2 py-1 text-xs outline-none"
                 :placeholder="t('settings.glossary.target')"
                 :aria-label="t('settings.glossary.target')" />
-            <label class="text-secondary-content flex items-center gap-1.5 text-xs">
+            <label class="text-secondary-content flex flex-none items-center gap-1.5 text-xs whitespace-nowrap">
                 <input v-model="editing.isLocked" type="checkbox" class="accent-accent cursor-pointer" />
                 {{ t('settings.glossary.locked') }}
             </label>
-            <span class="flex-1"></span>
-            <button
-                type="button"
-                class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold transition-colors"
-                @click="saveEdit">
-                {{ t('settings.glossary.add') }}
-            </button>
-            <button
-                type="button"
-                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                @click="editing = null">
-                {{ t('common.close') }}
-            </button>
+            <span class="min-w-4 flex-1"></span>
+            <!-- 动作区:恒为同一水平行(窄容器下整组换行,绝不竖排) -->
+            <span class="flex flex-none items-center gap-2" data-test="glossary-create-actions">
+                <button
+                    type="button"
+                    class="bg-accent text-accent-content hover:bg-accent/90 cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition-colors"
+                    data-test="glossary-create-save"
+                    @click="saveEdit">
+                    {{ t('settings.glossary.add') }}
+                </button>
+                <button
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs whitespace-nowrap transition-colors"
+                    data-test="glossary-create-close"
+                    @click="editing = null">
+                    {{ t('common.close') }}
+                </button>
+            </span>
         </div>
     </div>
 </template>

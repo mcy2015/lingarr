@@ -127,14 +127,21 @@
             <!-- ＋添加服务虚线卡:所有未上链的服务(内置+插件,含已配置的免配置服务),
                  点击加入链尾并展开编辑;全部上链后此卡隐藏 -->
             <div v-if="addCandidates.length > 0" class="relative" data-test="add-service-card">
+                <!-- 候选菜单:fixed 定位 + 视口钳制(上/下择优、高度封顶、左右收边),
+                     不再被设置页滚动容器上缘裁切;候选全量可达、超高自滚。 -->
                 <div
                     v-if="addMenuOpen"
-                    class="bg-secondary border-line absolute right-0 bottom-full z-20 mb-1 max-h-64 w-full min-w-[220px] overflow-y-auto rounded-md border p-1 shadow-lg">
+                    ref="addMenuEl"
+                    class="bg-secondary border-line shell-scroll fixed z-20 overflow-y-auto rounded-md border p-1 shadow-lg"
+                    :style="addMenuStyle"
+                    role="menu"
+                    data-test="add-service-menu">
                     <button
                         v-for="candidate in addCandidates"
                         :key="candidate.provider"
                         type="button"
                         class="hover:bg-tertiary block w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-xs transition-colors"
+                        role="menuitem"
                         :data-test="`add-candidate-${candidate.provider}`"
                         @click="addService(candidate.provider)">
                         <b>{{ candidate.displayName }}</b>
@@ -144,8 +151,10 @@
                     </button>
                 </div>
                 <button
+                    ref="addMenuAnchor"
                     type="button"
                     class="border-line text-secondary-content hover:border-accent hover:text-primary-content flex h-full min-h-[120px] w-full cursor-pointer flex-col items-start justify-center gap-1.5 rounded-md border border-dashed p-4 text-left transition-colors"
+                    data-test="add-service-toggle"
                     @click="addMenuOpen = !addMenuOpen">
                     <b class="text-[13px]">{{ t('settings.providers.addService') }}</b>
                     <span class="text-[11.5px]">
@@ -256,6 +265,8 @@ import { pluginService } from '@/cells/settings/services/pluginService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import useServiceChain from '@/cells/settings/composables/useServiceChain'
+import useClampedMenu from '@/cells/settings/composables/useClampedMenu'
+import useClickOutside from '@/cells/kernel/composables/useClickOutside'
 import {
     IEncryptedSettings,
     ISettings,
@@ -436,6 +447,10 @@ function metaLine(card: ITranslationServiceHealth): string {
 
 // ── ＋添加服务(A3):所有未上链的服务(内置+插件)──
 const addMenuOpen = ref(false)
+const addMenuAnchor = ref<HTMLElement>()
+const addMenuEl = ref<HTMLElement>()
+const { style: addMenuStyle } = useClampedMenu(addMenuAnchor, addMenuOpen)
+useClickOutside(addMenuEl, () => (addMenuOpen.value = false), addMenuAnchor)
 
 const externalPlugins = computed(() => plugins.value.filter((p) => !p.isBuiltIn))
 

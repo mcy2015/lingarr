@@ -91,7 +91,14 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="flex justify-end pt-2">
+                        <div class="flex justify-end gap-2 pt-2">
+                            <button
+                                type="button"
+                                class="border-line text-primary-content hover:bg-tertiary inline-flex cursor-pointer items-center rounded-md border px-4 py-1 text-xs transition-colors"
+                                data-test="directory-modal-close"
+                                @click="$emit('close')">
+                                {{ t('common.close') }}
+                            </button>
                             <div
                                 class="inline-flex cursor-pointer items-center rounded-md border border-line px-4 py-1 text-secondary-content/60 transition duration-300 hover:border-line hover:text-secondary-content/60"
                                 @click="selectDirectory">

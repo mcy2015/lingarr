@@ -336,7 +336,7 @@ describe('SettingsProvidersPage · 卡片展示规则(configured || 在链)', ()
         expect(wrapper.find('[data-test="card-head-openai"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="card-head-libretranslate"]').exists()).toBe(false)
 
-        await wrapper.find('[data-test="add-service-card"] button').trigger('click')
+        await wrapper.find('[data-test="add-service-toggle"]').trigger('click')
         expect(wrapper.find('[data-test="add-candidate-libretranslate"]').exists()).toBe(true)
     })
 
@@ -371,7 +371,7 @@ describe('SettingsProvidersPage · 卡片展示规则(configured || 在链)', ()
         expect(wrapper.find('[data-test="card-head-bing"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="delete-bing"]').exists()).toBe(false)
 
-        await wrapper.find('[data-test="add-service-card"] button').trigger('click')
+        await wrapper.find('[data-test="add-service-toggle"]').trigger('click')
         await wrapper.find('[data-test="add-candidate-bing"]').trigger('click')
         await flushPromises()
 
@@ -419,7 +419,7 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         setSettingMock.mockClear()
         const { wrapper, pinia } = await mountPage('["openai"]')
 
-        await wrapper.find('[data-test="add-service-card"] button').trigger('click')
+        await wrapper.find('[data-test="add-service-toggle"]').trigger('click')
         // chained providers are not candidates — configured or not
         expect(wrapper.find('[data-test="add-candidate-openai"]').exists()).toBe(false)
         // off-chain ones are: unconfigured built-in, configured (config-free) built-in, plugin
@@ -449,6 +449,80 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         const { wrapper } = await mountPage('["openai"]')
 
         expect(wrapper.find('[data-test="add-service-card"]').exists()).toBe(false)
+    })
+
+    it('opens the candidate menu fixed to the viewport with a clamped, scrollable height (UI 批一 · 4)', async () => {
+        // 8 candidates — the count that made the old absolute/bottom-full menu
+        // unusable when it poked out above the settings scroll container
+        getHealthMock.mockResolvedValue([openai])
+        listPluginsMock.mockResolvedValue([
+            { provider: 'openai', displayName: 'OpenAI', isBuiltIn: true, hasRequestTemplate: false },
+            ...Array.from({ length: 8 }, (_, index) => ({
+                provider: `plugin-${index}`,
+                displayName: `Plugin ${index}`,
+                isBuiltIn: false,
+                hasRequestTemplate: false
+            }))
+        ])
+        const { wrapper } = await mountPage('["openai"]')
+
+        await wrapper.find('[data-test="add-service-toggle"]').trigger('click')
+        await flushPromises()
+
+        const menu = wrapper.find('[data-test="add-service-menu"]')
+        expect(menu.exists()).toBe(true)
+        // fixed positioning escapes the scroll container's overflow clipping
+        expect(menu.classes()).toContain('fixed')
+        // long candidate lists scroll inside the menu
+        expect(menu.classes()).toContain('overflow-y-auto')
+        const style = menu.attributes('style') ?? ''
+        // happy-dom (1024×768, anchor rect 0) → opens downward, height capped at 320px
+        expect(style).toContain('max-height: 320px')
+        expect(style).toContain('top:')
+        // left is clamped inside the viewport, never negative
+        const left = Number.parseInt(/left:\s*(\d+)px/.exec(style)?.[1] ?? '-1', 10)
+        expect(left).toBeGreaterThanOrEqual(0)
+        // every candidate lives inside the scrollable menu — all reachable
+        expect(menu.findAll('[data-test^="add-candidate-"]')).toHaveLength(8)
+    })
+
+    it('shrinks the menu to the viewport height instead of overflowing it', async () => {
+        getHealthMock.mockResolvedValue([openai])
+        listPluginsMock.mockResolvedValue([
+            { provider: 'openai', displayName: 'OpenAI', isBuiltIn: true, hasRequestTemplate: false },
+            { provider: 'plugin-a', displayName: 'Plugin A', isBuiltIn: false, hasRequestTemplate: false }
+        ])
+        const originalHeight = window.innerHeight
+        window.innerHeight = 160
+        try {
+            const { wrapper } = await mountPage('["openai"]')
+
+            await wrapper.find('[data-test="add-service-toggle"]').trigger('click')
+            await flushPromises()
+
+            const style = wrapper.find('[data-test="add-service-menu"]').attributes('style') ?? ''
+            // 160px viewport - 6px gap = 154px of room below the (zero-rect) anchor
+            expect(style).toContain('max-height: 154px')
+        } finally {
+            window.innerHeight = originalHeight
+        }
+    })
+
+    it('closes the candidate menu on an outside click', async () => {
+        getHealthMock.mockResolvedValue([openai])
+        listPluginsMock.mockResolvedValue([
+            { provider: 'openai', displayName: 'OpenAI', isBuiltIn: true, hasRequestTemplate: false },
+            { provider: 'plugin-a', displayName: 'Plugin A', isBuiltIn: false, hasRequestTemplate: false }
+        ])
+        const { wrapper } = await mountPage('["openai"]')
+
+        await wrapper.find('[data-test="add-service-toggle"]').trigger('click')
+        expect(wrapper.find('[data-test="add-service-menu"]').exists()).toBe(true)
+
+        window.document.body.click()
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="add-service-menu"]').exists()).toBe(false)
     })
 
     it('fills the always-present meta slot with model · batch info once readable, "—" before that', async () => {

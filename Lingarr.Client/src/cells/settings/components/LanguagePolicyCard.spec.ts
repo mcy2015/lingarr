@@ -187,6 +187,26 @@ describe('LanguagePolicyCard · 覆盖行(派生只读)', () => {
 })
 
 describe('LanguagePolicyCard · 编辑模态(多选选择器,与 SourceAndTarget 同款写回)', () => {
+    it('offers exactly one close entry and a constant Save label (UI 批一 · 1/2)', async () => {
+        getServiceLanguages.mockResolvedValue(table('openai', 'unrestricted', []))
+        getLanguages.mockResolvedValue([{ code: 'zh', name: 'Chinese' }])
+
+        const { wrapper } = await mountCard('openai', [language('en')], [language('zh')])
+
+        await wrapper.find('[data-test="lp-edit-targets"]').trigger('click')
+
+        const modal = document.querySelector('[data-test="lp-modal"]')!
+        const closeButtons = [...modal.querySelectorAll('button')].filter(
+            (button) => button.textContent?.trim() === en.common.close
+        )
+        expect(closeButtons).toHaveLength(1)
+        expect(closeButtons[0].getAttribute('data-test')).toBe('lp-modal-cancel')
+
+        const save = modal.querySelector('[data-test="lp-modal-save"]') as HTMLButtonElement
+        expect(save.textContent?.trim()).toBe(en.common.save)
+        expect(save.textContent?.trim()).not.toBe(en.common.saved)
+    })
+
     it('edits target languages: prefilled chips, pick from culture table, save writes the JSON setting and refreshes chips', async () => {
         getServiceLanguages.mockResolvedValue(table('openai', 'unrestricted', []))
         getLanguages.mockResolvedValue([

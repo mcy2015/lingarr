@@ -91,6 +91,24 @@ describe('AutomationBatchesCard · 开关', () => {
 })
 
 describe('AutomationBatchesCard · 编辑(参数与开关解耦)', () => {
+    it('offers exactly one close entry and a constant Save label (UI 批一 · 1/2)', async () => {
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="batch-edit"]').trigger('click')
+        await flushPromises()
+
+        const modal = document.querySelector('[data-test="batch-modal"]')!
+        const closeButtons = [...modal.querySelectorAll('button')].filter(
+            (button) => button.textContent?.trim() === en.common.close
+        )
+        expect(closeButtons).toHaveLength(1)
+        expect(closeButtons[0].getAttribute('data-test')).toBe('batch-modal-close')
+
+        const save = modal.querySelector('[data-test="batch-save"]') as HTMLButtonElement
+        expect(save.textContent?.trim()).toBe(en.common.save)
+        expect(save.textContent?.trim()).not.toBe(en.common.saved)
+    })
+
     it('echoes the stored parameters when the modal opens', async () => {
         const { wrapper } = await mountCard()
 

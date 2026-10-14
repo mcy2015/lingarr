@@ -229,6 +229,24 @@ describe('SchedulePage (screen-12)', () => {
         expect(useToastStore().toasts[0].message).toBe('Created statistics-snapshot · 0 3 * * *')
     })
 
+    it('the custom-cron form offers exactly one close entry — the footer button (UI 批一 · 1)', async () => {
+        const page = await mountPage()
+
+        const uiStore = useUiStore()
+        uiStore.cta?.handler()
+        await flushPromises()
+        await page.find('[data-test="schedule-custom-cron"]').trigger('click')
+        await flushPromises()
+
+        const form = q('[data-test="schedule-new-job-form"]')
+        expect(form).not.toBeNull()
+        const closeButtons = [...form!.element.querySelectorAll('button')].filter(
+            (button) => button.textContent?.trim() === en.common.close
+        )
+        expect(closeButtons).toHaveLength(1)
+        expect(closeButtons[0].getAttribute('data-test')).toBe('schedule-form-close')
+    })
+
     it('the custom-cron form validates and submits job id, type and cron', async () => {
         const page = await mountPage()
 

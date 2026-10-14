@@ -168,12 +168,6 @@
                             <h2 class="text-[15px] font-semibold">
                                 {{ t('settings.schedule.createJobTitle') }}
                             </h2>
-                            <button
-                                type="button"
-                                class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                                @click="formOpen = false">
-                                {{ t('common.close') }}
-                            </button>
                         </div>
                         <div class="space-y-3">
                             <InputComponent
@@ -209,6 +203,7 @@
                                 <button
                                     type="button"
                                     class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors"
+                                    data-test="schedule-form-close"
                                     @click="formOpen = false">
                                     {{ t('common.close') }}
                                 </button>

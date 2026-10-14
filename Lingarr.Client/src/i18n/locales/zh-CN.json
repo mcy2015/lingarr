@@ -1,6 +1,7 @@
 {
     "common": {
         "close": "关闭",
+        "save": "保存",
         "back": "返回",
         "menu": "打开菜单",
         "language": "语言",

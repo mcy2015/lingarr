@@ -143,13 +143,6 @@
                         @click.stop>
                         <div class="mb-4 flex items-center gap-2.5">
                             <h2 class="text-[15px] font-semibold">{{ editingLabel }}</h2>
-                            <button
-                                type="button"
-                                class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                                data-test="lp-modal-close"
-                                @click="editing = null">
-                                {{ t('common.close') }}
-                            </button>
                         </div>
 
                         <label class="text-secondary-content mb-1.5 block text-xs">
@@ -185,7 +178,7 @@
                                 :disabled="!draftValid"
                                 data-test="lp-modal-save"
                                 @click="saveEdit">
-                                {{ t('common.saved') }}
+                                {{ t('common.save') }}
                             </button>
                         </div>
                     </div>

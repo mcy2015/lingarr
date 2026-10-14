@@ -106,13 +106,6 @@
                             <h2 class="text-[15px] font-semibold">
                                 {{ t('settings.subtitleOutput.naming') }}
                             </h2>
-                            <button
-                                type="button"
-                                class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                                data-test="naming-cancel"
-                                @click="namingModalOpen = false">
-                                {{ t('common.close') }}
-                            </button>
                         </div>
 
                         <label class="text-secondary-content mb-1.5 block text-xs" for="naming-template-input">
@@ -136,7 +129,7 @@
                             <button
                                 type="button"
                                 class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors"
-                                data-test="naming-cancel-secondary"
+                                data-test="naming-cancel"
                                 @click="namingModalOpen = false">
                                 {{ t('common.close') }}
                             </button>
@@ -146,7 +139,7 @@
                                 :disabled="!namingDraftValid"
                                 data-test="naming-save"
                                 @click="saveNaming">
-                                {{ t('common.saved') }}
+                                {{ t('common.save') }}
                             </button>
                         </div>
                     </div>

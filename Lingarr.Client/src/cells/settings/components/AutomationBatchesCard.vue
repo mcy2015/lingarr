@@ -57,12 +57,6 @@
                         @click.stop>
                         <div class="mb-4 flex items-center gap-2.5">
                             <h2 class="text-[15px] font-semibold">{{ t('settings.automation.dailyRow') }}</h2>
-                            <button
-                                type="button"
-                                class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                                @click="editOpen = false">
-                                {{ t('common.close') }}
-                            </button>
                         </div>
 
                         <div class="space-y-3">
@@ -103,6 +97,7 @@
                                 <button
                                     type="button"
                                     class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors"
+                                    data-test="batch-modal-close"
                                     @click="editOpen = false">
                                     {{ t('common.close') }}
                                 </button>
@@ -112,7 +107,7 @@
                                     :disabled="!canSave"
                                     data-test="batch-save"
                                     @click="save">
-                                    {{ t('common.saved') }}
+                                    {{ t('common.save') }}
                                 </button>
                             </div>
                         </div>

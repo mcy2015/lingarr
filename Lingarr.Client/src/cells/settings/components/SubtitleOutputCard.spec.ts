@@ -10,6 +10,7 @@ import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import SubtitleOutputCard from '@/cells/settings/components/SubtitleOutputCard.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
+import { useToastStore } from '@/cells/app/stores/toast'
 import { ISettings, SETTINGS } from '@/types'
 import en from '@/i18n/locales/en.json'
 
@@ -158,6 +159,50 @@ describe('SubtitleOutputCard · 校验行(全量保留)', () => {
 })
 
 describe('SubtitleOutputCard · 命名模板编辑模态', () => {
+    it('offers exactly one close entry — the footer button, no header duplicate (UI 批一 · 1)', async () => {
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="naming-edit"]').trigger('click')
+        const modal = document.querySelector('[data-test="naming-modal"]')!
+
+        const closeButtons = [...modal.querySelectorAll('button')].filter(
+            (button) => button.textContent?.trim() === en.common.close
+        )
+        expect(closeButtons).toHaveLength(1)
+        expect(closeButtons[0].getAttribute('data-test')).toBe('naming-cancel')
+
+        // leave the teleported dialog closed so later tests query a clean body
+        ;(modal.querySelector('[data-test="naming-cancel"]') as HTMLElement).click()
+        await flushPromises()
+    })
+
+    it('keeps the save label constant before and after saving — success feedback goes to the toast (UI 批一 · 2)', async () => {
+        const { wrapper, pinia } = await mountCard()
+
+        await wrapper.find('[data-test="naming-edit"]').trigger('click')
+        const save = document.querySelector('[data-test="naming-save"]') as HTMLButtonElement
+        expect(save.textContent?.trim()).toBe(en.common.save)
+        expect(save.textContent?.trim()).not.toBe(en.common.saved)
+
+        save.click()
+        await flushPromises()
+
+        // success feedback is the toast, not a mutated button label
+        const toastStore = useToastStore(pinia)
+        expect(toastStore.toasts[0].message).toBe(en.common.saved)
+        expect(toastStore.toasts[0].type).toBe('success')
+        expect(document.querySelector('[data-test="naming-modal"]')).toBeNull()
+
+        // reopened after a successful save, the label still reads Save
+        await wrapper.find('[data-test="naming-edit"]').trigger('click')
+        const reopened = document.querySelector('[data-test="naming-save"]') as HTMLButtonElement
+        expect(reopened.textContent?.trim()).toBe(en.common.save)
+
+        // leave the teleported dialog closed so later tests query a clean body
+        ;(document.querySelector('[data-test="naming-cancel"]') as HTMLElement).click()
+        await flushPromises()
+    })
+
     it('opens the modal prefilled with the current template and saves a new one to the store', async () => {
         const { wrapper, settingStore } = await mountCard()
 

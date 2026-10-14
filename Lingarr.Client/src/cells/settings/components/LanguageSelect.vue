@@ -29,12 +29,12 @@
                 <span
                     v-for="item in selected"
                     :key="item.code"
-                    class="bg-accent/15 border-accent/45 text-accent-content mono inline-flex flex-none items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]"
+                    class="border-accent bg-accent text-accent-content mono inline-flex flex-none items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]"
                     :data-test="`language-chip-${item.code.toUpperCase()}`">
                     {{ item.code.toUpperCase() }}
                     <button
                         type="button"
-                        class="hover:text-danger cursor-pointer transition-colors"
+                        class="hover:bg-danger hover:text-danger-content cursor-pointer rounded-[2px] px-0.5 transition-colors"
                         :aria-label="
                             t('settings.languageSelect.remove', { code: item.code.toUpperCase() })
                         "

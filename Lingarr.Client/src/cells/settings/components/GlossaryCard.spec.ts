@@ -116,3 +116,60 @@ describe('GlossaryCard · 导入 CSV', () => {
         expect(toastStore.toasts[0].message).toBe(en.settings.glossary.importFailed)
     })
 })
+
+describe('GlossaryCard · 添加/编辑行动作区(UI 批一 · 3:按钮恒同行,绝不竖排)', () => {
+    it('renders the create-row actions as one atomic horizontal group', async () => {
+        getAll.mockResolvedValue([])
+        const { wrapper } = await mountCard()
+
+        // the header「Add term」button opens the inline create row
+        const addButton = wrapper.findAll('button').find((button) => button.text() === en.settings.glossary.add)
+        expect(addButton).toBeDefined()
+        await addButton!.trigger('click')
+
+        const actions = wrapper.find('[data-test="glossary-create-actions"]')
+        expect(actions.exists()).toBe(true)
+        // one flex row: both action buttons share it and can never wrap apart
+        expect(actions.classes()).toContain('flex')
+        expect(actions.classes()).toContain('flex-none')
+        const buttons = actions.findAll('button')
+        expect(buttons).toHaveLength(2)
+        for (const button of buttons) {
+            expect(button.classes()).toContain('whitespace-nowrap')
+        }
+        expect(buttons[0].attributes('data-test')).toBe('glossary-create-save')
+        expect(buttons[1].attributes('data-test')).toBe('glossary-create-close')
+        // the lock toggle stays a sibling of the group, not a third stacked button
+        expect(actions.text()).not.toContain(en.settings.glossary.locked)
+    })
+
+    it('keeps the edit-row actions in one horizontal group with the constant Save label (UI 批一 · 2)', async () => {
+        getAll.mockResolvedValue([term(1, 'Ye Wenjie', '叶文洁', true)])
+        const { wrapper } = await mountCard()
+
+        const detail = wrapper.findAll('button').find((button) => button.text() === 'Details')
+        expect(detail).toBeDefined()
+        await detail!.trigger('click')
+
+        const actions = wrapper.find('[data-test="glossary-edit-actions"]')
+        expect(actions.exists()).toBe(true)
+        expect(actions.classes()).toContain('flex')
+        const buttons = actions.findAll('button')
+        expect(buttons).toHaveLength(2)
+        expect(buttons[0].attributes('data-test')).toBe('glossary-edit-save')
+        expect(buttons[0].text()).toBe(en.common.save)
+        expect(buttons[0].text()).not.toBe(en.common.saved)
+        expect(buttons[1].attributes('data-test')).toBe('glossary-edit-close')
+    })
+
+    it('collapses the create row via the close button', async () => {
+        getAll.mockResolvedValue([])
+        const { wrapper } = await mountCard()
+
+        const addButton = wrapper.findAll('button').find((button) => button.text() === en.settings.glossary.add)
+        await addButton!.trigger('click')
+        await wrapper.find('[data-test="glossary-create-close"]').trigger('click')
+
+        expect(wrapper.find('[data-test="glossary-create-actions"]').exists()).toBe(false)
+    })
+})

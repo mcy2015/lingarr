@@ -65,6 +65,24 @@ describe('LanguageSelect · 渲染', () => {
         expect(wrapper.find('[data-test="language-chip-TR"]').text()).toContain('TR')
     })
 
+    it('styles selected chips as solid accent with inverse content (readable on dark themes, UI 批一 · 5)', () => {
+        const wrapper = mountSelect([{ code: 'tr', name: 'tr' }])
+
+        const chip = wrapper.find('[data-test="language-chip-TR"]')
+        // solid accent + accent-content inverse — same semantics as the「默认」tag
+        expect(chip.classes()).toContain('bg-accent')
+        expect(chip.classes()).toContain('text-accent-content')
+        expect(chip.classes()).toContain('border-accent')
+        // the washed-out low-contrast tint is gone
+        expect(chip.classes()).not.toContain('bg-accent/15')
+        expect(chip.classes()).not.toContain('border-accent/45')
+
+        // the × remove button shares the chip background and turns red on hover
+        const remove = wrapper.find('[data-test="language-chip-remove-TR"]')
+        expect(remove.classes()).toContain('hover:bg-danger')
+        expect(remove.classes()).toContain('hover:text-danger-content')
+    })
+
     it('exposes aria conventions on the trigger (haspopup/expanded/combobox)', async () => {
         const wrapper = mountSelect()
         const trigger = wrapper.find('[data-test="language-select-trigger"]')
