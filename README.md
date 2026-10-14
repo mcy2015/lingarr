@@ -86,8 +86,8 @@ services:
       - "9876:9876"
     volumes:
       - /volume1/docker/lingarr/config:/app/config   # SQLite + Hangfire + 加密密钥
-      - /volume1/media/movies:/movies:ro             # 路径按 NAS 实际布局
-      - /volume1/media/tv:/tv:ro
+      - /volume1/media/movies:/movies                 # 读写:翻译要往媒体目录写字幕
+      - /volume1/media/tv:/tv
     networks: [media]
 
 networks:
