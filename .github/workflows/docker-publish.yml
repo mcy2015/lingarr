@@ -24,11 +24,18 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - name: strip host-network from Dockerfile for this bisect
         run: sed -i 's/RUN --network=host /RUN /' Lingarr.Server/Dockerfile
-      - name: (a) real Dockerfile, single amd64
-        run: docker buildx build --no-cache --progress=plain --platform linux/amd64 -f Lingarr.Server/Dockerfile -t diag:a . 2>&1 | tail -25
-      - name: (b) real Dockerfile, multi-platform
-        if: always()
-        run: docker buildx build --no-cache --progress=plain --platform linux/amd64,linux/arm64 -f Lingarr.Server/Dockerfile -t diag:b . 2>&1 | tail -25
+      - name: (c) via build-push-action, no push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Lingarr.Server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          provenance: false
+          sbom: false
+          build-args: |
+            BUILD_CONFIGURATION=Release
+            VERSION=diag
 
   build-and-push:
     name: Build and push (amd64 + arm64)
@@ -70,6 +77,8 @@ jobs:
           file: ./Lingarr.Server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
