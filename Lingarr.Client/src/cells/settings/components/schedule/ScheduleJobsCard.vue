@@ -58,84 +58,77 @@
             </span>
         </div>
 
-        <div class="overflow-x-auto">
-            <div class="border-line hidden border-b font-bold md:grid md:grid-cols-12">
-                <div class="px-4 py-2">{{ t('settings.schedule.jobName') }}</div>
-                <div class="px-4 py-2">{{ t('settings.schedule.cron') }}</div>
-                <div class="px-4 py-2">{{ t('settings.schedule.lastExecution') }}</div>
-                <div class="px-4 py-2">{{ t('settings.schedule.nextExecution') }}</div>
-                <div class="px-4 py-2">{{ t('settings.schedule.state') }}</div>
-                <div class="px-4 py-2">{{ t('settings.schedule.actions') }}</div>
-            </div>
-
-            <div
-                v-for="job in jobs"
-                :key="job.id"
-                class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 transition-opacity md:grid md:grid-cols-12 md:gap-0 md:py-0"
-                :class="job.enabled ? 'opacity-100' : 'opacity-55'">
-                <div class="flex w-full items-center gap-2 md:col-span-4 md:w-auto md:px-4 md:py-2">
-                    <span class="mono min-w-0 flex-1 truncate md:flex-none" :title="job.id">
-                        {{ job.id }}
-                    </span>
-                    <span class="ml-auto flex-none md:hidden">
-                        <JobToggle :job="job" @toggle="setEnabled" />
-                    </span>
-                </div>
-                <!-- cron 列:唯一编辑入口(停用行亦可改,启用即生效) -->
-                <div
-                    class="flex items-center gap-1.5 md:col-span-2 md:px-4 md:py-2"
-                    :data-test="`schedule-row-${job.id}`">
-                    <span class="mono text-secondary-content truncate">{{ job.cron || '—' }}</span>
-                    <button
-                        type="button"
-                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-1.5 py-px text-[10.5px] transition-colors"
-                        :data-test="`schedule-cron-edit-${job.id}`"
-                        @click="openCronEdit(job)">
-                        {{ t('settings.automation.edit') }}
-                    </button>
-                </div>
-                <div
-                    :class="job.lastExecution ? 'flex' : 'hidden md:flex'"
-                    class="items-center gap-2 md:col-span-2 md:px-4 md:py-2">
-                    <span v-if="job.lastExecution" class="mono text-secondary-content text-xs">
-                        {{ formatDateTime(job.lastExecution) }}
-                    </span>
-                    <span v-else class="mono text-secondary-content text-xs">—</span>
-                    <span
-                        class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                        {{ t('settings.schedule.lastRun') }}
-                    </span>
-                </div>
-                <div
-                    :class="job.nextExecution ? 'flex' : 'hidden md:flex'"
-                    class="items-center gap-2 md:col-span-2 md:px-4 md:py-2">
-                    <span v-if="job.nextExecution" class="mono text-secondary-content text-xs">
-                        {{ formatDateTime(job.nextExecution) }}
-                    </span>
-                    <span v-else class="mono text-secondary-content text-xs">—</span>
-                    <span
-                        class="text-primary-content/50 text-xs font-semibold tracking-wide uppercase md:hidden">
-                        {{ t('settings.schedule.nextRun') }}
-                    </span>
-                </div>
-                <div class="flex items-center md:col-span-1 md:px-4 md:py-2">
-                    <!-- 状态 chip 联动:关闭(dim)/运行中 busy/上次成功 ok/其他 dim -->
-                    <span
-                        class="mono rounded-[3px] border px-1.5 py-px text-[11px]"
-                        :class="stateChipClass(job)"
-                        :title="job.currentState">
-                        {{ stateChipLabel(job) }}
-                    </span>
-                </div>
-                <div
-                    class="hidden md:col-span-1 md:flex md:items-center md:justify-end md:gap-1 md:px-4 md:py-2">
-                    <TriggerJob
-                        v-if="job.enabled"
-                        :title="t('settings.schedule.run')"
-                        @toggle:trigger="scheduleStore.startJob(job.id)" />
-                    <JobToggle :job="job" @toggle="setEnabled" />
-                </div>
-            </div>
+        <div class="shell-scroll overflow-x-auto">
+            <table class="w-full border-collapse text-[12.5px]">
+                <thead>
+                    <tr>
+                        <th :class="thClass" class="min-w-[200px]">
+                            {{ t('settings.schedule.jobName') }}
+                        </th>
+                        <th :class="thClass">{{ t('settings.schedule.cron') }}</th>
+                        <th :class="thClass">{{ t('settings.schedule.lastExecution') }}</th>
+                        <th :class="thClass">{{ t('settings.schedule.nextExecution') }}</th>
+                        <th :class="thClass">{{ t('settings.schedule.state') }}</th>
+                        <th :class="`${thClass} text-right`">
+                            {{ t('settings.schedule.actions') }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="job in jobs"
+                        :key="job.id"
+                        class="hover:bg-tertiary/50 transition-opacity"
+                        :class="job.enabled ? 'opacity-100' : 'opacity-55'"
+                        :data-test="`schedule-row-${job.id}`">
+                        <td class="mono px-3 py-2.5 font-semibold" :title="job.id">
+                            {{ job.id }}
+                        </td>
+                        <!-- cron 列:唯一编辑入口(停用行亦可改,启用即生效) -->
+                        <td class="border-line/50 border-b px-3 py-2.5 align-middle">
+                            <span class="flex items-center gap-1.5 whitespace-nowrap">
+                                <span class="mono text-secondary-content">{{ job.cron || '—' }}</span>
+                                <button
+                                    type="button"
+                                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-1.5 py-px text-[10.5px] transition-colors"
+                                    :data-test="`schedule-cron-edit-${job.id}`"
+                                    @click="openCronEdit(job)">
+                                    {{ t('settings.automation.edit') }}
+                                </button>
+                            </span>
+                        </td>
+                        <td class="border-line/50 border-b px-3 py-2.5 align-middle">
+                            <span class="mono text-secondary-content text-xs">
+                                {{ job.lastExecution ? formatDateTime(job.lastExecution) : '—' }}
+                            </span>
+                        </td>
+                        <td class="border-line/50 border-b px-3 py-2.5 align-middle">
+                            <span class="mono text-secondary-content text-xs">
+                                {{ job.nextExecution ? formatDateTime(job.nextExecution) : '—' }}
+                            </span>
+                        </td>
+                        <td class="border-line/50 border-b px-3 py-2.5 align-middle">
+                            <!-- 状态 chip 联动:关闭(dim)/运行中 busy/上次成功 ok/其他 dim -->
+                            <span
+                                class="mono rounded-[3px] border px-1.5 py-px text-[11px]"
+                                :class="stateChipClass(job)"
+                                :title="job.currentState">
+                                {{ stateChipLabel(job) }}
+                            </span>
+                        </td>
+                        <td
+                            class="border-line/50 border-b px-3 py-2.5 text-right align-middle whitespace-nowrap">
+                            <span class="inline-flex items-center justify-end gap-1">
+                                <TriggerJob
+                                    v-if="job.enabled"
+                                    :title="t('settings.schedule.run')"
+                                    @toggle:trigger="scheduleStore.startJob(job.id)" />
+                                <JobToggle :job="job" @toggle="setEnabled" />
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- ═══ cron 编辑模态:任务表的 cron 是全产品唯一编辑入口 ───────── -->
@@ -302,6 +295,10 @@ const router = useRouter()
 const { t } = useI18n()
 const hubConnection = ref<Hub>()
 const jobs = computed(() => scheduleStore.getRecurringJobs)
+
+/// 应用表格惯用法(与媒体库矩阵一致,原型 th 规范:12px/字重 500/次级色)
+const thClass =
+    'text-secondary-content border-line whitespace-nowrap border-b px-3 py-2 text-left text-xs font-medium'
 
 const presets = computed<JobPreset[]>(() => [
     {

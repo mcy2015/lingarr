@@ -639,8 +639,6 @@
             "nextExecution": "Next Execution",
             "actions": "Actions",
             "run": "Run",
-            "lastRun": "Last run",
-            "nextRun": "Next run",
             "newJob": "＋ New job",
             "customCron": "Custom cron…",
             "createJobTitle": "New scheduled job",
