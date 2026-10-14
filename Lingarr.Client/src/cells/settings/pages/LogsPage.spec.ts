@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import en from '@/i18n/locales/en.json'
 import LogsPage from '@/cells/settings/pages/LogsPage.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { ILogEntry } from '@/types'
 
@@ -83,6 +84,17 @@ const chip = (wrapper: VueWrapper, value: string) =>
     wrapper.find(`[data-test="log-chip-${value}"]`)
 
 describe('LogsPage (drill-down, prototype screen-11)', () => {
+    it('roots on the shared DrillDownPage skeleton (dd-page)', async () => {
+        const { wrapper } = await mountPage()
+
+        const skeleton = wrapper.findComponent(DrillDownPage)
+        expect(skeleton.exists()).toBe(true)
+        const root = wrapper.find('[data-test="dd-page"]')
+        expect(root.exists()).toBe(true)
+        // root-ness: the skeleton div is the first element under the mount point
+        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
+    })
+
     it('renders the pb-head with the mono stream line and the level chips carrying client-side counts', async () => {
         const { wrapper } = await mountPage()
 

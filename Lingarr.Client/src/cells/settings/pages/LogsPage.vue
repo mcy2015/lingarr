@@ -2,47 +2,45 @@
     <!-- ═══ 日志下钻屏(原型 screen-11):pb-head(级别过滤 chips + 自动滚动
          switch + 清空次级动作)+ 日志卡(滚动收进卡内)。全部逻辑(SSE 流、
          级别过滤、导出、清空、自动滚动)沿用原有实现,仅模板层重排。 -->
-    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <PbHead
-            :back-to="{ name: 'settings-system' }"
-            :back-label="t('settings.menu.groups.system')"
-            :title="t('settings.logs.heading')"
-            :sub="t('settings.logs.subLine')">
-            <template #actions>
-                <div
-                    class="border-line bg-secondary inline-flex overflow-hidden rounded-md border"
-                    role="group"
-                    :aria-label="t('settings.logs.levelFilter')">
-                    <button
-                        v-for="chip in levelChips"
-                        :key="chip.value"
-                        type="button"
-                        class="mono cursor-pointer border-r border-line px-2 py-1 text-[11px] transition-colors last:border-r-0"
-                        :class="
-                            filterOptions.logLevel === chip.value
-                                ? 'bg-accent text-accent-content'
-                                : 'text-secondary-content hover:bg-tertiary hover:text-primary-content'
-                        "
-                        :aria-pressed="filterOptions.logLevel === chip.value"
-                        :data-test="`log-chip-${chip.value}`"
-                        @click="filterOptions.logLevel = chip.value">
-                        {{ chip.label }} {{ chip.count }}
-                    </button>
-                </div>
-                <label
-                    class="text-secondary-content ml-1 flex cursor-pointer items-center gap-2 text-[12.5px]">
-                    {{ t('settings.logs.autoScrollLabel') }}
-                    <ToggleButton v-model="autoScroll" size="small" />
-                </label>
+    <DrillDownPage
+        :back-to="{ name: 'settings-system' }"
+        :back-label="t('settings.menu.groups.system')"
+        :title="t('settings.logs.heading')"
+        :sub="t('settings.logs.subLine')">
+        <template #actions>
+            <div
+                class="border-line bg-secondary inline-flex overflow-hidden rounded-md border"
+                role="group"
+                :aria-label="t('settings.logs.levelFilter')">
                 <button
+                    v-for="chip in levelChips"
+                    :key="chip.value"
                     type="button"
-                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    data-test="log-clear"
-                    @click="clearLogs">
-                    {{ t('settings.logs.clear') }}
+                    class="mono cursor-pointer border-r border-line px-2 py-1 text-[11px] transition-colors last:border-r-0"
+                    :class="
+                        filterOptions.logLevel === chip.value
+                            ? 'bg-accent text-accent-content'
+                            : 'text-secondary-content hover:bg-tertiary hover:text-primary-content'
+                    "
+                    :aria-pressed="filterOptions.logLevel === chip.value"
+                    :data-test="`log-chip-${chip.value}`"
+                    @click="filterOptions.logLevel = chip.value">
+                    {{ chip.label }} {{ chip.count }}
                 </button>
-            </template>
-        </PbHead>
+            </div>
+            <label
+                class="text-secondary-content ml-1 flex cursor-pointer items-center gap-2 text-[12.5px]">
+                {{ t('settings.logs.autoScrollLabel') }}
+                <ToggleButton v-model="autoScroll" size="small" />
+            </label>
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                data-test="log-clear"
+                @click="clearLogs">
+                {{ t('settings.logs.clear') }}
+            </button>
+        </template>
 
         <div
             class="border-line bg-secondary flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border">
@@ -91,7 +89,7 @@
                 </div>
             </div>
         </div>
-    </div>
+    </DrillDownPage>
 </template>
 
 <script setup lang="ts">
@@ -100,7 +98,7 @@ import { useI18n } from 'vue-i18n'
 import { ILogEntry, IFilterOptions } from '@/types'
 import { logsService } from '@/cells/settings/services/logsService'
 import { formatDate, formatTime } from '@/cells/app/utils/date'
-import PbHead from '@/cells/app/components/PbHead.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
 import { useUiStore } from '@/cells/app/stores/ui'
 

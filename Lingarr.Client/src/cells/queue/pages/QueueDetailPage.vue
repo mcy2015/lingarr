@@ -1,49 +1,47 @@
 <template>
-    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <!-- ═══ pb-head(原型 screen-09):← 任务队列 + 标题块 + 校对/日志/暂停 ═══ -->
-        <PbHead
-            :back-to="{ name: 'queue' }"
-            :back-label="t('nav.queue')"
-            :title="detail?.title ?? t('nav.queue')"
-            :sub="subLine">
-            <template #actions>
-                <ButtonComponent
-                    v-if="detail?.status === TRANSLATION_STATUS.COMPLETED"
-                    variant="secondary"
-                    size="xs"
-                    :disabled="converting"
-                    @click="handleConvert">
-                    {{
-                        converting
-                            ? t('translations.detail.converting')
-                            : detail?.isBilingual
-                              ? t('translations.detail.convertToMonolingual')
-                              : t('translations.detail.convertToBilingual')
-                    }}
+    <!-- ═══ pb-head(原型 screen-09):← 任务队列 + 标题块 + 校对/日志/暂停 ═══ -->
+    <DrillDownPage
+        :back-to="{ name: 'queue' }"
+        :back-label="t('nav.queue')"
+        :title="detail?.title ?? t('nav.queue')"
+        :sub="subLine">
+        <template #actions>
+            <ButtonComponent
+                v-if="detail?.status === TRANSLATION_STATUS.COMPLETED"
+                variant="secondary"
+                size="xs"
+                :disabled="converting"
+                @click="handleConvert">
+                {{
+                    converting
+                        ? t('translations.detail.converting')
+                        : detail?.isBilingual
+                          ? t('translations.detail.convertToMonolingual')
+                          : t('translations.detail.convertToBilingual')
+                }}
+            </ButtonComponent>
+            <router-link
+                v-if="detail?.status === TRANSLATION_STATUS.COMPLETED"
+                :to="{ name: 'proofread', params: { id } }">
+                <ButtonComponent variant="secondary" size="xs">
+                    {{ t('translations.detail.proofread') }}
                 </ButtonComponent>
-                <router-link
-                    v-if="detail?.status === TRANSLATION_STATUS.COMPLETED"
-                    :to="{ name: 'proofread', params: { id } }">
-                    <ButtonComponent variant="secondary" size="xs">
-                        {{ t('translations.detail.proofread') }}
-                    </ButtonComponent>
-                </router-link>
-                <router-link :to="{ name: 'logs' }">
-                    <ButtonComponent variant="secondary" size="xs" data-test="detail-logs">
-                        {{ t('translations.detail.logs') }}
-                    </ButtonComponent>
-                </router-link>
-                <ButtonComponent
-                    v-if="canPause"
-                    variant="primary"
-                    size="xs"
-                    :loading="pauseBusy"
-                    data-test="detail-pause"
-                    @click="togglePause">
-                    {{ isPaused ? t('translations.detail.resumeAction') : t('translations.detail.pauseAction') }}
+            </router-link>
+            <router-link :to="{ name: 'logs' }">
+                <ButtonComponent variant="secondary" size="xs" data-test="detail-logs">
+                    {{ t('translations.detail.logs') }}
                 </ButtonComponent>
-            </template>
-        </PbHead>
+            </router-link>
+            <ButtonComponent
+                v-if="canPause"
+                variant="primary"
+                size="xs"
+                :loading="pauseBusy"
+                data-test="detail-pause"
+                @click="togglePause">
+                {{ isPaused ? t('translations.detail.resumeAction') : t('translations.detail.pauseAction') }}
+            </ButtonComponent>
+        </template>
 
         <div v-if="loading" class="flex justify-center py-12">
             <Icon name="loaderCircle" class="text-primary-content/50 h-8 w-8 animate-spin" />
@@ -243,7 +241,7 @@
         <div v-else class="text-primary-content/50 py-12 text-center">
             {{ t('translations.detail.notFound') }}
         </div>
-    </div>
+    </DrillDownPage>
 </template>
 
 <script setup lang="ts">
@@ -269,7 +267,7 @@ import { useSettingStore } from '@/cells/app/stores/setting'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
-import PbHead from '@/cells/app/components/PbHead.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import TranslationStatus from '@/cells/queue/components/TranslationStatus.vue'
 import TranslationProgress from '@/cells/app/components/TranslationProgress.vue'
 import BadgeComponent from '@/cells/kernel/components/BadgeComponent.vue'

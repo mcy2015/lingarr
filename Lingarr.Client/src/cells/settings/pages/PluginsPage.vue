@@ -2,12 +2,11 @@
     <!-- ═══ 外部插件下钻屏(原型 screen-06 A 下钻):pb-head(← 翻译服务 +
          已加载数 mono 副行)→ 插件行式卡(名称 + 描述 + mono 源文件)。
          数据流沿用原 PluginsSettings:/api/plugin 列表过滤非内置项。 -->
-    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <PbHead
-            :back-to="{ name: 'settings-providers' }"
-            :back-label="t('settings.menu.groups.providers')"
-            :title="t('settings.menu.plugins')"
-            :sub="subLine" />
+    <DrillDownPage
+        :back-to="{ name: 'settings-providers' }"
+        :back-label="t('settings.menu.groups.providers')"
+        :title="t('settings.menu.plugins')"
+        :sub="subLine">
 
         <div
             class="border-line bg-secondary shell-scroll min-h-0 flex-1 overflow-y-auto rounded-md border"
@@ -68,7 +67,7 @@
                 </span>
             </div>
         </div>
-    </div>
+    </DrillDownPage>
 </template>
 
 <script setup lang="ts">
@@ -78,7 +77,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { IPluginSummary } from '@/types'
 import { pluginService } from '@/cells/settings/services/pluginService'
-import PbHead from '@/cells/app/components/PbHead.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import CodeSnippet from '@/cells/kernel/components/CodeSnippet.vue'
 
 const pluginApi = pluginService(axios)

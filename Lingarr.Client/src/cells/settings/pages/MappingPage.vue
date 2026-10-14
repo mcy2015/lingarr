@@ -2,35 +2,33 @@
     <!-- ═══ 路径映射下钻屏(原型 screen-06 B 下钻):pb-head(← 媒体与自动化 +
          映射数 mono 副行 + 新增/保存动作)→ 映射行卡(源/目标路径 + 媒体类型 +
          移除,目录选择走 DirectoryModal)。CRUD 数据流零变化(原 mappingStore)。 -->
-    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <PbHead
-            :back-to="{ name: 'settings-sources' }"
-            :back-label="t('settings.menu.groups.sources')"
-            :title="t('settings.sources.mapping')"
-            :sub="subLine">
-            <template #actions>
-                <button
-                    type="button"
-                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    data-test="mapping-add"
-                    @click="addMapping">
-                    {{ t('services.mapping.add') }}
-                </button>
-                <button
-                    type="button"
-                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                    :disabled="loading"
-                    data-test="mapping-save"
-                    @click="saveMappings">
-                    <Icon
-                        v-if="loading"
-                        name="loaderCircle"
-                        class="h-3.5 w-3.5 animate-spin"
-                        aria-hidden="true" />
-                    {{ t('common.save') }}
-                </button>
-            </template>
-        </PbHead>
+    <DrillDownPage
+        :back-to="{ name: 'settings-sources' }"
+        :back-label="t('settings.menu.groups.sources')"
+        :title="t('settings.sources.mapping')"
+        :sub="subLine">
+        <template #actions>
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                data-test="mapping-add"
+                @click="addMapping">
+                {{ t('services.mapping.add') }}
+            </button>
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="loading"
+                data-test="mapping-save"
+                @click="saveMappings">
+                <Icon
+                    v-if="loading"
+                    name="loaderCircle"
+                    class="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true" />
+                {{ t('common.save') }}
+            </button>
+        </template>
 
         <div
             class="border-line bg-secondary shell-scroll min-h-0 flex-1 overflow-y-auto rounded-md border"
@@ -116,7 +114,7 @@
                 </div>
             </div>
         </div>
-    </div>
+    </DrillDownPage>
 
     <DirectoryModal :is-open="isModalOpen" @close="isModalOpen = false" @select="handleSelection" />
 </template>
@@ -129,7 +127,7 @@ import { MEDIA_TYPE } from '@/types'
 import SelectComponent from '@/cells/kernel/components/SelectComponent.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import DirectoryModal from '@/cells/settings/components/DirectoryModal.vue'
-import PbHead from '@/cells/app/components/PbHead.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { delay } from '@/cells/kernel/utils/delay'
 
 const mappingStore = useMappingStore()

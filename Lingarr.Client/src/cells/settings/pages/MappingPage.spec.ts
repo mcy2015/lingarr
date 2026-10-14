@@ -10,6 +10,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import en from '@/i18n/locales/en.json'
 import MappingPage from '@/cells/settings/pages/MappingPage.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 
 const getMappingsMock = vi.hoisted(() => vi.fn())
 const setMappingsMock = vi.hoisted(() => vi.fn())
@@ -66,6 +67,18 @@ beforeEach(() => {
 })
 
 describe('MappingPage · pb-head', () => {
+    it('roots on the shared DrillDownPage skeleton (dd-page)', async () => {
+        const { wrapper } = await mountPage()
+
+        const skeleton = wrapper.findComponent(DrillDownPage)
+        expect(skeleton.exists()).toBe(true)
+        const root = wrapper.find('[data-test="dd-page"]')
+        expect(root.exists()).toBe(true)
+        // root-ness: the skeleton div is the first element under the mount
+        // point (fragment root: the directory modal renders after it)
+        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
+    })
+
     it('renders the head with the sources back label and the real mapping count', async () => {
         const { wrapper } = await mountPage()
 

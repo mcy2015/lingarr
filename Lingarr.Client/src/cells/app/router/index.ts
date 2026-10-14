@@ -117,6 +117,24 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/cells/settings/pages/SchedulePage.vue')
             },
             {
+                // settings sub-drill-downs promoted to top level (same paths,
+                // no settings-tab chrome) so every drill-down shares the
+                // DrillDownPage skeleton edges — same treatment logs/schedule got
+                path: '/settings/plugins',
+                name: 'settings-plugins',
+                component: () => import('@/cells/settings/pages/PluginsPage.vue')
+            },
+            {
+                path: '/settings/mapping',
+                name: 'settings-mapping',
+                component: () => import('@/cells/settings/pages/MappingPage.vue')
+            },
+            {
+                path: '/settings/authentication',
+                name: 'settings-authentication',
+                component: () => import('@/cells/settings/pages/AuthenticationPage.vue')
+            },
+            {
                 path: '/settings',
                 component: () => import('@/cells/settings/pages/SettingPage.vue'),
                 name: 'settings',
@@ -154,13 +172,6 @@ const routes: RouteRecordRaw[] = [
                         redirect: { name: 'settings-providers' }
                     },
                     {
-                        // external plugins drill-down (prototype screen-06 A):
-                        // kept as its own page behind the providers group row
-                        path: 'plugins',
-                        name: 'settings-plugins',
-                        component: () => import('@/cells/settings/pages/PluginsPage.vue')
-                    },
-                    {
                         path: 'integration',
                         redirect: { name: 'settings-sources' }
                     },
@@ -169,22 +180,8 @@ const routes: RouteRecordRaw[] = [
                         redirect: { name: 'settings-sources' }
                     },
                     {
-                        // path mapping drill-down (prototype screen-06 B):
-                        // kept as its own page behind the media sources card row
-                        path: 'mapping',
-                        name: 'settings-mapping',
-                        component: () => import('@/cells/settings/pages/MappingPage.vue')
-                    },
-                    {
                         path: 'subtitle',
                         redirect: { name: 'settings-quality' }
-                    },
-                    {
-                        // authentication management drill-down (screen-06 D):
-                        // auth toggle + API key management page
-                        path: 'authentication',
-                        name: 'settings-authentication',
-                        component: () => import('@/cells/settings/pages/AuthenticationPage.vue')
                     },
                     {
                         // logs / schedule were promoted from settings children

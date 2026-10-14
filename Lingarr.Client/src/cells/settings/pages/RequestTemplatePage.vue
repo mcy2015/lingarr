@@ -1,31 +1,29 @@
 <template>
-    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <!-- ═══ pb-head(原型 screen-10):← 翻译服务 + 请求模版 · <服务> +
-             mono 副行(model/批大小,从 settings store 读,缺则省略)+
-             重置为默认 + 保存模版(primary)。 -->
-        <PbHead
-            :back-to="{ name: 'settings-providers' }"
-            :back-label="t('settings.menu.groups.providers')"
-            :title="`${t('requestTemplate.title')} · ${currentDisplayName}`"
-            :sub="subLine">
-            <template #actions>
-                <ButtonComponent
-                    variant="secondary"
-                    size="xs"
-                    :disabled="!templateCard?.canReset"
-                    data-test="tpl-reset"
-                    @click="resetTemplate">
-                    {{ t('requestTemplate.reset') }}
-                </ButtonComponent>
-                <ButtonComponent
-                    variant="primary"
-                    size="xs"
-                    data-test="tpl-save"
-                    @click="saveTemplate">
-                    {{ t('requestTemplate.save') }}
-                </ButtonComponent>
-            </template>
-        </PbHead>
+    <!-- ═══ pb-head(原型 screen-10):← 翻译服务 + 请求模版 · <服务> +
+         mono 副行(model/批大小,从 settings store 读,缺则省略)+
+         重置为默认 + 保存模版(primary)。 -->
+    <DrillDownPage
+        :back-to="{ name: 'settings-providers' }"
+        :back-label="t('settings.menu.groups.providers')"
+        :title="`${t('requestTemplate.title')} · ${currentDisplayName}`"
+        :sub="subLine">
+        <template #actions>
+            <ButtonComponent
+                variant="secondary"
+                size="xs"
+                :disabled="!templateCard?.canReset"
+                data-test="tpl-reset"
+                @click="resetTemplate">
+                {{ t('requestTemplate.reset') }}
+            </ButtonComponent>
+            <ButtonComponent
+                variant="primary"
+                size="xs"
+                data-test="tpl-save"
+                @click="saveTemplate">
+                {{ t('requestTemplate.save') }}
+            </ButtonComponent>
+        </template>
 
         <div v-if="tabOptions.length > 1" class="border-line bg-secondary flex shrink-0 flex-wrap items-center gap-3 rounded-md border px-3 py-2">
             <TabComponent
@@ -44,7 +42,7 @@
             <!-- ═══ 试译预览(原型 screen-10 右下卡):单行走真实请求 ═══ -->
             <TranslationPreviewCard :service="service" />
         </div>
-    </div>
+    </DrillDownPage>
 </template>
 
 <script setup lang="ts">
@@ -56,7 +54,7 @@ import { useSettingStore } from '@/cells/app/stores/setting'
 import { useUiStore } from '@/cells/app/stores/ui'
 import axios from 'axios'
 import { pluginService } from '@/cells/settings/services/pluginService'
-import PbHead from '@/cells/app/components/PbHead.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import TabComponent from '@/cells/kernel/components/TabComponent.vue'
 import RequestTemplate from '@/cells/settings/components/template/RequestTemplate.vue'

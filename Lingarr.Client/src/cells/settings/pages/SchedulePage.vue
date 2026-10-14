@@ -3,60 +3,58 @@
          Hangfire 副行 + 查看任务队列 + 「＋ 新建任务」CTA 菜单)→ 队列深度
          六卡(qdepth)→ 任务表(启停 chip 联动 + 触发)。深度/启停/新建走
          /api/schedule 的 depth、job/{id}/enable|disable、job 端点。 -->
-    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <PbHead
-            :back-to="{ name: 'settings-system' }"
-            :back-label="t('settings.menu.groups.system')"
-            :title="t('settings.schedule.heading')"
-            :sub="subLine">
-            <template #actions>
-                <ReloadComponent @toggle:update="refresh" />
+    <DrillDownPage
+        :back-to="{ name: 'settings-system' }"
+        :back-label="t('settings.menu.groups.system')"
+        :title="t('settings.schedule.heading')"
+        :sub="subLine">
+        <template #actions>
+            <ReloadComponent @toggle:update="refresh" />
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                data-test="schedule-view-queue"
+                @click="router.push({ name: 'queue' })">
+                {{ t('settings.schedule.viewQueue') }}
+            </button>
+            <!-- 「＋ 新建任务」:预设(现有 job 类型)+ 自定义 cron 表单 -->
+            <div ref="menuAnchor" class="relative">
                 <button
                     type="button"
-                    class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    data-test="schedule-view-queue"
-                    @click="router.push({ name: 'queue' })">
-                    {{ t('settings.schedule.viewQueue') }}
+                    class="bg-accent text-accent-content hover:brightness-106 focus-visible:ring-accent cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                    data-test="schedule-new-job"
+                    @click="newJobMenuOpen = !newJobMenuOpen">
+                    {{ t('settings.schedule.newJob') }}
                 </button>
-                <!-- 「＋ 新建任务」:预设(现有 job 类型)+ 自定义 cron 表单 -->
-                <div ref="menuAnchor" class="relative">
+                <div
+                    v-if="newJobMenuOpen"
+                    class="border-line bg-secondary absolute right-0 z-30 mt-1.5 w-64 rounded-md border py-1 shadow-lg"
+                    role="menu"
+                    data-test="schedule-new-job-menu">
+                    <button
+                        v-for="preset in presets"
+                        :key="preset.id"
+                        type="button"
+                        class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
+                        role="menuitem"
+                        @click="createPreset(preset)">
+                        <span class="min-w-0 flex-1 truncate">{{ preset.label }}</span>
+                        <span class="mono text-secondary-content flex-none text-[11px]">
+                            {{ preset.cron }}
+                        </span>
+                    </button>
+                    <div class="border-line my-1 border-t"></div>
                     <button
                         type="button"
-                        class="bg-accent text-accent-content hover:brightness-106 focus-visible:ring-accent cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                        data-test="schedule-new-job"
-                        @click="newJobMenuOpen = !newJobMenuOpen">
-                        {{ t('settings.schedule.newJob') }}
+                        class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
+                        role="menuitem"
+                        data-test="schedule-custom-cron"
+                        @click="openCustomForm">
+                        {{ t('settings.schedule.customCron') }}
                     </button>
-                    <div
-                        v-if="newJobMenuOpen"
-                        class="border-line bg-secondary absolute right-0 z-30 mt-1.5 w-64 rounded-md border py-1 shadow-lg"
-                        role="menu"
-                        data-test="schedule-new-job-menu">
-                        <button
-                            v-for="preset in presets"
-                            :key="preset.id"
-                            type="button"
-                            class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
-                            role="menuitem"
-                            @click="createPreset(preset)">
-                            <span class="min-w-0 flex-1 truncate">{{ preset.label }}</span>
-                            <span class="mono text-secondary-content flex-none text-[11px]">
-                                {{ preset.cron }}
-                            </span>
-                        </button>
-                        <div class="border-line my-1 border-t"></div>
-                        <button
-                            type="button"
-                            class="hover:bg-tertiary flex w-full cursor-pointer items-center gap-2 px-3.5 py-1.5 text-left text-xs transition-colors"
-                            role="menuitem"
-                            data-test="schedule-custom-cron"
-                            @click="openCustomForm">
-                            {{ t('settings.schedule.customCron') }}
-                        </button>
-                    </div>
                 </div>
-            </template>
-        </PbHead>
+            </div>
+        </template>
 
         <!-- ═══ 队列深度六卡(原型 .qdepth):translation 排队(accent)/
              正在执行 / system 排队 / movies+shows / webhook+default /
@@ -221,7 +219,7 @@
                 </div>
             </Transition>
         </Teleport>
-    </div>
+    </DrillDownPage>
 </template>
 
 <script setup lang="ts">
@@ -237,7 +235,7 @@ import { useToastStore } from '@/cells/app/stores/toast'
 import { statisticsService } from '@/cells/app/api/statisticsService'
 import { useScheduleStore } from '@/cells/settings/stores/schedule'
 import useClickOutside from '@/cells/kernel/composables/useClickOutside'
-import PbHead from '@/cells/app/components/PbHead.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import ReloadComponent from '@/cells/kernel/components/ReloadComponent.vue'
 import TriggerJob from '@/cells/settings/components/TriggerJob.vue'
 import JobToggle from '@/cells/settings/components/JobToggle.vue'

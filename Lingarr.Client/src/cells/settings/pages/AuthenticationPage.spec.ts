@@ -10,6 +10,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import en from '@/i18n/locales/en.json'
 import AuthenticationPage from '@/cells/settings/pages/AuthenticationPage.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { ENCRYPTED_SETTINGS, SETTINGS } from '@/types'
 
@@ -78,6 +79,20 @@ beforeEach(() => {
 
 
 describe('AuthenticationPage · pb-head', () => {
+    it('roots on the shared DrillDownPage skeleton (dd-page, scrolling column)', async () => {
+        const { wrapper } = await mountPage()
+
+        const skeleton = wrapper.findComponent(DrillDownPage)
+        expect(skeleton.exists()).toBe(true)
+        const root = wrapper.find('[data-test="dd-page"]')
+        expect(root.exists()).toBe(true)
+        // root-ness: the skeleton div is the first element under the mount point
+        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
+        // card-flow page: the whole column scrolls
+        expect(root.element.classList.contains('overflow-y-auto')).toBe(true)
+        expect(root.element.classList.contains('overflow-hidden')).toBe(false)
+    })
+
     it('renders the head with the system back label and the real state sub line', async () => {
         const { wrapper, pinia } = await mountPage()
         const settingStore = useSettingStore(pinia)

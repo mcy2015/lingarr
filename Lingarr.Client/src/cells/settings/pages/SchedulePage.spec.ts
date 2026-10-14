@@ -9,6 +9,7 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { DOMWrapper, flushPromises, mount, VueWrapper } from '@vue/test-utils'
 import SchedulePage from '@/cells/settings/pages/SchedulePage.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import en from '@/i18n/locales/en.json'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -132,6 +133,17 @@ afterEach(() => {
 })
 
 describe('SchedulePage (screen-12)', () => {
+    it('roots on the shared DrillDownPage skeleton (dd-page)', async () => {
+        const page = await mountPage()
+
+        const skeleton = page.findComponent(DrillDownPage)
+        expect(skeleton.exists()).toBe(true)
+        const root = page.find('[data-test="dd-page"]')
+        expect(root.exists()).toBe(true)
+        // root-ness: the skeleton div is the first element under the mount point
+        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
+    })
+
     it('renders the six depth cards from the depth endpoint and the success rate', async () => {
         const page = await mountPage()
 

@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount, VueWrapper } from '@vue/test-utils'
 import en from '@/i18n/locales/en.json'
 import RequestTemplatePage from '@/cells/settings/pages/RequestTemplatePage.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -115,6 +116,17 @@ async function mountPage(service = 'openai'): Promise<{
 }
 
 describe('RequestTemplatePage (drill-down, prototype screen-10)', () => {
+    it('roots on the shared DrillDownPage skeleton (dd-page)', async () => {
+        const { wrapper } = await mountPage()
+
+        const skeleton = wrapper.findComponent(DrillDownPage)
+        expect(skeleton.exists()).toBe(true)
+        const root = wrapper.find('[data-test="dd-page"]')
+        expect(root.exists()).toBe(true)
+        // root-ness: the skeleton div is the first element under the mount point
+        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
+    })
+
     it('renders the pb-head: back to providers, service title and the settings-derived mono sub', async () => {
         const { wrapper } = await mountPage()
 

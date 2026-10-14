@@ -9,6 +9,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import en from '@/i18n/locales/en.json'
 import PluginsPage from '@/cells/settings/pages/PluginsPage.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 
 const listPluginsMock = vi.hoisted(() => vi.fn())
 const setSettingMock = vi.hoisted(() => vi.fn())
@@ -82,6 +83,17 @@ beforeEach(() => {
 })
 
 describe('PluginsPage · pb-head', () => {
+    it('roots on the shared DrillDownPage skeleton (dd-page)', async () => {
+        const { wrapper } = await mountPage()
+
+        const skeleton = wrapper.findComponent(DrillDownPage)
+        expect(skeleton.exists()).toBe(true)
+        const root = wrapper.find('[data-test="dd-page"]')
+        expect(root.exists()).toBe(true)
+        // root-ness: the skeleton div is the first element under the mount point
+        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
+    })
+
     it('renders the head with the providers back label and the plugin count sub line', async () => {
         const { wrapper } = await mountPage()
 

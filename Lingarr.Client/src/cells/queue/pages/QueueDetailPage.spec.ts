@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import en from '@/i18n/locales/en.json'
 import QueueDetailPage from '@/cells/queue/pages/QueueDetailPage.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
@@ -173,6 +174,17 @@ describe('QueueDetailPage (drill-down, prototype screen-09)', () => {
 
     afterEach(() => {
         vi.useRealTimers()
+    })
+
+    it('roots on the shared DrillDownPage skeleton (dd-page)', async () => {
+        const { wrapper } = await mountDetail(makeDetail())
+
+        const skeleton = wrapper.findComponent(DrillDownPage)
+        expect(skeleton.exists()).toBe(true)
+        const root = wrapper.find('[data-test="dd-page"]')
+        expect(root.exists()).toBe(true)
+        // root-ness: the skeleton div is the first element under the mount point
+        expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
     })
 
     it('renders the pb-head: back to queue, mono sub line from detail fields, logs action', async () => {

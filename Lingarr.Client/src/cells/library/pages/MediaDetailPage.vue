@@ -1,42 +1,40 @@
 <template>
-    <div class="w-full flex h-full min-h-0 flex-col gap-3.5 overflow-hidden p-4 lg:p-6">
-        <!-- ═══ pb-head(原型下钻屏页头):返回 · 标题 + mono 副行 · 动作组 ═══ -->
-        <PbHead
-            :back-to="{ name: 'library' }"
-            :back-label="t('mediaDetail.back')"
-            :title="item?.title ?? t('common.loading')"
-            :sub="headerMeta">
-            <template #actions>
+    <!-- ═══ pb-head(原型下钻屏页头):返回 · 标题 + mono 副行 · 动作组 ═══ -->
+    <DrillDownPage
+        :back-to="{ name: 'library' }"
+        :back-label="t('mediaDetail.back')"
+        :title="item?.title ?? t('common.loading')"
+        :sub="headerMeta">
+        <template #actions>
+            <button
+                v-if="isShow"
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                @click="router.push({ name: 'import', query: { tab: 'season', show: props.id } })">
+                {{ t('library.action.seasonImport') }}
+            </button>
+            <button
+                v-else
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                @click="router.push({ name: 'import' })">
+                {{ t('library.toolbar.import') }}
+            </button>
+            <ContextMenu v-if="isShow" @select="translateMissing">
                 <button
-                    v-if="isShow"
                     type="button"
-                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                    @click="router.push({ name: 'import', query: { tab: 'season', show: props.id } })">
-                    {{ t('library.action.seasonImport') }}
-                </button>
-                <button
-                    v-else
-                    type="button"
-                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                    @click="router.push({ name: 'import' })">
-                    {{ t('library.toolbar.import') }}
-                </button>
-                <ContextMenu v-if="isShow" @select="translateMissing">
-                    <button
-                        type="button"
-                        class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors">
-                        {{ t('mediaDetail.translateMissing') }}
-                    </button>
-                </ContextMenu>
-                <button
-                    v-else
-                    type="button"
-                    class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors"
-                    @click="movieTranslateMissing">
+                    class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors">
                     {{ t('mediaDetail.translateMissing') }}
                 </button>
-            </template>
-        </PbHead>
+            </ContextMenu>
+            <button
+                v-else
+                type="button"
+                class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded-md border border-accent px-2.5 py-1 text-xs font-semibold transition-colors"
+                @click="movieTranslateMissing">
+                {{ t('mediaDetail.translateMissing') }}
+            </button>
+        </template>
 
         <!-- ═══ 工具栏:季段选(剧集)· 语言 chips · 最近活动 ═══ -->
         <div class="flex shrink-0 flex-wrap items-center gap-2">
@@ -221,7 +219,7 @@
             </router-link>
             </div>
         </div>
-    </div>
+    </DrillDownPage>
 </template>
 
 <script setup lang="ts">
@@ -231,7 +229,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import ContextMenu from '@/cells/app/layout/ContextMenu.vue'
 import JobRow from '@/cells/app/components/JobRow.vue'
-import PbHead from '@/cells/app/components/PbHead.vue'
+import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { mediaService } from '@/cells/app/api/mediaService'
 import { subtitleService } from '@/cells/library/services/subtitleService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
