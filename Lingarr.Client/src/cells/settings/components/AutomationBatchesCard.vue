@@ -225,19 +225,35 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { INPUT_TYPE, INPUT_VALIDATION_TYPE, SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
+import { useScheduleStore } from '@/cells/settings/stores/schedule'
 import { useToastStore } from '@/cells/app/stores/toast'
 import InputComponent from '@/cells/settings/components/InputComponent.vue'
 import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
 
 const settingsStore = useSettingStore()
+const scheduleStore = useScheduleStore()
 const toastStore = useToastStore()
 const { t } = useI18n()
 
 const automationEnabled = computed({
     get: (): string => (settingsStore.getSetting(SETTINGS.AUTOMATION_ENABLED) as string) ?? 'false',
+    // The job enable/disable endpoint is the same source of truth as the
+    // schedule table toggle: it persists automation_enabled AND registers
+    // the Hangfire job immediately — a bare setting write never registered
+    // anything until the next restart.
     set: (newValue: string): void => {
-        settingsStore.updateSetting(SETTINGS.AUTOMATION_ENABLED, newValue, true)
-        toastStore.push({ message: t('common.saved'), type: 'success' })
+        scheduleStore
+            .setJobEnabled('AutomatedTranslationJob', newValue === 'true')
+            .then(() => {
+                settingsStore.storeSetting(SETTINGS.AUTOMATION_ENABLED, newValue)
+                toastStore.push({ message: t('common.saved'), type: 'success' })
+            })
+            .catch(() => {
+                toastStore.push({
+                    message: t('settings.automation.toggleFailed'),
+                    type: 'error'
+                })
+            })
     }
 })
 

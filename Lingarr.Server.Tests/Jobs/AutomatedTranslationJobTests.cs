@@ -154,6 +154,8 @@ public class AutomatedTranslationJobTests
         public Task<bool> SetJobEnabled(string jobId, bool enabled) => Task.FromResult(false);
         public Task<RecurringJobStatus?> CreateRecurringJob(string jobId, string jobType, string cron) =>
             Task.FromResult<RecurringJobStatus?>(null);
+        public Task<UpdateCronResult> UpdateJobCron(string jobId, string cron) =>
+            Task.FromResult(UpdateCronResult.NotFound);
         public string GetJobState(string jobId) => string.Empty;
         public Task UpdateJobState(string jobId, string state) => Task.CompletedTask;
     }

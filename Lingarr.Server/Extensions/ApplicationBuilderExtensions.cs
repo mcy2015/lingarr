@@ -26,6 +26,13 @@ public static class ApplicationBuilderExtensions
         await app.ApplyMigrations();
         await app.MigrateApiKeyEncryption();
 
+        // The settings-change listener subscribes to the notifier in its
+        // constructor, but nothing injects it — resolving it once here is
+        // what makes the subscription exist before the first request
+        // (P1: without this, radarr/sonarr first-index, ClearHash and
+        // ServiceType reactions silently never ran).
+        app.Services.GetRequiredService<SettingChangedListener>();
+
         app.UseAuthentication();
         app.UseAuthorization();
 

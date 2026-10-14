@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 // AutomationBatchesCard (screen-06 B): the daily catch-up row renders cron +
-// limit + delays from the store, the switch writes automation_enabled, and
-// the edit modal echoes + saves the four batch parameters decoupled from the
-// switch. The「每周全库巡检」batch has no server counterpart and is not shown.
+// limit + delays from the store, the switch toggles the recurring job through
+// the schedule enable/disable endpoint (persist + immediate registration — a
+// bare setting write never registered anything), and the edit modal echoes +
+// saves the four batch parameters decoupled from the switch. The「每周全库巡检」
+// batch has no server counterpart and is not shown.
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -14,12 +16,22 @@ import { ISettings, SETTINGS } from '@/types'
 import en from '@/i18n/locales/en.json'
 
 const setSettingMock = vi.hoisted(() => vi.fn())
+const disableJobMock = vi.hoisted(() => vi.fn())
+const enableJobMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({
         setSetting: setSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
         getEncryptedSettingStates: vi.fn().mockResolvedValue({})
+    })
+}))
+
+vi.mock('@/cells/settings/services/scheduleService', () => ({
+    scheduleService: () => ({
+        disableJob: disableJobMock,
+        enableJob: enableJobMock,
+        recurringJobs: vi.fn().mockResolvedValue([])
     })
 }))
 
@@ -33,6 +45,8 @@ const i18n = createI18n({
 
 beforeEach(() => {
     setSettingMock.mockClear().mockResolvedValue(undefined)
+    disableJobMock.mockClear().mockResolvedValue(undefined)
+    enableJobMock.mockClear().mockResolvedValue(undefined)
 })
 
 async function mountCard(settings: Record<string, string> = {}) {
@@ -139,16 +153,30 @@ describe('AutomationBatchesCard · 媒体源同步 cron 行组(自 MediaSourcesC
 })
 
 describe('AutomationBatchesCard · 开关', () => {
-    it('writes automation_enabled without touching the batch parameters', async () => {
-        const { wrapper, settingStore } = await mountCard()
+    it('toggles the recurring job through the schedule endpoint', async () => {
+        const { wrapper, settingStore, toastStore } = await mountCard()
 
         await wrapper.find('[data-test="batch-row-daily"] [role="switch"]').trigger('click')
         await flushPromises()
 
+        // the job endpoint persists + registers; no bare setting write
+        expect(disableJobMock).toHaveBeenCalledWith('AutomatedTranslationJob')
+        expect(setSettingMock.mock.calls.map((call) => call[0])).not.toContain('automation_enabled')
+        // the local cache follows so the switch reflects the new state
         expect(settingStore.getSetting(SETTINGS.AUTOMATION_ENABLED)).toBe('false')
         expect(settingStore.getSetting(SETTINGS.TRANSLATION_SCHEDULE)).toBe('0 4 * * *')
-        const keys = setSettingMock.mock.calls.map((call) => call[0])
-        expect(keys).toEqual(['automation_enabled'])
+        expect(toastStore.toasts[0].message).toContain(en.common.saved)
+    })
+
+    it('leaves the switch state untouched when the endpoint fails', async () => {
+        disableJobMock.mockRejectedValueOnce(new Error('boom'))
+        const { wrapper, settingStore, toastStore } = await mountCard()
+
+        await wrapper.find('[data-test="batch-row-daily"] [role="switch"]').trigger('click')
+        await flushPromises()
+
+        expect(settingStore.getSetting(SETTINGS.AUTOMATION_ENABLED)).toBe('true')
+        expect(toastStore.toasts[0].message).toContain(en.settings.automation.toggleFailed)
     })
 })
 

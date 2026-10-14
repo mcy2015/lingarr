@@ -140,6 +140,8 @@ public static class SettingKeys
         public const string ShowSchedule = "show_schedule";
         public const string MovieAgeThreshold = "movie_age_threshold";
         public const string ShowAgeThreshold = "show_age_threshold";
+        public const string CleanupSchedule = "cleanup_schedule";
+        public const string StatisticsSchedule = "statistics_schedule";
 
         /// <summary>
         /// JSON list of user-created recurring job definitions from the schedule

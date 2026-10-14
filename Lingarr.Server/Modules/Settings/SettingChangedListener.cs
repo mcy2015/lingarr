@@ -59,21 +59,8 @@ public class SettingChangedListener
                     ])
                 },
                 {
-                    "automation", ("Job", "Automation", [
-                        SettingKeys.Automation.AutomationEnabled,
-                        SettingKeys.Automation.TranslationSchedule,
-                        SettingKeys.Automation.MaxTranslationsPerRun
-                    ])
-                },
-                {
                     "clearHash", ("Action", "ClearHash", [
                         SettingKeys.Translation.SourceLanguages
-                    ])
-                },
-                {
-                    "schedule", ("Action", "Schedule", [
-                        SettingKeys.Automation.MovieSchedule,
-                        SettingKeys.Automation.ShowSchedule
                     ])
                 },
                 {
@@ -161,26 +148,6 @@ public class SettingChangedListener
                     scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>()
                         .Schedule<SyncShowJob>(job => job.Execute(), TimeSpan.FromMinutes(1));
                     break;
-                case "Automation":
-                    _logger.LogInformation(
-                        $"Settings changed for |Green|{jobName}|/Green|. Automation has been |Orange|modified|/Orange|.");
-                    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
-                    if (settings[SettingKeys.Automation.AutomationEnabled] == "true")
-                    {
-                        var translationSchedule =
-                            await settingService.GetSetting(SettingKeys.Automation.TranslationSchedule);
-                        recurringJobManager.RemoveIfExists("AutomatedTranslationJob");
-                        recurringJobManager.AddOrUpdate<AutomatedTranslationJob>(
-                            "AutomatedTranslationJob",
-                            job => job.Execute(),
-                            translationSchedule);
-                    }
-                    else
-                    {
-                        recurringJobManager.RemoveIfExists("AutomatedTranslationJob");
-                    }
-
-                    break;
             }
         }
     }
@@ -212,18 +179,6 @@ public class SettingChangedListener
                 case "ClearHash":
                     dbContext.Database.ExecuteSqlRaw("UPDATE movies SET media_hash = ''");
                     dbContext.Database.ExecuteSqlRaw("UPDATE episodes SET media_hash = ''");
-                    break;
-
-                case "Schedule":
-                    var scheduleJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
-                    scheduleJobManager.AddOrUpdate<SyncMovieJob>(
-                        "SyncMovieJob",
-                        job => job.Execute(),
-                        settings[SettingKeys.Automation.MovieSchedule]);
-                    scheduleJobManager.AddOrUpdate<SyncShowJob>(
-                        "SyncShowJob",
-                        job => job.Execute(),
-                        settings[SettingKeys.Automation.ShowSchedule]);
                     break;
 
                 case "ServiceType":

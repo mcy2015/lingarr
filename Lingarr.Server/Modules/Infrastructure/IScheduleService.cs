@@ -58,6 +58,17 @@ public interface IScheduleService
     Task<RecurringJobStatus?> CreateRecurringJob(string jobId, string jobType, string cron);
 
     /// <summary>
+    /// Updates the cron expression of a recurring job. The schedule screen's
+    /// job table is the single place a cron may be edited: built-ins persist
+    /// to their settings key, custom jobs to their persisted definition, and
+    /// a currently enabled job is re-registered immediately.
+    /// </summary>
+    /// <param name="jobId">Recurring job id (built-in or user-created)</param>
+    /// <param name="cron">New 5-field cron expression</param>
+    /// <returns>Updated, or the reason the change was rejected.</returns>
+    Task<UpdateCronResult> UpdateJobCron(string jobId, string cron);
+
+    /// <summary>
     /// Gets the current state of a specific job.
     /// </summary>
     /// <param name="jobId">The ID of the job</param>
@@ -70,4 +81,20 @@ public interface IScheduleService
     /// <param name="jobId">The ID of the job</param>
     /// <param name="state">The current state</param>
     Task UpdateJobState(string jobId, string state);
+}
+
+/// <summary>Outcome of a cron update attempt on a recurring job.</summary>
+public enum UpdateCronResult
+{
+    /// <summary>The cron was persisted and the job re-registered when enabled.</summary>
+    Updated,
+
+    /// <summary>No recurring job (built-in or user-created) carries this id.</summary>
+    NotFound,
+
+    /// <summary>The expression is not a valid 5-field cron.</summary>
+    InvalidCron,
+
+    /// <summary>The backing settings row is absent — migrations have not run.</summary>
+    SettingRowMissing
 }

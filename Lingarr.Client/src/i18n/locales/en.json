@@ -632,7 +632,8 @@
             "dailyHint": "{cron} · limit {limit} tasks/run · new-media delay {movie}h movie / {show}h show",
             "edit": "Edit",
             "scheduleField": "Schedule (cron)",
-            "editFailed": "Please check the highlighted fields."
+            "editFailed": "Please check the highlighted fields.",
+            "toggleFailed": "Failed to toggle, please retry."
         },
         "schedule": {
             "heading": "Scheduled jobs",

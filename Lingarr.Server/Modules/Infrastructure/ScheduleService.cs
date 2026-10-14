@@ -26,24 +26,35 @@ public class ScheduleService : IScheduleService
 
     /// <summary>
     /// Built-in recurring jobs and where their cron comes from. The catalog
-    /// backs Initialize(), the enable/disable endpoints and the disabled-row
-    /// merge in GetRecurringJobs() — one structure, three consumers.
+    /// backs Initialize(), the enable/disable endpoints, the cron-update
+    /// endpoint and the disabled-row merge in GetRecurringJobs() — one
+    /// structure, four consumers.
     /// </summary>
-    private sealed record BuiltinJob(string Id, string JobType, string? CronSetting, string FallbackCron);
+    private sealed record BuiltinJob(
+        string Id,
+        string JobType,
+        string? CronSetting,
+        string FallbackCron,
+        bool AllowCustomCreation);
 
     private static readonly List<BuiltinJob> BuiltinJobs =
     [
-        new("SyncMovieJob", "SyncMovieJob", SettingKeys.Automation.MovieSchedule, "0 4 * * *"),
-        new("SyncShowJob", "SyncShowJob", SettingKeys.Automation.ShowSchedule, "0 4 * * *"),
+        new("SyncMovieJob", "SyncMovieJob", SettingKeys.Automation.MovieSchedule, "0 4 * * *", false),
+        new("SyncShowJob", "SyncShowJob", SettingKeys.Automation.ShowSchedule, "0 4 * * *", false),
         new("AutomatedTranslationJob", "AutomatedTranslationJob",
-            SettingKeys.Automation.TranslationSchedule, "0 4 * * *"),
-        new("CleanupJob", "CleanupJob", null, Cron.Weekly()),
-        new("StatisticsJob", "StatisticsJob", null, Cron.Daily())
+            SettingKeys.Automation.TranslationSchedule, "0 4 * * *", false),
+        new("CleanupJob", "CleanupJob", SettingKeys.Automation.CleanupSchedule, Cron.Weekly(), true),
+        new("StatisticsJob", "StatisticsJob", SettingKeys.Automation.StatisticsSchedule, Cron.Daily(), true)
     ];
 
-    /// <summary>Job types new recurring jobs may be created from — never arbitrary types.</summary>
-    public static IReadOnlyList<string> RegisteredJobTypes =>
-        BuiltinJobs.Select(job => job.JobType).ToList();
+    /// <summary>
+    /// Job types a user may create new recurring jobs from. Business jobs
+    /// (sync/translation) are whole-library singletons — a second instance
+    /// would double-run the same work — so only the maintenance types are
+    /// creatable.
+    /// </summary>
+    public static IReadOnlyList<string> CreatableJobTypes =>
+        BuiltinJobs.Where(job => job.AllowCustomCreation).Select(job => job.JobType).ToList();
 
     private readonly IHubContext<JobProgressHub> _hubContext;
     private readonly IServiceProvider _serviceProvider;
@@ -69,6 +80,9 @@ public class ScheduleService : IScheduleService
         var settings = await settingService.GetSettings([
             SettingKeys.Automation.MovieSchedule,
             SettingKeys.Automation.ShowSchedule,
+            SettingKeys.Automation.TranslationSchedule,
+            SettingKeys.Automation.CleanupSchedule,
+            SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.AutomationEnabled
         ]);
 
@@ -79,61 +93,14 @@ public class ScheduleService : IScheduleService
 
         var disabled = await ReadDisabledJobIds(settingService);
 
-        _logger.LogInformation("Configuring media indexers.");
-        foreach (var setting in settings)
+        _logger.LogInformation("Configuring recurring jobs.");
+        foreach (var builtin in BuiltinJobs)
         {
-            switch (setting.Key)
+            if (IsBuiltinDisabled(builtin, disabled, settings))
             {
-                case "movie_schedule":
-                    if (!disabled.Contains("SyncMovieJob"))
-                    {
-                        RecurringJob.AddOrUpdate<SyncMovieJob>(
-                            "SyncMovieJob",
-                            job => job.Execute(),
-                            setting.Value,
-                            new RecurringJobOptions { TimeZone = TimeZoneConfiguration.Current });
-                    }
-                    break;
-                case "show_schedule":
-                    if (!disabled.Contains("SyncShowJob"))
-                    {
-                        RecurringJob.AddOrUpdate<SyncShowJob>(
-                            "SyncShowJob",
-                            job => job.Execute(),
-                            setting.Value,
-                            new RecurringJobOptions { TimeZone = TimeZoneConfiguration.Current });
-                    }
-                    break;
-                case "automation_enabled":
-                    if (setting.Value == "true" && !disabled.Contains("AutomatedTranslationJob"))
-                    {
-                        var translationSchedule = await settingService.GetSetting("translation_schedule");
-                        RecurringJob.AddOrUpdate<AutomatedTranslationJob>(
-                            "AutomatedTranslationJob",
-                            job => job.Execute(),
-                            translationSchedule,
-                            new RecurringJobOptions { TimeZone = TimeZoneConfiguration.Current });
-                    }
-                    break;
+                continue;
             }
-        }
-
-        if (!disabled.Contains("CleanupJob"))
-        {
-            RecurringJob.AddOrUpdate<CleanupJob>(
-                "CleanupJob",
-                job => job.Execute(),
-                Cron.Weekly,
-                new RecurringJobOptions { TimeZone = TimeZoneConfiguration.Current });
-        }
-
-        if (!disabled.Contains("StatisticsJob"))
-        {
-            RecurringJob.AddOrUpdate<StatisticsJob>(
-                "StatisticsJob",
-                job => job.Execute(),
-                Cron.Daily,
-                new RecurringJobOptions { TimeZone = TimeZoneConfiguration.Current });
+            RegisterRecurring(builtin.Id, builtin.JobType, ResolveBuiltinCron(builtin, settings));
         }
 
         foreach (var custom in await ReadCustomJobs(settingService))
@@ -180,6 +147,8 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.MovieSchedule,
             SettingKeys.Automation.ShowSchedule,
             SettingKeys.Automation.TranslationSchedule,
+            SettingKeys.Automation.CleanupSchedule,
+            SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.AutomationEnabled
         ]);
 
@@ -292,8 +261,8 @@ public class ScheduleService : IScheduleService
         if (builtin.Id == "AutomatedTranslationJob")
         {
             // Same source of truth as the settings · automation switch: the
-            // setting write also drives the existing SettingChangedListener,
-            // the direct registration below makes it effective immediately.
+            // persisted setting bootstraps Initialize(), the direct
+            // registration below makes the toggle effective immediately.
             await settingService.SetSetting(
                 SettingKeys.Automation.AutomationEnabled,
                 enabled ? "true" : "false");
@@ -329,13 +298,66 @@ public class ScheduleService : IScheduleService
     }
 
     /// <inheritdoc />
+    public async Task<UpdateCronResult> UpdateJobCron(string jobId, string cron)
+    {
+        cron = cron.Trim();
+        if (!CronExpressionValidator.IsValid(cron))
+        {
+            return UpdateCronResult.InvalidCron;
+        }
+
+        using var scope = _serviceProvider.CreateScope();
+        var settingService = scope.ServiceProvider.GetRequiredService<ISettingService>();
+
+        var customJobs = await ReadCustomJobs(settingService);
+        var custom = customJobs.FirstOrDefault(job =>
+            string.Equals(job.JobId, jobId, StringComparison.Ordinal));
+        if (custom != null)
+        {
+            custom.Cron = cron;
+            await settingService.SetSetting(
+                SettingKeys.Automation.CustomRecurringJobs,
+                SerializeCustomJobs(customJobs));
+            if (custom.Enabled)
+            {
+                RegisterRecurring(custom.JobId, custom.JobType, cron);
+            }
+            return UpdateCronResult.Updated;
+        }
+
+        var builtin = BuiltinJobs.FirstOrDefault(job =>
+            string.Equals(job.Id, jobId, StringComparison.Ordinal));
+        if (builtin?.CronSetting == null)
+        {
+            return UpdateCronResult.NotFound;
+        }
+
+        // Fail loudly when the settings row is absent instead of silently
+        // keeping the old cron on the next restart.
+        if (!await settingService.SetSetting(builtin.CronSetting, cron))
+        {
+            return UpdateCronResult.SettingRowMissing;
+        }
+
+        var disabled = await ReadDisabledJobIds(settingService);
+        var settings = await settingService.GetSettings([
+            SettingKeys.Automation.AutomationEnabled
+        ]);
+        if (!IsBuiltinDisabled(builtin, disabled, settings))
+        {
+            RegisterRecurring(builtin.Id, builtin.JobType, cron);
+        }
+        return UpdateCronResult.Updated;
+    }
+
+    /// <inheritdoc />
     public async Task<RecurringJobStatus?> CreateRecurringJob(string jobId, string jobType, string cron)
     {
         jobId = jobId.Trim();
         cron = cron.Trim();
 
         if (string.IsNullOrEmpty(jobId) || jobId.Any(char.IsWhiteSpace) ||
-            !RegisteredJobTypes.Contains(jobType, StringComparer.Ordinal) ||
+            !CreatableJobTypes.Contains(jobType, StringComparer.Ordinal) ||
             !CronExpressionValidator.IsValid(cron))
         {
             return null;

@@ -632,7 +632,8 @@
             "dailyHint": "{cron} · 限额 {limit} 任务/次 · 新片延迟 电影 {movie}h / 剧集 {show}h",
             "edit": "编辑",
             "scheduleField": "调度(cron)",
-            "editFailed": "请检查标红的字段。"
+            "editFailed": "请检查标红的字段。",
+            "toggleFailed": "开关切换失败，请重试。"
         },
         "schedule": {
             "heading": "定时任务",

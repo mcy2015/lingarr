@@ -280,6 +280,138 @@ public class ScheduleServiceTests : IDisposable
         Assert.True(jobs.Single(job => job.Id == "SyncMovieJob").Enabled);
     }
 
+    // ── UpdateJobCron: the single cron edit entry ─────────────────
+
+    [Fact]
+    public async Task UpdateJobCron_Builtin_PersistsSettingAndReRegisters()
+    {
+        _settingService.Values[SettingKeys.Automation.MovieSchedule] = "0 4 * * *";
+
+        Assert.Equal(UpdateCronResult.Updated, await _service.UpdateJobCron("SyncMovieJob", " 0 5 * * * "));
+
+        Assert.Equal("0 5 * * *", _settingService.Values[SettingKeys.Automation.MovieSchedule]);
+        var job = (await _service.GetRecurringJobs()).Single(job => job.Id == "SyncMovieJob");
+        Assert.True(job.Enabled);
+        Assert.Equal("0 5 * * *", job.Cron);
+    }
+
+    [Fact]
+    public async Task UpdateJobCron_BuiltinWithAutomationOff_PersistsWithoutRegistering()
+    {
+        _settingService.Values[SettingKeys.Automation.AutomationEnabled] = "false";
+        _settingService.Values[SettingKeys.Automation.TranslationSchedule] = "0 4 * * *";
+
+        Assert.Equal(UpdateCronResult.Updated,
+            await _service.UpdateJobCron("AutomatedTranslationJob", "0 6 * * *"));
+
+        Assert.Equal("0 6 * * *", _settingService.Values[SettingKeys.Automation.TranslationSchedule]);
+        var job = (await _service.GetRecurringJobs()).Single(job => job.Id == "AutomatedTranslationJob");
+        // disabled merge row still shows the persisted cron, ready to enable
+        Assert.False(job.Enabled);
+        Assert.Equal("0 6 * * *", job.Cron);
+    }
+
+    [Fact]
+    public async Task UpdateJobCron_CustomJob_UpdatesPersistedCronWhileEnabled()
+    {
+        await _service.CreateRecurringJob("nightly-scan", "StatisticsJob", "0 5 * * *");
+
+        Assert.Equal(UpdateCronResult.Updated, await _service.UpdateJobCron("nightly-scan", "30 5 * * *"));
+
+        Assert.Equal("30 5 * * *", ReadCustomJobsSetting().Single().Cron);
+        var job = (await _service.GetRecurringJobs()).Single(job => job.Id == "nightly-scan");
+        Assert.True(job.Enabled);
+        Assert.Equal("30 5 * * *", job.Cron);
+    }
+
+    [Fact]
+    public async Task UpdateJobCron_CustomJobDisabled_PersistsOnly()
+    {
+        await _service.CreateRecurringJob("nightly-scan", "StatisticsJob", "0 5 * * *");
+        await _service.SetJobEnabled("nightly-scan", false);
+
+        Assert.Equal(UpdateCronResult.Updated, await _service.UpdateJobCron("nightly-scan", "15 5 * * *"));
+
+        var job = (await _service.GetRecurringJobs()).Single(job => job.Id == "nightly-scan");
+        Assert.False(job.Enabled);
+        Assert.Equal("15 5 * * *", job.Cron);
+    }
+
+    [Fact]
+    public async Task UpdateJobCron_InvalidCron_ReturnsInvalidCron()
+    {
+        Assert.Equal(UpdateCronResult.InvalidCron, await _service.UpdateJobCron("SyncMovieJob", "77 * * * *"));
+        Assert.Equal(UpdateCronResult.InvalidCron, await _service.UpdateJobCron("SyncMovieJob", "  "));
+    }
+
+    [Fact]
+    public async Task UpdateJobCron_UnknownJob_ReturnsNotFound()
+    {
+        Assert.Equal(UpdateCronResult.NotFound, await _service.UpdateJobCron("DoesNotExist", "0 5 * * *"));
+    }
+
+    [Fact]
+    public async Task UpdateJobCron_MissingSettingRow_ReturnsSettingRowMissing()
+    {
+        _settingService.MissingKeys.Add(SettingKeys.Automation.MovieSchedule);
+
+        Assert.Equal(UpdateCronResult.SettingRowMissing,
+            await _service.UpdateJobCron("SyncMovieJob", "0 5 * * *"));
+    }
+
+    // ── Cleanup/Statistics honour their settings keys ──────────────
+
+    [Fact]
+    public async Task SetJobEnabled_StatisticsEnable_UsesConfiguredScheduleSetting()
+    {
+        _settingService.Values[SettingKeys.Automation.StatisticsSchedule] = "30 1 * * *";
+
+        Assert.True(await _service.SetJobEnabled("StatisticsJob", true));
+
+        var job = (await _service.GetRecurringJobs()).Single(job => job.Id == "StatisticsJob");
+        Assert.True(job.Enabled);
+        Assert.Equal("30 1 * * *", job.Cron);
+    }
+
+    [Fact]
+    public async Task Initialize_UsesConfiguredCleanupAndStatisticsCron()
+    {
+        var translationRequests = new Mock<ITranslationRequestService>();
+        translationRequests
+            .Setup(service => service.ResumeTranslationRequests())
+            .Returns(Task.CompletedTask);
+
+        using var provider = BuildProvider(translationRequests.Object);
+        var service = new ScheduleService(
+            null!,
+            provider,
+            NullLogger<ScheduleService>.Instance);
+
+        _settingService.Values[SettingKeys.Automation.MovieSchedule] = "0 4 * * *";
+        _settingService.Values[SettingKeys.Automation.ShowSchedule] = "0 4 * * *";
+        _settingService.Values[SettingKeys.Automation.AutomationEnabled] = "true";
+        _settingService.Values[SettingKeys.Automation.TranslationSchedule] = "0 4 * * *";
+        _settingService.Values[SettingKeys.Automation.CleanupSchedule] = "0 3 * * 1";
+        _settingService.Values[SettingKeys.Automation.StatisticsSchedule] = "0 2 * * *";
+
+        await service.Initialize();
+
+        var jobs = await service.GetRecurringJobs();
+        Assert.Equal("0 3 * * 1", jobs.Single(job => job.Id == "CleanupJob").Cron);
+        Assert.Equal("0 2 * * *", jobs.Single(job => job.Id == "StatisticsJob").Cron);
+        Assert.True(jobs.Single(job => job.Id == "AutomatedTranslationJob").Enabled);
+    }
+
+    // ── CreateRecurringJob rejects business (singleton) types ──────
+
+    [Fact]
+    public async Task CreateRecurringJob_RejectsNonCreatableJobType()
+    {
+        Assert.Null(await _service.CreateRecurringJob("another-sync", "SyncMovieJob", "0 5 * * *"));
+        Assert.Null(await _service.CreateRecurringJob("another-translation", "AutomatedTranslationJob", "0 5 * * *"));
+        Assert.NotNull(await _service.CreateRecurringJob("another-wipe", "CleanupJob", "0 5 * * *"));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────
 
     private ServiceProvider BuildProvider(ITranslationRequestService? translationRequests = null)
@@ -311,11 +443,15 @@ public class ScheduleServiceTests : IDisposable
 
     /// <summary>
     /// Dictionary-backed ISettingService: writes land in Values so tests can
-    /// assert exactly what the schedule endpoints persisted.
+    /// assert exactly what the schedule endpoints persisted. Keys listed in
+    /// MissingKeys behave like absent settings rows — SetSetting returns
+    /// false, mirroring the production guard.
     /// </summary>
     private sealed class FakeSettingService : ISettingService
     {
         public Dictionary<string, string> Values { get; } = new();
+
+        public HashSet<string> MissingKeys { get; } = new();
 
         public event SettingChangedHandler? SettingChanged
         {
@@ -324,13 +460,19 @@ public class ScheduleServiceTests : IDisposable
         }
 
         public Task<string?> GetSetting(string key) =>
-            Task.FromResult(Values.GetValueOrDefault(key));
+            Task.FromResult<string?>(MissingKeys.Contains(key) ? null : Values.GetValueOrDefault(key));
 
         public Task<Dictionary<string, string>> GetSettings(IEnumerable<string> keys) =>
-            Task.FromResult(keys.ToDictionary(key => key, key => Values.GetValueOrDefault(key) ?? string.Empty));
+            Task.FromResult(keys
+                .Where(key => !MissingKeys.Contains(key))
+                .ToDictionary(key => key, key => Values.GetValueOrDefault(key) ?? string.Empty));
 
         public Task<bool> SetSetting(string key, string value)
         {
+            if (MissingKeys.Contains(key))
+            {
+                return Task.FromResult(false);
+            }
             Values[key] = value;
             return Task.FromResult(true);
         }

@@ -79,18 +79,19 @@ public class ScheduleController : ControllerBase
     }
 
     /// <summary>
-    /// Creates a new recurring job from one of the registered job types.
+    /// Creates a new recurring job from one of the creatable job types
+    /// (maintenance jobs only — business jobs are whole-library singletons).
     /// </summary>
     /// <param name="request">Job id, job type and cron expression.</param>
     /// <returns>
     /// 200 with the created job status; 400 when the job type is not
-    /// registered, the cron expression is invalid or the id is malformed;
+    /// creatable, the cron expression is invalid or the id is malformed;
     /// 409 when a job with the same id already exists.
     /// </returns>
     [HttpPost("job")]
     public async Task<IActionResult> CreateJob([FromBody] CreateRecurringJobRequest request)
     {
-        if (!ScheduleService.RegisteredJobTypes.Contains(request.JobType, StringComparer.Ordinal))
+        if (!ScheduleService.CreatableJobTypes.Contains(request.JobType, StringComparer.Ordinal))
         {
             return BadRequest($"Unsupported job type '{request.JobType}'.");
         }
@@ -105,6 +106,36 @@ public class ScheduleController : ControllerBase
             return Conflict($"A recurring job with id '{request.JobId}' already exists.");
         }
         return Ok(status);
+    }
+
+    /// <summary>
+    /// Updates the cron of a recurring job. This is the single edit entry
+    /// for schedules — built-ins persist to their settings key and are
+    /// re-registered immediately.
+    /// </summary>
+    /// <param name="jobId">Recurring job id (built-in or user-created).</param>
+    /// <param name="request">The new cron expression.</param>
+    /// <returns>
+    /// 200 on success; 400 for an invalid cron; 404 for an unknown job id;
+    /// 409 when the backing settings row is missing (migrations not run).
+    /// </returns>
+    [HttpPut("job/{jobId}/cron")]
+    public async Task<IActionResult> UpdateCron(string jobId, [FromBody] UpdateCronRequest request)
+    {
+        if (!CronExpressionValidator.IsValid(request.Cron))
+        {
+            return BadRequest("Invalid cron expression.");
+        }
+
+        var result = await _scheduleService.UpdateJobCron(jobId, request.Cron);
+        return result switch
+        {
+            UpdateCronResult.Updated => Ok(),
+            UpdateCronResult.NotFound => NotFound($"Recurring job '{jobId}' not found."),
+            UpdateCronResult.SettingRowMissing => Conflict(
+                $"The settings row backing '{jobId}' is missing; run migrations."),
+            _ => BadRequest("Invalid cron expression.")
+        };
     }
 
     /// <summary>
