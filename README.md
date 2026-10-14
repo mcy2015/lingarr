@@ -107,6 +107,7 @@ networks:
 | `BASE_PATH` | 空(根路径) | 反代需要子路径时设置,如 `/lingarr` |
 | `LINGARR_ADMIN_USER` / `LINGARR_ADMIN_PASSWORD` | `admin` / `admin` | 首启种子管理员;缺省 admin/admin 且首登强制改密 |
 | `AUTH_ENABLED` | `true` | 仅在数据库无值时作为首启种子生效 |
+| `AUTH_COOKIE_SECURE` | 跟随请求协议 | Cookie 的 Secure 标志默认按实际请求协议(HTTPS 部署自动携带;纯 HTTP 局域网部署如 NAS `http://IP:9876` 也能正常登录会话);设 `always` 强制 |
 | `SQLITE_DB_PATH` | `lingarr.db`(相对 `/app/config`) | 主库路径 |
 | `DB_HANGFIRE_SQLITE_PATH` | `/app/config/Hangfire.db` | 队列库路径 |
 | `ENCRYPTION_KEYS` | 自动生成并持久化 | 服务商密钥的加密密钥(轮换用,逗号分隔,末位为活跃键) |

@@ -22,15 +22,18 @@ public static class AuthModule
         {
             options.Cookie.Name = "Lingarr.Auth";
             options.Cookie.HttpOnly = true;
-            // P2-1: production cookies are always marked Secure. SameAsRequest
-            // would let a plain-http response carry the auth cookie, which a
-            // network attacker could replay. Development keeps SameAsRequest
-            // because the dev compose and local runs serve plain http — with
-            // Always the browser would silently drop the cookie and login
-            // would appear broken.
-            options.Cookie.SecurePolicy = environment.IsDevelopment()
-                ? CookieSecurePolicy.SameAsRequest
-                : CookieSecurePolicy.Always;
+            // The Secure flag follows the request scheme: https deployments
+            // (direct or behind a proxy that forwards the scheme) emit Secure
+            // cookies automatically, while plain-http LAN deployments (a NAS
+            // on http://IP:port) keep a usable session — with Always there a
+            // browser silently drops the cookie and login appears broken.
+            // Strict deployments force the flag with AUTH_COOKIE_SECURE=always.
+            options.Cookie.SecurePolicy =
+                Environment.GetEnvironmentVariable("AUTH_COOKIE_SECURE")?
+                    .Trim()
+                    .Equals("always", StringComparison.OrdinalIgnoreCase) == true
+                    ? CookieSecurePolicy.Always
+                    : CookieSecurePolicy.SameAsRequest;
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.ExpireTimeSpan = TimeSpan.FromDays(7);
             options.SlidingExpiration = true;
