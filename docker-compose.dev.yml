@@ -106,21 +106,21 @@ services:
     networks:
       - lingarr
 
-  LibreTranslate:
-    container_name: LibreTranslate
-    image: libretranslate/libretranslate:latest
-    restart: unless-stopped
-    environment:
-      - LT_LOAD_ONLY=en,tr,nl,pt
-      - LT_DISABLE_WEB_UI=false # Optional, enable if you would like to make use of the LibreTranslate web interface 
-    ports:
-      - 5000:5000
-    volumes:
-      - ../media/libretranslate:/home/libretranslate/.local/share/argos-translate
-    networks:
-      - lingarr
-    healthcheck:
-      test: ["CMD-SHELL", "./venv/bin/python scripts/healthcheck.py"]
+#  LibreTranslate: # Disabled: not started with lingarr; uncomment to re-enable (web UI at http://localhost:5001)
+#    container_name: LibreTranslate
+#    image: libretranslate/libretranslate:latest
+#    restart: unless-stopped
+#    environment:
+#      - LT_LOAD_ONLY=en,tr,nl,pt
+#      - LT_DISABLE_WEB_UI=false # Optional, enable if you would like to make use of the LibreTranslate web interface
+#    ports:
+#      - 5001:5000
+#    volumes:
+#      - ../media/libretranslate:/home/libretranslate/.local/share/argos-translate
+#    networks:
+#      - lingarr
+#    healthcheck:
+#      test: ["CMD-SHELL", "./venv/bin/python scripts/healthcheck.py"]
 
   radarr:
     image: ghcr.io/hotio/radarr:nightly
