@@ -14,9 +14,6 @@ public static class IntegrationModule
         services.AddScoped<IRadarrService, RadarrService>();
         services.AddScoped<ISonarrService, SonarrService>();
 
-        // Client for the external Lingarr release-feed API (update checks).
-        services.AddScoped<ILingarrApiService, LingarrApiService>();
-
         // Streams poster artwork proxied from the Radarr/Sonarr APIs.
         services.AddScoped<IImageService, ImageService>();
     }

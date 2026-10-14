@@ -1,6 +1,6 @@
 # Lingarr(重构版)
 
-自托管字幕翻译管理器。fork 自 [lingarr-translate/lingarr](https://github.com/lingarr-translate/lingarr),在其基础上完成了前端整屏重写、后端模块化、数据库单引擎化与认证安全加固的个人深度重构分支。沿用 AGPL-3.0。
+自托管字幕翻译管理器,个人深度重构分支(前端整屏重写 · 后端模块化 · SQLite 单引擎 · 认证安全加固)。AGPL-3.0。
 
 接入 Radarr/Sonarr 媒体库,自动扫描缺字幕的影视,经可配置的翻译服务链(13 家内置 + 插件)批量翻译并落盘;配套队列监控、逐行校对台、成本统计与术语表管理。
 
@@ -71,7 +71,7 @@ docker compose up -d
 | `MAX_CONCURRENT_JOBS` | `4` | 翻译任务并发 worker 数 |
 | `JOB_TIMEOUT_MINUTES` | `30` | 单任务静默超时(分钟),超时 Hangfire 重试 |
 
-可作为环境变量持久化的应用内设置清单见 [Settings.MD](Settings.MD);容器支持 `user: "1000:1000"` 以非 root 运行(注意 `./data` 与媒体挂载目录的属主)。
+可作为环境变量持久化的应用内设置清单见 [SETTINGS.md](SETTINGS.md);容器支持 `user: "1000:1000"` 以非 root 运行(注意 `./data` 与媒体挂载目录的属主)。
 
 ## 开发
 
@@ -100,6 +100,6 @@ cd Lingarr.Client && npx vitest run && npx vue-tsc --noEmit && npx oxlint ./src
 
 ## 致谢与许可
 
-AGPL-3.0(见 [LICENSE](LICENSE))。基于 [lingarr-translate/lingarr](https://github.com/lingarr-translate/lingarr) 衍生,感谢上游的工作。
+AGPL-3.0(见 [LICENSE](LICENSE))。
 
-上游依赖:图标 [Lucide](https://lucide.dev/icons) · 字幕解析 [AlexPoint/SubtitlesParser](https://github.com/AlexPoint/SubtitlesParser) · 翻译 [LibreTranslate](https://libretranslate.com) / [GTranslate](https://github.com/d4n3436/GTranslate)。
+依赖致谢:图标 [Lucide](https://lucide.dev/icons) · 字幕解析 [AlexPoint/SubtitlesParser](https://github.com/AlexPoint/SubtitlesParser) · 翻译 [LibreTranslate](https://libretranslate.com) / [GTranslate](https://github.com/d4n3436/GTranslate)。

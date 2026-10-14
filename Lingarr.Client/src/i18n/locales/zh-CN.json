@@ -133,7 +133,6 @@
     },
     "version": {
         "development": "开发版",
-        "updateAvailable": "有新版本 {version} 可用",
         "current": "版本:{version}"
     },
     "login": {

@@ -66,7 +66,7 @@ public static class InfrastructureModule
                 License = new OpenApiLicense
                 {
                     Name = "GNU Affero General Public License v3.0",
-                    Url = new Uri("https://github.com/lingarr-translate/lingarr/blob/main/LICENSE")
+                    Url = new Uri("https://www.gnu.org/licenses/agpl-3.0.html")
                 }
             });
 

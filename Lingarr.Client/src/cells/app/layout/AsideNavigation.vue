@@ -70,15 +70,6 @@
                         classes="text-warning-content border-warning/40 bg-warning/50">
                         {{ t('version.development') }}
                     </BadgeComponent>
-                    <BadgeComponent
-                        v-else-if="instanceStore.getVersion.newVersion"
-                        classes="text-success-content border-success/40 bg-success/50">
-                        {{
-                            t('version.updateAvailable', {
-                                version: instanceStore.getVersion.latestVersion
-                            })
-                        }}
-                    </BadgeComponent>
                     <BadgeComponent v-else>
                         {{
                             t('version.current', {

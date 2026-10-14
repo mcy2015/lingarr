@@ -133,7 +133,6 @@
     },
     "version": {
         "development": "Development",
-        "updateAvailable": "Update {version} is available",
         "current": "Version: {version}"
     },
     "login": {

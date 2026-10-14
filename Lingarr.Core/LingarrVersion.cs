@@ -42,41 +42,19 @@ public static class LingarrVersion
         return buildMetadataStart < 0 ? version : version[..buildMetadataStart];
     }
 
-    public static async Task<VersionInfo> CheckForUpdates(object? lingarrApiService = null)
+    /// <summary>
+    /// Builds the version info shown in the UI. This fork ships as a
+    /// self-built image with no release feed to compare against, so the
+    /// latest version always equals the running one.
+    /// </summary>
+    public static VersionInfo GetVersionInfo()
     {
-        var latestVersion = Number;
-        var isDevelopment = !Version.TryParse(Number, out var current);
-
-        try
-        {
-            var method = lingarrApiService?.GetType().GetMethod("GetLatestVersion");
-            if (method != null)
-            {
-                if (method.Invoke(lingarrApiService, null) is Task<string?> task)
-                {
-                    var version = await task;
-                    if (!string.IsNullOrEmpty(version))
-                    {
-                        latestVersion = version;
-                    }
-                }
-            }
-        }
-        catch (Exception)
-        {
-            Console.WriteLine("Failed to get latest version");
-        }
-
-        var newVersion = !isDevelopment
-            && Version.TryParse(latestVersion.TrimStart('v'), out var latest)
-            && latest > current;
-
         return new VersionInfo
         {
-            NewVersion = newVersion,
-            IsDevelopment = isDevelopment,
+            NewVersion = false,
+            IsDevelopment = !Version.TryParse(Number, out _),
             CurrentVersion = Number,
-            LatestVersion = latestVersion
+            LatestVersion = Number
         };
     }
 }
