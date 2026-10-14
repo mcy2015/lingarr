@@ -23,6 +23,7 @@ ARG TARGETARCH
 ARG VERSION=0.0.0-dev
 WORKDIR /src
 COPY ["Directory.Packages.props", "global.json", "./"]
+COPY ["Lingarr.Contracts/Lingarr.Contracts.csproj", "Lingarr.Contracts/"]
 COPY ["Lingarr.Server/Lingarr.Server.csproj", "Lingarr.Server/"]
 COPY ["Lingarr.Core/Lingarr.Core.csproj", "Lingarr.Core/"]
 COPY ["Lingarr.Migrations/Lingarr.Migrations.csproj", "Lingarr.Migrations/"]
