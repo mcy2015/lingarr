@@ -4,6 +4,8 @@ import {
     IAuthenticatedResponse,
     IAuthService,
     IChangePasswordRequest,
+    IChangeUsernameRequest,
+    IChangeUsernameResponse,
     ILoginRequest,
     ILoginResponse
 } from '@/types'
@@ -23,6 +25,10 @@ const service = (http: AxiosStatic, resource = '/api/auth'): IAuthService => ({
 
     changePassword(request: IChangePasswordRequest): Promise<ILoginResponse> {
         return http.post(`${resource}/password`, request).then((response) => response.data)
+    },
+
+    changeUsername(request: IChangeUsernameRequest): Promise<IChangeUsernameResponse> {
+        return http.put(`${resource}/username`, request).then((response) => response.data)
     },
 
     generateApiKey(): Promise<IApiKeyResponse> {

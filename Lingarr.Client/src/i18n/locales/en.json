@@ -988,5 +988,19 @@
             "invalidCurrent": "The current password is incorrect",
             "generic": "Failed to change the password. Please try again."
         }
+    },
+    "changeUsername": {
+        "title": "Change username",
+        "cardNote": "Login account name · confirmed by current password, no re-login needed",
+        "newUsername": "New username",
+        "hint": "3-32 characters: letters, digits, dot, dash, underscore",
+        "submit": "Change username",
+        "success": "Username changed to {username}",
+        "errors": {
+            "invalid": "The username must be 3-32 characters: letters, digits, dot, dash or underscore.",
+            "same": "This is already your username.",
+            "taken": "This username is already taken.",
+            "generic": "Failed to change the username, please retry."
+        }
     }
 }

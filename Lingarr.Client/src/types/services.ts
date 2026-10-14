@@ -13,6 +13,8 @@ import {
     ILoginResponse,
     IAuthenticatedResponse,
     IChangePasswordRequest,
+    IChangeUsernameRequest,
+    IChangeUsernameResponse,
     IApiKeyResponse,
     IIncludeSummary,
     IPluginManifest,
@@ -39,6 +41,9 @@ export interface IAuthService {
     /// P0-3: change the logged-in user's password. The server revokes every
     /// session on success, so the caller must sign in again afterwards.
     changePassword(request: IChangePasswordRequest): Promise<ILoginResponse>
+    /// Rename the logged-in user (current-password confirmed). Unlike a
+    /// password change the session stays valid.
+    changeUsername(request: IChangeUsernameRequest): Promise<IChangeUsernameResponse>
     generateApiKey(): Promise<IApiKeyResponse>
     /// Security walk fix: explicit reveal of the stored API key. Same guard
     /// as generation on the server (cookie sessions only); the only other

@@ -71,6 +71,12 @@ public interface IAuthService
     Task ChangePasswordAsync(User user, string newPassword);
 
     /// <summary>
+    /// Renames the given user. Returns false when the name is already taken
+    /// by another account; the session stays valid (the id is unchanged).
+    /// </summary>
+    Task<bool> ChangeUsernameAsync(User user, string newUsername);
+
+    /// <summary>
     /// True when the stored must_change_password setting is "true" (the
     /// default admin/admin account has not changed its password yet).
     /// </summary>

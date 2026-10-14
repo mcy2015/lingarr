@@ -303,6 +303,136 @@ public class AuthControllerTests
         _settingService.Verify(s => s.SetEncryptedSetting("api_key", string.Empty), Times.Once);
     }
 
+    // ===== Username change (PUT /api/auth/username) =====
+
+    [Fact]
+    public async Task ChangeUsername_CookieSessionWithPassword_RenamesAndKeepsSession()
+    {
+        _controller.HttpContext.User = CookiePrincipal("admin");
+        var user = new Lingarr.Core.Entities.User { Id = 1, Username = "admin", PasswordHash = "hash" };
+        _authService.Setup(a => a.GetUserById(1)).ReturnsAsync(user);
+        _authService.Setup(a => a.VerifyPassword("secret123", "hash")).Returns(true);
+        _authService.Setup(a => a.ChangeUsernameAsync(user, "mcy2015")).ReturnsAsync(true);
+
+        var result = await _controller.ChangeUsername(new ChangeUsernameRequest
+        {
+            CurrentPassword = "secret123",
+            NewUsername = "mcy2015"
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal("mcy2015", new ResponseAdapter(ok.Value!).Get("username"));
+        // unlike a password change, the session is deliberately not revoked
+        _sessionStore.Verify(s => s.RemoveAllForUserAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_AnonymousCaller_Returns401()
+    {
+        var result = await _controller.ChangeUsername(new ChangeUsernameRequest
+        {
+            CurrentPassword = "secret123",
+            NewUsername = "mcy2015"
+        });
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
+        _authService.Verify(a => a.ChangeUsernameAsync(It.IsAny<Lingarr.Core.Entities.User>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_ApiKeyPrincipal_Returns403()
+    {
+        _controller.HttpContext.User = ApiKeyPrincipal();
+
+        var result = await _controller.ChangeUsername(new ChangeUsernameRequest
+        {
+            CurrentPassword = "secret123",
+            NewUsername = "mcy2015"
+        });
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        _authService.Verify(a => a.ChangeUsernameAsync(It.IsAny<Lingarr.Core.Entities.User>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("ab")]        // too short
+    [InlineData("has space")] // illegal character
+    [InlineData("中文用户名")]   // outside the allowed charset
+    public async Task ChangeUsername_InvalidFormat_Returns400BeforeAnyHashing(string invalid)
+    {
+        _controller.HttpContext.User = CookiePrincipal("admin");
+
+        var result = await _controller.ChangeUsername(new ChangeUsernameRequest
+        {
+            CurrentPassword = "secret123",
+            NewUsername = invalid
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("invalid_username", new ResponseAdapter(bad.Value!).Get("reason"));
+        // format rejection runs before the PBKDF2 verification of the password
+        _authService.Verify(a => a.VerifyPassword(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_WrongCurrentPassword_Returns401WithReason()
+    {
+        _controller.HttpContext.User = CookiePrincipal("admin");
+        var user = new Lingarr.Core.Entities.User { Id = 1, Username = "admin", PasswordHash = "hash" };
+        _authService.Setup(a => a.GetUserById(1)).ReturnsAsync(user);
+        _authService.Setup(a => a.VerifyPassword("wrong", "hash")).Returns(false);
+
+        var result = await _controller.ChangeUsername(new ChangeUsernameRequest
+        {
+            CurrentPassword = "wrong",
+            NewUsername = "mcy2015"
+        });
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.Equal("invalid_current_password", new ResponseAdapter(unauthorized.Value!).Get("reason"));
+        _authService.Verify(a => a.ChangeUsernameAsync(It.IsAny<Lingarr.Core.Entities.User>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_SameName_Returns400WithSameUsernameReason()
+    {
+        _controller.HttpContext.User = CookiePrincipal("admin");
+        var user = new Lingarr.Core.Entities.User { Id = 1, Username = "admin", PasswordHash = "hash" };
+        _authService.Setup(a => a.GetUserById(1)).ReturnsAsync(user);
+        _authService.Setup(a => a.VerifyPassword("secret123", "hash")).Returns(true);
+
+        var result = await _controller.ChangeUsername(new ChangeUsernameRequest
+        {
+            CurrentPassword = "secret123",
+            NewUsername = "admin"
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("same_username", new ResponseAdapter(bad.Value!).Get("reason"));
+    }
+
+    [Fact]
+    public async Task ChangeUsername_TakenName_Returns409WithReason()
+    {
+        _controller.HttpContext.User = CookiePrincipal("admin");
+        var user = new Lingarr.Core.Entities.User { Id = 1, Username = "admin", PasswordHash = "hash" };
+        _authService.Setup(a => a.GetUserById(1)).ReturnsAsync(user);
+        _authService.Setup(a => a.VerifyPassword("secret123", "hash")).Returns(true);
+        _authService.Setup(a => a.ChangeUsernameAsync(user, "mcy2015")).ReturnsAsync(false);
+
+        var result = await _controller.ChangeUsername(new ChangeUsernameRequest
+        {
+            CurrentPassword = "secret123",
+            NewUsername = "mcy2015"
+        });
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+        Assert.Equal("username_taken", new ResponseAdapter(conflict.Value!).Get("reason"));
+    }
+
     // ===== Login: rate limiting + mustChangePassword contract =====
 
     [Fact]

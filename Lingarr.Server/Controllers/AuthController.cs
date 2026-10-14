@@ -272,6 +272,101 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Change the username of the logged-in user. Requires the current
+    /// password as confirmation; the session stays valid because the user
+    /// id the ticket carries is unchanged.
+    /// </summary>
+    [HttpPut("username")]
+    [Authorize("LingarrAccess")]
+    public async Task<ActionResult> ChangeUsername([FromBody] ChangeUsernameRequest request)
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!User.IsCookieSession())
+        {
+            _logger.LogWarning(
+                "Rejected username change without a cookie session from {RemoteIp}.",
+                remoteIp);
+
+            return User.Identity?.IsAuthenticated == true
+                ? StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    reason = "no_session",
+                    message = "Username changes require a logged-in browser session"
+                })
+                : Unauthorized(new
+                {
+                    reason = "no_session",
+                    message = "Username changes require a logged-in browser session"
+                });
+        }
+
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new { reason = "no_session", message = "No user is attached to this session" });
+        }
+
+        var newUsername = request.NewUsername?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || newUsername.Length == 0)
+        {
+            return BadRequest(new
+            {
+                reason = "validation",
+                message = "Current password and new username are required"
+            });
+        }
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(newUsername, "^[A-Za-z0-9._-]{3,32}$"))
+        {
+            return BadRequest(new
+            {
+                reason = "invalid_username",
+                message = "The username must be 3-32 characters of letters, digits, dot, dash or underscore"
+            });
+        }
+
+        var user = await _authService.GetUserById(userId);
+        if (user == null)
+        {
+            return Unauthorized(new { reason = "no_session", message = "No user is attached to this session" });
+        }
+
+        if (!_authService.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+        {
+            return Unauthorized(new
+            {
+                reason = "invalid_current_password",
+                message = "The current password is incorrect"
+            });
+        }
+
+        if (string.Equals(user.Username, newUsername, StringComparison.Ordinal))
+        {
+            return BadRequest(new
+            {
+                reason = "same_username",
+                message = "This is already your username"
+            });
+        }
+
+        if (!await _authService.ChangeUsernameAsync(user, newUsername))
+        {
+            return Conflict(new
+            {
+                reason = "username_taken",
+                message = "This username is already taken"
+            });
+        }
+
+        _logger.LogInformation(
+            "User {OldUsername} renamed to {NewUsername} from {RemoteIp}.",
+            user.Username,
+            newUsername,
+            remoteIp);
+        return Ok(new { username = newUsername });
+    }
+
+    /// <summary>
     /// Generate a new API key
     /// </summary>
     /// <remarks>

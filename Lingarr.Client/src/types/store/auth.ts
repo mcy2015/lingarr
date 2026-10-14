@@ -27,3 +27,16 @@ export interface IChangePasswordRequest {
     currentPassword: string
     newPassword: string
 }
+
+/// PUT /api/auth/username payload. `reason` codes: validation |
+/// invalid_username | same_username | invalid_current_password |
+/// username_taken | no_session. The session stays valid after a rename —
+/// the ticket carries the unchanged user id.
+export interface IChangeUsernameRequest {
+    currentPassword: string
+    newUsername: string
+}
+
+export interface IChangeUsernameResponse {
+    username: string
+}

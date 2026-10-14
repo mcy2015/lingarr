@@ -266,6 +266,22 @@ public class AuthService : IAuthService
     }
 
     /// <inheritdoc />
+    public async Task<bool> ChangeUsernameAsync(User user, string newUsername)
+    {
+        var taken = await _context.Users
+            .AnyAsync(u => u.Id != user.Id && u.Username == newUsername);
+
+        if (taken)
+        {
+            return false;
+        }
+
+        user.Username = newUsername;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    /// <inheritdoc />
     public async Task<bool> GetMustChangePasswordAsync()
     {
         return await _settingService.GetSetting(SettingKeys.Authentication.MustChangePassword) == "true";

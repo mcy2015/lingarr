@@ -988,5 +988,19 @@
             "invalidCurrent": "当前密码不正确",
             "generic": "修改密码失败,请重试。"
         }
+    },
+    "changeUsername": {
+        "title": "更改用户名",
+        "cardNote": "登录账户名 · 验证当前密码后生效,无需重登",
+        "newUsername": "新用户名",
+        "hint": "3-32 个字符:字母、数字、点、横线、下划线",
+        "submit": "更改用户名",
+        "success": "用户名已改为 {username}",
+        "errors": {
+            "invalid": "用户名须为 3-32 个字符:字母、数字、点、横线、下划线。",
+            "same": "这就是当前用户名。",
+            "taken": "该用户名已被占用。",
+            "generic": "更改失败,请重试。"
+        }
     }
 }

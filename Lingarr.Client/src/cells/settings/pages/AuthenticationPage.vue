@@ -11,6 +11,7 @@
         <AuthenticationSettings />
         <ApiKeyConfiguration />
         <ChangePasswordCard />
+        <ChangeUsernameCard />
     </DrillDownPage>
 </template>
 <script setup lang="ts">
@@ -22,6 +23,7 @@ import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import AuthenticationSettings from '@/cells/settings/components/AuthenticationSettings.vue'
 import ApiKeyConfiguration from '@/cells/settings/components/authentication/ApiKeyConfiguration.vue'
 import ChangePasswordCard from '@/cells/settings/components/authentication/ChangePasswordCard.vue'
+import ChangeUsernameCard from '@/cells/settings/components/authentication/ChangeUsernameCard.vue'
 
 const { t } = useI18n()
 const settingStore = useSettingStore()
