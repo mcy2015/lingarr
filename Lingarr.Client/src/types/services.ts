@@ -21,7 +21,8 @@ import {
     IPluginSummary,
     IProofreadLineApplyRequest,
     IProofreadLineRequest,
-    IQueueDepth
+    IQueueDepth,
+    IScheduleTimeZone
 } from '@/types'
 
 export interface IPluginService {
@@ -310,6 +311,10 @@ export interface IScheduleService {
     /// Update a recurring job's cron — the single edit entry for schedules;
     /// 400 invalid cron, 404 unknown id, 409 missing settings row.
     updateJobCron<T>(jobId: string, cron: string): Promise<T>
+    /// Effective schedule time zone: crons are interpreted in it and
+    /// schedule times displayed in it; warning is set when the server
+    /// fell back to UTC.
+    timeZone(): Promise<IScheduleTimeZone>
 }
 
 export interface IMappingService {

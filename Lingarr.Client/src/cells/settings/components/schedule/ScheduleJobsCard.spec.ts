@@ -15,6 +15,7 @@ import { IRecurringJob } from '@/types'
 
 const scheduleApi = vi.hoisted(() => ({
     recurringJobs: vi.fn(),
+    timeZone: vi.fn(),
     depth: vi.fn(),
     enableJob: vi.fn(),
     disableJob: vi.fn(),
@@ -94,11 +95,13 @@ const mountCard = async (): Promise<VueWrapper> => {
 beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(scheduleApi.recurringJobs).mockReset()
+    vi.mocked(scheduleApi.timeZone).mockReset()
     vi.mocked(scheduleApi.enableJob).mockReset()
     vi.mocked(scheduleApi.disableJob).mockReset()
     vi.mocked(scheduleApi.updateJobCron).mockReset()
 
     scheduleApi.recurringJobs.mockResolvedValue([makeJob()])
+    scheduleApi.timeZone.mockResolvedValue({ ianaId: 'Europe/Amsterdam', warning: null })
     scheduleApi.enableJob.mockResolvedValue(undefined)
     scheduleApi.disableJob.mockResolvedValue(undefined)
     scheduleApi.updateJobCron.mockResolvedValue(undefined)
@@ -229,5 +232,53 @@ describe('ScheduleJobsCard (自动化 tab · 任务表)', () => {
         const page = await mountCard()
 
         expect(page.find('[data-test="schedule-cron-edit-CleanupJob"]').exists()).toBe(true)
+    })
+
+    // ── 时区标注:cron 与「下次执行」同源时区,防按浏览器时区误读 ────
+
+    it('labels the next-execution column with the effective time zone', async () => {
+        const page = await mountCard()
+
+        const label = page.find('[data-test="schedule-timezone-id"]')
+        expect(label.exists()).toBe(true)
+        expect(label.text()).toBe('Europe/Amsterdam')
+    })
+
+    it('hides the time zone label while the endpoint has not answered', async () => {
+        scheduleApi.timeZone.mockReturnValue(new Promise(() => {})) // never settles
+        const page = await mountCard()
+
+        expect(page.find('[data-test="schedule-timezone-id"]').exists()).toBe(false)
+    })
+
+    it('shows the interpretation zone inside the cron edit modal', async () => {
+        const page = await mountCard()
+
+        await page.find('[data-test="schedule-cron-edit-StatisticsJob"]').trigger('click')
+        await flushPromises()
+
+        const hint = q('[data-test="schedule-cron-timezone"]')
+        expect(hint).not.toBeNull()
+        expect(hint!.text()).toContain('Europe/Amsterdam')
+    })
+
+    it('warns when the server fell back to UTC, and stays silent otherwise', async () => {
+        scheduleApi.timeZone.mockResolvedValue({
+            ianaId: 'UTC',
+            warning: 'TZ is not set, falling back to UTC.'
+        })
+        const warned = await mountCard()
+
+        const banner = warned.find('[data-test="schedule-timezone-warning"]')
+        expect(banner.exists()).toBe(true)
+        expect(banner.text()).toContain(en.settings.schedule.timeZoneWarning)
+        expect(banner.attributes('title')).toBe('TZ is not set, falling back to UTC.')
+        warned.unmount()
+        wrapper = null
+
+        // restore the beforeEach default (no warning) for the silent mount
+        scheduleApi.timeZone.mockResolvedValue({ ianaId: 'Europe/Amsterdam', warning: null })
+        const quiet = await mountCard()
+        expect(quiet.find('[data-test="schedule-timezone-warning"]').exists()).toBe(false)
     })
 })

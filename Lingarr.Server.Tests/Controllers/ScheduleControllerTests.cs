@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Hangfire;
+using Lingarr.Core.Configuration;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Models;
 using Lingarr.Server.Modules.Infrastructure;
@@ -67,5 +68,21 @@ public class ScheduleControllerTests
         var action = await _controller.UpdateCron("SyncMovieJob", new UpdateCronRequest { Cron = "0 5 * * *" });
 
         Assert.IsType<OkResult>(action);
+    }
+
+    /// <summary>
+    /// The schedule screen labels cron/next-run with the effective zone and
+    /// warns on UTC fallback — the endpoint must mirror TimeZoneConfiguration
+    /// exactly, including a null warning when TZ resolved cleanly.
+    /// </summary>
+    [Fact]
+    public void TimeZone_MirrorsTimeZoneConfiguration()
+    {
+        var action = _controller.TimeZone();
+
+        var ok = Assert.IsType<OkObjectResult>(action);
+        var body = Assert.IsType<ScheduleTimeZone>(ok.Value!);
+        Assert.Equal(TimeZoneConfiguration.IanaId, body.IanaId);
+        Assert.Equal(TimeZoneConfiguration.ResolutionWarning, body.Warning);
     }
 }

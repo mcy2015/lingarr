@@ -1,5 +1,6 @@
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
+using Lingarr.Core.Configuration;
 using Lingarr.Server.Models;
 using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Modules.Infrastructure;
@@ -33,6 +34,21 @@ public class ScheduleController : ControllerBase
     {
         var jobs = await _scheduleService.GetRecurringJobs();
         return Ok(jobs);
+    }
+
+    /// <summary>
+    /// The effective schedule time zone (IANA id): crons are interpreted in
+    /// it and schedule times are displayed in it. Warning is non-null when
+    /// TZ is unset or invalid and the zone fell back to UTC.
+    /// </summary>
+    [HttpGet("time-zone")]
+    public IActionResult TimeZone()
+    {
+        return Ok(new ScheduleTimeZone
+        {
+            IanaId = TimeZoneConfiguration.IanaId,
+            Warning = TimeZoneConfiguration.ResolutionWarning
+        });
     }
 
     /// <summary>

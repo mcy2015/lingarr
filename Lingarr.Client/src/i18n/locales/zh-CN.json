@@ -656,7 +656,9 @@
             "cronUpdated": "已更新 {job} → {cron}",
             "jobNotFound": "任务不存在,刷新后重试。",
             "cronUpdateFailed": "cron 更新失败,请重试。",
-            "cronInvalid": "Cron 表达式无效"
+            "cronInvalid": "Cron 表达式无效",
+            "cronTimeZone": "Cron 按服务器时区 {timeZone} 解释,执行时间也按该时区显示",
+            "timeZoneWarning": "服务器 TZ 环境变量未设置或无效,定时任务已回退 UTC——cron 与显示时间均按 UTC 计算"
         },
         "subtitle": {
             "title": "字幕",

@@ -1,6 +1,15 @@
 export interface IUseScheduleStore {
     recurringJobs: IRecurringJob[]
     queueDepths: IQueueDepth[]
+    timeZone: IScheduleTimeZone | null
+}
+
+/// Effective schedule time zone (GET /api/schedule/time-zone): crons are
+/// interpreted in it and schedule times rendered in it. warning is set when
+/// the server TZ is unset/invalid and the zone fell back to UTC.
+export interface IScheduleTimeZone {
+    ianaId: string
+    warning: string | null
 }
 
 export interface IRunningJob {

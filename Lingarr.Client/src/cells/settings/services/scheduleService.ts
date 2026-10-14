@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { IScheduleService } from '@/types'
+import { IScheduleService, IScheduleTimeZone } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/schedule'): IScheduleService => ({
     startJob<T>(jobName: string): Promise<T> {
@@ -7,6 +7,9 @@ const service = (http: AxiosStatic, resource = '/api/schedule'): IScheduleServic
     },
     recurringJobs<T>(): Promise<T> {
         return http.get(`${resource}/jobs`).then((response) => response.data)
+    },
+    timeZone(): Promise<IScheduleTimeZone> {
+        return http.get(`${resource}/time-zone`).then((response) => response.data)
     },
     remove<T>(jobId: string): Promise<T> {
         return http.delete(`${resource}/job/remove/${jobId}`).then((response) => response.data)

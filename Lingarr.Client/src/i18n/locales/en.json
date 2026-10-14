@@ -656,7 +656,9 @@
             "cronUpdated": "Updated {job} → {cron}",
             "jobNotFound": "Job not found, refresh and retry.",
             "cronUpdateFailed": "Failed to update cron, please retry.",
-            "cronInvalid": "Invalid cron expression"
+            "cronInvalid": "Invalid cron expression",
+            "cronTimeZone": "Cron is interpreted in {timeZone}; execution times are displayed in it too",
+            "timeZoneWarning": "Server TZ is unset or invalid — schedules fell back to UTC, so cron and displayed times use UTC"
         },
         "subtitle": {
             "title": "Subtitle",

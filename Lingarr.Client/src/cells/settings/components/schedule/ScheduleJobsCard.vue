@@ -22,6 +22,15 @@
             </span>
         </div>
 
+        <!-- TZ 未设置/无效回退 UTC 时,服务端日志之外的唯一可见提示 -->
+        <div
+            v-if="timeZone?.warning"
+            class="text-warning border-line/50 border-b px-4 py-2 text-[12px]"
+            data-test="schedule-timezone-warning"
+            :title="timeZone.warning">
+            ⚠ {{ t('settings.schedule.timeZoneWarning') }}
+        </div>
+
         <div class="shell-scroll overflow-x-auto">
             <table class="w-full border-collapse text-[12.5px]">
                 <thead>
@@ -31,7 +40,18 @@
                         </th>
                         <th :class="thClass">{{ t('settings.schedule.cron') }}</th>
                         <th :class="thClass">{{ t('settings.schedule.lastExecution') }}</th>
-                        <th :class="thClass">{{ t('settings.schedule.nextExecution') }}</th>
+                        <th :class="thClass">
+                            <span class="flex items-center gap-1.5">
+                                {{ t('settings.schedule.nextExecution') }}
+                                <!-- cron 与本列时间同源时区,标注以免按浏览器时区误读 -->
+                                <span
+                                    v-if="timeZone"
+                                    class="text-secondary-content/60 text-[10.5px] font-normal"
+                                    data-test="schedule-timezone-id">
+                                    {{ timeZone.ianaId }}
+                                </span>
+                            </span>
+                        </th>
                         <th :class="thClass">{{ t('settings.schedule.state') }}</th>
                         <th :class="`${thClass} text-right`">
                             {{ t('settings.schedule.actions') }}
@@ -125,6 +145,13 @@
                                 :placeholder="'0 5 * * *'"
                                 :debounce="0"
                                 @update:validation="(val) => (draftCronValid = val)" />
+                            <!-- 写 cron 的现场标注解释时区,与「下次执行」列头同源 -->
+                            <p
+                                v-if="timeZone"
+                                class="text-secondary-content/70 text-[11px]"
+                                data-test="schedule-cron-timezone">
+                                {{ t('settings.schedule.cronTimeZone', { timeZone: timeZone.ianaId }) }}
+                            </p>
                             <div class="flex justify-end gap-2 pt-1">
                                 <button
                                     type="button"
@@ -173,6 +200,7 @@ const router = useRouter()
 const { t } = useI18n()
 const hubConnection = ref<Hub>()
 const jobs = computed(() => scheduleStore.getRecurringJobs)
+const timeZone = computed(() => scheduleStore.timeZone)
 
 /// 应用表格惯用法(与媒体库矩阵一致,原型 th 规范:12px/字重 500/次级色)
 const thClass =
@@ -282,7 +310,7 @@ const onJobStateUpdated = (jobId: string, state: string) => {
 }
 
 onMounted(async () => {
-    await refresh()
+    await Promise.all([refresh(), scheduleStore.fetchTimeZone()])
     hubConnection.value = await signalR.connect('JobProgress', '/signalr/JobProgress')
     await hubConnection.value.joinGroup({ group: 'JobProgress' })
 

@@ -8,7 +8,8 @@ const scheduleApi = scheduleService(axios)
 export const useScheduleStore = defineStore('schedule', {
     state: (): IUseScheduleStore => ({
         recurringJobs: [],
-        queueDepths: []
+        queueDepths: [],
+        timeZone: null
     }),
     getters: {
         getRecurringJobs: (state: IUseScheduleStore): IRecurringJob[] => state.recurringJobs,
@@ -20,6 +21,11 @@ export const useScheduleStore = defineStore('schedule', {
         },
         async fetchQueueDepths(): Promise<void> {
             this.queueDepths = await scheduleApi.depth()
+        },
+        /// The schedule screen labels cron/next-run with the zone jobs run
+        /// in — fetched separately so a failure hides the label, not the table.
+        async fetchTimeZone(): Promise<void> {
+            this.timeZone = await scheduleApi.timeZone()
         },
         /// Enable/disable land through the store so the row state and the
         /// depth strip stay in sync after the refresh.
