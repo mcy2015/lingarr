@@ -33,5 +33,8 @@ services:
       - ../media/data/series/anime:/anime:ro
     ports:
       - "9878:9876"
-    # 若要用独立启动的 LibreTranslate:它在宿主机 5001 端口时,
-    # 应用内服务地址填 http://host.docker.internal:5001(Docker Desktop 自带解析)。
+    # Linux Docker(各类 NAS)默认不解析 host.docker.internal,加这条后
+    # 同机服务可统一填 http://host.docker.internal:端口(如 Radarr :7878、
+    # Sonarr :8989、LibreTranslate :5001);Docker Desktop 不受影响。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
