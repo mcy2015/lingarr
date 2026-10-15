@@ -24,6 +24,15 @@ public interface IMediaLibraryService
         int pageSize);
 
     /// <summary>
+    /// Single library row for the media detail page: the same shape as a
+    /// <see cref="GetLibrary"/> item but built from one media graph and its
+    /// newest requests only — never the full-library aggregation (scale
+    /// audit P0-8). Null when no media of the requested type carries the id;
+    /// a null mediaType tries shows first, then movies.
+    /// </summary>
+    Task<MediaLibraryItem?> GetLibraryItem(MediaType? mediaType, int id);
+
+    /// <summary>
     /// Rough cost estimate for translating selected items into a target
     /// language: uncovered episodes' source-language subtitle bytes from the
     /// coverage scan, priced at the default provider's rate (A5).

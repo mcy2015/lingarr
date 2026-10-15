@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
@@ -12,10 +13,12 @@ namespace Lingarr.Server.Modules.Media;
 
 /// <summary>
 /// Aggregations behind the media library matrix (A4) and its tray estimate.
-/// Track coverage comes from the statistics scan's per-media snapshot; state
-/// and last activity from the newest request per episode/movie. With a
-/// coverage or state filter active the whole (DB-only) result set is
-/// aggregated before paging so totals remain truthful.
+/// Track coverage comes from the statistics scan's per-media JSON snapshot;
+/// state and last activity from the newest request per episode/movie, rolled
+/// up with SQL GROUP BY so neither episode entities nor request payloads
+/// (StackTrace/subtitle columns) are ever materialized (scale audit
+/// P0-7/P0-8). Coverage/state filters run over the small aggregate row set
+/// (DB only, no filesystem) before paging so totals remain truthful.
 /// </summary>
 public class MediaLibraryService : IMediaLibraryService
 {
@@ -49,124 +52,354 @@ public class MediaLibraryService : IMediaLibraryService
     {
         var wantShows = mediaType is null or MediaType.Show;
         var wantMovies = mediaType is null or MediaType.Movie;
-
-        // Tracking query: Episodes carry a required Season navigation back,
-        // which no-tracking includes reject as a cycle.
-        var showQuery = _dbContext.Shows
-            .Include(s => s.Seasons)
-            .ThenInclude(season => season.Episodes)
-            .AsQueryable();
-        var movieQuery = _dbContext.Movies
-            .AsNoTracking()
-            .AsQueryable();
-
-        if (!string.IsNullOrEmpty(searchQuery))
-        {
-            var needle = searchQuery.ToLower();
-            if (wantShows) showQuery = showQuery.Where(s => s.Title.ToLower().Contains(needle));
-            if (wantMovies) movieQuery = movieQuery.Where(m => m.Title.ToLower().Contains(needle));
-        }
-
-        var showList = wantShows ? await showQuery.ToListAsync() : new List<Show>();
-        var movieList = wantMovies ? await movieQuery.ToListAsync() : new List<Movie>();
-
-        // Newest request per media drives the state column and last activity.
-        var episodeIds = showList
-            .SelectMany(s => s.Seasons.SelectMany(season => season.Episodes.Select(e => e.Id)))
-            .ToHashSet();
-        var movieIds = movieList.Select(m => m.Id).ToHashSet();
-        var latestByMedia = await LatestStatusByMediaAsync(episodeIds, movieIds);
+        var needle = string.IsNullOrEmpty(searchQuery) ? null : searchQuery.ToLower();
 
         var targetLanguages = await _settingService.GetSettingAsJson<TargetLanguage>(
             SettingKeys.Translation.TargetLanguages) ?? new List<TargetLanguage>();
 
-        var items = new List<MediaLibraryItem>();
-        foreach (var show in showList)
+        // Phase 1 — aggregate rows straight from SQL: scalars, coverage read
+        // directly off the JSON column and season/episode counts from grouped
+        // subqueries. One small row per media item, no entity graphs.
+        var rows = new List<MediaRow>();
+        if (wantShows)
         {
-            var item = BuildShowItem(show, latestByMedia, targetLanguages);
-            if (MatchesFilters(item, state, targetLanguage))
+            var showQuery = _dbContext.Shows
+                .AsNoTracking()
+                .AsQueryable();
+            if (needle is not null)
             {
-                items.Add(item);
+                showQuery = showQuery.Where(s => s.Title.ToLower().Contains(needle));
             }
+
+            var showRows = await showQuery.Select(s => new
+            {
+                s.Id,
+                s.Title,
+                s.DateAdded,
+                s.IncludeInTranslation,
+                s.TranslationAgeThreshold,
+                s.SubtitleCoverageJson,
+                SeasonCount = s.Seasons.Count(),
+                EpisodeCount = s.Seasons.SelectMany(season => season.Episodes).Count()
+            }).ToListAsync();
+
+            var statusById = await ShowStatusCountsAsync();
+            rows.AddRange(showRows.Select(r => new MediaRow
+            {
+                Id = r.Id,
+                MediaType = MediaType.Show,
+                Title = r.Title,
+                DateAdded = r.DateAdded,
+                IncludeInTranslation = r.IncludeInTranslation,
+                TranslationAgeThreshold = r.TranslationAgeThreshold,
+                SubtitleCoverageJson = r.SubtitleCoverageJson,
+                SeasonCount = r.SeasonCount,
+                EpisodeCount = r.EpisodeCount,
+                Status = statusById.GetValueOrDefault(r.Id)
+            }));
         }
-        foreach (var movie in movieList)
+        if (wantMovies)
         {
-            var item = BuildMovieItem(movie, latestByMedia, targetLanguages);
-            if (MatchesFilters(item, state, targetLanguage))
+            var movieQuery = _dbContext.Movies
+                .AsNoTracking()
+                .AsQueryable();
+            if (needle is not null)
             {
-                items.Add(item);
+                movieQuery = movieQuery.Where(m => m.Title.ToLower().Contains(needle));
             }
+
+            var movieRows = await movieQuery.Select(m => new
+            {
+                m.Id,
+                m.Title,
+                m.DateAdded,
+                m.IncludeInTranslation,
+                m.TranslationAgeThreshold,
+                m.SubtitleCoverageJson
+            }).ToListAsync();
+
+            var statusById = await MovieStatusCountsAsync();
+            rows.AddRange(movieRows.Select(r => new MediaRow
+            {
+                Id = r.Id,
+                MediaType = MediaType.Movie,
+                Title = r.Title,
+                DateAdded = r.DateAdded,
+                IncludeInTranslation = r.IncludeInTranslation,
+                TranslationAgeThreshold = r.TranslationAgeThreshold,
+                SubtitleCoverageJson = r.SubtitleCoverageJson,
+                SeasonCount = 0,
+                EpisodeCount = 1,
+                Status = statusById.GetValueOrDefault(r.Id)
+            }));
         }
 
-        var ordered = Order(items, orderBy, ascending);
+        foreach (var row in rows)
+        {
+            row.Tracks = BuildTracks(
+                DeserializeCoverage(row.SubtitleCoverageJson) ?? new Dictionary<string, MediaLanguageCoverage>(),
+                row.EpisodeCount,
+                targetLanguages);
+        }
+
+        // Phase 2 — coverage/state filters, ordering and paging run over the
+        // aggregate rows (small: one row per media, not per episode).
+        var filtered = rows.Where(row => MatchesFilters(row, state, targetLanguage)).ToList();
+        var ordered = Order(filtered, orderBy, ascending);
+        var page = ordered
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        // Phase 3 — the full show graph hydrates for the page's rows only
+        // (inline season detail). Tracking stays on because Episodes' required
+        // Season navigation cycles no-tracking includes.
+        Dictionary<int, Show>? showsById = null;
+        var pageShowIds = page
+            .Where(row => row.MediaType == MediaType.Show)
+            .Select(row => row.Id)
+            .Distinct()
+            .ToList();
+        if (pageShowIds.Count > 0)
+        {
+            showsById = await _dbContext.Shows
+                .Include(s => s.Seasons)
+                .ThenInclude(season => season.Episodes)
+                .Where(s => pageShowIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id);
+        }
+
         return new PagedResult<MediaLibraryItem>
         {
-            Items = Paged(ordered, pageNumber, pageSize),
+            Items = page.Select(row => BuildItem(row, showsById)).ToList(),
             TotalCount = ordered.Count,
             PageNumber = pageNumber,
             PageSize = pageSize
         };
     }
 
-    private static List<MediaLibraryItem> Paged(List<MediaLibraryItem> ordered, int pageNumber, int pageSize) =>
-        ordered
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
-
-    private MediaLibraryItem BuildShowItem(
-        Show show,
-        IReadOnlyDictionary<(MediaType Type, int Id), TranslationRequest> latestByMedia,
-        IReadOnlyList<TargetLanguage> targetLanguages)
+    /// <inheritdoc />
+    public async Task<MediaLibraryItem?> GetLibraryItem(MediaType? mediaType, int id)
     {
-        var episodes = show.Seasons.SelectMany(season => season.Episodes).ToList();
-        var coverage = show.SubtitleCoverage ?? new Dictionary<string, MediaLanguageCoverage>();
-        var (state, completed, failed, lastActivity) = AggregateState(
-            episodes.Select(e => latestByMedia.GetValueOrDefault((MediaType.Show, e.Id))));
+        var targetLanguages = await _settingService.GetSettingAsJson<TargetLanguage>(
+            SettingKeys.Translation.TargetLanguages) ?? new List<TargetLanguage>();
 
-        return new MediaLibraryItem
+        if (mediaType is null or MediaType.Show)
         {
-            Id = show.Id,
-            MediaType = MediaType.Show,
-            Title = show.Title,
-            DateAdded = show.DateAdded,
-            SeasonCount = show.Seasons.Count,
-            EpisodeCount = episodes.Count,
-            Tracks = BuildTracks(coverage, episodes.Count, targetLanguages),
-            State = state,
-            CompletedCount = completed,
-            FailedCount = failed,
-            LastActivityAt = lastActivity,
-            IncludeInTranslation = show.IncludeInTranslation,
-            TranslationAgeThreshold = show.TranslationAgeThreshold,
-            Show = show
-        };
+            var show = await _dbContext.Shows
+                .Include(s => s.Seasons)
+                .ThenInclude(season => season.Episodes)
+                .FirstOrDefaultAsync(s => s.Id == id);
+            if (show is not null)
+            {
+                var summary = (await ShowStatusCountsAsync(show.Id)).GetValueOrDefault(show.Id);
+                var episodeCount = show.Seasons.Sum(season => season.Episodes.Count);
+                return new MediaLibraryItem
+                {
+                    Id = show.Id,
+                    MediaType = MediaType.Show,
+                    Title = show.Title,
+                    DateAdded = show.DateAdded,
+                    SeasonCount = show.Seasons.Count,
+                    EpisodeCount = episodeCount,
+                    Tracks = BuildTracks(
+                        show.SubtitleCoverage ?? new Dictionary<string, MediaLanguageCoverage>(),
+                        episodeCount,
+                        targetLanguages),
+                    State = DeriveState(summary),
+                    CompletedCount = summary?.Completed ?? 0,
+                    FailedCount = summary?.Failed ?? 0,
+                    LastActivityAt = summary?.LastActivity,
+                    IncludeInTranslation = show.IncludeInTranslation,
+                    TranslationAgeThreshold = show.TranslationAgeThreshold,
+                    Show = show
+                };
+            }
+        }
+
+        if (mediaType is null or MediaType.Movie)
+        {
+            var movie = await _dbContext.Movies
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (movie is not null)
+            {
+                var summary = (await MovieStatusCountsAsync(movie.Id)).GetValueOrDefault(movie.Id);
+                return new MediaLibraryItem
+                {
+                    Id = movie.Id,
+                    MediaType = MediaType.Movie,
+                    Title = movie.Title,
+                    DateAdded = movie.DateAdded,
+                    SeasonCount = 0,
+                    EpisodeCount = 1,
+                    Tracks = BuildTracks(
+                        movie.SubtitleCoverage ?? new Dictionary<string, MediaLanguageCoverage>(),
+                        1,
+                        targetLanguages),
+                    State = DeriveState(summary),
+                    CompletedCount = summary?.Completed ?? 0,
+                    FailedCount = summary?.Failed ?? 0,
+                    LastActivityAt = summary?.LastActivity,
+                    IncludeInTranslation = movie.IncludeInTranslation,
+                    TranslationAgeThreshold = movie.TranslationAgeThreshold
+                };
+            }
+        }
+
+        return null;
     }
 
-    private MediaLibraryItem BuildMovieItem(
-        Movie movie,
-        IReadOnlyDictionary<(MediaType Type, int Id), TranslationRequest> latestByMedia,
-        IReadOnlyList<TargetLanguage> targetLanguages)
+    /// <summary>
+    /// Newest request per episode rolled up to counts per show (scale audit
+    /// P0-8). A NOT EXISTS anti-join keeps only the newest row per media (Id
+    /// breaks UpdatedAt ties deterministically) and the grouping stays in
+    /// SQL, so neither request payloads nor episode entities enter memory.
+    /// When <paramref name="showId"/> is given the aggregation narrows to a
+    /// single show (media detail page direct path).
+    /// </summary>
+    private async Task<Dictionary<int, MediaStatusSummary>> ShowStatusCountsAsync(int? showId = null)
     {
-        var coverage = movie.SubtitleCoverage ?? new Dictionary<string, MediaLanguageCoverage>();
-        var (state, completed, failed, lastActivity) = AggregateState(
-            [latestByMedia.GetValueOrDefault((MediaType.Movie, movie.Id))]);
+        var episodes = _dbContext.Episodes
+            .AsNoTracking()
+            .AsQueryable();
+        if (showId is not null)
+        {
+            var id = showId.Value;
+            episodes = episodes.Where(e => e.Season.ShowId == id);
+        }
 
+        var rows = await episodes
+            .Join(
+                _dbContext.TranslationRequests.AsNoTracking()
+                    .Where(r => r.MediaType == MediaType.Show),
+                e => (int?)e.Id,
+                r => r.MediaId,
+                (e, r) => new { ShowId = e.Season.ShowId, RequestId = r.Id, r.MediaId, r.Status, r.UpdatedAt })
+            .Where(x => !_dbContext.TranslationRequests.Any(later =>
+                later.MediaType == MediaType.Show
+                && later.MediaId == x.MediaId
+                && (later.UpdatedAt > x.UpdatedAt
+                    || (later.UpdatedAt == x.UpdatedAt && later.Id > x.RequestId))))
+            .GroupBy(x => x.ShowId)
+            .Select(g => new
+            {
+                ShowId = g.Key,
+                Total = g.Count(),
+                Completed = g.Count(x => x.Status == TranslationStatus.Completed),
+                Failed = g.Count(x => x.Status == TranslationStatus.Failed),
+                InProgress = g.Count(x => x.Status == TranslationStatus.InProgress),
+                Pending = g.Count(x => x.Status == TranslationStatus.Pending),
+                LastActivity = g.Max(x => x.UpdatedAt)
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(
+            r => r.ShowId,
+            r => new MediaStatusSummary
+            {
+                Total = r.Total,
+                Completed = r.Completed,
+                Failed = r.Failed,
+                InProgress = r.InProgress,
+                Pending = r.Pending,
+                LastActivity = r.LastActivity
+            });
+    }
+
+    /// <summary>
+    /// Newest request per movie rolled up to counts (movie MediaId is the
+    /// movie id, no join needed). Same anti-join shape as
+    /// <see cref="ShowStatusCountsAsync"/>; <paramref name="movieId"/> narrows
+    /// the aggregation to one movie for the detail-page direct path.
+    /// </summary>
+    private async Task<Dictionary<int, MediaStatusSummary>> MovieStatusCountsAsync(int? movieId = null)
+    {
+        var query = _dbContext.TranslationRequests
+            .AsNoTracking()
+            .Where(r => r.MediaType == MediaType.Movie && r.MediaId != null);
+        if (movieId is not null)
+        {
+            var id = movieId.Value;
+            query = query.Where(r => r.MediaId == id);
+        }
+
+        var rows = await query
+            .Where(r => !_dbContext.TranslationRequests.Any(later =>
+                later.MediaType == MediaType.Movie
+                && later.MediaId == r.MediaId
+                && (later.UpdatedAt > r.UpdatedAt
+                    || (later.UpdatedAt == r.UpdatedAt && later.Id > r.Id))))
+            .GroupBy(r => r.MediaId!.Value)
+            .Select(g => new
+            {
+                MediaId = g.Key,
+                Total = g.Count(),
+                Completed = g.Count(x => x.Status == TranslationStatus.Completed),
+                Failed = g.Count(x => x.Status == TranslationStatus.Failed),
+                InProgress = g.Count(x => x.Status == TranslationStatus.InProgress),
+                Pending = g.Count(x => x.Status == TranslationStatus.Pending),
+                LastActivity = g.Max(x => x.UpdatedAt)
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(
+            r => r.MediaId,
+            r => new MediaStatusSummary
+            {
+                Total = r.Total,
+                Completed = r.Completed,
+                Failed = r.Failed,
+                InProgress = r.InProgress,
+                Pending = r.Pending,
+                LastActivity = r.LastActivity
+            });
+    }
+
+    /// <summary>
+    /// State column derivation from the per-media latest-request counts —
+    /// identical precedence to the previous in-memory aggregation: any
+    /// InProgress, else any Pending, else any Failed, else Completed.
+    /// </summary>
+    private static MediaTranslationState DeriveState(MediaStatusSummary? summary)
+    {
+        if (summary is null || summary.Total == 0)
+        {
+            return MediaTranslationState.None;
+        }
+        if (summary.InProgress > 0)
+        {
+            return MediaTranslationState.InProgress;
+        }
+        if (summary.Pending > 0)
+        {
+            return MediaTranslationState.Queued;
+        }
+        if (summary.Failed > 0)
+        {
+            return MediaTranslationState.Failed;
+        }
+        return MediaTranslationState.Completed;
+    }
+
+    private static MediaLibraryItem BuildItem(MediaRow row, IReadOnlyDictionary<int, Show>? shows)
+    {
         return new MediaLibraryItem
         {
-            Id = movie.Id,
-            MediaType = MediaType.Movie,
-            Title = movie.Title,
-            DateAdded = movie.DateAdded,
-            SeasonCount = 0,
-            EpisodeCount = 1,
-            Tracks = BuildTracks(coverage, 1, targetLanguages),
-            State = state,
-            CompletedCount = completed,
-            FailedCount = failed,
-            LastActivityAt = lastActivity,
-            IncludeInTranslation = movie.IncludeInTranslation,
-            TranslationAgeThreshold = movie.TranslationAgeThreshold
+            Id = row.Id,
+            MediaType = row.MediaType,
+            Title = row.Title,
+            DateAdded = row.DateAdded,
+            SeasonCount = row.SeasonCount,
+            EpisodeCount = row.EpisodeCount,
+            Tracks = row.Tracks,
+            State = DeriveState(row.Status),
+            CompletedCount = row.Status?.Completed ?? 0,
+            FailedCount = row.Status?.Failed ?? 0,
+            LastActivityAt = row.Status?.LastActivity,
+            IncludeInTranslation = row.IncludeInTranslation,
+            TranslationAgeThreshold = row.TranslationAgeThreshold,
+            Show = row.MediaType == MediaType.Show ? shows?.GetValueOrDefault(row.Id) : null
         };
     }
 
@@ -200,32 +433,10 @@ public class MediaLibraryService : IMediaLibraryService
             .ToList();
     }
 
-    private static (MediaTranslationState State, int Completed, int Failed, DateTimeOffset? Last) AggregateState(
-        IEnumerable<TranslationRequest?> latestPerMedia)
-    {
-        var latest = latestPerMedia.Where(r => r is not null).Cast<TranslationRequest>().ToList();
-        var last = latest.Count == 0 ? (DateTimeOffset?)null : latest.Max(r => r.UpdatedAt);
-        var completed = latest.Count(r => r.Status == TranslationStatus.Completed);
-        var failed = latest.Count(r => r.Status == TranslationStatus.Failed);
-        var active = latest.Count(r => r.Status is TranslationStatus.InProgress or TranslationStatus.Pending);
-
-        var state = latest.Count == 0
-            ? MediaTranslationState.None
-            : latest.Any(r => r.Status == TranslationStatus.InProgress)
-                ? MediaTranslationState.InProgress
-                : latest.Any(r => r.Status == TranslationStatus.Pending)
-                    ? MediaTranslationState.Queued
-                    : failed > 0
-                        ? MediaTranslationState.Failed
-                        : MediaTranslationState.Completed;
-
-        return (state, completed, failed, last);
-    }
-
-    private static bool MatchesFilters(MediaLibraryItem item, string? state, string? targetLanguage)
+    private static bool MatchesFilters(MediaRow row, string? state, string? targetLanguage)
     {
         if (!string.IsNullOrEmpty(state)
-            && !string.Equals(item.State.ToString(), state, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(DeriveState(row.Status).ToString(), state, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -233,7 +444,7 @@ public class MediaLibraryService : IMediaLibraryService
         if (!string.IsNullOrEmpty(targetLanguage))
         {
             // "Missing this target": the track is absent or not yet complete.
-            var track = item.Tracks.FirstOrDefault(t =>
+            var track = row.Tracks.FirstOrDefault(t =>
                 string.Equals(t.Language, targetLanguage, StringComparison.OrdinalIgnoreCase));
             return track is not { State: "complete" };
         }
@@ -241,7 +452,7 @@ public class MediaLibraryService : IMediaLibraryService
         return true;
     }
 
-    private static List<MediaLibraryItem> Order(List<MediaLibraryItem> items, string? orderBy, bool ascending) =>
+    private static List<MediaRow> Order(List<MediaRow> items, string? orderBy, bool ascending) =>
         orderBy switch
         {
             "DateAdded" => ascending
@@ -255,28 +466,10 @@ public class MediaLibraryService : IMediaLibraryService
                 : items.OrderByDescending(i => i.Title, StringComparer.OrdinalIgnoreCase).ToList()
         };
 
-    private async Task<Dictionary<(MediaType Type, int Id), TranslationRequest>> LatestStatusByMediaAsync(
-        HashSet<int> episodeIds,
-        HashSet<int> movieIds)
-    {
-        if (episodeIds.Count == 0 && movieIds.Count == 0)
-        {
-            return new Dictionary<(MediaType, int), TranslationRequest>();
-        }
-
-        var requests = await _dbContext.TranslationRequests
-            .AsNoTracking()
-            .Where(r => r.MediaId != null
-                && ((r.MediaType == MediaType.Show && episodeIds.Contains(r.MediaId.Value))
-                    || (r.MediaType == MediaType.Movie && movieIds.Contains(r.MediaId.Value))))
-            .ToListAsync();
-
-        return requests
-            .GroupBy(r => (r.MediaType, r.MediaId!.Value))
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(r => r.UpdatedAt).First());
-    }
+    private static Dictionary<string, MediaLanguageCoverage>? DeserializeCoverage(string? json) =>
+        string.IsNullOrEmpty(json)
+            ? null
+            : JsonSerializer.Deserialize<Dictionary<string, MediaLanguageCoverage>>(json);
 
     /// <inheritdoc />
     public async Task<TranslationEstimate> Estimate(List<EstimateItem> items, string targetLanguage)
@@ -369,5 +562,40 @@ public class MediaLibraryService : IMediaLibraryService
 
         var coveredEpisodes = Math.Max(1, source.Count);
         return (long)((double)source.Bytes / coveredEpisodes * missing);
+    }
+
+    /// <summary>
+    /// Per-media aggregate row: scalar columns plus the grouped request
+    /// counts — one small row per media item instead of full entity graphs.
+    /// </summary>
+    private sealed class MediaRow
+    {
+        public int Id { get; init; }
+        public MediaType MediaType { get; init; }
+        public string Title { get; init; } = string.Empty;
+        public DateTimeOffset? DateAdded { get; init; }
+        public bool IncludeInTranslation { get; init; }
+        public int? TranslationAgeThreshold { get; init; }
+        public string? SubtitleCoverageJson { get; init; }
+        public int SeasonCount { get; init; }
+        public int EpisodeCount { get; init; }
+        public MediaStatusSummary? Status { get; set; }
+        public List<SubtitleTrackSummary> Tracks { get; set; } = [];
+        public DateTimeOffset? LastActivityAt => Status?.LastActivity;
+    }
+
+    /// <summary>
+    /// Counts over the newest request per episode/movie — the inputs of the
+    /// state column, computed by SQL GROUP BY and never from materialized
+    /// request entities.
+    /// </summary>
+    private sealed class MediaStatusSummary
+    {
+        public int Total { get; set; }
+        public int Completed { get; set; }
+        public int Failed { get; set; }
+        public int InProgress { get; set; }
+        public int Pending { get; set; }
+        public DateTimeOffset? LastActivity { get; set; }
     }
 }

@@ -7,6 +7,7 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Controllers;
+using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Media;
@@ -38,9 +39,9 @@ public class MediaControllerTests
         _dbContext = new LingarrDbContext(options);
     }
 
-    private MediaController CreateController() => new(
+    private MediaController CreateController(Mock<IMediaLibraryService>? library = null) => new(
         new Mock<IMediaService>().Object,
-        new Mock<IMediaLibraryService>().Object,
+        (library ?? new Mock<IMediaLibraryService>()).Object,
         _subtitleService.Object,
         _dbContext);
 
@@ -251,6 +252,77 @@ public class MediaControllerTests
     public async Task GetMediaSubtitles_UnknownId_Returns404()
     {
         var action = await CreateController().GetMediaSubtitles(MediaType.Movie, 999);
+
+        Assert.IsType<NotFoundResult>(action.Result);
+    }
+
+    // ── library: pageSize clamp + single-media detail path (audit P0-8/P2) ──
+
+    [Fact]
+    public async Task GetLibrary_ClampsPageSizeInto1To100()
+    {
+        var library = new Mock<IMediaLibraryService>();
+        library
+            .Setup(s => s.GetLibrary(
+                It.IsAny<MediaType?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(new PagedResult<MediaLibraryItem>
+            {
+                Items = [], TotalCount = 0, PageNumber = 1, PageSize = 1
+            });
+        var controller = CreateController(library);
+
+        await controller.GetLibrary(null, null, null, null, null, null, ascending: true, pageSize: 5000, pageNumber: 1);
+        await controller.GetLibrary(null, null, null, null, null, null, ascending: true, pageSize: 0, pageNumber: 1);
+
+        library.Verify(s => s.GetLibrary(null, null, null, null, null, true, 1, 100), Times.Once);
+        library.Verify(s => s.GetLibrary(null, null, null, null, null, true, 1, 1), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetLibrary_WithId_UsesDirectSingleMediaPath()
+    {
+        var item = new MediaLibraryItem
+        {
+            Id = 7,
+            MediaType = MediaType.Show,
+            Title = "Solo",
+            Tracks = [],
+            State = MediaTranslationState.Queued
+        };
+        var library = new Mock<IMediaLibraryService>();
+        library
+            .Setup(s => s.GetLibraryItem(MediaType.Show, 7))
+            .ReturnsAsync(item);
+        var controller = CreateController(library);
+
+        var action = await controller.GetLibrary(
+            MediaType.Show, 7, null, null, null, null, ascending: true, pageSize: 20, pageNumber: 1);
+
+        var ok = Assert.IsType<OkObjectResult>(action.Result);
+        var page = Assert.IsType<PagedResult<MediaLibraryItem>>(ok.Value!);
+        Assert.Same(item, Assert.Single(page.Items));
+        Assert.Equal(1, page.TotalCount);
+        Assert.Equal(1, page.PageSize);
+        // the detail-page branch must never trigger the full aggregation
+        library.Verify(s => s.GetLibraryItem(MediaType.Show, 7), Times.Once);
+        library.Verify(s => s.GetLibrary(
+            It.IsAny<MediaType?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
+            It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetLibrary_WithUnknownId_Returns404()
+    {
+        var library = new Mock<IMediaLibraryService>();
+        library
+            .Setup(s => s.GetLibraryItem(It.IsAny<MediaType?>(), It.IsAny<int>()))
+            .ReturnsAsync((MediaLibraryItem?)null);
+
+        var action = await CreateController(library).GetLibrary(
+            MediaType.Movie, 42, null, null, null, null, ascending: true, pageSize: 20, pageNumber: 1);
 
         Assert.IsType<NotFoundResult>(action.Result);
     }

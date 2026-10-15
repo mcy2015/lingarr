@@ -55,23 +55,20 @@ public class StatisticsService : IStatisticsService
     /// Daily write-back and cost series for the overview trend card (P1-1).
     /// Aggregated on the fly from completed requests — smaller footprint than
     /// extending <see cref="DailyStatistics"/> with a cost column that would
-    /// need back-filling. Days are local (TimeZoneConfiguration) and zero-filled.
+    /// need back-filling. Days are local (TimeZoneConfiguration) and
+    /// zero-filled. Each day is one SQL GROUP BY over its completed_at range
+    /// (indexed, M0006) so neither request rows nor their subtitle payloads
+    /// enter memory (scale audit P1-10); day boundaries come from the
+    /// configured time zone exactly like CostService's month window.
     /// </summary>
     public async Task<DailyTrendStatistics> GetDailyTrendStatistics(int days = 14)
     {
         days = Math.Clamp(days, 1, 90);
         var today = Today;
         var startDate = today.AddDays(-days + 1);
-        var startLocal = startDate.ToDateTime(TimeOnly.MinValue);
-        var start = new DateTimeOffset(startLocal, TimeZoneConfiguration.Current.GetUtcOffset(startLocal));
+        var timeZone = TimeZoneConfiguration.Current;
 
         var rates = await _costService.GetRates();
-        var usage = await _dbContext.TranslationRequests
-            .Where(r => r.CompletedAt >= start)
-            .Select(r => new { r.CompletedAt, r.ServiceType, r.CharactersTranslated, r.TranslatedSubtitle })
-            .ToListAsync();
-
-        var timeZone = TimeZoneConfiguration.Current;
         var points = new Dictionary<DateOnly, DailyTrendPoint>(days);
         var charactersByDay = new Dictionary<DateOnly, Dictionary<string, long>>(days);
         for (var offset = 0; offset < days; offset++)
@@ -84,32 +81,44 @@ public class StatisticsService : IStatisticsService
         // Any provider with usage but no rate prices the whole window as unknown,
         // mirroring CostSummary's "unknown, never $0" rule.
         var unpricedUsage = false;
-        foreach (var request in usage)
+        for (var offset = 0; offset < days; offset++)
         {
-            if (request.CompletedAt is not { } completedAt)
-            {
-                continue;
-            }
+            var date = startDate.AddDays(offset);
+            var dayStartLocal = date.ToDateTime(TimeOnly.MinValue);
+            var dayStart = new DateTimeOffset(dayStartLocal, timeZone.GetUtcOffset(dayStartLocal));
+            var dayEndLocal = date.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            var dayEnd = new DateTimeOffset(dayEndLocal, timeZone.GetUtcOffset(dayEndLocal));
 
-            var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(completedAt, timeZone).DateTime);
-            if (!points.TryGetValue(localDate, out var point))
-            {
-                continue;
-            }
-
-            if (request.TranslatedSubtitle != null)
-            {
-                point.WrittenCount++;
-            }
-
-            if (request.ServiceType != null && request.CharactersTranslated is { } characters)
-            {
-                var dayCharacters = charactersByDay[localDate];
-                dayCharacters[request.ServiceType] =
-                    dayCharacters.GetValueOrDefault(request.ServiceType) + characters;
-                if (!rates.ContainsKey(request.ServiceType))
+            var usage = await _dbContext.TranslationRequests
+                .AsNoTracking()
+                .Where(r => r.CompletedAt >= dayStart && r.CompletedAt < dayEnd)
+                .GroupBy(r => r.ServiceType)
+                .Select(g => new
                 {
-                    unpricedUsage = true;
+                    Provider = g.Key,
+                    Written = g.Count(x => x.TranslatedSubtitle != null),
+                    CharacterRows = g.Count(x => x.CharactersTranslated != null),
+                    Characters = g.Sum(x => x.CharactersTranslated ?? 0)
+                })
+                .ToListAsync();
+            if (usage.Count == 0)
+            {
+                continue;
+            }
+
+            var point = points[date];
+            var dayCharacters = charactersByDay[date];
+            foreach (var entry in usage)
+            {
+                point.WrittenCount += entry.Written;
+                if (entry.Provider is not null && entry.CharacterRows > 0)
+                {
+                    dayCharacters[entry.Provider] =
+                        dayCharacters.GetValueOrDefault(entry.Provider) + entry.Characters;
+                    if (!rates.ContainsKey(entry.Provider))
+                    {
+                        unpricedUsage = true;
+                    }
                 }
             }
         }

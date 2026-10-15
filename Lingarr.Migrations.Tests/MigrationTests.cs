@@ -29,10 +29,11 @@ public class MigrationTests
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
             // The baseline plus the auth-sessions, schedule-cron,
-            // embedded-track and consume-embedded migrations are applied.
-            Assert.Equal(5L, await ExecuteScalarAsync(connection,
+            // embedded-track, consume-embedded and performance-index
+            // migrations are applied.
+            Assert.Equal(6L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(5L, await ExecuteScalarAsync(connection,
+            Assert.Equal(6L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
@@ -156,6 +157,52 @@ public class MigrationTests
     }
 
     /// <summary>
+    /// M0006 only adds indexes, so rolling it back must return exactly the
+    /// M0005 state: version back to 5 and every one of the eight indexes
+    /// gone from sqlite_master.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_PerformanceIndexesMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(5);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(5L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN (" +
+                "'ix_translation_requests_media_type_media_id'," +
+                "'ix_translation_requests_status'," +
+                "'ix_translation_requests_completed_at'," +
+                "'ix_translation_requests_created_at'," +
+                "'ux_movies_radarr_id'," +
+                "'ux_shows_sonarr_id'," +
+                "'ux_episodes_sonarr_id'," +
+                "'ix_daily_statistics_date')"));
+            // The pre-existing baseline indexes survive the rollback.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name = 'ix_episodes_season_id'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
     /// Locks in the schema shape the squash verified against the old
     /// 29-migration chain: tables, column names in order, foreign keys and
     /// explicit indexes. Fails when the baseline drifts from the contract the
@@ -221,7 +268,11 @@ public class MigrationTests
 
             var expectedIndexes = new Dictionary<string, string[]>
             {
-                ["episodes"] = ["ix_episodes_season_id"],
+                // M0006: the external-id lookups are UNIQUE (sync upserts
+                // match on exactly one row per Radarr/Sonarr endpoint).
+                ["movies"] = ["ux_movies_radarr_id"],
+                ["shows"] = ["ux_shows_sonarr_id"],
+                ["episodes"] = ["ix_episodes_season_id", "ux_episodes_sonarr_id"],
                 ["images"] = ["ix_images_movie_id", "ix_images_show_id"],
                 ["seasons"] = ["ix_seasons_show_id"],
                 // The TEXT primary key adds an implicit autoindex alongside
@@ -232,10 +283,21 @@ public class MigrationTests
                     "ix_auth_sessions_user_id",
                     "sqlite_autoindex_auth_sessions_1"
                 ],
+                // M0006 (P0-9): translation_requests was index-free after
+                // the baseline; the polling, status-count and trend queries
+                // now get these four.
+                ["translation_requests"] =
+                [
+                    "ix_translation_requests_completed_at",
+                    "ix_translation_requests_created_at",
+                    "ix_translation_requests_media_type_media_id",
+                    "ix_translation_requests_status"
+                ],
                 ["translation_glossaries"] = ["ix_glossary_source_term"],
                 ["media_subtitle_tracks"] = ["ix_media_subtitle_tracks_media_type_media_id"],
                 ["translation_request_events"] = ["ix_translation_request_events_translation_request_id"],
                 ["translation_request_lines"] = ["ix_translation_request_lines_translation_request_id"],
+                ["daily_statistics"] = ["ix_daily_statistics_date"],
                 ["version_info"] = ["ux_version"],
             };
 

@@ -169,26 +169,24 @@ public class MediaController : ControllerBase
         int pageSize = 20,
         int pageNumber = 1)
     {
+        // page size cap: a hostile/huge value must not turn one request into
+        // a full-library payload (audit P2)
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         if (id is not null)
         {
-            // media detail page: single-row lookup
-            var single = await _mediaLibraryService.GetLibrary(
-                mediaType,
-                null,
-                null,
-                null,
-                null,
-                true,
-                1,
-                1000);
-            var hit = single.Items.FirstOrDefault(item => item.Id == id);
-            return hit is null ? NotFound() : Ok(new PagedResult<MediaLibraryItem>
-            {
-                Items = [hit],
-                TotalCount = 1,
-                PageNumber = 1,
-                PageSize = 1
-            });
+            // media detail page: single-row direct lookup that skips the
+            // library aggregation entirely (audit P0-8)
+            var item = await _mediaLibraryService.GetLibraryItem(mediaType, id.Value);
+            return item is null
+                ? NotFound()
+                : Ok(new PagedResult<MediaLibraryItem>
+                {
+                    Items = [item],
+                    TotalCount = 1,
+                    PageNumber = 1,
+                    PageSize = 1
+                });
         }
 
         var value = await _mediaLibraryService.GetLibrary(
