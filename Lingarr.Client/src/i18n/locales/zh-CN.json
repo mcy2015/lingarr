@@ -935,7 +935,7 @@
         "subBatch": "批 {count} 行"
     },
     "mediaDetail": {
-        "back": "← 媒体库",
+        "back": "媒体库",
         "translateMissing": "翻译缺失 ▸",
         "seasons": "季",
         "episodeTitle": "集标题",

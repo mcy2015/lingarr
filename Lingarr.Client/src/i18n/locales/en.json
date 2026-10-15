@@ -935,7 +935,7 @@
         "subBatch": "batch {count} lines"
     },
     "mediaDetail": {
-        "back": "← Library",
+        "back": "Library",
         "translateMissing": "Translate missing ▸",
         "seasons": "Season",
         "episodeTitle": "Episode",

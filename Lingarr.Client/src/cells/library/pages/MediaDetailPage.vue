@@ -560,15 +560,17 @@ function historyStatusClass(request: ITranslationRequest): string {
 }
 
 function historyStatusLabel(request: ITranslationRequest): string {
+    // library.state.* 文案本身已带状态符号(✓/✗/◐/⏳),这里不再拼前缀,
+    // 否则中英文都会渲染出双符号。
     switch (request.status) {
         case TRANSLATION_STATUS.COMPLETED:
-            return `✓ ${t('library.state.completed')}`
+            return t('library.state.completed')
         case TRANSLATION_STATUS.FAILED:
-            return `✗ ${t('library.state.failed')}`
+            return t('library.state.failed')
         case TRANSLATION_STATUS.INPROGRESS:
-            return `◐ ${t('library.state.inProgress')}`
+            return t('library.state.inProgress')
         case TRANSLATION_STATUS.PENDING:
-            return `⏳ ${t('library.state.queued')}`
+            return t('library.state.queued')
         default:
             return request.status
     }
