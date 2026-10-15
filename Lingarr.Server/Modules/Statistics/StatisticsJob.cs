@@ -56,11 +56,12 @@ public class StatisticsJob
                 movieSubtitles += subtitles.Count;
                 movie.SubtitleCoverage = CoverageFromFiles(subtitles);
 
-                // Group by language for language counts
-                foreach (var subtitle in subtitles)
+                // Group by language for language counts — dual-language files
+                // (scjp/简日…) count once per language they carry.
+                foreach (var language in subtitles.SelectMany(LanguagesOf))
                 {
-                    byLanguage.TryAdd(subtitle.Language, 0);
-                    byLanguage[subtitle.Language]++;
+                    byLanguage.TryAdd(language, 0);
+                    byLanguage[language]++;
                 }
             }
             catch (DirectoryNotFoundException)
@@ -141,17 +142,19 @@ public class StatisticsJob
         await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
     }
 
-    /// <summary>Movie coverage: every language present counts as one file.</summary>
+    /// <summary>
+    /// Movie coverage: every language present counts as one file. Dual-language
+    /// files (scjp/简日…) contribute to each language they carry.
+    /// </summary>
     private static Dictionary<string, MediaLanguageCoverage> CoverageFromFiles(List<Subtitles> subtitles)
     {
         var coverage = new Dictionary<string, MediaLanguageCoverage>();
-        foreach (var group in subtitles.GroupBy(s => s.Language))
+        foreach (var language in subtitles.SelectMany(LanguagesOf).Distinct())
         {
-            coverage[group.Key] = new MediaLanguageCoverage
-            {
-                Count = 1,
-                Bytes = SumBytes(group)
-            };
+            var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
+            slot.Count++;
+            slot.Bytes += subtitles.Where(s => LanguagesOf(s).Contains(language)).Sum(BytesOf);
+            coverage[language] = slot;
         }
         return coverage;
     }
@@ -169,19 +172,29 @@ public class StatisticsJob
         foreach (var subtitle in subtitles)
         {
             var size = new FileInfo(subtitle.Path).Length;
-            var slot = coverage.GetValueOrDefault(subtitle.Language) ?? new MediaLanguageCoverage();
-            slot.Bytes += size;
             var episode = season.Episodes.FirstOrDefault(ep =>
                 !string.IsNullOrEmpty(ep.FileName)
                 && SubtitleMatchesEpisode(subtitle.FileName, ep.FileName));
-            if (episode != null && coveredEpisodes.Add(episode.Id))
+            foreach (var language in LanguagesOf(subtitle))
             {
-                slot.Count++;
+                var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
+                slot.Bytes += size;
+                if (episode != null && coveredEpisodes.Add(episode.Id * 31 + language.GetHashCode()))
+                {
+                    slot.Count++;
+                }
+                coverage[language] = slot;
             }
-            coverage[subtitle.Language] = slot;
         }
         show.SubtitleCoverage = coverage;
     }
+
+    /// <summary>The language codes a subtitle file carries ("unknown" when untagged).</summary>
+    private static IEnumerable<string> LanguagesOf(Subtitles subtitle) =>
+        subtitle.Languages.Count > 0 ? subtitle.Languages : [subtitle.Language];
+
+    private static long BytesOf(Subtitles subtitle) =>
+        File.Exists(subtitle.Path) ? new FileInfo(subtitle.Path).Length : 0;
 
     private static bool SubtitleMatchesEpisode(string subtitleFileName, string episodeFileName)
     {
@@ -189,7 +202,4 @@ public class StatisticsJob
         return subtitleFileName.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase)
                || string.Equals(subtitleFileName, baseName, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static long SumBytes(IEnumerable<Subtitles> subtitles) =>
-        subtitles.Sum(s => File.Exists(s.Path) ? new FileInfo(s.Path).Length : 0);
 }

@@ -83,6 +83,18 @@ export interface IMediaService {
     includeAll<T>(mediaType: MediaType, include: boolean): Promise<T>
     includeSummary(mediaType: MediaType): Promise<IIncludeSummary>
     threshold<T>(mediaType: MediaType, id: number, hours: string): Promise<T>
+    /// Subtitle files found next to one media item (see MediaSubtitleFile).
+    mediaSubtitles<T>(mediaType: MediaType, id: number): Promise<T>
+}
+
+/// One external subtitle file next to a media item; languages carries every
+/// language of a dual-language file (scjp → ['zh', 'ja']).
+export interface IMediaSubtitleFile {
+    fileName: string
+    directory: string
+    languages: string[]
+    format: string
+    bytes: number
 }
 
 export interface ISettingService {

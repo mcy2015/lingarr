@@ -188,6 +188,54 @@
             </div>
         </div>
 
+        <!-- ═══ 字幕文件:目录下实际存在的外挂字幕(覆盖 chips 的地面真值);
+             双语文件(scjp/简日…)一行带两枚语言标签 ═══ -->
+        <div
+            class="border-line bg-secondary flex min-h-0 max-h-[240px] flex-col rounded-md border"
+            data-test="subtitle-files-card">
+            <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
+                <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.subtitleFiles.title') }}</h2>
+                <span class="mono text-secondary-content ml-auto text-xs">
+                    {{ t('mediaDetail.subtitleFiles.count', { count: subtitleFiles.length }) }}
+                </span>
+            </div>
+            <div v-if="subtitleFiles.length === 0" class="text-secondary-content/60 px-4 py-5 text-center text-xs">
+                {{ t('mediaDetail.subtitleFiles.empty') }}
+            </div>
+            <div v-else class="shell-scroll min-h-0 flex-1 overflow-y-auto">
+                <div
+                    v-for="file in subtitleFiles"
+                    :key="file.directory + '/' + file.fileName"
+                    class="border-line flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b px-4 py-2 text-[12.5px] last:border-b-0"
+                    :data-test="'subtitle-file-row'">
+                    <span
+                        class="mono text-primary-content min-w-0 flex-1 truncate text-[11.5px]"
+                        :title="file.directory + '/' + file.fileName">
+                        {{ file.fileName }}
+                    </span>
+                    <span class="flex flex-none gap-1">
+                        <span
+                            v-for="lang in file.languages"
+                            :key="lang"
+                            class="mono rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold"
+                            :class="
+                                lang === 'unknown'
+                                    ? 'border-line bg-tertiary text-secondary-content'
+                                    : 'border-success/40 bg-success/10 text-success'
+                            ">
+                            {{ languageLabel(lang) }}
+                        </span>
+                    </span>
+                    <span class="mono text-secondary-content flex-none text-[10.5px] uppercase">
+                        {{ file.format }}
+                    </span>
+                    <span class="mono text-secondary-content flex-none text-[10.5px]">
+                        {{ formatBytes(file.bytes) }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
         <!-- ═══ 翻译历史(请求列表形态;行内详情 → queue-detail) ═══ -->
         <div class="border-line bg-secondary flex min-h-[160px] flex-1 flex-col rounded-md border">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
@@ -241,6 +289,7 @@ import {
     ILanguage,
     MEDIA_TYPE,
     IMediaLibraryItem,
+    IMediaSubtitleFile,
     ISeason,
     IShow,
     ISubtitle,
@@ -275,6 +324,7 @@ const item = ref<IMediaLibraryItem | null>(null)
 const history = ref<ITranslationRequest[]>([])
 const requestsByEpisode = ref(new Map<number, ITranslationRequest>())
 const seasonSubtitles = ref<ISubtitle[]>([])
+const subtitleFiles = ref<IMediaSubtitleFile[]>([])
 const activeSeason = ref<number | null>(null)
 const isShow = computed(() => props.type === 'show')
 const show = computed<IShow | null>(() => item.value?.show ?? null)
@@ -430,6 +480,16 @@ async function load(): Promise<void> {
     item.value = page.items[0] ?? null
     if (!item.value) return
 
+    // subtitle files living next to the media (movie dir / every season dir)
+    try {
+        subtitleFiles.value = await mediaApi.mediaSubtitles<IMediaSubtitleFile[]>(
+            isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE,
+            Number(props.id)
+        )
+    } catch {
+        subtitleFiles.value = []
+    }
+
     // season scan for per-episode language attribution
     if (isShow.value && seasons.value.length > 0) {
         activeSeason.value = seasons.value[0].seasonNumber
@@ -462,8 +522,21 @@ async function load(): Promise<void> {
     }
 }
 
-async function loadSeasonSubtitles(season: ISeason): Promise<void> {
-    if (!season.path) {
+/// 字幕文件行的语言标签:常见码用本地化名,其余回退原码。
+function languageLabel(code: string): string {
+    const key = `mediaDetail.lang.${code}`
+    const label = t(key)
+    return label === key ? code : label
+}
+
+function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '—'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+async function loadSeasonSubtitles(season: ISeason): Promise<void> {    if (!season.path) {
         seasonSubtitles.value = []
         return
     }

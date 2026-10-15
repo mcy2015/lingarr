@@ -1,10 +1,13 @@
+using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Controllers;
@@ -16,13 +19,69 @@ public class MediaController : ControllerBase
 {
     private readonly IMediaService _mediaService;
     private readonly IMediaLibraryService _mediaLibraryService;
+    private readonly ISubtitleService _subtitleService;
+    private readonly LingarrDbContext _dbContext;
 
     public MediaController(
         IMediaService mediaService,
-        IMediaLibraryService mediaLibraryService)
+        IMediaLibraryService mediaLibraryService,
+        ISubtitleService subtitleService,
+        LingarrDbContext dbContext)
     {
         _mediaService = mediaService;
         _mediaLibraryService = mediaLibraryService;
+        _subtitleService = subtitleService;
+        _dbContext = dbContext;
+    }
+
+    /// <summary>
+    /// Every external subtitle file that lives next to one media item — the
+    /// ground truth behind the coverage chips. Movies scan their directory,
+    /// shows scan every season directory. Dual-language filenames (scjp, 简日…)
+    /// report every language they carry.
+    /// </summary>
+    /// <response code="200">Subtitle files with detected languages, format and size.</response>
+    /// <response code="404">Unknown media id.</response>
+    [HttpGet("{mediaType}/{id}/subtitles")]
+    public async Task<ActionResult<List<MediaSubtitleFile>>> GetMediaSubtitles(
+        MediaType mediaType,
+        int id)
+    {
+        List<string> directories;
+        if (mediaType == MediaType.Movie)
+        {
+            var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == id);
+            if (movie == null) return NotFound();
+            directories = string.IsNullOrEmpty(movie.Path) ? [] : [movie.Path];
+        }
+        else
+        {
+            var show = await _dbContext.Shows
+                .Include(s => s.Seasons)
+                .FirstOrDefaultAsync(s => s.Id == id);
+            if (show == null) return NotFound();
+            directories = show.Seasons
+                .Where(season => !string.IsNullOrEmpty(season.Path))
+                .Select(season => season.Path!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        var files = new List<MediaSubtitleFile>();
+        foreach (var directory in directories)
+        {
+            var subtitles = await _subtitleService.GetAllSubtitles(directory);
+            files.AddRange(subtitles.Select(subtitle => new MediaSubtitleFile
+            {
+                FileName = Path.GetFileName(subtitle.Path),
+                Directory = Path.GetDirectoryName(subtitle.Path) ?? string.Empty,
+                Languages = subtitle.Languages.Count > 0 ? subtitle.Languages : [subtitle.Language],
+                Format = subtitle.Format.TrimStart('.'),
+                Bytes = System.IO.File.Exists(subtitle.Path) ? new FileInfo(subtitle.Path).Length : 0
+            }));
+        }
+
+        return Ok(files.OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
     /// <summary>

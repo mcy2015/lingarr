@@ -963,6 +963,19 @@
             "busyToast": "翻译进行中 · 请求 #{id} · {progress}%",
             "queuedToast": "翻译已创建 · 请求 #{id}",
             "noSource": "视频旁没有源字幕 · 请先导入"
+        },
+        "subtitleFiles": {
+            "title": "字幕文件",
+            "count": "{count} 个文件",
+            "empty": "该媒体目录下没有外挂字幕文件"
+        },
+        "lang": {
+            "zh": "简体中文",
+            "zh-TW": "繁体中文",
+            "ja": "日语",
+            "en": "英语",
+            "ko": "韩语",
+            "unknown": "未识别"
         }
     },
     "cmdk": {

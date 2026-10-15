@@ -25,9 +25,10 @@ const requestsMock = vi.hoisted(() => vi.fn())
 const collectMock = vi.hoisted(() => vi.fn())
 const translateSubtitleMock = vi.hoisted(() => vi.fn())
 const getActiveTranslationsMock = vi.hoisted(() => vi.fn())
+const mediaSubtitlesMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/mediaService', () => ({
-    mediaService: () => ({ library: libraryMock })
+    mediaService: () => ({ library: libraryMock, mediaSubtitles: mediaSubtitlesMock })
 }))
 
 vi.mock('@/cells/app/api/translationRequestService', () => ({
@@ -241,6 +242,7 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
         requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
         getActiveTranslationsMock.mockResolvedValue([])
         translateSubtitleMock.mockResolvedValue({ jobId: 55 })
+        mediaSubtitlesMock.mockResolvedValue([])
     })
 
     afterEach(() => {
@@ -427,5 +429,49 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
         // only ep02 has a request; ep01/ep03 must not render a detail link
         const detailLinks = wrapper.find('table').findAll('a')
         expect(detailLinks.map((a) => a.attributes('href'))).toEqual(['/queue/30'])
+    })
+
+    // ═══ 字幕文件卡:目录实际存在的文件 + 双语标签 ═══
+    it('lists every subtitle file with per-language chips, dual files carrying both', async () => {
+        mediaSubtitlesMock.mockResolvedValue([
+            {
+                fileName: '[DBD-Raws][Movie][FLAC].scjp.ass',
+                directory: '/movies/Movie(2023){tmdb-1}',
+                languages: ['zh', 'ja'],
+                format: 'ass',
+                bytes: 4096
+            },
+            {
+                fileName: 'Movie.english.srt',
+                directory: '/movies/Movie(2023){tmdb-1}',
+                languages: ['en'],
+                format: 'srt',
+                bytes: 1024
+            }
+        ])
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        expect(card.exists()).toBe(true)
+        const rows = card.findAll('[data-test="subtitle-file-row"]')
+        expect(rows).toHaveLength(2)
+
+        const dual = rows[0]
+        expect(dual.text()).toContain('.scjp.ass')
+        // 双语文件:简体中文 + 日语两枚标签,同一行
+        expect(dual.text()).toContain(en.mediaDetail.lang.zh)
+        expect(dual.text()).toContain(en.mediaDetail.lang.ja)
+        expect(dual.text()).toContain('ass')
+
+        // 计数行
+        expect(card.text()).toContain(en.mediaDetail.subtitleFiles.count.replace('{count}', '2'))
+    })
+
+    it('shows the empty hint when no external subtitles live next to the media', async () => {
+        mediaSubtitlesMock.mockResolvedValue([])
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        expect(card.text()).toContain(en.mediaDetail.subtitleFiles.empty)
     })
 })

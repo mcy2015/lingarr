@@ -50,6 +50,7 @@ public class SubtitleService : ISubtitleService
                 var fileName = Path.GetFileNameWithoutExtension(file);
                 var parts = fileName.Split('.').Reverse().ToList();
                 var language = "";
+                var languages = new List<string>();
                 var caption = "";
 
                 // First look for caption
@@ -60,17 +61,22 @@ public class SubtitleService : ISubtitleService
                     parts.Remove(captionPart);
                 }
 
-                // Then look for language in remaining parts
-                var languagePart = parts.FirstOrDefault(p => TryGetLanguageByPart(p, out var code));
-                if (languagePart != null && TryGetLanguageByPart(languagePart, out var languageCode))
+                // Then look for language in remaining parts. Fansub tags
+                // (chs/sc/scjp/简日…) parse into one or two canonical codes;
+                // the first hit wins and a dual-language file carries both.
+                var languagePart = parts.FirstOrDefault(p => SubtitleLanguageParser.TryParse(p, out _));
+                if (languagePart != null
+                    && SubtitleLanguageParser.TryParse(languagePart, out var parsed))
                 {
-                    language = languageCode;
+                    languages = parsed.ToList();
+                    language = parsed[0];
                     parts.Remove(languagePart);
                 }
                 // Hindi is an exception, if we didn't find a language, and we did found Hindi, We set that as language
                 else if (caption == "hi" && language == "")
                 {
                     language = caption;
+                    languages = [caption];
                     caption = "";
                 }
 
@@ -79,6 +85,7 @@ public class SubtitleService : ISubtitleService
                     Path = file,
                     FileName = fileName,
                     Language = string.IsNullOrEmpty(language) ? "unknown" : language,
+                    Languages = languages.Count > 0 ? languages : ["unknown"],
                     Caption = caption,
                     Format = extension
                 };
@@ -139,8 +146,8 @@ public class SubtitleService : ISubtitleService
             reversedParts.RemoveAt(captionIndex);
         }
 
-        // Extract language
-        int languageIndex = reversedParts.FindIndex(part => TryGetLanguageByPart(part, out _));
+        // Extract language (single- or dual-language tag: en, chs, scjp, 简日…)
+        int languageIndex = reversedParts.FindIndex(part => SubtitleLanguageParser.TryParse(part, out _));
         if (languageIndex != -1)
         {
             reversedParts.RemoveAt(languageIndex);
@@ -451,20 +458,26 @@ public class SubtitleService : ISubtitleService
         HashSet<string> sourceCodes,
         string ignoreCaptions)
     {
+        // A dual-language file (scjp/简日…) is a valid source for every
+        // language it carries, so matching runs over the full language set.
         var availableLanguages = matchingSubtitles
-            .Select(s => s.Language.ToLowerInvariant())
+            .SelectMany(s => s.Languages.Count > 0 ? s.Languages : [s.Language])
+            .Select(lang => lang.ToLowerInvariant())
             .ToHashSet();
 
-        var sourceLanguage = availableLanguages.FirstOrDefault(lang => sourceCodes.Contains(lang));
+        var sourceLanguage = sourceCodes.FirstOrDefault(codes => availableLanguages.Contains(codes));
         if (sourceLanguage == null)
         {
             return null;
         }
 
+        bool CarriesSource(Subtitles s) => (s.Languages.Count > 0 ? s.Languages : [s.Language])
+            .Any(lang => string.Equals(lang, sourceLanguage, StringComparison.OrdinalIgnoreCase));
+
         var sourceSubtitle = ignoreCaptions == "true"
-            ? matchingSubtitles.FirstOrDefault(s => s.Language == sourceLanguage && string.IsNullOrEmpty(s.Caption))
-                ?? matchingSubtitles.FirstOrDefault(s => s.Language == sourceLanguage)
-            : matchingSubtitles.FirstOrDefault(s => s.Language == sourceLanguage);
+            ? matchingSubtitles.FirstOrDefault(s => CarriesSource(s) && string.IsNullOrEmpty(s.Caption))
+                ?? matchingSubtitles.FirstOrDefault(CarriesSource)
+            : matchingSubtitles.FirstOrDefault(CarriesSource);
 
         if (sourceSubtitle == null)
         {

@@ -963,6 +963,19 @@
             "busyToast": "Translation in progress · request #{id} · {progress}%",
             "queuedToast": "Translation created · request #{id}",
             "noSource": "No source subtitle beside the video — import one first"
+        },
+        "subtitleFiles": {
+            "title": "Subtitle files",
+            "count": "{count} files",
+            "empty": "No external subtitle files next to this media"
+        },
+        "lang": {
+            "zh": "Simplified Chinese",
+            "zh-TW": "Traditional Chinese",
+            "ja": "Japanese",
+            "en": "English",
+            "ko": "Korean",
+            "unknown": "Unidentified"
         }
     },
     "cmdk": {

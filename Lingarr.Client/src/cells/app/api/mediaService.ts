@@ -86,6 +86,13 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
         return http
             .post(`${resource}/threshold`, { mediaType: mediaType, id: id, hours: hours })
             .then((response) => response.data)
+    },
+    /// Ground truth behind the coverage chips: every external subtitle file
+    /// next to one media item, dual-language names reporting all languages.
+    mediaSubtitles<T>(mediaType: MediaType, id: number): Promise<T> {
+        return http
+            .get(`${resource}/${mediaType}/${id}/subtitles`)
+            .then((response) => response.data)
     }
 })
 
