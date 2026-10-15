@@ -14,9 +14,10 @@ public interface ISubtitleService
     /// </summary>
     /// <param name="path">The relative path from the media root directory where subtitle files (.srt) are located. The path should start with a forward slash ("/").</param>
     /// <returns>
-    /// A <see cref="List{Subtitles}"/> containing the collected subtitle files. Each <see cref="Subtitles"/> object includes the file path, 
-    /// file name (excluding language code), and detected language code extracted from the file name. If the language code cannot be determined, 
-    /// it is set to "unknown".
+    /// A <see cref="List{Subtitles}"/> containing the collected subtitle files. Each <see cref="Subtitles"/> object includes the file path,
+    /// file name (excluding language code), and detected language code extracted from the file name. If the language code cannot be determined
+    /// from the file name, the file content is sniffed (first 64 KB, encoding-normalised) and a confident language replaces "unknown";
+    /// ambiguous content stays "unknown".
     /// </returns>
     Task<List<Subtitles>> GetAllSubtitles(string path);
 

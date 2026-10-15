@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 using Lingarr.Contracts.Translation;
@@ -18,16 +19,33 @@ public class SubtitleService : ISubtitleService
     private readonly ILogger<SubtitleService> _logger;
     private readonly LanguageCodeService _languageCodeService;
     private readonly ISettingService _settingService;
+    private readonly ISubtitleEncodingService _encodingService;
+    private readonly Func<string, byte[]> _readSubtitleHead;
+
+    // Content-sniff results keyed on (path, mtime, length) — edits invalidate
+    // the entry. Static because scans run in fresh scopes; the cache should
+    // survive them. Coarse cap, evicts the oldest half when exceeded.
+    private static readonly ConcurrentDictionary<SniffCacheKey, (long Tick, string? Language)> SniffCache = new();
+    private static long _sniffTick;
+    private const int MaxSniffCacheEntries = 500;
 
     public SubtitleService(
         ILogger<SubtitleService> logger,
         LanguageCodeService languageCodeService,
-        ISettingService settingService)
+        ISettingService settingService,
+        ISubtitleEncodingService? subtitleEncodingService = null,
+        Func<string, byte[]>? subtitleHeadReader = null)
     {
         _logger = logger;
         _languageCodeService = languageCodeService;
         _settingService = settingService;
+        // Optional collaborators default to the production implementations —
+        // tests inject counting stubs without DI ceremony.
+        _encodingService = subtitleEncodingService ?? new SubtitleEncodingService();
+        _readSubtitleHead = subtitleHeadReader ?? ReadSubtitleHead;
     }
+
+    private readonly record struct SniffCacheKey(string Path, long LastWriteUtcTicks, long Length);
 
     /// <inheritdoc />
     public Task<List<Subtitles>> GetAllSubtitles(string path)
@@ -80,6 +98,18 @@ public class SubtitleService : ISubtitleService
                     caption = "";
                 }
 
+                // Filename tags always win; content sniffing only rescues files
+                // that would otherwise land on "unknown" (requirement F1).
+                if (string.IsNullOrEmpty(language))
+                {
+                    var sniffed = SniffContentLanguage(file);
+                    if (sniffed is not null)
+                    {
+                        language = sniffed;
+                        languages = [sniffed];
+                    }
+                }
+
                 return new Subtitles
                 {
                     Path = file,
@@ -95,6 +125,85 @@ public class SubtitleService : ISubtitleService
         }
 
         return Task.FromResult(subtitles);
+    }
+
+    /// <summary>
+    /// Reads the file head, normalises it to UTF-8 (GB18030/Big5/Shift-JIS files
+    /// decode correctly through <see cref="ISubtitleEncodingService"/>) and sniffs
+    /// the content language. Results are cached on (path, mtime, length) so a
+    /// repeated scan of unchanged files performs no file reads.
+    /// </summary>
+    private string? SniffContentLanguage(string file)
+    {
+        try
+        {
+            var info = new FileInfo(file);
+            if (!info.Exists)
+            {
+                return null;
+            }
+
+            var key = new SniffCacheKey(file, info.LastWriteTimeUtc.Ticks, info.Length);
+            if (SniffCache.TryGetValue(key, out var cached))
+            {
+                return cached.Language;
+            }
+
+            var bytes = _readSubtitleHead(file);
+            var text = Encoding.UTF8.GetString(_encodingService.ConvertToUtf8(bytes));
+            var detected = SubtitleContentLanguageDetector.DetectLanguage(text);
+
+            _logger.LogDebug("Sniffed content language '{Language}' for {File}", detected ?? "unknown", file);
+            CacheSniffResult(key, detected);
+            return detected;
+        }
+        catch (Exception ex)
+        {
+            // A broken file must never break the scan.
+            _logger.LogDebug(ex, "Content language sniff failed for {File}", file);
+            return null;
+        }
+    }
+
+    private static void CacheSniffResult(SniffCacheKey key, string? language)
+    {
+        SniffCache[key] = (Interlocked.Increment(ref _sniffTick), language);
+        if (SniffCache.Count <= MaxSniffCacheEntries)
+        {
+            return;
+        }
+
+        // Cap exceeded: evict the oldest half. Coarse, but this only guards a
+        // long-running process against unbounded growth — good enough.
+        foreach (var victim in SniffCache.OrderBy(kv => kv.Value.Tick)
+                     .Take(MaxSniffCacheEntries / 2)
+                     .Select(kv => kv.Key)
+                     .ToList())
+        {
+            SniffCache.TryRemove(victim, out _);
+        }
+    }
+
+    /// <summary>Reads the first 64 KB of a subtitle file — plenty of text for language detection.</summary>
+    private static byte[] ReadSubtitleHead(string path)
+    {
+        const int headBytes = 64 * 1024;
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var length = (int)Math.Min(stream.Length, headBytes);
+        var buffer = new byte[length];
+        var read = 0;
+        while (read < length)
+        {
+            var chunk = stream.Read(buffer, read, length - read);
+            if (chunk <= 0)
+            {
+                break;
+            }
+
+            read += chunk;
+        }
+
+        return read == length ? buffer : buffer[..read];
     }
 
     /// <inheritdoc />

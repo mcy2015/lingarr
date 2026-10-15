@@ -967,7 +967,14 @@
         "subtitleFiles": {
             "title": "Subtitle files",
             "count": "{count} files",
-            "empty": "No external subtitle files next to this media"
+            "empty": "No external subtitle files next to this media",
+            "embedded": {
+                "title": "Embedded tracks",
+                "count": "{count} tracks",
+                "notScanned": "Not probed · run \"Embedded track scan\" (EmbeddedTrackScanJob) under Settings → Automation",
+                "empty": "No embedded subtitle tracks in the container",
+                "graphic": "Image-based · not translatable"
+            }
         },
         "lang": {
             "zh": "Simplified Chinese",

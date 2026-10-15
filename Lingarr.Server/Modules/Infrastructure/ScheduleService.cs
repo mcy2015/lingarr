@@ -7,6 +7,7 @@ using Lingarr.Server.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.OpenApi.Extensions;
 using Newtonsoft.Json;
+using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
 using Lingarr.Server.Modules.Sync;
@@ -28,7 +29,7 @@ public class ScheduleService : IScheduleService
     /// Built-in recurring jobs and where their cron comes from. The catalog
     /// backs Initialize(), the enable/disable endpoints, the cron-update
     /// endpoint and the disabled-row merge in GetRecurringJobs() — one
-    /// structure, four consumers. The five built-ins are the whole job
+    /// structure, four consumers. The six built-ins are the whole job
     /// catalogue: nothing else creates recurring jobs anymore (legacy
     /// custom_recurring_jobs entries keep running, frozen per precedent).
     /// </summary>
@@ -45,7 +46,9 @@ public class ScheduleService : IScheduleService
         new("AutomatedTranslationJob", "AutomatedTranslationJob",
             SettingKeys.Automation.TranslationSchedule, "0 4 * * *"),
         new("CleanupJob", "CleanupJob", SettingKeys.Automation.CleanupSchedule, Cron.Weekly()),
-        new("StatisticsJob", "StatisticsJob", SettingKeys.Automation.StatisticsSchedule, Cron.Daily())
+        new("StatisticsJob", "StatisticsJob", SettingKeys.Automation.StatisticsSchedule, Cron.Daily()),
+        new("EmbeddedTrackScanJob", "EmbeddedTrackScanJob",
+            SettingKeys.Automation.EmbeddedTrackSchedule, "30 4 * * *")
     ];
 
     private readonly IHubContext<JobProgressHub> _hubContext;
@@ -75,6 +78,7 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.TranslationSchedule,
             SettingKeys.Automation.CleanupSchedule,
             SettingKeys.Automation.StatisticsSchedule,
+            SettingKeys.Automation.EmbeddedTrackSchedule,
             SettingKeys.Automation.AutomationEnabled
         ]);
 
@@ -141,6 +145,7 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.TranslationSchedule,
             SettingKeys.Automation.CleanupSchedule,
             SettingKeys.Automation.StatisticsSchedule,
+            SettingKeys.Automation.EmbeddedTrackSchedule,
             SettingKeys.Automation.AutomationEnabled
         ]);
 
@@ -403,6 +408,9 @@ public class ScheduleService : IScheduleService
                 break;
             case "StatisticsJob":
                 RecurringJob.AddOrUpdate<StatisticsJob>(jobId, job => job.Execute(), cron, options);
+                break;
+            case "EmbeddedTrackScanJob":
+                RecurringJob.AddOrUpdate<EmbeddedTrackScanJob>(jobId, job => job.Execute(), cron, options);
                 break;
             default:
                 throw new ArgumentException($"Unsupported job type '{jobType}'.", nameof(jobType));

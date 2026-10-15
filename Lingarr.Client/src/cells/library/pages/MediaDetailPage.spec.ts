@@ -27,6 +27,20 @@ const translateSubtitleMock = vi.hoisted(() => vi.fn())
 const getActiveTranslationsMock = vi.hoisted(() => vi.fn())
 const mediaSubtitlesMock = vi.hoisted(() => vi.fn())
 
+/// mediaSubtitles payload shape (F2a): external files + embedded tracks.
+const subtitlesPayload = (
+    overrides: Partial<{
+        files: unknown[]
+        embedded: unknown[]
+        embeddedScanned: boolean
+    }> = {}
+) => ({
+    files: [],
+    embedded: [],
+    embeddedScanned: false,
+    ...overrides
+})
+
 vi.mock('@/cells/app/api/mediaService', () => ({
     mediaService: () => ({ library: libraryMock, mediaSubtitles: mediaSubtitlesMock })
 }))
@@ -53,7 +67,12 @@ vi.mock('@/cells/app/api/translateService', () => ({
 }))
 
 // ── fixtures ──────────────────────────────────────────────────────
-const emptyPage = <T,>(): IPagedResult<T> => ({ items: [], totalCount: 0, pageNumber: 1, pageSize: 20 })
+const emptyPage = <T>(): IPagedResult<T> => ({
+    items: [],
+    totalCount: 0,
+    pageNumber: 1,
+    pageSize: 20
+})
 
 const movieItem = {
     id: 7,
@@ -116,10 +135,34 @@ const showItem = {
 
 // ep01 has an EN + ZH file (complete), ep02/ep03 only EN (missing ZH)
 const seasonFiles: ISubtitle[] = [
-    { path: '/shows/shogun/s01/a.en.srt', fileName: 'shogun.s01e01', language: 'en', format: '.srt', caption: '' },
-    { path: '/shows/shogun/s01/a.zh.srt', fileName: 'shogun.s01e01', language: 'zh', format: '.srt', caption: '' },
-    { path: '/shows/shogun/s01/b.en.srt', fileName: 'shogun.s01e02', language: 'en', format: '.srt', caption: '' },
-    { path: '/shows/shogun/s01/c.en.srt', fileName: 'shogun.s01e03', language: 'en', format: '.srt', caption: '' }
+    {
+        path: '/shows/shogun/s01/a.en.srt',
+        fileName: 'shogun.s01e01',
+        language: 'en',
+        format: '.srt',
+        caption: ''
+    },
+    {
+        path: '/shows/shogun/s01/a.zh.srt',
+        fileName: 'shogun.s01e01',
+        language: 'zh',
+        format: '.srt',
+        caption: ''
+    },
+    {
+        path: '/shows/shogun/s01/b.en.srt',
+        fileName: 'shogun.s01e02',
+        language: 'en',
+        format: '.srt',
+        caption: ''
+    },
+    {
+        path: '/shows/shogun/s01/c.en.srt',
+        fileName: 'shogun.s01e03',
+        language: 'en',
+        format: '.srt',
+        caption: ''
+    }
 ]
 
 const makeRequest = (overrides: Partial<ITranslationRequest>): ITranslationRequest =>
@@ -171,10 +214,7 @@ interface MountedDetail {
     router: ReturnType<typeof createRouter>
 }
 
-async function mountDetail(
-    type: 'show' | 'movie',
-    routePath: string
-): Promise<MountedDetail> {
+async function mountDetail(type: 'show' | 'movie', routePath: string): Promise<MountedDetail> {
     const pinia = createPinia()
     const settingStore = useSettingStore(pinia)
     settingStore.storeSetting(SETTINGS.SOURCE_LANGUAGES, [{ code: 'EN', name: 'English' }])
@@ -195,7 +235,12 @@ async function mountDetail(
             { path: '/library', name: 'library', component: { template: '<div />' } },
             { path: '/import', name: 'import', component: { template: '<div />' } },
             { path: '/queue', name: 'queue', component: { template: '<div />' } },
-            { path: '/queue/:id', name: 'queue-detail', component: { template: '<div />' }, props: true },
+            {
+                path: '/queue/:id',
+                name: 'queue-detail',
+                component: { template: '<div />' },
+                props: true
+            },
             { path: '/proofread/:id?', name: 'proofread', component: { template: '<div />' } },
             {
                 path: '/library/show/:id',
@@ -238,11 +283,16 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
     beforeEach(() => {
         vi.useFakeTimers()
         vi.clearAllMocks()
-        libraryMock.mockResolvedValue({ items: [movieItem], totalCount: 1, pageNumber: 1, pageSize: 20 })
+        libraryMock.mockResolvedValue({
+            items: [movieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
         requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
         getActiveTranslationsMock.mockResolvedValue([])
         translateSubtitleMock.mockResolvedValue({ jobId: 55 })
-        mediaSubtitlesMock.mockResolvedValue([])
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
     })
 
     afterEach(() => {
@@ -301,7 +351,12 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
     })
 
     it('renders the in-progress task card from the real request and toasts busy on CTA', async () => {
-        requestsMock.mockResolvedValue({ items: [busyRequest], totalCount: 1, pageNumber: 1, pageSize: 20 })
+        requestsMock.mockResolvedValue({
+            items: [busyRequest],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
         const { wrapper, uiStore, toastStore } = await mountDetail('movie', '/library/movie/7')
 
         // shared JobRow renders with the request's real data
@@ -330,7 +385,12 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
             mediaId: 7,
             serviceType: 'deepl'
         })
-        requestsMock.mockResolvedValue({ items: [done], totalCount: 1, pageNumber: 1, pageSize: 20 })
+        requestsMock.mockResolvedValue({
+            items: [done],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
         const { wrapper } = await mountDetail('movie', '/library/movie/7')
 
         expect(wrapper.text()).toContain(en.mediaDetail.history)
@@ -343,11 +403,17 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
     beforeEach(() => {
         vi.useFakeTimers()
         vi.clearAllMocks()
-        libraryMock.mockResolvedValue({ items: [showItem], totalCount: 1, pageNumber: 1, pageSize: 20 })
+        libraryMock.mockResolvedValue({
+            items: [showItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
         requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
         collectMock.mockResolvedValue(seasonFiles)
         getActiveTranslationsMock.mockResolvedValue([])
         translateSubtitleMock.mockResolvedValue({ jobId: 77 })
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
     })
 
     afterEach(() => {
@@ -359,7 +425,9 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
 
         // 3 episodes, 1 ZH track → 2 missing
         const sub = wrapper.find('div.mono').text()
-        expect(sub).toContain(en.mediaDetail.showMeta.replace('{seasons}', '1').replace('{episodes}', '3'))
+        expect(sub).toContain(
+            en.mediaDetail.showMeta.replace('{seasons}', '1').replace('{episodes}', '3')
+        )
         expect(sub).toContain('2 episodes missing ZH subtitles')
     })
 
@@ -387,8 +455,20 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
     it('toasts "nothing to queue" when every episode already has the target track', async () => {
         collectMock.mockResolvedValue([
             ...seasonFiles,
-            { path: '/shows/shogun/s01/b.zh.srt', fileName: 'shogun.s01e02', language: 'zh', format: '.srt', caption: '' },
-            { path: '/shows/shogun/s01/c.zh.srt', fileName: 'shogun.s01e03', language: 'zh', format: '.srt', caption: '' }
+            {
+                path: '/shows/shogun/s01/b.zh.srt',
+                fileName: 'shogun.s01e02',
+                language: 'zh',
+                format: '.srt',
+                caption: ''
+            },
+            {
+                path: '/shows/shogun/s01/c.zh.srt',
+                fileName: 'shogun.s01e03',
+                language: 'zh',
+                format: '.srt',
+                caption: ''
+            }
         ])
         const { uiStore, toastStore, router } = await mountDetail('show', '/library/show/3')
 
@@ -403,8 +483,18 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
     it('links the episode detail button to the episode request when one is in flight or failed', async () => {
         requestsMock.mockResolvedValue({
             items: [
-                makeRequest({ id: 30, mediaId: 22, status: TRANSLATION_STATUS.INPROGRESS, progress: 72 }),
-                makeRequest({ id: 31, mediaId: 23, status: TRANSLATION_STATUS.FAILED, errorMessage: '429' })
+                makeRequest({
+                    id: 30,
+                    mediaId: 22,
+                    status: TRANSLATION_STATUS.INPROGRESS,
+                    progress: 72
+                }),
+                makeRequest({
+                    id: 31,
+                    mediaId: 23,
+                    status: TRANSLATION_STATUS.FAILED,
+                    errorMessage: '429'
+                })
             ],
             totalCount: 2,
             pageNumber: 1,
@@ -414,7 +504,10 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
 
         // scoped to the episode table — the history card links the same ids
         const detailLinks = wrapper.find('table').findAll('a')
-        expect(detailLinks.map((a) => a.attributes('href')).sort()).toEqual(['/queue/30', '/queue/31'])
+        expect(detailLinks.map((a) => a.attributes('href')).sort()).toEqual([
+            '/queue/30',
+            '/queue/31'
+        ])
     })
 
     it('hides the episode detail button when the episode has no request id', async () => {
@@ -433,22 +526,27 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
 
     // ═══ 字幕文件卡:目录实际存在的文件 + 双语标签 ═══
     it('lists every subtitle file with per-language chips, dual files carrying both', async () => {
-        mediaSubtitlesMock.mockResolvedValue([
-            {
-                fileName: '[DBD-Raws][Movie][FLAC].scjp.ass',
-                directory: '/movies/Movie(2023){tmdb-1}',
-                languages: ['zh', 'ja'],
-                format: 'ass',
-                bytes: 4096
-            },
-            {
-                fileName: 'Movie.english.srt',
-                directory: '/movies/Movie(2023){tmdb-1}',
-                languages: ['en'],
-                format: 'srt',
-                bytes: 1024
-            }
-        ])
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                files: [
+                    {
+                        fileName: '[DBD-Raws][Movie][FLAC].scjp.ass',
+                        directory: '/movies/Movie(2023){tmdb-1}',
+                        languages: ['zh', 'ja'],
+                        format: 'ass',
+                        bytes: 4096
+                    },
+                    {
+                        fileName: 'Movie.english.srt',
+                        directory: '/movies/Movie(2023){tmdb-1}',
+                        languages: ['en'],
+                        format: 'srt',
+                        bytes: 1024
+                    }
+                ],
+                embeddedScanned: true
+            })
+        )
         const { wrapper } = await mountDetail('movie', '/library/movie/7')
 
         const card = wrapper.find('[data-test="subtitle-files-card"]')
@@ -468,10 +566,82 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
     })
 
     it('shows the empty hint when no external subtitles live next to the media', async () => {
-        mediaSubtitlesMock.mockResolvedValue([])
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload({ embeddedScanned: true }))
         const { wrapper } = await mountDetail('movie', '/library/movie/7')
 
         const card = wrapper.find('[data-test="subtitle-files-card"]')
         expect(card.text()).toContain(en.mediaDetail.subtitleFiles.empty)
+    })
+
+    // ═══ 内嵌轨道分区:ffprobe 探测结果(F2a 纯展示)═══
+    it('lists embedded tracks with language chips and the graphic marker on PGS', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                embedded: [
+                    {
+                        streamIndex: 2,
+                        language: 'zh',
+                        rawLanguage: 'chi',
+                        title: '简体中文',
+                        codec: 'srt',
+                        isTextBased: true
+                    },
+                    {
+                        streamIndex: 3,
+                        language: null,
+                        rawLanguage: 'und',
+                        title: null,
+                        codec: 'pgs',
+                        isTextBased: false
+                    }
+                ],
+                embeddedScanned: true
+            })
+        )
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        expect(card.find('[data-test="embedded-tracks-section"]').exists()).toBe(true)
+        const rows = card.findAll('[data-test="embedded-track-row"]')
+        expect(rows).toHaveLength(2)
+
+        // 文本轨:规范语言 chip + 容器标题 + codec,无图形标注
+        const text = rows[0]
+        expect(text.text()).toContain('#2')
+        expect(text.text()).toContain('简体中文')
+        expect(text.text()).toContain(en.mediaDetail.lang.zh)
+        expect(text.text()).toContain('srt')
+        expect(text.text()).not.toContain(en.mediaDetail.subtitleFiles.embedded.graphic)
+
+        // 图形轨:识别不出 → 灰 chip 显示原始 tag,标「图形 · 不可翻译」
+        const graphic = rows[1]
+        expect(graphic.text()).toContain('und')
+        expect(graphic.text()).toContain(en.mediaDetail.subtitleFiles.embedded.graphic)
+        expect(graphic.text()).toContain('pgs')
+
+        // 分区计数行
+        expect(card.text()).toContain(
+            en.mediaDetail.subtitleFiles.embedded.count.replace('{count}', '2')
+        )
+    })
+
+    it('shows the actionable not-scanned hint before the first probe', async () => {
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        expect(card.find('[data-test="embedded-not-scanned"]').exists()).toBe(true)
+        expect(card.text()).toContain(en.mediaDetail.subtitleFiles.embedded.notScanned)
+        expect(card.findAll('[data-test="embedded-track-row"]')).toHaveLength(0)
+    })
+
+    it('shows the scanned-empty hint when the container has no subtitle streams', async () => {
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload({ embeddedScanned: true }))
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        expect(card.find('[data-test="embedded-empty"]').exists()).toBe(true)
+        expect(card.text()).toContain(en.mediaDetail.subtitleFiles.embedded.empty)
+        expect(card.find('[data-test="embedded-not-scanned"]').exists()).toBe(false)
     })
 })

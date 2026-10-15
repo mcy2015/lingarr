@@ -143,6 +143,9 @@ public static class SettingKeys
         public const string CleanupSchedule = "cleanup_schedule";
         public const string StatisticsSchedule = "statistics_schedule";
 
+        /// <summary>Cron of the ffprobe embedded subtitle track scan (F2a).</summary>
+        public const string EmbeddedTrackSchedule = "embedded_track_schedule";
+
         /// <summary>
         /// JSON list of user-created recurring job definitions from the schedule
         /// screen「＋ new job」. Persisted so Initialize() can re-register them

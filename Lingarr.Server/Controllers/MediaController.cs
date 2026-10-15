@@ -36,23 +36,31 @@ public class MediaController : ControllerBase
 
     /// <summary>
     /// Every external subtitle file that lives next to one media item — the
-    /// ground truth behind the coverage chips. Movies scan their directory,
-    /// shows scan every season directory. Dual-language filenames (scjp, 简日…)
-    /// report every language they carry.
+    /// ground truth behind the coverage chips — plus the embedded subtitle
+    /// tracks of the last ffprobe scan. Movies scan their directory, shows
+    /// scan every season directory; embedded tracks aggregate over a show's
+    /// episodes. Dual-language filenames (scjp, 简日…) report every language
+    /// they carry.
     /// </summary>
-    /// <response code="200">Subtitle files with detected languages, format and size.</response>
+    /// <response code="200">External files with detected languages, format and size; embedded tracks with normalized language, codec and text-based flag; whether the media has been probed at all.</response>
     /// <response code="404">Unknown media id.</response>
     [HttpGet("{mediaType}/{id}/subtitles")]
-    public async Task<ActionResult<List<MediaSubtitleFile>>> GetMediaSubtitles(
+    public async Task<ActionResult<MediaSubtitlesResponse>> GetMediaSubtitles(
         MediaType mediaType,
         int id)
     {
         List<string> directories;
+        // Media ids whose container files the embedded scan would probe —
+        // drives the embeddedScanned flag below.
+        List<int> probeableIds;
         if (mediaType == MediaType.Movie)
         {
             var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == id);
             if (movie == null) return NotFound();
             directories = string.IsNullOrEmpty(movie.Path) ? [] : [movie.Path];
+            probeableIds = string.IsNullOrEmpty(movie.Path) || string.IsNullOrEmpty(movie.FileName)
+                ? []
+                : [movie.Id];
         }
         else
         {
@@ -65,6 +73,12 @@ public class MediaController : ControllerBase
                 .Select(season => season.Path!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            probeableIds = await _dbContext.Seasons
+                .Where(season => season.ShowId == id)
+                .SelectMany(season => season.Episodes)
+                .Where(episode => !string.IsNullOrEmpty(episode.Path) && !string.IsNullOrEmpty(episode.FileName))
+                .Select(episode => episode.Id)
+                .ToListAsync();
         }
 
         var files = new List<MediaSubtitleFile>();
@@ -81,7 +95,60 @@ public class MediaController : ControllerBase
             }));
         }
 
-        return Ok(files.OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList());
+        // Embedded tracks of the last scan: movies own their rows directly,
+        // shows aggregate over their episodes' rows. The scan-marker rows
+        // (StreamIndex -1) never surface — they only answer "was this probed".
+        List<MediaSubtitleTrack> trackRows;
+        List<int> scannedIds;
+        if (mediaType == MediaType.Movie)
+        {
+            trackRows = await _dbContext.MediaSubtitleTracks
+                .Where(track => track.MediaType == MediaType.Movie
+                                && track.MediaId == id
+                                && track.StreamIndex >= 0)
+                .OrderBy(track => track.StreamIndex)
+                .ToListAsync();
+            scannedIds = await _dbContext.MediaSubtitleTracks
+                .Where(track => track.MediaType == MediaType.Movie
+                                && track.MediaId == id
+                                && track.StreamIndex == MediaSubtitleTrack.ScanMarkerStreamIndex)
+                .Select(track => track.MediaId)
+                .ToListAsync();
+        }
+        else
+        {
+            trackRows = await _dbContext.MediaSubtitleTracks
+                .Where(track => track.MediaType == MediaType.Episode
+                                && probeableIds.Contains(track.MediaId)
+                                && track.StreamIndex >= 0)
+                .OrderBy(track => track.MediaId)
+                .ThenBy(track => track.StreamIndex)
+                .ToListAsync();
+            scannedIds = await _dbContext.MediaSubtitleTracks
+                .Where(track => track.MediaType == MediaType.Episode
+                                && probeableIds.Contains(track.MediaId)
+                                && track.StreamIndex == MediaSubtitleTrack.ScanMarkerStreamIndex)
+                .Select(track => track.MediaId)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        return Ok(new MediaSubtitlesResponse
+        {
+            Files = files.OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList(),
+            Embedded = trackRows.Select(track => new MediaEmbeddedTrack
+            {
+                StreamIndex = track.StreamIndex,
+                Language = track.Language,
+                RawLanguage = track.RawLanguage,
+                Title = track.Title,
+                Codec = track.Codec,
+                IsTextBased = track.IsTextBased
+            }).ToList(),
+            // scanned only once every probeable file carries a scan marker
+            EmbeddedScanned = probeableIds.Count > 0
+                              && probeableIds.All(probeable => scannedIds.Contains(probeable))
+        });
     }
 
     /// <summary>

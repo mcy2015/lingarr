@@ -28,15 +28,15 @@ public class MigrationTests
             await using var connection = new SqliteConnection(connectionString);
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
-            // The baseline plus the auth-sessions and schedule-cron
-            // migrations are applied.
-            Assert.Equal(3L, await ExecuteScalarAsync(connection,
+            // The baseline plus the auth-sessions, schedule-cron and
+            // embedded-track migrations are applied.
+            Assert.Equal(4L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(3L, await ExecuteScalarAsync(connection,
+            Assert.Equal(4L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
-            Assert.Equal(88L, await ExecuteScalarAsync(connection,
+            Assert.Equal(89L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
@@ -47,6 +47,10 @@ public class MigrationTests
                 "SELECT COUNT(*) FROM settings WHERE key = 'cleanup_schedule' AND value = '0 0 * * 0'"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'statistics_schedule' AND value = '0 0 * * *'"));
+
+            // M0004 seeds the embedded track scan cron at its daily 04:30 default.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'embedded_track_schedule' AND value = '30 4 * * *'"));
 
             // Fresh installs ship with authentication enabled (secure default).
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
@@ -96,7 +100,7 @@ public class MigrationTests
             await using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync(TestContext.Current.CancellationToken);
-                Assert.Equal(16L, await ExecuteScalarAsync(connection,
+                Assert.Equal(17L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
                 Assert.Equal(1L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request'"));
@@ -196,6 +200,9 @@ public class MigrationTests
                 ["daily_statistics"] = ["id", "date", "translation_count", "created_at", "updated_at"],
                 ["users"] = ["id", "username", "password_hash", "created_at", "last_login_at"],
                 ["auth_sessions"] = ["key", "value", "user_id", "expires_at"],
+                ["media_subtitle_tracks"] = ["id", "media_type", "media_id", "stream_index", "language",
+                    "raw_language", "title", "codec", "is_text_based", "file_path", "media_hash",
+                    "created_at", "updated_at"],
                 ["version_info"] = ["version", "applied_on", "description"],
             };
 
@@ -222,6 +229,7 @@ public class MigrationTests
                     "sqlite_autoindex_auth_sessions_1"
                 ],
                 ["translation_glossaries"] = ["ix_glossary_source_term"],
+                ["media_subtitle_tracks"] = ["ix_media_subtitle_tracks_media_type_media_id"],
                 ["translation_request_events"] = ["ix_translation_request_events_translation_request_id"],
                 ["translation_request_lines"] = ["ix_translation_request_lines_translation_request_id"],
                 ["version_info"] = ["ux_version"],

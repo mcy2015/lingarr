@@ -11,6 +11,7 @@ public static class MediaModule
         services.AddScoped<IMediaLibraryService, MediaLibraryService>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<IMediaSubtitleProcessor, MediaSubtitleProcessor>();
+        services.AddScoped<IEmbeddedTrackService, EmbeddedTrackService>();
         services.AddScoped<IMappingService, MappingService>();
     }
 }

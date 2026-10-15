@@ -83,7 +83,8 @@ export interface IMediaService {
     includeAll<T>(mediaType: MediaType, include: boolean): Promise<T>
     includeSummary(mediaType: MediaType): Promise<IIncludeSummary>
     threshold<T>(mediaType: MediaType, id: number, hours: string): Promise<T>
-    /// Subtitle files found next to one media item (see MediaSubtitleFile).
+    /// External files plus embedded tracks of one media item (see
+    /// IMediaSubtitlesResponse).
     mediaSubtitles<T>(mediaType: MediaType, id: number): Promise<T>
 }
 
@@ -95,6 +96,28 @@ export interface IMediaSubtitleFile {
     languages: string[]
     format: string
     bytes: number
+}
+
+/// One embedded subtitle stream inside the media container (ffprobe scan,
+/// F2a). Graphic tracks (PGS…) carry isTextBased=false — display-only, no
+/// translation entry point yet.
+export interface IMediaEmbeddedTrack {
+    streamIndex: number
+    language: string | null
+    rawLanguage: string | null
+    title: string | null
+    codec: string
+    isTextBased: boolean
+}
+
+/// GET api/media/{mediaType}/{id}/subtitles payload: the external files the
+/// card always listed plus the embedded tracks of the last scan.
+/// embeddedScanned is false until the media's files were probed (or
+/// confirmed missing) at least once.
+export interface IMediaSubtitlesResponse {
+    files: IMediaSubtitleFile[]
+    embedded: IMediaEmbeddedTrack[]
+    embeddedScanned: boolean
 }
 
 export interface ISettingService {
@@ -189,11 +212,7 @@ export interface ITranslateService {
         target: ILanguage,
         mediaType: MediaType
     ): Promise<T>
-    bulkTranslate<T>(
-        mediaIds: number[],
-        targetLanguage: string,
-        mediaType: MediaType
-    ): Promise<T>
+    bulkTranslate<T>(mediaIds: number[], targetLanguage: string, mediaType: MediaType): Promise<T>
     getLanguages<T>(): Promise<T>
     getHealth(): Promise<ITranslationServiceHealth[]>
     /// Language capability of one named service (P1-3): its concrete

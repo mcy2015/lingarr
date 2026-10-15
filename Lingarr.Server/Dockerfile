@@ -48,6 +48,15 @@ RUN dotnet publish "./Lingarr.Server.csproj" -c $BUILD_CONFIGURATION -o /app/pub
 # Step 5: Final image
 FROM base AS final
 WORKDIR /app
+# ffmpeg ships ffprobe, which the embedded subtitle track scan invokes
+# (F2a: probe MKV/MP4 containers for subtitle streams). Cost: ~350 MB
+# installed (codecs + libs) on top of the runtime image — the Debian package
+# is the pragmatic multi-arch source (official repo serves amd64 and arm64),
+# and only the probe runs, never a transcode. Deployments without Docker can
+# instead install ffmpeg themselves or set LINGARR_FFPROBE_PATH.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=publish /app/publish .
 
 VOLUME /app/config

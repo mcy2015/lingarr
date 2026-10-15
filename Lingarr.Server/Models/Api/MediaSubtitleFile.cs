@@ -13,3 +13,35 @@ public class MediaSubtitleFile
     public string Format { get; set; } = string.Empty;
     public long Bytes { get; set; }
 }
+
+/// <summary>
+/// GET api/media/{mediaType}/{id}/subtitles payload: the external files the
+/// card always listed (shape unchanged) plus the embedded tracks of the last
+/// ffprobe scan. <see cref="EmbeddedScanned"/> is false until the media's
+/// files have been probed (or confirmed missing) at least once.
+/// </summary>
+public class MediaSubtitlesResponse
+{
+    public List<MediaSubtitleFile> Files { get; set; } = [];
+    public List<MediaEmbeddedTrack> Embedded { get; set; } = [];
+    public bool EmbeddedScanned { get; set; }
+}
+
+/// <summary>
+/// One embedded subtitle stream inside the media container. Graphic tracks
+/// (PGS, DVB…) carry <see cref="IsTextBased"/> = false — display-only, no
+/// translation entry point.
+/// </summary>
+public class MediaEmbeddedTrack
+{
+    public int StreamIndex { get; set; }
+    /// <summary>Normalized code (zh-CN → zh); null when the tag was unrecognised.</summary>
+    public string? Language { get; set; }
+    /// <summary>The raw container tag as muxed ("chi", "und"…); null when absent.</summary>
+    public string? RawLanguage { get; set; }
+    public string? Title { get; set; }
+    /// <summary>Display codec: srt / ass / pgs…</summary>
+    public string Codec { get; set; } = string.Empty;
+    public bool IsTextBased { get; set; }
+}
+

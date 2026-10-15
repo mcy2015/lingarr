@@ -27,10 +27,11 @@ services:
     volumes:
       # 应用数据:SQLite(lingarr.db)与 Hangfire.db 都在这里
       - ./data:/app/config
-      # 媒体目录(只读):按本机实际布局调整;应用内配置媒体源时用容器路径(/movies、/tv)
-      - ../media/data/movies:/movies:ro
-      - ../media/data/tv:/tv:ro
-      - ../media/data/series/anime:/anime:ro
+      # 媒体目录(必须可写):翻译结果要写回媒体目录(外挂字幕归整/重命名),
+      # 只读挂载会导致写回失败;应用内配置媒体源时用容器路径(/movies、/tv)。
+      - ../media/data/movies:/movies
+      - ../media/data/tv:/tv
+      - ../media/data/series/anime:/anime
     ports:
       - "9878:9876"
     # Linux Docker(各类 NAS)默认不解析 host.docker.internal,加这条后

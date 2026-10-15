@@ -967,7 +967,14 @@
         "subtitleFiles": {
             "title": "字幕文件",
             "count": "{count} 个文件",
-            "empty": "该媒体目录下没有外挂字幕文件"
+            "empty": "该媒体目录下没有外挂字幕文件",
+            "embedded": {
+                "title": "内嵌轨道",
+                "count": "{count} 条轨道",
+                "notScanned": "未探测 · 到 设置 → 自动化 手动运行「内嵌轨道探测」(EmbeddedTrackScanJob)",
+                "empty": "容器内没有内嵌字幕轨",
+                "graphic": "图形 · 不可翻译"
+            }
         },
         "lang": {
             "zh": "简体中文",
