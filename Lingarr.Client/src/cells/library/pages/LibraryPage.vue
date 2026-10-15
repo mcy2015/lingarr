@@ -100,7 +100,14 @@
                                     <span class="badge" :class="item.mediaType === 'Show' ? 'badge-show' : ''">
                                         {{ item.mediaType === 'Show' ? t('library.badge.show') : t('library.badge.movie') }}
                                     </span>
-                                    <b class="truncate font-semibold" :title="item.title">{{ item.title }}</b>
+                                    <a
+                                        :href="detailHref(item)"
+                                        class="text-primary-content focus-visible:ring-accent hover:underline cursor-pointer truncate rounded-md font-semibold focus-visible:ring-2 focus-visible:outline-none"
+                                        :title="item.title"
+                                        :aria-label="t('library.table.openDetail', { type: item.mediaType === 'Show' ? t('library.badge.show') : t('library.badge.movie'), title: item.title })"
+                                        @click="onTitleClick(item, $event)">
+                                        {{ item.title }}
+                                    </a>
                                     <span v-if="item.mediaType === 'Show'" class="text-secondary-content hidden shrink-0 text-[11.5px] sm:inline">
                                         {{ t('library.meta.show', { seasons: item.seasonCount, episodes: item.episodeCount }) }}
                                     </span>
@@ -546,11 +553,31 @@ function stateLabel(item: IMediaLibraryItem): string {
 }
 
 
-function goDetail(item: IMediaLibraryItem): void {
-    router.push({
+function detailRoute(item: IMediaLibraryItem): { name: string; params: { id: number } } {
+    return {
         name: item.mediaType === 'Show' ? 'media-detail-show' : 'media-detail-movie',
         params: { id: item.id }
-    })
+    }
+}
+
+function goDetail(item: IMediaLibraryItem): void {
+    router.push(detailRoute(item))
+}
+
+/// Requirement card C — the title text doubles as a detail link. The href
+/// is resolved through the router so it stays in sync with goDetail's named
+/// routes (right-click → open in new tab works natively). Plain left clicks
+/// are intercepted for SPA navigation; modified clicks (cmd/ctrl/shift/alt)
+/// fall through to the browser so they keep their native meaning.
+function detailHref(item: IMediaLibraryItem): string {
+    return router.resolve(detailRoute(item)).href
+}
+
+function onTitleClick(item: IMediaLibraryItem, event: MouseEvent): void {
+    if (event.defaultPrevented || event.button !== 0) return
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    goDetail(item)
 }
 
 function goImport(item: IMediaLibraryItem): void {

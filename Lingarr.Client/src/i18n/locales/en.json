@@ -82,7 +82,8 @@
             "status": "Status",
             "lastActivity": "Last activity",
             "selectAll": "Select all on this page",
-            "select": "Select {title}"
+            "select": "Select {title}",
+            "openDetail": "Open {type} {title} details"
         },
         "badge": {
             "show": "Show",

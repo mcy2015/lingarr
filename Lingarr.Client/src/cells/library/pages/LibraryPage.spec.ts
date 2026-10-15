@@ -135,10 +135,19 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
     settingStore.storeSetting(SETTINGS.SONARR_SETTINGS_COMPLETED, 'true')
     settingStore.storeSetting(SETTINGS.TARGET_LANGUAGES, [{ code: 'ZH', name: 'Chinese' }])
 
+    // messages cover only the keys the row title link asserts; everything
+    // else renders as its key and is not asserted anywhere
     const i18n = createI18n({
         legacy: false,
         locale: 'en',
-        messages: { en: {} },
+        messages: {
+            en: {
+                library: {
+                    table: { openDetail: 'Open {type} {title} details' },
+                    badge: { show: 'Show', movie: 'Movie' }
+                }
+            }
+        },
         missingWarn: false,
         fallbackWarn: false
     })
@@ -147,7 +156,10 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
         history: createMemoryHistory(),
         routes: [
             { path: '/library', name: 'library', component: LibraryPage },
-            { path: '/import', name: 'import', component: { template: '<div />' } }
+            { path: '/import', name: 'import', component: { template: '<div />' } },
+            // detail drill-downs the title links and the Details button target
+            { path: '/library/show/:id', name: 'media-detail-show', component: { template: '<div />' }, props: true },
+            { path: '/library/movie/:id', name: 'media-detail-movie', component: { template: '<div />' }, props: true }
         ]
     })
     await router.push(path)
@@ -346,5 +358,74 @@ describe('LibraryPage', () => {
 
         expect(uiStore.cta).toBeNull()
         expect(uiStore.subOverride).toBe('')
+    })
+
+    // ── requirement card C: title click → detail ─────────────────────
+    it('navigates to the show detail route when a show row title is clicked', async () => {
+        const { wrapper, router } = await mountLibraryPage()
+
+        const title = wrapper.findAll('tbody a')[0] // show1「Foundation」
+        expect(title.attributes('href')).toBe('/library/show/1')
+        expect(title.attributes('aria-label')).toBe('Open Show Foundation details')
+
+        await title.trigger('click')
+        await settle()
+
+        expect(router.currentRoute.value.name).toBe('media-detail-show')
+        expect(router.currentRoute.value.path).toBe('/library/show/1')
+    })
+
+    it('navigates to the movie detail route when a movie row title is clicked', async () => {
+        const { wrapper, router } = await mountLibraryPage()
+
+        const title = wrapper.findAll('tbody a')[1] // movie2「Dune」
+        expect(title.attributes('href')).toBe('/library/movie/2')
+
+        await title.trigger('click')
+        await settle()
+
+        expect(router.currentRoute.value.name).toBe('media-detail-movie')
+        expect(router.currentRoute.value.path).toBe('/library/movie/2')
+    })
+
+    it('leaves modified title clicks to the browser so open-in-new-tab works', async () => {
+        const { wrapper, router } = await mountLibraryPage()
+
+        const title = wrapper.findAll('tbody a')[1]
+        // listener attached after Vue's own handler: observes whether the
+        // component preventDefault()ed the modified click (it must not)
+        let defaultPrevented = false
+        title.element.addEventListener('click', (event) => {
+            defaultPrevented = event.defaultPrevented
+        })
+
+        await title.trigger('click', { metaKey: true })
+        await settle()
+
+        expect(defaultPrevented).toBe(false)
+        expect(router.currentRoute.value.path).toBe('/library')
+    })
+
+    it('toggles selection without navigating when a row checkbox is used', async () => {
+        const { wrapper, router, vm } = await mountLibraryPage()
+
+        // movie2 row checkbox — selection changes, route stays on the list
+        await wrapper.findAll('tbody input[type="checkbox"]')[1].trigger('change')
+        await settle()
+
+        expect(vm.selection.has('Movie:2')).toBe(true)
+        expect(router.currentRoute.value.path).toBe('/library')
+    })
+
+    it('still routes the existing Details button to the detail page', async () => {
+        const { wrapper, router } = await mountLibraryPage()
+
+        // row action cell: [import, details]
+        const detail = wrapper.findAll('tbody tr')[0].findAll('button')[1]
+        await detail.trigger('click')
+        await settle()
+
+        expect(router.currentRoute.value.name).toBe('media-detail-show')
+        expect(router.currentRoute.value.path).toBe('/library/show/1')
     })
 })

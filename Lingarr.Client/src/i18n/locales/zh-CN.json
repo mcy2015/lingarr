@@ -82,7 +82,8 @@
             "status": "状态",
             "lastActivity": "最近活动",
             "selectAll": "全选本页",
-            "select": "选择 {title}"
+            "select": "选择 {title}",
+            "openDetail": "打开{type}《{title}》详情"
         },
         "badge": {
             "show": "剧集",
