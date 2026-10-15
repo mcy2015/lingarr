@@ -9,17 +9,17 @@
             </span>
         </div>
 
+        <!-- 行结构 = 原型 .setlist .row:行 13px,b 标题与 12px hint 同行内联,
+             控件靠右;不再用「标题上/描述下」的两行堆叠形态。 -->
         <div
             v-for="row in rows"
             :key="row.key"
-            class="border-line flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 last:border-b-0"
+            class="border-line flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-4 py-2.5 text-[13px] last:border-b-0"
             :data-test="`req-row-${row.key}`">
-            <div class="min-w-0 flex-1">
-                <b class="text-[13px] font-semibold">{{ row.title }}</b>
-                <div class="text-secondary-content mt-0.5 text-xs leading-snug">
-                    {{ row.description }}
-                </div>
-            </div>
+            <b class="flex-none font-semibold">{{ row.title }}</b>
+            <span class="text-secondary-content min-w-0 flex-1 text-xs leading-snug">
+                {{ row.description }}
+            </span>
             <div class="flex flex-none items-center gap-2">
                 <ToggleButton v-if="row.kind === 'toggle'" v-model="row.model.value">
                     <span class="text-primary-content text-xs font-medium">
@@ -29,7 +29,8 @@
                 <template v-else>
                     <InputComponent
                         v-model="row.model.value"
-                        class="w-28"
+                        size="sm"
+                        class="w-20"
                         :validation-type="INPUT_VALIDATION_TYPE.NUMBER" />
                 </template>
             </div>

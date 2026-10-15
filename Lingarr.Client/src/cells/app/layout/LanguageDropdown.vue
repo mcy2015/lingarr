@@ -12,7 +12,7 @@
                 <button
                     v-for="locale in SUPPORTED_LOCALES"
                     :key="locale.code"
-                    class="hover:bg-tertiary text-secondary-content block w-full cursor-pointer px-4 py-2 text-left text-sm"
+                    class="hover:bg-tertiary flex w-full cursor-pointer items-center justify-between gap-2 whitespace-nowrap px-4 py-2 text-left text-sm"
                     :class="
                         locale.code === currentLocale
                             ? 'text-accent font-medium'

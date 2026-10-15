@@ -46,7 +46,8 @@ const getClasses = () => {
         case 'large':
             return 'w-80 md:w-96'
         default:
-            return 'w-20'
+            // wide enough for CJK locale labels ("简体中文") plus the check icon
+            return 'w-32'
     }
 }
 
