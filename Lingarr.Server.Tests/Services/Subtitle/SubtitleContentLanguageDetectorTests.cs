@@ -192,6 +192,27 @@ public class SubtitleContentLanguageDetectorTests
     {
         Assert.Null(SubtitleContentLanguageDetector.DetectLanguage(text));
     }
+
+    [Fact]
+    public void ShortPureHanSample_DefaultsToSimplifiedInsteadOfUnknown()
+    {
+        // QA F1-N1: two lines of everyday dialogue, no script-unique
+        // characters at all — previously unknown, now simplified.
+        Assert.Equal("zh", SubtitleContentLanguageDetector.DetectLanguage(
+            "我们都是好孩子。\n这条路很长。"));
+    }
+
+    [Fact]
+    public void AssDialogueText_SniffsThroughStyleLayers()
+    {
+        var text = SubtitleService.StripAssStyleLayers(
+            "[Script Info]\nTitle: x\n" +
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n" +
+            "Style: Default,Arial,20,&H00FFFFFF,...\n" +
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,我们都是好孩子，天天都在等待阳光。\n" +
+            "Dialogue: 0,0:00:04.00,0:00:06.00,Default,,0,0,0,,这条路的尽头就是我们要去的地方。\n");
+        Assert.Equal("zh", SubtitleContentLanguageDetector.DetectLanguage(text));
+    }
 }
 
 /// <summary>
@@ -323,7 +344,13 @@ public class SubtitleContentSniffScanTests : IDisposable
     [Fact]
     public async Task UntaggedJapanese_SniffsJa()
     {
-        WriteSubtitle("Movie.ass", JapaneseSrt);
+        // Real ASS shape: the kana only ever appears in the Dialogue text
+        // column, everything else is style noise (QA F1-N2).
+        WriteSubtitle("Movie.ass", "[Script Info]\n" +
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n" +
+            "Style: Default,Arial,20,&H00FFFFFF,...\n" +
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,こんにちは、世界。私たちの旅はここから始まる。\n" +
+            "Dialogue: 0,0:00:04.00,0:00:06.00,Default,,0,0,0,,また明日ね、元気でね。\n");
 
         var subtitle = await ScanSingleAsync();
 

@@ -197,7 +197,10 @@ public static class SubtitleContentLanguageDetector
 
         var kana = hiragana + katakana;
         var total = (double)(han + kana + hangul + latin + other);
-        if (total < MinLetters)
+        // Han carries far more information per character than Latin — two
+        // subtitle lines of Chinese are plenty, while short Latin strings
+        // stay below the bar.
+        if (total < MinLetters && han < 8)
         {
             return null;
         }
@@ -235,7 +238,13 @@ public static class SubtitleContentLanguageDetector
         return null;
     }
 
-    /// <summary>Splits Han onto zh / zh-TW by counting script-unique characters; ties and thin evidence return null.</summary>
+    /// <summary>
+    /// Splits Han onto zh / zh-TW by counting script-unique characters. Short
+    /// pure-Han samples (two subtitle lines of everyday dialogue) often carry
+    /// no script-unique character at all, so below the evidence bar a heavily
+    /// Han-dominant sample defaults to simplified instead of unknown — a wrong
+    /// script guess still translates readably, unknown never translates.
+    /// </summary>
     private static string? ClassifyChinese(string text)
     {
         int simplified = 0, traditional = 0;
@@ -251,17 +260,37 @@ public static class SubtitleContentLanguageDetector
             }
         }
 
-        if (simplified + traditional < MinVariantEvidence)
+        if (simplified + traditional >= MinVariantEvidence)
         {
-            return null;
+            if (simplified > traditional)
+            {
+                return "zh";
+            }
+
+            return traditional > simplified ? "zh-TW" : null;
         }
 
-        if (simplified > traditional)
+        // Thin evidence stays undecidable — except short pure-Han samples,
+        // which default to simplified rather than unknown.
+        return IsShortPureHanSample(text) ? "zh" : null;
+    }
+
+    private static bool IsShortPureHanSample(string text)
+    {
+        int han = 0, other = 0;
+        foreach (var c in text)
         {
-            return "zh";
+            if (IsHan(c))
+            {
+                han++;
+            }
+            else if (!char.IsWhiteSpace(c) && !char.IsPunctuation(c))
+            {
+                other++;
+            }
         }
 
-        return traditional > simplified ? "zh-TW" : null;
+        return han > 0 && other == 0 && han <= 64;
     }
 
     /// <summary>

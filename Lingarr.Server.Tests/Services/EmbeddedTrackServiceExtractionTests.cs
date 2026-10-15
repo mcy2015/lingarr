@@ -120,7 +120,7 @@ public sealed class EmbeddedTrackServiceExtractionTests : IDisposable
         Assert.Contains("0:2", arguments);
         Assert.Contains("srt", arguments);
         Assert.EndsWith(".srt", path);
-        Assert.Contains("embedded.movie.7.s2.srt", Path.GetFileName(path));
+        Assert.Matches("embedded\\.movie\\.7\\.s2\\.[0-9A-F]{12}\\.srt", Path.GetFileName(path));
         Assert.True(File.Exists(path));
 
         // the container path is passed as the input right after -i
@@ -151,20 +151,21 @@ public sealed class EmbeddedTrackServiceExtractionTests : IDisposable
     {
         await CreateContainerWithTrack();
         var service = CreateService();
-        var expected = Path.Combine(
-            _contentRoot, "config", "imports", "embedded", "embedded.movie.7.s2.srt");
-        Directory.CreateDirectory(Path.GetDirectoryName(expected)!);
-        await File.WriteAllTextAsync(expected, string.Empty); // zero-byte leftover
-
         _run = async target =>
         {
             await File.WriteAllTextAsync(target, "content");
             return string.Empty;
         };
 
+        // Learn the keyed cache path, then replace its content with the
+        // zero-byte leftover a crashed run would leave behind.
         var path = await service.ExtractTrack(MediaType.Movie, 7, 2);
+        _invocations.Clear();
+        await File.WriteAllTextAsync(path, string.Empty);
 
-        Assert.Equal(expected, path);
+        var again = await service.ExtractTrack(MediaType.Movie, 7, 2);
+
+        Assert.Equal(path, again);
         Assert.Single(_invocations); // leftover forced a re-run
     }
 
@@ -184,8 +185,9 @@ public sealed class EmbeddedTrackServiceExtractionTests : IDisposable
 
         Assert.Contains("code 1", error.Message);
         // no partial file survives for the reuse check to trust
-        Assert.False(File.Exists(Path.Combine(
-            _contentRoot, "config", "imports", "embedded", "embedded.movie.7.s2.srt")));
+        var embeddedDir = Path.Combine(_contentRoot, "config", "imports", "embedded");
+        Assert.False(Directory.Exists(embeddedDir)
+            && Directory.GetFiles(embeddedDir, "embedded.movie.7.s2.*.srt").Any());
     }
 
     [Fact]

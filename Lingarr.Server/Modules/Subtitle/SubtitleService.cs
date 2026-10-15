@@ -151,6 +151,15 @@ public class SubtitleService : ISubtitleService
 
             var bytes = _readSubtitleHead(file);
             var text = Encoding.UTF8.GetString(_encodingService.ConvertToUtf8(bytes));
+            var extension = Path.GetExtension(file).ToLowerInvariant();
+            if (extension is ".ass" or ".ssa")
+            {
+                // Style layers ([Script Info], Format:/Style: lines, the nine
+                // comma-separated fields before the text) are Latin noise that
+                // would push the sample out of the Han window.
+                text = StripAssStyleLayers(text);
+            }
+
             var detected = SubtitleContentLanguageDetector.DetectLanguage(text);
 
             _logger.LogDebug("Sniffed content language '{Language}' for {File}", detected ?? "unknown", file);
@@ -163,6 +172,53 @@ public class SubtitleService : ISubtitleService
             _logger.LogDebug(ex, "Content language sniff failed for {File}", file);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Keeps only the text column of ASS/SSA Dialogue lines (after the ninth
+    /// comma); metadata and style sections drop out entirely.
+    /// </summary>
+    public static string StripAssStyleLayers(string content)
+    {
+        var builder = new StringBuilder();
+        foreach (var rawLine in content.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r').Trim();
+            if (line.Length == 0
+                || line.StartsWith('[')
+                || line.StartsWith("Format:", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("Style:", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("Comment:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (line.StartsWith("Dialogue:", StringComparison.OrdinalIgnoreCase))
+            {
+                // Text is field 10; the text column may itself contain commas.
+                var rest = line["Dialogue:".Length..].TrimStart();
+                var commas = 0;
+                var start = 0;
+                for (var i = 0; i < rest.Length; i++)
+                {
+                    if (rest[i] != ',')
+                    {
+                        continue;
+                    }
+
+                    commas++;
+                    if (commas == 9)
+                    {
+                        start = i + 1;
+                        break;
+                    }
+                }
+
+                builder.AppendLine(rest[start..]);
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static void CacheSniffResult(SniffCacheKey key, string? language)

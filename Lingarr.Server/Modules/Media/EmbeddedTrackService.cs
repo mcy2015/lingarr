@@ -336,7 +336,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
                 "Re-index the media and run the embedded track scan again.");
         }
 
-        var target = ExtractionFilePath(mediaType, mediaId, streamIndex);
+        var target = ExtractionFilePath(mediaType, mediaId, streamIndex, ComputeScanKey(container));
         // Same track translated again → the previous extraction is reused; a
         // zero-byte leftover from a crashed run does not count.
         if (File.Exists(target) && new FileInfo(target).Length > 0)
@@ -409,13 +409,21 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
     /// <summary>
     /// Deterministic extraction cache path:
-    /// <c>{contentRoot}/config/imports/embedded/embedded.{type}.{id}.s{index}.srt</c>.
+    /// <c>{contentRoot}/config/imports/embedded/embedded.{type}.{id}.s{index}.{scanKey}.srt</c>.
+    /// The container's scan key (path + mtime) is part of the name, so a
+    /// replaced video file invalidates its extraction instead of serving a
+    /// stale subtitle.
     /// </summary>
-    private string ExtractionFilePath(MediaType mediaType, int mediaId, int streamIndex) =>
-        Path.Combine(
+    private string ExtractionFilePath(MediaType mediaType, int mediaId, int streamIndex, string scanKey)
+    {
+        // Base64 carries path-hostile characters — fold to file-safe hex.
+        var safeKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(scanKey)))[..12];
+        return Path.Combine(
             _environment.ContentRootPath,
             "config", "imports", "embedded",
-            $"embedded.{mediaType.ToString().ToLowerInvariant()}.{mediaId}.s{streamIndex}.srt");
+            $"embedded.{mediaType.ToString().ToLowerInvariant()}.{mediaId}.s{streamIndex}.{safeKey}.srt");
+    }
 
     private async Task<MediaSubtitleTrack> LoadTrack(
         MediaType mediaType,

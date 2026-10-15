@@ -130,11 +130,13 @@ public class SubtitleNormalizeServiceTests : IDisposable
         };
         var season = new Season { SeasonNumber = 1, Show = show };
         show.Seasons.Add(season);
+        // Production convention: the episode's directory in Path, the base
+        // name without extension in FileName.
         season.Episodes.Add(new Episode
         {
             SonarrId = 11, EpisodeNumber = 1, Title = "Anjin",
-            Path = Path.Combine(showDirectory, "Shogun.S01E01.mkv"),
-            FileName = "Shogun.S01E01.mkv", Season = season
+            Path = showDirectory,
+            FileName = "Shogun.S01E01", Season = season
         });
         _dbContext.Shows.Add(show);
         await _dbContext.SaveChangesAsync();
@@ -358,8 +360,8 @@ public class SubtitleNormalizeServiceTests : IDisposable
         season.Episodes.Add(new Episode
         {
             SonarrId = 12, EpisodeNumber = 1, Title = "Anjin (duplicate)",
-            Path = Path.Combine(Dir("tv", "shogun"), "Shogun.S01E01.mkv"),
-            FileName = "Shogun.S01E01.mkv", Season = season
+            Path = Path.GetDirectoryName(Path.Combine(Dir("tv", "shogun"), "Shogun.S01E01.mkv"))!,
+            FileName = "Shogun.S01E01", Season = season
         });
         await _dbContext.SaveChangesAsync();
         WriteFile(Path.Combine(Dir("tv", "shogun"), "Shogun.S01E01.chs.srt"));
@@ -541,5 +543,60 @@ public class SubtitleNormalizeServiceTests : IDisposable
 
         Assert.Equal(0, result.Renamed);
         Assert.Empty(result.Failed);
+    }
+
+    [Fact]
+    public async Task Preview_Show_SeasonSubdirectoryLayout_MatchesEpisodes()
+    {
+        // QA F3-N1 regression: production stores the episode's DIRECTORY in
+        // Episode.Path; subtitles live next to the video in the Season folder.
+        var showDirectory = Dir("tv", "shogun");
+        var seasonDirectory = Path.Combine(showDirectory, "Season 01");
+        Directory.CreateDirectory(seasonDirectory);
+        var show = new Show
+        {
+            SonarrId = 1, Title = "Shōgun", Path = showDirectory, DateAdded = DateTimeOffset.Now
+        };
+        var season = new Season { SeasonNumber = 1, Show = show };
+        show.Seasons.Add(season);
+        season.Episodes.Add(new Episode
+        {
+            SonarrId = 11, EpisodeNumber = 1, Title = "Anjin",
+            Path = seasonDirectory, FileName = "Shogun.S01E01", Season = season
+        });
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+        WriteFile(Path.Combine(seasonDirectory, "Shogun.S01E01.chs.srt"));
+
+        var preview = await _service.Preview("Show", show.Id);
+
+        var item = Assert.Single(preview.Items);
+        Assert.Equal("Shogun.S01E01.zh.srt", item.NewName);
+        Assert.Empty(preview.Skipped);
+    }
+
+    [Fact]
+    public async Task Execute_SourceOutsideTheMedia_IsRejectedWithoutTouchingDisk()
+    {
+        var (movie, directory) = await SeedMovie();
+        WriteFile(Path.Combine(directory, "Dune.2021.chs.srt"));
+        var outside = Path.Combine(Dir("elsewhere"), "foreign.srt");
+        WriteFile(outside, "1\n00:00:01,000 --> 00:00:02,000\nx\n");
+
+        var result = await _service.Execute("Movie", movie.Id,
+        [
+            new SubtitleNormalizeExecuteItem
+            {
+                OldPath = outside,
+                NewPath = Path.Combine(Dir("elsewhere"), "foreign.zh.srt"),
+                Language = "zh",
+                MediaTitle = "Dune"
+            }
+        ]);
+
+        Assert.Equal(0, result.Renamed);
+        var failure = Assert.Single(result.Failed);
+        Assert.Contains("not a subtitle of the selected media", failure.Error);
+        Assert.True(File.Exists(outside));
     }
 }

@@ -79,8 +79,8 @@ public class SubtitleNormalizeService : ISubtitleNormalizeService
             scanRoots = !string.IsNullOrWhiteSpace(show.Path) && Directory.Exists(show.Path)
                 ? [show.Path]
                 : episodes
-                    .Select(e => Path.GetDirectoryName(e.Path!))
-                    .OfType<string>()
+                    .Select(e => e.Path!)
+                    .Where(path => !string.IsNullOrEmpty(path))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
         }
@@ -111,9 +111,12 @@ public class SubtitleNormalizeService : ISubtitleNormalizeService
             };
         }
 
+        // EpisodeSync stores the episode's DIRECTORY in Episode.Path (with the
+        // base name in FileName) — the subtitle's directory is matched against
+        // that path directly, never against its parent.
         var episodesByDirectory = episodes
-            .Where(e => !string.IsNullOrEmpty(e.FileName))
-            .GroupBy(e => Path.GetDirectoryName(e.Path!) ?? string.Empty)
+            .Where(e => !string.IsNullOrEmpty(e.FileName) && !string.IsNullOrEmpty(e.Path))
+            .GroupBy(e => e.Path!)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
         var videosByDirectory = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -173,7 +176,7 @@ public class SubtitleNormalizeService : ISubtitleNormalizeService
                 }
 
                 var episode = matches[0];
-                baseName = Path.GetFileNameWithoutExtension(episode.FileName!);
+                baseName = StripVideoExtension(episode.FileName!);
                 mediaTitle = $"{episode.Season.Show.Title} - " +
                              $"S{episode.Season.SeasonNumber:D2}E{episode.EpisodeNumber:D2} - " +
                              $"{episode.Title}";
@@ -258,6 +261,26 @@ public class SubtitleNormalizeService : ISubtitleNormalizeService
 
         var result = new SubtitleNormalizeExecuteResponse();
         var failures = new List<SubtitleNormalizeFailedItem>();
+
+        // The media bounds from Preview apply to Execute as well: every source
+        // must be a supported subtitle file inside this media's scan roots —
+        // a confirmed list can never reach beyond the previewed media.
+        var allowedRoots = ResolveScanRoots(mediaType, mediaId);
+        foreach (var item in confirmedItems)
+        {
+            if (allowedRoots.Count == 0
+                || !SupportedSubtitleExtensions.Contains(Path.GetExtension(item.OldPath), StringComparer.OrdinalIgnoreCase)
+                || !allowedRoots.Any(root => IsInside(item.OldPath, root)))
+            {
+                failures.Add(Fail(item.OldPath, "source is not a subtitle of the selected media"));
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            result.Failed = failures;
+            return Task.FromResult(result);
+        }
 
         // Full-batch conflict check first: execute what is uniquely targeted,
         // fail the colliding entries before anything moves.
@@ -344,6 +367,50 @@ public class SubtitleNormalizeService : ISubtitleNormalizeService
     }
 
     /// <summary>Creates-deletes a probe file: the only reliable read-only test across network mounts.</summary>
+    /// <summary>
+    /// The directories a media item's subtitles may live in — the same roots
+    /// Preview scans. Empty when the media is unknown, so Execute fails closed.
+    /// </summary>
+    private List<string> ResolveScanRoots(string mediaType, int mediaId)
+    {
+        if (mediaType.Equals("Movie", StringComparison.OrdinalIgnoreCase))
+        {
+            var moviePath = _dbContext.Movies
+                .Where(m => m.Id == mediaId)
+                .Select(m => m.Path)
+                .FirstOrDefault();
+            return string.IsNullOrWhiteSpace(moviePath) ? [] : [moviePath];
+        }
+
+        var showPath = _dbContext.Shows
+            .Where(s => s.Id == mediaId)
+            .Select(s => s.Path)
+            .FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(showPath))
+        {
+            return [showPath];
+        }
+
+        return _dbContext.Episodes
+            .Where(e => e.Season.ShowId == mediaId && e.Path != null && e.Path != string.Empty)
+            .Select(e => e.Path!)
+            .Distinct()
+            .ToList();
+    }
+
+    private static bool IsInside(string path, string root)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (directory == null)
+        {
+            return false;
+        }
+
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return directory.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+               || directory.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool ProbeWritable(string directory)
     {
         try
@@ -382,9 +449,27 @@ public class SubtitleNormalizeService : ISubtitleNormalizeService
     /// The statistics job's subtitle-to-episode heuristic: the subtitle name
     /// equals the episode base name or extends it at a dot boundary.
     /// </summary>
+    /// <summary>
+    /// Entity file names carry no extension and release base names contain
+    /// dots ("Show.S01E05"), so only a known video extension is stripped —
+    /// never the last dot-separated segment.
+    /// </summary>
+    private static string StripVideoExtension(string fileName)
+    {
+        foreach (var extension in VideoExtensions)
+        {
+            if (fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                return fileName[..^extension.Length];
+            }
+        }
+
+        return fileName;
+    }
+
     private static bool SubtitleMatchesEpisode(string subtitleFileName, string episodeFileName)
     {
-        var baseName = Path.GetFileNameWithoutExtension(episodeFileName);
+        var baseName = StripVideoExtension(episodeFileName);
         return subtitleFileName.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase)
                || string.Equals(subtitleFileName, baseName, StringComparison.OrdinalIgnoreCase);
     }
