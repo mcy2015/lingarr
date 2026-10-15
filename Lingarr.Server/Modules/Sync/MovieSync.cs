@@ -57,7 +57,12 @@ public class MovieSync : IMovieSync
                 DateAdded = UtcDateTime.Parse(movie.Added),
                 FileName = Path.GetFileNameWithoutExtension(moviePath),
                 Path = Path.GetDirectoryName(moviePath) ?? string.Empty,
-                IncludeInTranslation = defaultInclude
+                IncludeInTranslation = defaultInclude,
+                Year = movie.Year,
+                ImdbId = movie.ImdbId,
+                Quality = movie.MovieFile?.Quality?.Quality?.Name,
+                SizeBytes = movie.MovieFile?.Size,
+                ImdbRating = ResolveImdbRating(movie.Ratings)
             };
             // The setter folds an empty result back to null — the column
             // never stores "[]" (unknown is null).
@@ -76,6 +81,16 @@ public class MovieSync : IMovieSync
             {
                 movieEntity.AudioLanguages = audioLanguages?.ToArray();
             }
+
+            // B2/M0008 metadata: Radarr always carries these fields on a
+            // hasFile movie, so the payload is authoritative on re-sync —
+            // unlike audio languages there is no lower-trust local source
+            // whose value would need protecting.
+            movieEntity.Year = movie.Year;
+            movieEntity.ImdbId = movie.ImdbId;
+            movieEntity.Quality = movie.MovieFile?.Quality?.Quality?.Name;
+            movieEntity.SizeBytes = movie.MovieFile?.Size;
+            movieEntity.ImdbRating = ResolveImdbRating(movie.Ratings);
         }
 
         _logger.LogInformation("Syncing movie: {MovieId} with Path: {Path}", movie.Id, movieEntity.Path);
@@ -105,5 +120,15 @@ public class MovieSync : IMovieSync
         }
 
         return codes.Count > 0 ? codes : null;
+    }
+
+    /// <summary>
+    /// B2: Radarr exposes the IMDb score as ratings.imdb = {votes, value};
+    /// votes &lt;= 1 means *arr has no real user aggregate yet (value 0), so
+    /// the column stays null instead of storing a fake 0.
+    /// </summary>
+    private static double? ResolveImdbRating(RadarrRatings? ratings)
+    {
+        return ratings?.Imdb is { Votes: > 0, Value: not null } imdb ? imdb.Value : null;
     }
 }

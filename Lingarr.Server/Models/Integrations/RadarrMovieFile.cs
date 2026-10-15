@@ -17,4 +17,15 @@ public class RadarrMovieFile
     /// <summary>ffprobe-derived container truth (audioLanguages slash string).</summary>
     [JsonPropertyName("mediaInfo")]
     public IntegrationMediaInfo? MediaInfo { get; set; }
+
+    /// <summary>
+    /// Quality wrapper — quality.quality.name is the release quality label
+    /// ("WEBDL-1080p") stored on movies.quality (B2).
+    /// </summary>
+    [JsonPropertyName("quality")]
+    public RadarrMovieFileQuality? Quality { get; set; }
+
+    /// <summary>File size in bytes, stored on movies.size_bytes (B2).</summary>
+    [JsonPropertyName("size")]
+    public long? Size { get; set; }
 }

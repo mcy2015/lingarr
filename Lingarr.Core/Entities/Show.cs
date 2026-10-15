@@ -15,6 +15,22 @@ public class Show : BaseEntity
     public string? SubtitleCoverageJson { get; set; }
 
     /// <summary>
+    /// Series year from Sonarr (M0008). Episode search requests resolve
+    /// Year/ImdbId through Season→Show rather than storing them per episode
+    /// (design point 1: no per-episode write amplification).
+    /// </summary>
+    public int? Year { get; set; }
+
+    /// <summary>Series IMDb id ("tt…") from Sonarr; episode-search key via the Season→Show join.</summary>
+    public string? ImdbId { get; set; }
+
+    /// <summary>
+    /// IMDb user rating; null when Sonarr has no real score yet
+    /// (ratings.imdb.votes &lt;= 0 — the column never stores a fake 0).
+    /// </summary>
+    public double? ImdbRating { get; set; }
+
+    /// <summary>
     /// Language -> subtitle coverage, written by the statistics scan; null
     /// until the first scan after the coverage migration.
     /// </summary>

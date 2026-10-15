@@ -16,6 +16,15 @@ public class RadarrMovie
     public required string Added { get; set; }
     [JsonPropertyName("hasFile")]
     public required bool HasFile { get; set; }
+    /// <summary>Release year — feeds movies.year (M0008, subtitle-search request building).</summary>
+    [JsonPropertyName("year")]
+    public int? Year { get; set; }
+    /// <summary>IMDb id ("tt…") — feeds movies.imdb_id (M0008).</summary>
+    [JsonPropertyName("imdbId")]
+    public string? ImdbId { get; set; }
+    /// <summary>Ratings block; only the imdb child is mapped (B2: movies.imdb_rating).</summary>
+    [JsonPropertyName("ratings")]
+    public RadarrRatings? Ratings { get; set; }
     [JsonPropertyName("movieFile")]
     public RadarrMovieFile MovieFile { get; set; } = new();
     [JsonPropertyName("images")]

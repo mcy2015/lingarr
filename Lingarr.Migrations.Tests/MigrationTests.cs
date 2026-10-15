@@ -29,15 +29,16 @@ public class MigrationTests
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
             // The baseline plus the auth-sessions, schedule-cron,
-            // embedded-track, consume-embedded, performance-index and
-            // audio-and-language-cache migrations are applied.
-            Assert.Equal(7L, await ExecuteScalarAsync(connection,
+            // embedded-track, consume-embedded, performance-index,
+            // audio-and-language-cache, subtitle-search and
+            // subtitle-search-telemetry migrations are applied.
+            Assert.Equal(9L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(7L, await ExecuteScalarAsync(connection,
+            Assert.Equal(9L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
-            Assert.Equal(90L, await ExecuteScalarAsync(connection,
+            Assert.Equal(96L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
@@ -65,6 +66,23 @@ public class MigrationTests
             // admin/admin seed flips it at startup).
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'must_change_password' AND value = 'false'"));
+
+            // M0008 seeds the subtitle-search feature rows: off by default,
+            // daily 05:00 round (one hour after the 04:00 sync wave), the
+            // PM-decided single auto-score threshold of 75, SRT conversion
+            // and auto-translate on, 200 media per round.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_enabled' AND value = 'false'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_schedule' AND value = '0 5 * * *'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_auto_score' AND value = '75'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_convert_srt' AND value = 'true'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_batch_limit' AND value = '200'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_auto_translate' AND value = 'true'"));
         }
         finally
         {
@@ -105,7 +123,12 @@ public class MigrationTests
             await using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync(TestContext.Current.CancellationToken);
-                Assert.Equal(18L, await ExecuteScalarAsync(connection,
+                // 18 tables through M0007, +3 business tables in M0008
+                // (subtitle_search_state, subtitle_downloads,
+                // subtitle_search_blacklist) and +3 telemetry tables in
+                // M0009 (subtitle_search_sessions, provider_quota_usage,
+                // coverage_daily).
+                Assert.Equal(24L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
                 Assert.Equal(1L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request'"));
@@ -263,6 +286,153 @@ public class MigrationTests
     }
 
     /// <summary>
+    /// M0008 adds three business tables, the search/B2 columns on
+    /// movies/shows and six settings rows, so rolling it back must return
+    /// exactly the M0007 state: version back to 7, the three tables gone
+    /// with all their indexes (including the raw-DDL partial index), the
+    /// new columns gone while the M0007 audio columns survive, and the six
+    /// seeded settings rows removed.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_SubtitleSearchMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(7);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(7L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+
+            // The three business tables and every one of their indexes are
+            // gone (boost is a raw-DDL partial index, so DROP INDEX IF EXISTS).
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name IN (" +
+                "'subtitle_search_state'," +
+                "'subtitle_downloads'," +
+                "'subtitle_search_blacklist'," +
+                "'ix_subtitle_search_state_dequeue'," +
+                "'ux_subtitle_search_state_media'," +
+                "'ix_subtitle_search_state_boost'," +
+                "'ix_subtitle_downloads_media'," +
+                "'ix_subtitle_downloads_created'," +
+                "'ix_subtitle_downloads_source')"));
+
+            // The M0008 columns are gone from movies/shows while the M0007
+            // columns survive untouched.
+            var movieColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"movies\")", columnIndex: 1);
+            Assert.DoesNotContain("year", movieColumns);
+            Assert.DoesNotContain("imdb_id", movieColumns);
+            Assert.DoesNotContain("quality", movieColumns);
+            Assert.DoesNotContain("size_bytes", movieColumns);
+            Assert.DoesNotContain("imdb_rating", movieColumns);
+            Assert.Contains("audio_languages", movieColumns);
+
+            var showColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"shows\")", columnIndex: 1);
+            Assert.DoesNotContain("year", showColumns);
+            Assert.DoesNotContain("imdb_id", showColumns);
+            Assert.DoesNotContain("imdb_rating", showColumns);
+
+            // The six seeded settings rows are removed and nothing else.
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key LIKE 'subtitle_search_%'"));
+            Assert.Equal(90L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings"));
+
+            // M0007's table and M0006's indexes survive the rollback.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'subtitle_language_cache'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name = 'ux_movies_radarr_id'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// M0009 adds three telemetry tables and the coverage watermark columns,
+    /// so rolling it back must return exactly the M0008 state: version back
+    /// to 8, the telemetry tables gone (the composite-PK autoindexes with
+    /// them), coverage_checked_at gone from movies/episodes while every
+    /// M0008 table, column and settings row survives.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_SubtitleSearchTelemetryMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(8);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(8L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+
+            // The telemetry tables (and their composite-PK autoindexes) are
+            // gone from sqlite_master entirely.
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name IN (" +
+                "'subtitle_search_sessions'," +
+                "'provider_quota_usage'," +
+                "'coverage_daily'," +
+                "'ix_subtitle_search_sessions_media'," +
+                "'ix_subtitle_search_sessions_created'," +
+                "'sqlite_autoindex_provider_quota_usage_1'," +
+                "'sqlite_autoindex_coverage_daily_1')"));
+
+            // The watermark column is gone from both media tables while the
+            // M0008 columns survive.
+            var movieColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"movies\")", columnIndex: 1);
+            Assert.DoesNotContain("coverage_checked_at", movieColumns);
+            Assert.Contains("quality", movieColumns);
+            Assert.Contains("imdb_rating", movieColumns);
+
+            var episodeColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"episodes\")", columnIndex: 1);
+            Assert.DoesNotContain("coverage_checked_at", episodeColumns);
+
+            // M0008's business tables and settings rows survive the rollback.
+            Assert.Equal(3L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN (" +
+                "'subtitle_search_state'," +
+                "'subtitle_downloads'," +
+                "'subtitle_search_blacklist')"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_enabled' AND value = 'false'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
     /// Locks in the schema shape the squash verified against the old
     /// 29-migration chain: tables, column names in order, foreign keys and
     /// explicit indexes. Fails when the baseline drifts from the contract the
@@ -285,14 +455,20 @@ public class MigrationTests
                 ["settings"] = ["key", "value", "provider"],
                 ["movies"] = ["id", "radarr_id", "title", "file_name", "path", "media_hash", "date_added",
                     "translation_age_threshold", "created_at", "updated_at", "include_in_translation",
-                    "subtitle_coverage_json", "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed"],
+                    "subtitle_coverage_json", "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed",
+                    // M0008 search-request keys + B2 metadata, M0009 watermark.
+                    "year", "imdb_id", "quality", "size_bytes", "imdb_rating", "coverage_checked_at"],
                 ["shows"] = ["id", "sonarr_id", "title", "path", "date_added", "translation_age_threshold",
-                    "created_at", "updated_at", "include_in_translation", "subtitle_coverage_json"],
+                    "created_at", "updated_at", "include_in_translation", "subtitle_coverage_json",
+                    // M0008: series-level year/imdb (design point 1) + B2 rating.
+                    "year", "imdb_id", "imdb_rating"],
                 ["seasons"] = ["id", "season_number", "path", "show_id", "created_at", "updated_at",
                     "include_in_translation"],
                 ["episodes"] = ["id", "sonarr_id", "episode_number", "title", "file_name", "path", "media_hash",
                     "season_id", "date_added", "created_at", "updated_at", "include_in_translation",
-                    "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed"],
+                    "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed",
+                    // M0009 coverage watermark (consumed by the M7 batch).
+                    "coverage_checked_at"],
                 ["images"] = ["id", "type", "path", "show_id", "movie_id"],
                 ["path_mappings"] = ["id", "source_path", "destination_path", "media_type", "created_at", "updated_at"],
                 ["translation_requests"] = ["id", "job_id", "media_id", "title", "source_language", "target_language",
@@ -316,6 +492,20 @@ public class MigrationTests
                     "raw_language", "title", "codec", "is_text_based", "file_path", "media_hash",
                     "created_at", "updated_at"],
                 ["subtitle_language_cache"] = ["path", "mtime_ticks", "length", "language", "updated_at"],
+                // M0008 subtitle-search business tables.
+                ["subtitle_search_state"] = ["id", "media_type", "media_id", "status", "priority_rank",
+                    "pinned", "webhook_boost_until", "next_attempt_at", "attempt_count", "last_error",
+                    "last_searched_at", "updated_at"],
+                ["subtitle_downloads"] = ["id", "media_type", "media_id", "provider", "external_id",
+                    "language", "file_path", "match_score", "hash_match", "source", "search_session_id",
+                    "result", "error", "removed_at", "replaced_by_download_id", "created_at"],
+                ["subtitle_search_blacklist"] = ["id", "provider", "reason", "expires_at"],
+                // M0009 telemetry tables.
+                ["subtitle_search_sessions"] = ["id", "media_type", "media_id", "provider",
+                    "query_language", "result_count", "hit_target", "created_at"],
+                ["provider_quota_usage"] = ["date", "provider", "searches", "downloads",
+                    "quota_limit", "quota_remaining"],
+                ["coverage_daily"] = ["date", "media_type", "language", "covered", "total"],
                 ["version_info"] = ["version", "applied_on", "description"],
             };
 
@@ -360,6 +550,30 @@ public class MigrationTests
                 // The TEXT primary key adds an implicit autoindex, as with
                 // auth_sessions.
                 ["subtitle_language_cache"] = ["sqlite_autoindex_subtitle_language_cache_1"],
+                // M0008: dequeue covering index, enqueue-dedup UNIQUE and
+                // the webhook-boost partial index on subtitle_search_state;
+                // subtitle_search_blacklist is id-only (rowid PK, no index).
+                ["subtitle_search_state"] =
+                [
+                    "ix_subtitle_search_state_boost",
+                    "ix_subtitle_search_state_dequeue",
+                    "ux_subtitle_search_state_media"
+                ],
+                ["subtitle_downloads"] =
+                [
+                    "ix_subtitle_downloads_created",
+                    "ix_subtitle_downloads_media",
+                    "ix_subtitle_downloads_source"
+                ],
+                // M0009: sessions media/created indexes; the two counter
+                // tables get their composite-PK autoindexes.
+                ["subtitle_search_sessions"] =
+                [
+                    "ix_subtitle_search_sessions_created",
+                    "ix_subtitle_search_sessions_media"
+                ],
+                ["provider_quota_usage"] = ["sqlite_autoindex_provider_quota_usage_1"],
+                ["coverage_daily"] = ["sqlite_autoindex_coverage_daily_1"],
                 ["translation_request_events"] = ["ix_translation_request_events_translation_request_id"],
                 ["translation_request_lines"] = ["ix_translation_request_lines_translation_request_id"],
                 ["daily_statistics"] = ["ix_daily_statistics_date"],

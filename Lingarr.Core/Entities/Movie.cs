@@ -48,6 +48,37 @@ public class Movie : BaseEntity, IMedia
     public bool NoSubtitleNeeded { get; set; }
 
     /// <summary>
+    /// Release year from Radarr (M0008/B2). Feed for the subtitle-search
+    /// request builder (title + year disambiguation, tech design ②/⑤).
+    /// </summary>
+    public int? Year { get; set; }
+
+    /// <summary>IMDb id ("tt…") from Radarr; strongest provider-side search key after hash.</summary>
+    public string? ImdbId { get; set; }
+
+    /// <summary>
+    /// Release quality label from movieFile.quality.quality.name
+    /// ("WEBDL-1080p"); a release-name token for candidate scoring (③).
+    /// </summary>
+    public string? Quality { get; set; }
+
+    /// <summary>File size in bytes from movieFile.size (library B2).</summary>
+    public long? SizeBytes { get; set; }
+
+    /// <summary>
+    /// IMDb user rating; null when Radarr has no real score yet
+    /// (ratings.imdb.votes &lt;= 0 — the column never stores a fake 0).
+    /// </summary>
+    public double? ImdbRating { get; set; }
+
+    /// <summary>
+    /// Coverage watermark (M0009): when the statistics scan last computed
+    /// this movie's language coverage. Written by the M7 watermark batch;
+    /// null = not yet checked (full-scan eligible).
+    /// </summary>
+    public DateTimeOffset? CoverageCheckedAt { get; set; }
+
+    /// <summary>
     /// Language -> subtitle coverage, written by the statistics scan; null
     /// until the first scan after the coverage migration.
     /// </summary>

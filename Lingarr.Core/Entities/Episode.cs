@@ -50,4 +50,11 @@ public class Episode : BaseEntity, IMedia
     /// statistics scan and the subtitle-need endpoint (SubtitleNeedRule).</summary>
     public bool NoSubtitleNeeded { get; set; }
 
+    /// <summary>
+    /// Coverage watermark (M0009): when the statistics scan last computed
+    /// this episode's language coverage. Written by the M7 watermark batch;
+    /// null = not yet checked (full-scan eligible).
+    /// </summary>
+    public DateTimeOffset? CoverageCheckedAt { get; set; }
+
 }
