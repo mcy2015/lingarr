@@ -141,18 +141,37 @@
                                 :label="t('services.integration.address')"
                                 :error-message="editingSource.urlError"
                                 @update:validation="(val) => setValid(editing, 'url', val)" />
-                            <InputComponent
-                                v-model="editingSource.keyModel.value"
-                                :min-length="32"
-                                :max-length="32"
-                                :validation-type="INPUT_VALIDATION_TYPE.STRING"
-                                :type="INPUT_TYPE.PASSWORD"
-                                :label="t('services.integration.apiKey')"
-                                :placeholder="editingKeyPlaceholder"
-                                :error-message="
-                                    t('services.integration.apiKeyLengthError', { minLength: 32 })
-                                "
-                                @update:validation="(val) => setValid(editing, 'key', val)" />
+                            <div class="flex items-end gap-1.5">
+                                <InputComponent
+                                    v-model="editingSource.keyModel.value"
+                                    class="min-w-0 flex-1"
+                                    :min-length="32"
+                                    :max-length="32"
+                                    :validation-type="INPUT_VALIDATION_TYPE.STRING"
+                                    :type="
+                                        revealedKey !== null
+                                            ? INPUT_TYPE.TEXT
+                                            : INPUT_TYPE.PASSWORD
+                                    "
+                                    :label="t('services.integration.apiKey')"
+                                    :placeholder="editingKeyPlaceholder"
+                                    :error-message="
+                                        t('services.integration.apiKeyLengthError', { minLength: 32 })
+                                    "
+                                    @update:validation="(val) => setValid(editing, 'key', val)" />
+                                <button
+                                    v-if="editingKeyConfigured"
+                                    type="button"
+                                    class="border-line text-primary-content hover:bg-tertiary mb-[2px] cursor-pointer rounded-md border px-2 py-1.5 transition-colors"
+                                    :title="revealedKey !== null ? t('common.hide') : t('common.show')"
+                                    :aria-label="revealedKey !== null ? t('common.hide') : t('common.show')"
+                                    :data-test="`key-visibility-${editing}`"
+                                    @click="toggleKeyReveal()">
+                                    <Icon
+                                        :name="revealedKey !== null ? 'eyeOn' : 'eyeOff'"
+                                        class="h-4 w-4" />
+                                </button>
+                            </div>
                             <div class="flex items-center space-x-2 pt-1">
                                 <ToggleButton v-model="editingSource.includeModel.value">
                                     <span class="text-primary-content text-xs font-medium">
@@ -169,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
@@ -183,11 +202,13 @@ import {
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { mediaService } from '@/cells/app/api/mediaService'
+import { settingService } from '@/cells/app/api/settingService'
 import { scheduleService } from '@/cells/settings/services/scheduleService'
 import { useMappingStore } from '@/cells/settings/stores/mapping'
 import InputComponent from '@/cells/settings/components/InputComponent.vue'
 import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
 import CodeSnippet from '@/cells/kernel/components/CodeSnippet.vue'
+import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import { resolveUrl } from '@/cells/app/utils/baseUrl'
 
 const { t } = useI18n()
@@ -196,6 +217,7 @@ const settingStore = useSettingStore()
 const toastStore = useToastStore()
 const mappingStore = useMappingStore()
 const mediaApi = mediaService(axios)
+const settingApi = settingService(axios)
 const scheduleApi = scheduleService(axios)
 
 const radarrWebhookUrl = resolveUrl('/api/webhook/radarr')
@@ -290,16 +312,40 @@ const sonarrValid = reactive({ url: false, key: false })
 
 /// 敏感值统一策略(输入型):API Key 编辑态不回显旧值(输入恒从空开始,
 /// 服务端只回「已配置」布尔),已配置时占位符说明「留空保持不变」;
-/// 空输入不写空串覆盖已存密钥。
+/// 空输入不写空串覆盖已存密钥。「显示」为用户显式动作:经按 key 的
+/// reveal 端点取回明文填入输入框(cookie 会话专用,服务端留审计)。
+function keyFor(kind: 'radarr' | 'sonarr' | null) {
+    if (kind === 'radarr') return ENCRYPTED_SETTINGS.RADARR_API_KEY
+    if (kind === 'sonarr') return ENCRYPTED_SETTINGS.SONARR_API_KEY
+    return null
+}
+
 function keyConfigured(kind: 'radarr' | 'sonarr' | null): boolean {
-    const key =
-        kind === 'radarr'
-            ? ENCRYPTED_SETTINGS.RADARR_API_KEY
-            : kind === 'sonarr'
-              ? ENCRYPTED_SETTINGS.SONARR_API_KEY
-              : null
+    const key = keyFor(kind)
     if (key === null) return false
     return settingStore.isEncryptedSettingConfigured(key)
+}
+
+const revealedKey = ref<string | null>(null)
+
+// 切换编辑对象时收回已显示的密钥:显示态只属于当前打开的那一个。
+watch(editing, () => {
+    revealedKey.value = null
+})
+
+async function toggleKeyReveal(): Promise<void> {
+    if (!editingKeyConfigured.value) return
+    if (revealedKey.value !== null) {
+        revealedKey.value = null
+        return
+    }
+    const key = keyFor(editing.value)
+    if (key === null) return
+    try {
+        revealedKey.value = await settingApi.revealEncryptedSetting(key)
+    } catch {
+        toastStore.push({ message: t('common.loadFailed'), type: 'error' })
+    }
 }
 
 const editingKeyConfigured = computed(() => keyConfigured(editing.value))
@@ -317,8 +363,9 @@ const radarrUrlModel = computed({
     }
 })
 const radarrKeyModel = computed({
-    // 不回显:Secret 类输入恒从空开始,占位符提示「留空保持不变」
-    get: (): string => '',
+    // 默认不回显(Secret 输入恒从空开始);「显示」后 revealedKey 持有
+    // 明文,输入框以文本态展示并可直接编辑保存。
+    get: (): string => revealedKey.value ?? '',
     set: (newValue: string): void => {
         // 空输入 = 保持已配置的密钥不变,不做任何写入
         if (newValue === '') return
@@ -351,8 +398,8 @@ const sonarrUrlModel = computed({
     }
 })
 const sonarrKeyModel = computed({
-    // 不回显:Secret 类输入恒从空开始,占位符提示「留空保持不变」
-    get: (): string => '',
+    // 同 radarr:默认空输入 + 「留空保持不变」,显示态回填明文。
+    get: (): string => revealedKey.value ?? '',
     set: (newValue: string): void => {
         // 空输入 = 保持已配置的密钥不变,不做任何写入
         if (newValue === '') return

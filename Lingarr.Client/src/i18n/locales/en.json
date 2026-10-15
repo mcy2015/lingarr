@@ -2,6 +2,9 @@
     "common": {
         "close": "Close",
         "save": "Save",
+        "show": "Show",
+        "hide": "Hide",
+        "loadFailed": "Failed to load",
         "menu": "Open menu",
         "language": "Language",
         "theme": "Theme",

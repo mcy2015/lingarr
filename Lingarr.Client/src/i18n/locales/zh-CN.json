@@ -2,6 +2,9 @@
     "common": {
         "close": "关闭",
         "save": "保存",
+        "show": "显示",
+        "hide": "隐藏",
+        "loadFailed": "读取失败",
         "menu": "打开菜单",
         "language": "语言",
         "theme": "主题",

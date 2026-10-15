@@ -1,6 +1,7 @@
 using Lingarr.Core.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Lingarr.Server.Modules.Auth;
 using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Controllers;
@@ -136,5 +137,49 @@ public class SettingController : ControllerBase
     {
         var states = await _settingService.GetEncryptedSettingStates(keys);
         return Ok(states);
+    }
+
+    /// <summary>
+    /// Reveals the plaintext of one encrypted setting (the *arr API keys,
+    /// provider secrets) so the settings UI can show a stored value on request.
+    /// </summary>
+    /// <remarks>
+    /// The bulk encrypted read answers configured-flags only; plaintext leaves
+    /// the process exclusively through this explicit per-key action. Guarded
+    /// like the auth API-key reveal: anonymous callers 401, API-key principals
+    /// 403 — only interactive cookie sessions get values. The audit line
+    /// carries the key name only, never the value.
+    /// </remarks>
+    /// <param name="key">The setting key whose stored value should be decrypted.</param>
+    /// <response code="200">The decrypted value (empty string when unset).</response>
+    /// <response code="401">No authenticated session.</response>
+    /// <response code="403">Authenticated by something other than a browser cookie session.</response>
+    [HttpGet("encrypted/{key}")]
+    public async Task<ActionResult> RevealEncryptedSetting(string key)
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!User.IsCookieSession())
+        {
+            _logger.LogWarning(
+                "Rejected encrypted setting reveal for '{SettingKey}' without a cookie session " +
+                "(authenticated: {IsAuthenticated}) from {RemoteIp}.",
+                key,
+                User.Identity?.IsAuthenticated ?? false,
+                remoteIp);
+
+            return User.Identity?.IsAuthenticated == true
+                ? StatusCode(StatusCodes.Status403Forbidden,
+                    new { message = "Revealing stored secrets requires a logged-in browser session" })
+                : Unauthorized(new { message = "Revealing stored secrets requires a logged-in browser session" });
+        }
+
+        var value = await _settingService.GetEncryptedSetting(key);
+
+        // Audit line: key + user only, never the value.
+        _logger.LogInformation(
+            "Encrypted setting '{SettingKey}' revealed by user {Username}.",
+            key,
+            User.Identity?.Name);
+        return Ok(new { value = value ?? string.Empty });
     }
 }

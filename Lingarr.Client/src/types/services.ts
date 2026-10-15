@@ -94,6 +94,9 @@ export interface ISettingService {
     /// (configured per key) — the server never returns secret plaintext.
     /// T is the client-side states map (all-boolean values).
     getEncryptedSettingStates<T>(keys: string[]): Promise<T>
+    /// Explicit per-key reveal: fetches one decrypted secret (cookie-session
+    /// guarded endpoint, audited server-side). Empty string when unset.
+    revealEncryptedSetting(key: string): Promise<string>
     setEncryptedSetting(key: string, value: string): Promise<void>
 }
 

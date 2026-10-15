@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Lingarr.Core.Entities;
 using Lingarr.Server.Controllers;
+using Lingarr.Server.Modules.Auth;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -15,7 +18,8 @@ namespace Lingarr.Server.Tests.Controllers;
 /// <summary>
 /// P2-5 audit lines: every settings write path logs one Information entry
 /// carrying the key(s) and whether the value was stored encrypted — and
-/// never the value itself.
+/// never the value itself. The per-key reveal endpoint keeps that contract:
+/// cookie sessions only, one audit line without the plaintext.
 /// </summary>
 public class SettingControllerTests
 {
@@ -140,6 +144,111 @@ public class SettingControllerTests
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Never);
+    }
+
+    // ===== Per-key reveal: cookie sessions only, audited without the value =====
+
+    [Fact]
+    public async Task RevealEncryptedSetting_AnonymousCaller_Returns401()
+    {
+        SignIn(new ClaimsPrincipal(new ClaimsIdentity()));
+
+        var action = await _controller.RevealEncryptedSetting("radarr_api_key");
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(action);
+        Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
+        _settingService.Verify(
+            s => s.GetEncryptedSetting(It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RevealEncryptedSetting_ApiKeyPrincipal_Returns403()
+    {
+        SignIn(ApiKeyPrincipal());
+
+        var action = await _controller.RevealEncryptedSetting("radarr_api_key");
+
+        var forbidden = Assert.IsType<ObjectResult>(action);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        _settingService.Verify(
+            s => s.GetEncryptedSetting(It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RevealEncryptedSetting_CookieSession_ReturnsDecryptedValue()
+    {
+        SignIn(CookiePrincipal("henry"));
+        _settingService
+            .Setup(s => s.GetEncryptedSetting("radarr_api_key"))
+            .ReturnsAsync("the-plaintext-key");
+
+        var action = await _controller.RevealEncryptedSetting("radarr_api_key");
+
+        var ok = Assert.IsType<OkObjectResult>(action);
+        Assert.Equal("the-plaintext-key", new ResponseAdapter(ok.Value!).Get("value"));
+    }
+
+    [Fact]
+    public async Task RevealEncryptedSetting_CookieSessionWithUnsetKey_ReturnsEmptyString()
+    {
+        SignIn(CookiePrincipal("henry"));
+        _settingService
+            .Setup(s => s.GetEncryptedSetting("radarr_api_key"))
+            .ReturnsAsync((string?)null);
+
+        var action = await _controller.RevealEncryptedSetting("radarr_api_key");
+
+        var ok = Assert.IsType<OkObjectResult>(action);
+        Assert.Equal(string.Empty, new ResponseAdapter(ok.Value!).Get("value"));
+    }
+
+    [Fact]
+    public async Task RevealEncryptedSetting_CookieSession_LogsKeyAndUserWithoutTheValue()
+    {
+        SignIn(CookiePrincipal("henry"));
+        _settingService
+            .Setup(s => s.GetEncryptedSetting("radarr_api_key"))
+            .ReturnsAsync("the-plaintext-key");
+
+        await _controller.RevealEncryptedSetting("radarr_api_key");
+
+        AssertInformationLog(
+            count: 1,
+            containing: "radarr_api_key",
+            notContaining: "the-plaintext-key");
+    }
+
+    /// <summary>Sets the controller's HttpContext principal and remote IP.</summary>
+    private void SignIn(ClaimsPrincipal principal)
+    {
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = principal }
+        };
+        _controller.HttpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.10");
+    }
+
+    private static ClaimsPrincipal CookiePrincipal(string username) =>
+        new(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, "1"), new Claim(ClaimTypes.Name, username)],
+            authenticationType: "Cookies"));
+
+    /// <summary>Mirrors the principal built by ApiKeyAuthenticationHandler.</summary>
+    private static ClaimsPrincipal ApiKeyPrincipal() =>
+        new(new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.AuthenticationMethod, ApiKeyAuthenticationHandler.SchemeName),
+                new Claim(ClaimTypes.Name, "ApiKey")
+            ],
+            authenticationType: ApiKeyAuthenticationHandler.SchemeName));
+
+    /// <summary>Reads properties off anonymous response objects in assertions.</summary>
+    private sealed class ResponseAdapter(object instance)
+    {
+        public object? Get(string propertyName) =>
+            instance.GetType().GetProperty(propertyName)?.GetValue(instance);
     }
 
     /// <summary>

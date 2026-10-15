@@ -26,6 +26,13 @@ const service = (http: AxiosStatic, resource = '/api/setting'): ISettingService 
             .post(`${resource}/multiple/encrypted/get`, keys)
             .then((response) => response.data)
     },
+    /// Explicit per-key reveal (cookie sessions only, audited server-side):
+    /// the one path besides writing that secret plaintext reaches the client.
+    revealEncryptedSetting(key: string): Promise<string> {
+        return http
+            .get(`${resource}/encrypted/${encodeURIComponent(key)}`)
+            .then((response) => (response.data?.value ?? '') as string)
+    },
     setEncryptedSetting(key: string, value: string): Promise<void> {
         return http
             .post(`${resource}/encrypted`, { Key: key, Value: value })

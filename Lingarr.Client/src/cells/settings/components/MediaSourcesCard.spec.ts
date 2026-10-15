@@ -21,6 +21,7 @@ const indexShowsMock = vi.hoisted(() => vi.fn())
 const moviesMock = vi.hoisted(() => vi.fn())
 const showsMock = vi.hoisted(() => vi.fn())
 const setEncryptedSettingMock = vi.hoisted(() => vi.fn())
+const revealEncryptedSettingMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/settings/services/scheduleService', () => ({
     scheduleService: () => ({
@@ -57,7 +58,8 @@ vi.mock('@/cells/app/api/settingService', () => ({
         setSetting: vi.fn().mockResolvedValue(undefined),
         setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettingStates: vi.fn().mockResolvedValue({})
+        getEncryptedSettingStates: vi.fn().mockResolvedValue({}),
+        revealEncryptedSetting: revealEncryptedSettingMock
     })
 }))
 
@@ -75,6 +77,7 @@ beforeEach(() => {
     moviesMock.mockReset().mockResolvedValue({ totalCount: 312, items: [] })
     showsMock.mockReset().mockResolvedValue({ totalCount: 46, items: [] })
     setEncryptedSettingMock.mockReset().mockResolvedValue(undefined)
+    revealEncryptedSettingMock.mockReset().mockResolvedValue('')
 })
 
 async function mountCard() {
@@ -226,6 +229,72 @@ describe('MediaSourcesCard · 编辑模态', () => {
         } finally {
             vi.useRealTimers()
         }
+    })
+})
+
+describe('MediaSourcesCard · API Key 显示', () => {
+    // 模态经 Teleport 挂到 body,内部按钮用 document 查询。
+    const clickVisibility = async (kind: 'radarr' | 'sonarr') => {
+        const button = document.querySelector(`[data-test="key-visibility-${kind}"]`)
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+    }
+    const keyInput = (kind: 'radarr' | 'sonarr') =>
+        [...(document.querySelector(`[data-test="source-modal-${kind}"]`)?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
+
+    it('fetches the stored key on demand and shows it as editable text', async () => {
+        revealEncryptedSettingMock.mockResolvedValue('x'.repeat(32))
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
+
+        await clickVisibility('radarr')
+
+        expect(revealEncryptedSettingMock).toHaveBeenCalledWith('radarr_api_key')
+        expect(keyInput('radarr').type).toBe('text')
+        expect(keyInput('radarr').value).toBe('x'.repeat(32))
+    })
+
+    it('hides back to an empty password input without a second request', async () => {
+        revealEncryptedSettingMock.mockResolvedValue('y'.repeat(32))
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="edit-source-sonarr"]').trigger('click')
+        await flushPromises()
+        await clickVisibility('sonarr')
+        await clickVisibility('sonarr')
+
+        expect(revealEncryptedSettingMock).toHaveBeenCalledTimes(1)
+        expect(keyInput('sonarr').type).toBe('password')
+        expect(keyInput('sonarr').value).toBe('')
+    })
+
+    it('withdraws a revealed key when switching the edited source', async () => {
+        revealEncryptedSettingMock.mockResolvedValue('z'.repeat(32))
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
+        await clickVisibility('radarr')
+
+        await wrapper.find('[data-test="edit-source-sonarr"]').trigger('click')
+        await flushPromises()
+
+        const sonarrInput = keyInput('sonarr')
+        expect(sonarrInput.type).toBe('password')
+        expect(sonarrInput.value).toBe('')
+    })
+
+    it('does not render the reveal button when no key is configured', async () => {
+        const { wrapper, pinia } = await mountCard()
+        useSettingStore(pinia).encrypted_settings.radarr_api_key = false
+        await flushPromises()
+
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
+
+        expect(document.querySelector('[data-test="key-visibility-radarr"]')).toBeNull()
     })
 })
 

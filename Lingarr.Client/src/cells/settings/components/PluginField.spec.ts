@@ -2,6 +2,7 @@
 // PluginField · 敏感值统一策略(输入型)验收:Secret 字段编辑态不回显旧值
 // (加密设置批量读取只回「已配置」布尔,前端从头就没有明文),占位符说明
 // 「留空保持不变」,空输入不写空串覆盖已存密钥;非 Secret 字段回显行为不变。
+// 「显示」为显式动作:经按 key 的 reveal 端点取回明文,文本态可编辑保存。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -13,13 +14,15 @@ import en from '@/i18n/locales/en.json'
 
 const setSettingMock = vi.hoisted(() => vi.fn())
 const setEncryptedSettingMock = vi.hoisted(() => vi.fn())
+const revealEncryptedSettingMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({
         setSetting: setSettingMock,
         setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettingStates: vi.fn().mockResolvedValue({})
+        getEncryptedSettingStates: vi.fn().mockResolvedValue({}),
+        revealEncryptedSetting: revealEncryptedSettingMock
     })
 }))
 
@@ -62,6 +65,7 @@ async function mountField(field: IPluginSettingField, secretConfigured = false) 
 beforeEach(() => {
     setSettingMock.mockReset().mockResolvedValue(undefined)
     setEncryptedSettingMock.mockReset().mockResolvedValue(undefined)
+    revealEncryptedSettingMock.mockReset().mockResolvedValue('')
 })
 
 afterEach(() => {
@@ -127,6 +131,50 @@ describe('PluginField · Secret 输入型策略', () => {
             useSettingStore(pinia).isEncryptedSettingConfigured('openai_api_key' as never)
         ).toBe(true)
         expect(wrapper.emitted('save')).toBeTruthy()
+    })
+})
+
+describe('PluginField · Secret 显示(显式取值)', () => {
+    it('reveals the stored secret as editable text via the per-key endpoint', async () => {
+        revealEncryptedSettingMock.mockResolvedValue('stored-secret-token')
+        const { wrapper } = await mountField(secretField, true)
+
+        await wrapper.find('[data-test="secret-visibility-openai_api_key"]').trigger('click')
+        await flushPromises()
+
+        expect(revealEncryptedSettingMock).toHaveBeenCalledWith('openai_api_key')
+        const input = wrapper.find('input')
+        expect(input.attributes('type')).toBe('text')
+        expect((input.element as HTMLInputElement).value).toBe('stored-secret-token')
+    })
+
+    it('hides back to an empty password input without a second request', async () => {
+        revealEncryptedSettingMock.mockResolvedValue('stored-secret-token')
+        const { wrapper } = await mountField(secretField, true)
+
+        const toggle = () =>
+            wrapper.find('[data-test="secret-visibility-openai_api_key"]').trigger('click')
+        await toggle()
+        await flushPromises()
+        await toggle()
+        await flushPromises()
+
+        expect(revealEncryptedSettingMock).toHaveBeenCalledTimes(1)
+        const input = wrapper.find('input')
+        expect(input.attributes('type')).toBe('password')
+        expect((input.element as HTMLInputElement).value).toBe('')
+    })
+
+    it('offers no reveal button when the secret is not configured', async () => {
+        const { wrapper } = await mountField(secretField, false)
+
+        expect(wrapper.find('[data-test="secret-visibility-openai_api_key"]').exists()).toBe(false)
+    })
+
+    it('offers no reveal button on non-secret fields', async () => {
+        const { wrapper } = await mountField(textField)
+
+        expect(wrapper.find('[data-test="secret-visibility-openai_model"]').exists()).toBe(false)
     })
 })
 

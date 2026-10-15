@@ -35,7 +35,8 @@ vi.mock('@/cells/app/api/settingService', () => ({
         setSetting: setSettingMock,
         setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
-        getEncryptedSettingStates: vi.fn().mockResolvedValue({})
+        getEncryptedSettingStates: vi.fn().mockResolvedValue({}),
+        revealEncryptedSetting: vi.fn().mockResolvedValue('')
     })
 }))
 
