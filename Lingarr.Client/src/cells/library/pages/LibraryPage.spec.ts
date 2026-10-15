@@ -135,8 +135,8 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
     settingStore.storeSetting(SETTINGS.SONARR_SETTINGS_COMPLETED, 'true')
     settingStore.storeSetting(SETTINGS.TARGET_LANGUAGES, [{ code: 'ZH', name: 'Chinese' }])
 
-    // messages cover only the keys the row title link asserts; everything
-    // else renders as its key and is not asserted anywhere
+    // messages cover only the keys the row title link and the native badge
+    // assert; everything else renders as its key and is not asserted anywhere
     const i18n = createI18n({
         legacy: false,
         locale: 'en',
@@ -144,7 +144,8 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
             en: {
                 library: {
                     table: { openDetail: 'Open {type} {title} details' },
-                    badge: { show: 'Show', movie: 'Movie' }
+                    badge: { show: 'Show', movie: 'Movie' },
+                    nativeBadge: 'Native Chinese'
                 }
             }
         },
@@ -427,5 +428,48 @@ describe('LibraryPage', () => {
 
         expect(router.currentRoute.value.name).toBe('media-detail-show')
         expect(router.currentRoute.value.path).toBe('/library/show/1')
+    })
+
+    // ── requirement card B (1st batch): audio-derived state filters ─────
+    it('offers the native and audio-unknown options and passes them as the state param', async () => {
+        const { wrapper } = await mountLibraryPage()
+
+        // second select in the toolbar is the state filter
+        const stateSelect = wrapper.findAll('select')[1]
+        const values = stateSelect
+            .findAll('option')
+            .map((option) => (option.element as HTMLOptionElement).value)
+        expect(values).toContain('native')
+        expect(values).toContain('audio-unknown')
+
+        await stateSelect.setValue('native')
+        await settle()
+        expect(libraryMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({ state: 'native' })
+        )
+
+        await stateSelect.setValue('audio-unknown')
+        await settle()
+        expect(libraryMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({ state: 'audio-unknown' })
+        )
+    })
+
+    it('renders the weak native badge only on rows marked needsNoSubtitles', async () => {
+        libraryMock.mockResolvedValueOnce({
+            ...libraryPage,
+            items: [{ ...show1, needsNoSubtitles: true }, movie2, show3]
+        })
+        const marked = await mountLibraryPage()
+
+        const badges = marked.wrapper.findAll('[data-test="native-audio-badge"]')
+        expect(badges).toHaveLength(1)
+        expect(badges[0].text()).toBe('Native Chinese')
+        // the weak badge trails the language chips inside the tracks cell
+        expect(marked.wrapper.findAll('tbody tr')[0].text()).toContain('Native Chinese')
+
+        // unmarked rows (and absent field = legacy payload) render nothing
+        const plain = await mountLibraryPage()
+        expect(plain.wrapper.findAll('[data-test="native-audio-badge"]')).toHaveLength(0)
     })
 })

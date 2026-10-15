@@ -23,6 +23,7 @@ public class LingarrDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<AuthSession> AuthSessions { get; set; }
     public DbSet<MediaSubtitleTrack> MediaSubtitleTracks { get; set; }
+    public DbSet<SubtitleLanguageCache> SubtitleLanguageCaches { get; set; }
 
     public LingarrDbContext(DbContextOptions options) : base(options)
     {
@@ -38,6 +39,14 @@ public class LingarrDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EpisodeConfiguration());
         modelBuilder.ApplyConfiguration(new ImageConfiguration());
         modelBuilder.ApplyConfiguration(new MediaSubtitleTrackConfiguration());
+
+        // Audit P1-7: the sniff-persistence table name is fixed by migration
+        // M0007 (singular, path-keyed) — pinned here so EnsureCreated-built
+        // test schemas match the FluentMigrator schema exactly.
+        modelBuilder.Entity<SubtitleLanguageCache>(builder =>
+        {
+            builder.ToTable("subtitle_language_cache");
+        });
 
         ConvertTimestampsToUtc(modelBuilder);
     }

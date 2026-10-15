@@ -269,6 +269,15 @@ export interface IMediaLibraryItem {
     translationAgeThreshold?: number | null
     show?: IShow | null
     subtitleFiles?: ISubtitle[] | null
+    /// Requirement card A: normalized audio language codes detected on the
+    /// media's container (e.g. ['zh', 'en']). null = audio languages unknown
+    /// (nothing scanned / und tags only). Optional so pre-A2 payloads that
+    /// predate the field keep typing as "unknown".
+    audioLanguages?: string[] | null
+    /// Requirement card A: effective「无需字幕」exemption — the audio
+    /// already covers the target language or the user marked it so. Absent
+    /// (undefined) reads as false: no exemption.
+    needsNoSubtitles?: boolean
 }
 
 export interface ITranslationEstimate {

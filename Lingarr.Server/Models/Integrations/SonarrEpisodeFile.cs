@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Lingarr.Server.Models.Integrations;
 
@@ -9,4 +9,15 @@ public class SonarrEpisodeFile
 
     [JsonPropertyName("dateAdded")]
     public DateTimeOffset? DateAdded { get; set; }
+
+    /// <summary>
+    /// Aggregate language guess ([{id,name}]) — may fall back to the original
+    /// language, so it ranks below mediaInfo.audioLanguages (PRD card A).
+    /// </summary>
+    [JsonPropertyName("languages")]
+    public List<IntegrationLanguage>? Languages { get; set; }
+
+    /// <summary>ffprobe-derived container truth (audioLanguages slash string).</summary>
+    [JsonPropertyName("mediaInfo")]
+    public IntegrationMediaInfo? MediaInfo { get; set; }
 }

@@ -105,7 +105,9 @@
             "completed": "✓ Completed",
             "completedRatio": "✓ {done}/{total} completed",
             "failed": "✗ Failed",
-            "failedCount": "✗ {count} failed"
+            "failedCount": "✗ {count} failed",
+            "native": "✓ No subtitles needed",
+            "audioUnknown": "? Audio unknown"
         },
         "action": {
             "seasonImport": "Import season",
@@ -120,7 +122,11 @@
             "charsOnly": "≈ {chars} characters · no rate configured",
             "needSelection": "Select media first."
         },
-        "empty": "No media matches the current filters."
+        "empty": "No media matches the current filters.",
+        "nativeBadge": "Native Chinese",
+        "nativeBadgeTitle": "Container audio already covers the target language — no subtitles needed",
+        "audioUnknownBadge": "Audio unknown",
+        "audioUnknownBadgeTitle": "Audio languages not identified yet — subtitle need stays treated as missing; see the detail page mark entry"
     },
     "version": {
         "development": "Development",
@@ -993,6 +999,8 @@
         "historyCount": "{count} requests",
         "noHistory": "No translation requests for this media yet.",
         "noEpisodes": "No episodes in this season.",
+        "episodePagePrev": "Previous episode page",
+        "episodePageNext": "Next episode page",
         "translate": "Translate ▾",
         "showMeta": "{seasons} seasons · {episodes} episodes",
         "movieMeta": "movie",
@@ -1036,6 +1044,15 @@
             "en": "English",
             "ko": "Korean",
             "unknown": "Unidentified"
+        },
+        "audio": {
+            "title": "Audio",
+            "unknown": "Audio language unknown",
+            "markNeeded": "Needs subtitles",
+            "cancelMark": "Cancel mark",
+            "markedToast": "Marked as needing subtitles",
+            "unmarkedToast": "Subtitle-need mark cancelled",
+            "failedToast": "Updating the subtitle need failed: {message}"
         }
     },
     "cmdk": {

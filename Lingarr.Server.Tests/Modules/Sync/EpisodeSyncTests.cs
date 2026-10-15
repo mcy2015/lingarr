@@ -81,7 +81,10 @@ public class EpisodeSyncTests : IDisposable
         string path,
         DateTimeOffset? dateAdded = null,
         bool hasFile = true,
-        string? title = null) => new()
+        string? title = null,
+        string? mediaInfoAudioLanguages = null,
+        List<IntegrationLanguage>? fileLanguages = null,
+        List<IntegrationLanguage>? episodeLanguages = null) => new()
     {
         Id = id,
         EpisodeNumber = id,
@@ -89,9 +92,21 @@ public class EpisodeSyncTests : IDisposable
         SeasonNumber = 1,
         HasFile = hasFile,
         EpisodeFile = hasFile
-            ? new SonarrEpisodeFile { Path = path, DateAdded = dateAdded }
-            : null
+            ? new SonarrEpisodeFile
+            {
+                Path = path,
+                DateAdded = dateAdded,
+                MediaInfo = mediaInfoAudioLanguages == null
+                    ? null
+                    : new IntegrationMediaInfo { AudioLanguages = mediaInfoAudioLanguages },
+                Languages = fileLanguages
+            }
+            : null,
+        Languages = episodeLanguages
     };
+
+    private static List<IntegrationLanguage> Names(params string[] names) =>
+        names.Select((name, index) => new IntegrationLanguage { Id = index + 1, Name = name }).ToList();
 
     [Fact]
     public async Task SyncEpisodes_AddsNewEpisodesFromEmbeddedEpisodeFile()
@@ -223,5 +238,102 @@ public class EpisodeSyncTests : IDisposable
 
         var stored = await _context.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 10);
         Assert.Equal("/mnt/nas/tv/Show/Season 1", stored.Path);
+    }
+
+    // ── PRD card A: audio-language mapping ─────────────────────────
+
+    [Fact]
+    public async Task SyncEpisodes_MediaInfoTruthString_IsPreferredAndNormalized()
+    {
+        var season = await SeedSeasonAsync();
+        var episodes = new List<SonarrEpisode>
+        {
+            SonarrEpisode(10, "/tv/Show/Season 1/Show.S01E10.mkv",
+                mediaInfoAudioLanguages: "english / chi",
+                fileLanguages: Names("French"))
+        };
+
+        await _episodeSync.SyncEpisodes(season, episodes);
+        await _context.SaveChangesAsync();
+
+        var stored = await _context.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 10);
+        Assert.Equal(["en","zh"], stored.AudioLanguages);
+    }
+
+    [Fact]
+    public async Task SyncEpisodes_FileLanguagesAggregate_IsTheFallback()
+    {
+        var season = await SeedSeasonAsync();
+        var episodes = new List<SonarrEpisode>
+        {
+            SonarrEpisode(10, "/tv/Show/Season 1/Show.S01E10.mkv",
+                fileLanguages: Names("English", "Unknown"))
+        };
+
+        await _episodeSync.SyncEpisodes(season, episodes);
+        await _context.SaveChangesAsync();
+
+        var stored = await _context.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 10);
+        Assert.Equal(["en"], stored.AudioLanguages);
+    }
+
+    [Fact]
+    public async Task SyncEpisodes_EpisodeLanguages_AreTheLastResortWithoutEpisodeFile()
+    {
+        // hasFile=true but no episodeFile resource — the episode-level mirror
+        // is the only *arr source left.
+        var season = await SeedSeasonAsync();
+        var episodes = new List<SonarrEpisode>
+        {
+            SonarrEpisode(10, string.Empty, episodeLanguages: Names("English"))
+        };
+
+        await _episodeSync.SyncEpisodes(season, episodes);
+        await _context.SaveChangesAsync();
+
+        var stored = await _context.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 10);
+        Assert.Equal(["en"], stored.AudioLanguages);
+    }
+
+    [Fact]
+    public async Task SyncEpisodes_EmptyOrUndPayload_LeavesTheColumnNull()
+    {
+        var season = await SeedSeasonAsync();
+        var episodes = new List<SonarrEpisode>
+        {
+            SonarrEpisode(10, "/tv/Show/Season 1/Show.S01E10.mkv",
+                mediaInfoAudioLanguages: "und",
+                fileLanguages: Names("Unknown"))
+        };
+
+        await _episodeSync.SyncEpisodes(season, episodes);
+        await _context.SaveChangesAsync();
+
+        var stored = await _context.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 10);
+        Assert.Null(stored.AudioLanguages);
+    }
+
+    [Fact]
+    public async Task SyncEpisodes_MissingPayload_NeverClearsAnExistingValue()
+    {
+        var season = await SeedSeasonAsync();
+        var first = new List<SonarrEpisode>
+        {
+            SonarrEpisode(10, "/tv/Show/Season 1/Show.S01E10.mkv", mediaInfoAudioLanguages: "chi")
+        };
+        await _episodeSync.SyncEpisodes(season, first);
+        await _context.SaveChangesAsync();
+
+        // A later payload without audio data must not wipe the value the
+        // first sync (or the ffprobe piggyback) wrote.
+        var second = new List<SonarrEpisode>
+        {
+            SonarrEpisode(10, "/tv/Show/Season 1/Show.S01E10.mkv")
+        };
+        await _episodeSync.SyncEpisodes(season, second);
+        await _context.SaveChangesAsync();
+
+        var stored = await _context.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 10);
+        Assert.Equal(["zh"], stored.AudioLanguages);
     }
 }

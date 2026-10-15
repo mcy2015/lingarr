@@ -3,10 +3,13 @@ using System.Reflection;
 using System.Text;
 using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
+using Lingarr.Core.Data;
+using Lingarr.Core.Entities;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Translation;
+using Microsoft.EntityFrameworkCore;
 using SubtitleValidationOptions = Lingarr.Server.Models.SubtitleValidationOptions;
 
 namespace Lingarr.Server.Modules.Subtitle;
@@ -22,6 +25,7 @@ public class SubtitleService : ISubtitleService
     private readonly ISubtitleEncodingService _encodingService;
     private readonly Func<string, byte[]> _readSubtitleHead;
     private readonly Func<string, IEnumerable<string>> _enumerateFiles;
+    private readonly LingarrDbContext? _dbContext;
 
     // Content-sniff results keyed on (path, mtime, length) — edits invalidate
     // the entry. Static because scans run in fresh scopes; the cache should
@@ -36,7 +40,8 @@ public class SubtitleService : ISubtitleService
         ISettingService settingService,
         ISubtitleEncodingService? subtitleEncodingService = null,
         Func<string, byte[]>? subtitleHeadReader = null,
-        Func<string, IEnumerable<string>>? directoryEnumerator = null)
+        Func<string, IEnumerable<string>>? directoryEnumerator = null,
+        LingarrDbContext? dbContext = null)
     {
         _logger = logger;
         _languageCodeService = languageCodeService;
@@ -49,19 +54,25 @@ public class SubtitleService : ISubtitleService
         // per supported extension.
         _enumerateFiles = directoryEnumerator
             ?? (path => Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories));
+        // Audit P1-7: the sniff results are additionally persisted in
+        // subtitle_language_cache — the 500-entry in-memory cap is useless on
+        // a 100k library, and every scan of an untagged file would re-read
+        // its head. Null keeps the pre-P1-7 behavior (tests without a
+        // database); production DI always supplies the scoped context.
+        _dbContext = dbContext;
     }
 
     private readonly record struct SniffCacheKey(string Path, long LastWriteUtcTicks, long Length);
 
     /// <inheritdoc />
-    public Task<List<Subtitles>> GetAllSubtitles(string path)
+    public async Task<List<Subtitles>> GetAllSubtitles(string path)
     {
         if (!Directory.Exists(path))
         {
             _logger.LogInformation(
                 "Failed to collect subtitles in path |Red|{Path}|/Red|. Try reindexing or verify that the media is correctly set up in the source system.",
                 path);
-            return Task.FromResult(new List<Subtitles>());
+            return new List<Subtitles>();
         }
 
         // Audit P0-4: ONE physical traversal of the directory tree. The old
@@ -94,7 +105,11 @@ public class SubtitleService : ISubtitleService
             subtitles.AddRange(filesByExtension[extension].Select(file => ParseSubtitleFile(file, extension)));
         }
 
-        return Task.FromResult(subtitles);
+        // Audit P1-7: persist the sniff results queued while parsing — one
+        // SaveChanges per directory tree, not one write per file.
+        await FlushPersistedSniffsAsync();
+
+        return subtitles;
     }
 
     /// <summary>
@@ -166,7 +181,10 @@ public class SubtitleService : ISubtitleService
     /// Reads the file head, normalises it to UTF-8 (GB18030/Big5/Shift-JIS files
     /// decode correctly through <see cref="ISubtitleEncodingService"/>) and sniffs
     /// the content language. Results are cached on (path, mtime, length) so a
-    /// repeated scan of unchanged files performs no file reads.
+    /// repeated scan of unchanged files performs no file reads — L1 in the
+    /// static in-process cache, L2 (audit P1-7) in subtitle_language_cache so
+    /// a fresh process answers from the database instead of re-reading the
+    /// file head.
     /// </summary>
     private string? SniffContentLanguage(string file)
     {
@@ -184,6 +202,16 @@ public class SubtitleService : ISubtitleService
                 return cached.Language;
             }
 
+            // L2 read-through: a persisted row that matches (mtime, length)
+            // answers directly — including a null language ("sniffed, still
+            // unknown"), which is cached like any other result.
+            var persisted = FindPersistedSniff(key);
+            if (persisted != null)
+            {
+                CacheSniffResult(key, persisted.Language);
+                return persisted.Language;
+            }
+
             var bytes = _readSubtitleHead(file);
             var text = Encoding.UTF8.GetString(_encodingService.ConvertToUtf8(bytes));
             var extension = Path.GetExtension(file).ToLowerInvariant();
@@ -199,6 +227,7 @@ public class SubtitleService : ISubtitleService
 
             _logger.LogDebug("Sniffed content language '{Language}' for {File}", detected ?? "unknown", file);
             CacheSniffResult(key, detected);
+            QueuePersistedSniff(key, detected);
             return detected;
         }
         catch (Exception ex)
@@ -206,6 +235,118 @@ public class SubtitleService : ISubtitleService
             // A broken file must never break the scan.
             _logger.LogDebug(ex, "Content language sniff failed for {File}", file);
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the persisted sniff row for the key's path. Returns null when
+    /// the row is absent or was written for a different (mtime, length) —
+    /// i.e. the file changed since. Database problems degrade to "not
+    /// cached" (the sniff still runs) instead of failing the scan.
+    /// </summary>
+    private SubtitleLanguageCache? FindPersistedSniff(SniffCacheKey key)
+    {
+        if (_dbContext == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var row = _dbContext.SubtitleLanguageCaches.Find(key.Path);
+            return row != null
+                && row.MtimeTicks == key.LastWriteUtcTicks
+                && row.Length == key.Length
+                ? row
+                : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Reading the persisted sniff cache failed for {File}", key.Path);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Stages the upsert of one sniff result; the write itself happens in
+    /// <see cref="FlushPersistedSniffsAsync"/> so a directory tree costs one
+    /// SaveChanges instead of one per file. Find() re-attaches the tracked
+    /// row the read-through already loaded, so an edited file updates its
+    /// row in place instead of colliding on the path primary key.
+    /// </summary>
+    private void QueuePersistedSniff(SniffCacheKey key, string? language)
+    {
+        if (_dbContext == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var row = _dbContext.SubtitleLanguageCaches.Find(key.Path);
+            if (row == null)
+            {
+                _dbContext.SubtitleLanguageCaches.Add(new SubtitleLanguageCache
+                {
+                    Path = key.Path,
+                    MtimeTicks = key.LastWriteUtcTicks,
+                    Length = key.Length,
+                    Language = language,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                });
+            }
+            else
+            {
+                row.MtimeTicks = key.LastWriteUtcTicks;
+                row.Length = key.Length;
+                row.Language = language;
+                row.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Staging the sniff cache row failed for {File}", key.Path);
+        }
+    }
+
+    /// <summary>
+    /// Saves the staged sniff rows. Saved (or failed) rows are detached so a
+    /// full-library scan does not grow the change tracker monotonically, and
+    /// a failure cannot be retried unexpectedly by the next SaveChanges on
+    /// the shared scoped context — the rows are simply re-sniffed next scan.
+    /// </summary>
+    private async Task FlushPersistedSniffsAsync()
+    {
+        if (_dbContext == null)
+        {
+            return;
+        }
+
+        var pending = _dbContext.ChangeTracker
+            .Entries<SubtitleLanguageCache>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified)
+            .ToList();
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex,
+                "Persisting {Count} sniff cache rows failed — they will be re-sniffed on the next scan",
+                pending.Count);
+        }
+        finally
+        {
+            foreach (var entry in pending)
+            {
+                entry.State = EntityState.Detached;
+            }
         }
     }
 

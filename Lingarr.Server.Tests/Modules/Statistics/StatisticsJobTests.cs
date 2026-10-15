@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
@@ -105,14 +106,30 @@ public class StatisticsJobTests : IDisposable
         }
     }
 
-    private StatisticsJob CreateJob(ISubtitleService? subtitleService = null) => new(
+    private StatisticsJob CreateJob(ISubtitleService? subtitleService = null, ISettingService? settingService = null) => new(
         _dbContext,
         subtitleService ?? new SubtitleService(
             NullLogger<SubtitleService>.Instance,
             new LanguageCodeService(),
             new Mock<ISettingService>().Object),
         _scheduleService.Object,
+        settingService ?? new Mock<ISettingService>().Object,
         NullLogger<StatisticsJob>.Instance);
+
+    /// <summary>
+    /// Setting service whose target languages are exactly the given codes —
+    /// the target set of the subtitle-need rule.
+    /// </summary>
+    private static ISettingService TargetsService(params string[] codes)
+    {
+        var mock = new Mock<ISettingService>();
+        mock
+            .Setup(service => service.GetSettingAsJson<TargetLanguage>(It.IsAny<string>()))
+            .ReturnsAsync(codes
+                .Select(code => new TargetLanguage { Name = code, Code = code })
+                .ToList());
+        return mock.Object;
+    }
 
     private string WriteSubtitleFile(string directory, string fileName, int bytes)
     {
@@ -122,7 +139,10 @@ public class StatisticsJobTests : IDisposable
         return path;
     }
 
-    private async Task<(Movie movie, string dir)> SeedMovieAsync(int id)
+    private async Task<(Movie movie, string dir)> SeedMovieAsync(
+        int id,
+        string[]? audioLanguages = null,
+        bool? audioOverride = null)
     {
         var dir = $"movie{id}";
         Directory.CreateDirectory(Path.Combine(_root, dir));
@@ -133,7 +153,9 @@ public class StatisticsJobTests : IDisposable
             Title = $"movie {id}",
             Path = Path.Combine(_root, dir),
             FileName = $"movie{id}.mkv",
-            DateAdded = DateTimeOffset.UtcNow
+            DateAdded = DateTimeOffset.UtcNow,
+            AudioLanguages = audioLanguages,
+            AudioOverride = audioOverride
         };
         _dbContext.Movies.Add(movie);
         await _dbContext.SaveChangesAsync();
@@ -388,4 +410,73 @@ public class StatisticsJobTests : IDisposable
         Assert.Equal(1, storedShow.SubtitleCoverage!["zh"].Count);
         Assert.Equal(30, storedShow.SubtitleCoverage!["zh"].Bytes);
     }
+
+    // ── subtitle-need rule (PRD card A / audit P0-5) ────────────────
+
+    [Fact]
+    public async Task Execute_MovieNeedsTranslation_CoversTheFourContractStates()
+    {
+        // none of these movies carry any subtitle file — the rule alone decides
+        await SeedMovieAsync(20, audioLanguages: ["zh"]);                    // audio hits the target → exempt
+        await SeedMovieAsync(21, audioLanguages: null);                     // audio unknown + missing zh → needs
+        await SeedMovieAsync(22, audioLanguages: ["zh"], audioOverride: true);  // override=true beats zh audio
+        await SeedMovieAsync(23, audioLanguages: null, audioOverride: false);  // override=false beats the gap
+
+        await CreateJob(settingService: TargetsService("zh")).Execute();
+
+        var flags = await _dbContext.Movies.AsNoTracking().ToDictionaryAsync(m => m.Id, m => m.NeedsTranslation);
+        Assert.False(flags[20]);
+        Assert.True(flags[21]);
+        Assert.True(flags[22]);
+        Assert.False(flags[23]);
+
+        // idempotent: a second run with the same inputs flips nothing
+        _sqlLog.Clear();
+        await CreateJob(settingService: TargetsService("zh")).Execute();
+        Assert.Equal(0, _sqlLog.Count(IsNeedsUpdate));
+    }
+
+    [Fact]
+    public async Task Execute_EpisodeNeedsTranslation_IsJudgedPerEpisode()
+    {
+        var show = await SeedShowAsync(30, "show30/s01");
+        var episodes = await _dbContext.Episodes
+            .Where(e => e.Season.ShowId == show.Id)
+            .OrderBy(e => e.EpisodeNumber)
+            .ToListAsync();
+        // episode 1 carries zh audio (exempt), episode 2's audio is unknown;
+        // the one zh subtitle on disk matches episode 1 only
+        episodes[0].AudioLanguages = ["zh"];
+        episodes[1].AudioLanguages = null;
+        await _dbContext.SaveChangesAsync();
+        WriteSubtitleFile("show30/s01", "show30.s01e01.zh.srt", 10);
+
+        await CreateJob(settingService: TargetsService("zh")).Execute();
+
+        var flags = await _dbContext.Episodes.AsNoTracking()
+            .Where(e => e.Season.ShowId == show.Id)
+            .ToDictionaryAsync(e => e.EpisodeNumber, e => e.NeedsTranslation);
+        Assert.False(flags[1]); // zh audio exempts even without subtitles
+        Assert.True(flags[2]);  // unknown audio never exempts (conservative)
+    }
+
+    [Fact]
+    public async Task Execute_FullCoverage_NeedsNothing_UnlessOverrideForcesIt()
+    {
+        // covered in the target → no need; covered but override forces it back
+        await SeedMovieAsync(24);
+        WriteSubtitleFile("movie24", "movie24.zh.srt", 12);
+        await SeedMovieAsync(25, audioOverride: true);
+        WriteSubtitleFile("movie25", "movie25.zh.srt", 12);
+
+        await CreateJob(settingService: TargetsService("zh")).Execute();
+
+        var flags = await _dbContext.Movies.AsNoTracking().ToDictionaryAsync(m => m.Id, m => m.NeedsTranslation);
+        Assert.False(flags[24]);
+        Assert.True(flags[25]);
+    }
+
+    private static bool IsNeedsUpdate(string sql) =>
+        sql.StartsWith("UPDATE \"movies\"", StringComparison.OrdinalIgnoreCase)
+        || sql.StartsWith("UPDATE \"episodes\"", StringComparison.OrdinalIgnoreCase);
 }

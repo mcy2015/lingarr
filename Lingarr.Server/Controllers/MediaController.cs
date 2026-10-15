@@ -83,6 +83,9 @@ public class MediaController : ControllerBase
         // Media ids whose container files the embedded scan would probe —
         // drives the embeddedScanned flag below.
         List<int> probeableIds;
+        // Audio track languages of the media (PRD card A): the movie column
+        // directly, shows aggregated over their episodes.
+        string[]? audioLanguages;
         if (mediaType == MediaType.Movie)
         {
             var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == id);
@@ -91,6 +94,7 @@ public class MediaController : ControllerBase
             probeableIds = string.IsNullOrEmpty(movie.Path) || string.IsNullOrEmpty(movie.FileName)
                 ? []
                 : [movie.Id];
+            audioLanguages = movie.AudioLanguages;
         }
         else
         {
@@ -109,6 +113,12 @@ public class MediaController : ControllerBase
                 .Where(episode => !string.IsNullOrEmpty(episode.Path) && !string.IsNullOrEmpty(episode.FileName))
                 .Select(episode => episode.Id)
                 .ToListAsync();
+            audioLanguages = MediaLibraryService.AggregateAudioLanguages(
+                await _dbContext.Seasons
+                    .Where(season => season.ShowId == id)
+                    .SelectMany(season => season.Episodes)
+                    .Select(episode => episode.AudioLanguages)
+                    .ToListAsync());
         }
 
         var files = new List<MediaSubtitleFile>();
@@ -190,8 +200,96 @@ public class MediaController : ControllerBase
             }).ToList(),
             // scanned only once every probeable file carries a scan marker
             EmbeddedScanned = probeableIds.Count > 0
-                              && probeableIds.All(probeable => scannedIds.Contains(probeable))
+                              && probeableIds.All(probeable => scannedIds.Contains(probeable)),
+            AudioLanguages = audioLanguages
         });
+    }
+
+    /// <summary>
+    /// Manually marks whether a media item needs subtitles (PRD card A):
+    /// writes the reversible audio_override and flips needs_translation
+    /// immediately — with an override set, the need rule short-circuits to
+    /// its value, so the new state takes effect on the next selection run
+    /// without waiting for the statistics scan. Shows apply the mark to
+    /// every episode.
+    /// </summary>
+    /// <param name="mediaType">Movie, Episode or Show (shows cascade to episodes).</param>
+    /// <param name="id">Movie/episode id, or the show id for shows.</param>
+    /// <param name="request">The needed flag to persist.</param>
+    /// <response code="200">The media's new subtitle-need state.</response>
+    /// <response code="404">Unknown media id (or unsupported media type).</response>
+    [HttpPost("{mediaType}/{id}/subtitle-need")]
+    public async Task<ActionResult<SubtitleNeedResponse>> SetSubtitleNeed(
+        MediaType mediaType,
+        int id,
+        [FromBody] SubtitleNeedRequest request)
+    {
+        switch (mediaType)
+        {
+            case MediaType.Movie:
+            {
+                var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == id);
+                if (movie == null) return NotFound();
+                movie.AudioOverride = request.Needed;
+                movie.NeedsTranslation = request.Needed;
+                movie.NoSubtitleNeeded = !request.Needed;
+                await _dbContext.SaveChangesAsync();
+                return Ok(new SubtitleNeedResponse
+                {
+                    NeedsNoSubtitles = !movie.NeedsTranslation,
+                    NeedsTranslation = movie.NeedsTranslation,
+                    AudioLanguages = movie.AudioLanguages,
+                    AudioOverride = movie.AudioOverride
+                });
+            }
+
+            case MediaType.Episode:
+            {
+                var episode = await _dbContext.Episodes.FirstOrDefaultAsync(e => e.Id == id);
+                if (episode == null) return NotFound();
+                episode.AudioOverride = request.Needed;
+                episode.NeedsTranslation = request.Needed;
+                await _dbContext.SaveChangesAsync();
+                return Ok(new SubtitleNeedResponse
+                {
+                    NeedsNoSubtitles = !episode.NeedsTranslation,
+                    NeedsTranslation = episode.NeedsTranslation,
+                    AudioLanguages = episode.AudioLanguages,
+                    AudioOverride = episode.AudioOverride
+                });
+            }
+
+            case MediaType.Show:
+            {
+                // the show must exist even when it has no episodes yet
+                if (!await _dbContext.Shows.AnyAsync(s => s.Id == id)) return NotFound();
+                var episodes = await _dbContext.Episodes
+                    .Where(e => e.Season.ShowId == id)
+                    .ToListAsync();
+                foreach (var episode in episodes)
+                {
+                    episode.AudioOverride = request.Needed;
+                    episode.NeedsTranslation = request.Needed;
+                }
+                await _dbContext.SaveChangesAsync();
+                return Ok(new SubtitleNeedResponse
+                {
+                    // every episode now carries the override, so the show
+                    // needs subtitles exactly when the mark says so; an
+                    // episode-less show has neither need nor exemption (its
+                    // vacuous aggregate is not "native", matching the list)
+                    NeedsNoSubtitles = episodes.Count > 0 && !request.Needed,
+                    NeedsTranslation = episodes.Count > 0 && request.Needed,
+                    AudioLanguages = MediaLibraryService.AggregateAudioLanguages(
+                        episodes.Select(e => e.AudioLanguages)),
+                    // an episode-less show has no row to persist the mark on
+                    AudioOverride = episodes.Count > 0 ? request.Needed : null
+                });
+            }
+
+            default:
+                return NotFound();
+        }
     }
 
     /// <summary>
@@ -354,4 +452,25 @@ public class MediaController : ControllerBase
         var value = await _mediaService.Threshold(request.MediaType, request.Id, request.Hours);
         return Ok(value);
     }
+}
+
+/// <summary>Body of POST api/media/{mediaType}/{id}/subtitle-need (PRD card A).</summary>
+public class SubtitleNeedRequest
+{
+    /// <summary>True marks the media as needing subtitles; false as not needing them.</summary>
+    public bool Needed { get; set; }
+}
+
+/// <summary>
+/// The media's subtitle-need state after a manual mark: the effective
+///「无需字幕」state (the frontend contract field), the needs_translation
+/// flag now in force, the audio track languages (null = unknown, shows
+/// aggregate over their episodes) and the override just written.
+/// </summary>
+public class SubtitleNeedResponse
+{
+    public bool NeedsNoSubtitles { get; set; }
+    public bool NeedsTranslation { get; set; }
+    public string[]? AudioLanguages { get; set; }
+    public bool? AudioOverride { get; set; }
 }

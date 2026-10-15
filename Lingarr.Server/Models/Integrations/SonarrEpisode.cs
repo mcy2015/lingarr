@@ -21,6 +21,13 @@ public class SonarrEpisode
     /// </summary>
     [JsonPropertyName("episodeFile")]
     public SonarrEpisodeFile? EpisodeFile { get; set; }
+    /// <summary>
+    /// Episode-level aggregate language mirror ([{id,name}]). Only used as a
+    /// defensive fallback when episodeFile is absent — the file-level
+    /// languages/mediaInfo outrank it (PRD card A trust chain).
+    /// </summary>
+    [JsonPropertyName("languages")]
+    public List<IntegrationLanguage>? Languages { get; set; }
     [JsonPropertyName("series")]
     public SonarrShow? Show { get; set; }
 }

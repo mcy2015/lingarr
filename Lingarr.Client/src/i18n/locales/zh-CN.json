@@ -105,7 +105,9 @@
             "completed": "✓ 完成",
             "completedRatio": "✓ {done}/{total} 完成",
             "failed": "✗ 失败",
-            "failedCount": "✗ {count} 集失败"
+            "failedCount": "✗ {count} 集失败",
+            "native": "✓ 无需字幕",
+            "audioUnknown": "? 音轨未知"
         },
         "action": {
             "seasonImport": "整季导入",
@@ -120,7 +122,11 @@
             "charsOnly": "≈ {chars} 字符 · 费率未配置",
             "needSelection": "请先选择媒体。"
         },
-        "empty": "没有符合当前过滤条件的媒体。"
+        "empty": "没有符合当前过滤条件的媒体。",
+        "nativeBadge": "原生中文",
+        "nativeBadgeTitle": "容器音轨已覆盖目标语言 —— 无需字幕",
+        "audioUnknownBadge": "音轨未知",
+        "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理,详见详情页标记入口"
     },
     "version": {
         "development": "开发版",
@@ -993,6 +999,8 @@
         "historyCount": "{count} 个请求",
         "noHistory": "该媒体还没有翻译请求。",
         "noEpisodes": "这一季没有集。",
+        "episodePagePrev": "上一页剧集",
+        "episodePageNext": "下一页剧集",
         "translate": "翻译 ▾",
         "showMeta": "{seasons} 季 · {episodes} 集",
         "movieMeta": "电影",
@@ -1036,6 +1044,15 @@
             "en": "英语",
             "ko": "韩语",
             "unknown": "未识别"
+        },
+        "audio": {
+            "title": "音轨",
+            "unknown": "音轨语言未知",
+            "markNeeded": "标记需要字幕",
+            "cancelMark": "取消标记",
+            "markedToast": "已标记需要字幕",
+            "unmarkedToast": "已取消标记",
+            "failedToast": "更新字幕需求失败：{message}"
         }
     },
     "cmdk": {

@@ -9,13 +9,16 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Core.Interfaces;
 using Lingarr.Server.Models;
+using Lingarr.Server.Models.FileSystem;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Xunit;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Tests.Jobs;
@@ -41,6 +44,59 @@ public class AutomatedTranslationJobTests
             Assert.True(result);
             Assert.Single(processor.ProcessedTitles);
             Assert.Equal(movies[^1].Title, processor.ProcessedTitles.Single());
+        }
+        finally
+        {
+            tempDirectory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessMovies_SelectsOnlyMediaNeedingTranslation_AndTouchesTheFileSystemOnlyForThem()
+    {
+        var tempDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var context = BuildContext();
+            await using var dbContext = context;
+
+            // three equally eligible movies on disk, but only two carry the
+            // needs_translation flag the statistics scan computed
+            var needing = CreateMovie(11, "Needing One", tempDirectory.FullName, TimeSpan.FromHours(80));
+            var alsoNeeding = CreateMovie(12, "Needing Two", tempDirectory.FullName, TimeSpan.FromHours(90));
+            var notNeeding = CreateMovie(13, "Already Covered", tempDirectory.FullName, TimeSpan.FromHours(80));
+            needing.NeedsTranslation = true;
+            alsoNeeding.NeedsTranslation = true;
+            notNeeding.NeedsTranslation = false;
+            dbContext.Movies.AddRange(needing, alsoNeeding, notNeeding);
+            await dbContext.SaveChangesAsync();
+
+            // the real per-media processor behind a mocked subtitle service:
+            // audit P0-5 asserts the per-media filesystem lookup happens for
+            // the selected candidates only, never for the whole library
+            var subtitleService = new Mock<ISubtitleService>();
+            subtitleService
+                .Setup(service => service.GetSubtitles(It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(new List<Subtitles>());
+            var processor = new MediaSubtitleProcessor(
+                new Mock<ITranslationRequestService>().Object,
+                NullLogger<IMediaSubtitleProcessor>.Instance,
+                new NoOpSettingService(),
+                subtitleService.Object,
+                dbContext,
+                new Mock<IEmbeddedTrackService>().Object);
+            var job = CreateJob(dbContext, processor);
+            ConfigureJobForMovies(job);
+
+            var result = await InvokeProcessMoviesAsync(job);
+
+            Assert.False(result); // no subtitles on disk → nothing initiated
+            // the filesystem was consulted exactly once per selected candidate
+            subtitleService.Verify(service => service.GetSubtitles(needing.Path!, needing.FileName!), Times.Once);
+            subtitleService.Verify(service => service.GetSubtitles(alsoNeeding.Path!, alsoNeeding.FileName!), Times.Once);
+            // media that needs no translation is never selected — not even loaded
+            subtitleService.Verify(service => service.GetSubtitles(notNeeding.Path!, notNeeding.FileName!), Times.Never);
+            subtitleService.Verify(service => service.GetSubtitles(It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(2));
         }
         finally
         {
@@ -85,7 +141,10 @@ public class AutomatedTranslationJobTests
             FileName = fileName,
             Path = filePath,
             DateAdded = DateTime.UtcNow - age,
-            IncludeInTranslation = true
+            IncludeInTranslation = true,
+            // SQL selection (audit P0-5): every seeded movie is a candidate;
+            // the age threshold still does the winnowing inside the rotation
+            NeedsTranslation = true
         };
     }
 

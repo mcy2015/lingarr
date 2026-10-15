@@ -19,9 +19,18 @@ namespace Lingarr.Server.Modules.Media;
 /// (StackTrace/subtitle columns) are ever materialized (scale audit
 /// P0-7/P0-8). Coverage/state filters run over the small aggregate row set
 /// (DB only, no filesystem) before paging so totals remain truthful.
+/// The audio-aware states (PRD card A) — "native" (needs no subtitles) and
+/// "audio-unknown" — are plain column predicates and push all the way down
+/// into the media queries.
 /// </summary>
 public class MediaLibraryService : IMediaLibraryService
 {
+    /// <summary>Library state filter value: the subtitle-need rule judged the media as not needing subtitles.</summary>
+    public const string NativeState = "native";
+
+    /// <summary>Library state filter value: the audio track languages are unknown (null).</summary>
+    public const string AudioUnknownState = "audio-unknown";
+
     private readonly LingarrDbContext _dbContext;
     private readonly ISettingService _settingService;
     private readonly ICostService _costService;
@@ -57,6 +66,12 @@ public class MediaLibraryService : IMediaLibraryService
         var targetLanguages = await _settingService.GetSettingAsJson<TargetLanguage>(
             SettingKeys.Translation.TargetLanguages) ?? new List<TargetLanguage>();
 
+        // The two audio-aware states are plain column predicates, so unlike
+        // the request-state filter (in-memory over the aggregate rows) they
+        // push into the media queries themselves (PRD card A first batch).
+        var wantNative = string.Equals(state, NativeState, StringComparison.OrdinalIgnoreCase);
+        var wantAudioUnknown = string.Equals(state, AudioUnknownState, StringComparison.OrdinalIgnoreCase);
+
         // Phase 1 — aggregate rows straight from SQL: scalars, coverage read
         // directly off the JSON column and season/episode counts from grouped
         // subqueries. One small row per media item, no entity graphs.
@@ -70,6 +85,19 @@ public class MediaLibraryService : IMediaLibraryService
             {
                 showQuery = showQuery.Where(s => s.Title.ToLower().Contains(needle));
             }
+            if (wantNative)
+            {
+                // a show counts as native when it has episodes and every one
+                // carries the persisted exemption flag (scan-maintained)
+                showQuery = showQuery.Where(s =>
+                    s.Seasons.SelectMany(season => season.Episodes).Any()
+                    && s.Seasons.SelectMany(season => season.Episodes).All(e => e.NoSubtitleNeeded));
+            }
+            if (wantAudioUnknown)
+            {
+                showQuery = showQuery.Where(s =>
+                    s.Seasons.SelectMany(season => season.Episodes).Any(e => e.AudioLanguages == null));
+            }
 
             var showRows = await showQuery.Select(s => new
             {
@@ -80,7 +108,9 @@ public class MediaLibraryService : IMediaLibraryService
                 s.TranslationAgeThreshold,
                 s.SubtitleCoverageJson,
                 SeasonCount = s.Seasons.Count(),
-                EpisodeCount = s.Seasons.SelectMany(season => season.Episodes).Count()
+                EpisodeCount = s.Seasons.SelectMany(season => season.Episodes).Count(),
+                HasEpisodes = s.Seasons.SelectMany(season => season.Episodes).Any(),
+                AllEpisodesNative = s.Seasons.SelectMany(season => season.Episodes).All(e => e.NoSubtitleNeeded)
             }).ToListAsync();
 
             var statusById = await ShowStatusCountsAsync();
@@ -95,6 +125,7 @@ public class MediaLibraryService : IMediaLibraryService
                 SubtitleCoverageJson = r.SubtitleCoverageJson,
                 SeasonCount = r.SeasonCount,
                 EpisodeCount = r.EpisodeCount,
+                NeedsNoSubtitles = r.HasEpisodes && r.AllEpisodesNative,
                 Status = statusById.GetValueOrDefault(r.Id)
             }));
         }
@@ -107,6 +138,14 @@ public class MediaLibraryService : IMediaLibraryService
             {
                 movieQuery = movieQuery.Where(m => m.Title.ToLower().Contains(needle));
             }
+            if (wantNative)
+            {
+                movieQuery = movieQuery.Where(m => m.NoSubtitleNeeded);
+            }
+            if (wantAudioUnknown)
+            {
+                movieQuery = movieQuery.Where(m => m.AudioLanguages == null);
+            }
 
             var movieRows = await movieQuery.Select(m => new
             {
@@ -115,7 +154,10 @@ public class MediaLibraryService : IMediaLibraryService
                 m.DateAdded,
                 m.IncludeInTranslation,
                 m.TranslationAgeThreshold,
-                m.SubtitleCoverageJson
+                m.SubtitleCoverageJson,
+                m.AudioLanguages,
+                m.NeedsTranslation,
+                m.NoSubtitleNeeded
             }).ToListAsync();
 
             var statusById = await MovieStatusCountsAsync();
@@ -130,6 +172,8 @@ public class MediaLibraryService : IMediaLibraryService
                 SubtitleCoverageJson = r.SubtitleCoverageJson,
                 SeasonCount = 0,
                 EpisodeCount = 1,
+                AudioLanguages = r.AudioLanguages,
+                NeedsNoSubtitles = r.NoSubtitleNeeded,
                 Status = statusById.GetValueOrDefault(r.Id)
             }));
         }
@@ -193,7 +237,8 @@ public class MediaLibraryService : IMediaLibraryService
             if (show is not null)
             {
                 var summary = (await ShowStatusCountsAsync(show.Id)).GetValueOrDefault(show.Id);
-                var episodeCount = show.Seasons.Sum(season => season.Episodes.Count);
+                var episodes = show.Seasons.SelectMany(season => season.Episodes).ToList();
+                var episodeCount = episodes.Count;
                 return new MediaLibraryItem
                 {
                     Id = show.Id,
@@ -212,6 +257,8 @@ public class MediaLibraryService : IMediaLibraryService
                     LastActivityAt = summary?.LastActivity,
                     IncludeInTranslation = show.IncludeInTranslation,
                     TranslationAgeThreshold = show.TranslationAgeThreshold,
+                    AudioLanguages = AggregateAudioLanguages(episodes.Select(e => e.AudioLanguages)),
+                    NeedsNoSubtitles = episodes.Count > 0 && episodes.All(e => e.NoSubtitleNeeded),
                     Show = show
                 };
             }
@@ -242,7 +289,9 @@ public class MediaLibraryService : IMediaLibraryService
                     FailedCount = summary?.Failed ?? 0,
                     LastActivityAt = summary?.LastActivity,
                     IncludeInTranslation = movie.IncludeInTranslation,
-                    TranslationAgeThreshold = movie.TranslationAgeThreshold
+                    TranslationAgeThreshold = movie.TranslationAgeThreshold,
+                    AudioLanguages = movie.AudioLanguages,
+                    NeedsNoSubtitles = movie.NoSubtitleNeeded
                 };
             }
         }
@@ -384,6 +433,7 @@ public class MediaLibraryService : IMediaLibraryService
 
     private static MediaLibraryItem BuildItem(MediaRow row, IReadOnlyDictionary<int, Show>? shows)
     {
+        var show = row.MediaType == MediaType.Show ? shows?.GetValueOrDefault(row.Id) : null;
         return new MediaLibraryItem
         {
             Id = row.Id,
@@ -399,8 +449,39 @@ public class MediaLibraryService : IMediaLibraryService
             LastActivityAt = row.Status?.LastActivity,
             IncludeInTranslation = row.IncludeInTranslation,
             TranslationAgeThreshold = row.TranslationAgeThreshold,
-            Show = row.MediaType == MediaType.Show ? shows?.GetValueOrDefault(row.Id) : null
+            // shows union their episodes' audio (null when any episode is
+            // unknown); movies take the column value straight from the row
+            AudioLanguages = show is not null
+                ? AggregateAudioLanguages(show.Seasons.SelectMany(season => season.Episodes)
+                    .Select(episode => episode.AudioLanguages))
+                : row.AudioLanguages,
+            NeedsNoSubtitles = row.NeedsNoSubtitles,
+            Show = show
         };
+    }
+
+    /// <summary>
+    /// Show-level audio aggregation over its episodes' audio lists: null when
+    /// any episode's audio is unknown, otherwise the distinct union of the
+    /// known codes. Public so the media endpoints aggregate the same way.
+    /// </summary>
+    public static string[]? AggregateAudioLanguages(IEnumerable<string[]?> episodeAudioLanguages)
+    {
+        var union = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var audio in episodeAudioLanguages)
+        {
+            if (audio == null)
+            {
+                return null;
+            }
+
+            foreach (var code in audio)
+            {
+                union.Add(code);
+            }
+        }
+
+        return union.OrderBy(code => code, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     /// <summary>
@@ -435,7 +516,11 @@ public class MediaLibraryService : IMediaLibraryService
 
     private static bool MatchesFilters(MediaRow row, string? state, string? targetLanguage)
     {
-        if (!string.IsNullOrEmpty(state)
+        // The audio-aware states were already pushed into the media queries
+        // (plain column predicates) — only request states filter here.
+        var statePushedToSql = string.Equals(state, NativeState, StringComparison.OrdinalIgnoreCase)
+                               || string.Equals(state, AudioUnknownState, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(state) && !statePushedToSql
             && !string.Equals(DeriveState(row.Status).ToString(), state, StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -579,6 +664,8 @@ public class MediaLibraryService : IMediaLibraryService
         public string? SubtitleCoverageJson { get; init; }
         public int SeasonCount { get; init; }
         public int EpisodeCount { get; init; }
+        public string[]? AudioLanguages { get; init; }
+        public bool NeedsNoSubtitles { get; init; }
         public MediaStatusSummary? Status { get; set; }
         public List<SubtitleTrackSummary> Tracks { get; set; } = [];
         public DateTimeOffset? LastActivityAt => Status?.LastActivity;
@@ -597,5 +684,70 @@ public class MediaLibraryService : IMediaLibraryService
         public int InProgress { get; set; }
         public int Pending { get; set; }
         public DateTimeOffset? LastActivity { get; set; }
+    }
+}
+
+/// <summary>
+/// The shared subtitle-need rule (PRD card A, merged into audit S4): the
+/// single source of truth used by the statistics scan (persists
+/// needs_translation per movie/episode) and the display states. The manual
+/// override endpoint short-circuits on the override branch of the same rule.
+/// </summary>
+public static class SubtitleNeedRule
+{
+    /// <summary>
+    /// needs = override.HasValue ? override.Value
+    ///       : audio hits any target language ? false
+    ///       : coverage lacks any target language.
+    /// Unknown audio (null) never exempts — conservative, so "und" content
+    /// keeps surfacing as a gap (PRD card A boundary ①). With no configured
+    /// target languages nothing can be missing.
+    /// </summary>
+    /// <param name="audioOverride">Manual reversible mark; null = automatic.</param>
+    /// <param name="audioLanguages">Normalized audio codes; null = unknown.</param>
+    /// <param name="coveredLanguages">Subtitle languages the media already carries.</param>
+    /// <param name="targetLanguages">Configured translation target codes.</param>
+    /// <summary>
+    /// Persisted exemption: manual mark wins; otherwise known audio covering
+    /// any target language exempts. Unknown audio (null) never exempts, and
+    /// with no configured targets nothing is exempt (conservative on both).
+    /// </summary>
+    public static bool NoSubtitleNeeded(
+        bool? audioOverride,
+        string[]? audioLanguages,
+        IReadOnlyCollection<string> targetLanguages)
+    {
+        if (audioOverride.HasValue)
+        {
+            return !audioOverride.Value;
+        }
+        return audioLanguages is not null && audioLanguages.Any(audio =>
+            targetLanguages.Contains(audio, StringComparer.OrdinalIgnoreCase));
+    }
+
+    public static bool NeedsTranslation(
+        bool? audioOverride,
+        string[]? audioLanguages,
+        IEnumerable<string>? coveredLanguages,
+        IReadOnlyCollection<string> targetLanguages)
+    {
+        if (audioOverride.HasValue)
+        {
+            return audioOverride.Value;
+        }
+
+        if (targetLanguages.Count == 0)
+        {
+            return false;
+        }
+
+        if (audioLanguages is not null && audioLanguages.Any(audio =>
+                targetLanguages.Contains(audio, StringComparer.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        return targetLanguages.Any(target =>
+            coveredLanguages?.Contains(target, StringComparer.OrdinalIgnoreCase) != true);
     }
 }

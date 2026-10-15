@@ -2,6 +2,7 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Core.Helpers;
+using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Sync;
 using Lingarr.Server.Models.Integrations;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,8 @@ public class MovieSync : IMovieSync
             MediaType.Movie
         );
 
+        var audioLanguages = ResolveAudioLanguages(movie.MovieFile);
+
         if (movieEntity == null)
         {
             movieEntity = new Movie
@@ -56,6 +59,9 @@ public class MovieSync : IMovieSync
                 Path = Path.GetDirectoryName(moviePath) ?? string.Empty,
                 IncludeInTranslation = defaultInclude
             };
+            // The setter folds an empty result back to null — the column
+            // never stores "[]" (unknown is null).
+            movieEntity.AudioLanguages = audioLanguages?.ToArray();
             _dbContext.Movies.Add(movieEntity);
         }
         else
@@ -64,6 +70,12 @@ public class MovieSync : IMovieSync
             movieEntity.DateAdded = UtcDateTime.Parse(movie.Added);
             movieEntity.FileName = Path.GetFileNameWithoutExtension(moviePath);
             movieEntity.Path = Path.GetDirectoryName(moviePath) ?? string.Empty;
+            // A payload without a recognized code never clears the column —
+            // an ffprobe-filled value survives until *arr has real data.
+            if (audioLanguages != null)
+            {
+                movieEntity.AudioLanguages = audioLanguages?.ToArray();
+            }
         }
 
         _logger.LogInformation("Syncing movie: {MovieId} with Path: {Path}", movie.Id, movieEntity.Path);
@@ -74,5 +86,24 @@ public class MovieSync : IMovieSync
         }
 
         return movieEntity;
+    }
+
+    /// <summary>
+    /// PRD card A trust chain: mediaInfo.audioLanguages (ffprobe truth,
+    /// "english / chi") outranks the languages aggregate ([{id,name}] guess).
+    /// Returns null when neither source carries a recognized code — the
+    /// column then stays null ("unknown") so the embedded-scan ffprobe
+    /// piggyback can fill it later.
+    /// </summary>
+    private static List<string>? ResolveAudioLanguages(RadarrMovieFile? movieFile)
+    {
+        var codes = EmbeddedTrackService.ParseAudioLanguageString(movieFile?.MediaInfo?.AudioLanguages);
+        if (codes.Count == 0)
+        {
+            codes = EmbeddedTrackService.NormalizeLanguageNames(
+                movieFile?.Languages?.Select(language => language.Name) ?? []);
+        }
+
+        return codes.Count > 0 ? codes : null;
     }
 }

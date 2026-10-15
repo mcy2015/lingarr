@@ -27,6 +27,20 @@ public class MediaLibraryItem
     public bool IncludeInTranslation { get; init; }
     public int? TranslationAgeThreshold { get; init; }
 
+    /// <summary>
+    /// Normalized audio track languages of the media (PRD card A); null while
+    /// unknown ("und" after ffprobe fallback). Shows aggregate over their
+    /// episodes: null when any episode is unknown, else the distinct union.
+    /// </summary>
+    public string[]? AudioLanguages { get; init; }
+
+    /// <summary>
+    /// The subtitle-need rule judged this media as not needing subtitles
+    /// (manual override=false, target-language audio track, or full
+    /// coverage). Drives the "native" library state filter.
+    /// </summary>
+    public bool NeedsNoSubtitles { get; init; }
+
     /// <summary>Populated for shows: seasons with episodes for the inline detail.</summary>
     public Show? Show { get; init; }
 

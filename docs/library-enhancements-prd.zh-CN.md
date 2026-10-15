@@ -70,3 +70,12 @@
 | B 第二批 | 2.5d | 搭 M0006/AC12 同步补齐班车 |
 
 **迁移裁决（tech-lead）**：`audio_languages`/`quality`/`size`/`imdb_rating` 列与 M0006 已计划的 year/imdb_id 同属"同步载荷落库"，**一次合入 M0006 不拆**（写路径相同、Down 同生共死，拆分只多一份计数门禁成本无灰度收益）；M0007 遥测维持独立。
+
+## QA 验收附记（2026-10-15，S4 落地时）
+
+- **P1-1 首扫过渡态**：已修——新增持久化 `no_subtitle_needed` 标志（M0007 列，默认 0=不豁免），由统计扫描与 subtitle-need 端点按 `SubtitleNeedRule.NoSubtitleNeeded`（override 优先，已知音轨含任一目标语言才豁免，unknown/零目标永不豁免）单一规则维护；native 过滤与「原生中文」徽章均读该标志，首扫前全库不误标。
+- **P1-3 AC10 断裂**：已修——列表 chips 增「? 音轨未知」弱标记（`audioLanguages === null` 时渲染，与 audio-unknown 过滤一一对应）。
+- **P2-1 误导注释**：已修——同步侧空数组折回 null 的承诺由写入方守卫实现，注释改为描述现状。
+- **P2-2 UI 不对称**（已知音轨不含目标的缺口媒体无「无需字幕」入口）：维持 PM 表——该态无需豁免入口，属有意设计。
+- **P1-2 顺延**：AC2"缺口数四处一致"中的详情页缺集数/概览管线节点扣减豁免项，顺延至字幕搜索 M6 前端批次一并处理（届时 KPI 亦需同口径）。
+- **P3 顺延**：StatisticsJob 逐 id ExecuteUpdate 批量化，并入字幕搜索 M5 性能批次。

@@ -147,8 +147,14 @@ public class AutomatedTranslationJob
     {
         _logger.LogInformation("Movie Translation job initiated");
 
+        // Audit P0-5: candidates come from the needs_translation flag the
+        // statistics scan computes (audio/override/coverage rule), selected
+        // with an indexed SQL predicate instead of loading every movie and
+        // walking the filesystem per item to discover nothing is missing.
+        // Media that needs no translation is never selected; the per-media
+        // processing path (hash guard, request creation) is unchanged.
         var movies = await _dbContext.Movies
-            .Where(movie => movie.IncludeInTranslation)
+            .Where(movie => movie.IncludeInTranslation && movie.NeedsTranslation)
             .OrderBy(movie => movie.Id)
             .ToListAsync();
 
@@ -236,7 +242,12 @@ public class AutomatedTranslationJob
 
         var episodes = await _dbContext.Episodes
             .Where(episode =>
-                seasons.Select(s => s.Id).Contains(episode.SeasonId) && episode.IncludeInTranslation)
+                seasons.Select(s => s.Id).Contains(episode.SeasonId)
+                && episode.IncludeInTranslation
+                // Audit P0-5: per-episode need flag from the statistics scan
+                // (shows select through their episodes) — episodes that need
+                // no translation never enter the rotation.
+                && episode.NeedsTranslation)
             .OrderBy(e => e.Id)
             .ToListAsync();
 

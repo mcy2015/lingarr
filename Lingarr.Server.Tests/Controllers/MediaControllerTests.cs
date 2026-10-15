@@ -45,14 +45,15 @@ public class MediaControllerTests
         _subtitleService.Object,
         _dbContext);
 
-    private static Movie NewMovie(int id, string path, string fileName) => new()
+    private static Movie NewMovie(int id, string path, string fileName, string[]? audioLanguages = null) => new()
     {
         Id = id,
         RadarrId = id,
         Title = $"movie {id}",
         Path = path,
         FileName = fileName,
-        DateAdded = DateTimeOffset.UtcNow
+        DateAdded = DateTimeOffset.UtcNow,
+        AudioLanguages = audioLanguages
     };
 
     private static (Show show, Season season, Episode ep1, Episode ep2) NewShow(int showId)
@@ -438,5 +439,132 @@ public class MediaControllerTests
             MediaType.Movie, 42, null, null, null, null, ascending: true, pageSize: 20, pageNumber: 1);
 
         Assert.IsType<NotFoundResult>(action.Result);
+    }
+
+    // ── subtitle card audio languages (PRD card A) ──────────────────
+
+    [Fact]
+    public async Task GetMediaSubtitles_CarriesMovieAudioLanguages()
+    {
+        _dbContext.Movies.Add(NewMovie(30, "/movies/audio", "audio.mkv", ["zh", "en"]));
+        await _dbContext.SaveChangesAsync();
+        _subtitleService
+            .Setup(service => service.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync([]);
+
+        var payload = Assert.IsType<MediaSubtitlesResponse>(
+            Assert.IsType<OkObjectResult>((await CreateController().GetMediaSubtitles(MediaType.Movie, 30)).Result).Value!);
+
+        Assert.Equal(["zh", "en"], payload.AudioLanguages);
+    }
+
+    [Fact]
+    public async Task GetMediaSubtitles_ShowAggregatesEpisodeAudio_UnknownDominates()
+    {
+        var (show, _, ep1, ep2) = NewShow(31);
+        ep1.AudioLanguages = ["zh"];
+        ep2.AudioLanguages = ["en"];
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+        _subtitleService
+            .Setup(service => service.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync([]);
+
+        var unionPayload = Assert.IsType<MediaSubtitlesResponse>(
+            Assert.IsType<OkObjectResult>((await CreateController().GetMediaSubtitles(MediaType.Show, 31)).Result).Value!);
+        Assert.Equal(["en", "zh"], unionPayload.AudioLanguages);
+
+        // one unknown episode is enough to make the whole show unknown
+        ep2.AudioLanguages = null;
+        await _dbContext.SaveChangesAsync();
+        var unknownPayload = Assert.IsType<MediaSubtitlesResponse>(
+            Assert.IsType<OkObjectResult>((await CreateController().GetMediaSubtitles(MediaType.Show, 31)).Result).Value!);
+        Assert.Null(unknownPayload.AudioLanguages);
+    }
+
+    // ── manual subtitle-need mark (PRD card A) ───────────────────────
+
+    [Fact]
+    public async Task SetSubtitleNeed_Movie_WritesOverrideAndFlipsImmediately()
+    {
+        var movie = NewMovie(40, "/movies/native", "native.mkv", ["zh"]);
+        movie.NeedsTranslation = false; // the scan judged it exempt
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+
+        var action = await CreateController().SetSubtitleNeed(MediaType.Movie, 40, new SubtitleNeedRequest { Needed = true });
+
+        var payload = Assert.IsType<SubtitleNeedResponse>(Assert.IsType<OkObjectResult>(action.Result).Value!);
+        Assert.True(payload.NeedsTranslation);
+        Assert.True(payload.AudioOverride);
+        Assert.False(payload.NeedsNoSubtitles); // the frontend contract field
+        Assert.Equal(["zh"], payload.AudioLanguages);
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 40);
+        Assert.True(stored.AudioOverride);
+        Assert.True(stored.NeedsTranslation);
+
+        // reversible: marking it back as not needing flips both flags again
+        var flip = await CreateController().SetSubtitleNeed(MediaType.Movie, 40, new SubtitleNeedRequest { Needed = false });
+        var flipPayload = Assert.IsType<SubtitleNeedResponse>(Assert.IsType<OkObjectResult>(flip.Result).Value!);
+        Assert.False(flipPayload.NeedsTranslation);
+        Assert.True(flipPayload.NeedsNoSubtitles);
+        Assert.False(flipPayload.AudioOverride);
+        var storedAfterFlip = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 40);
+        Assert.False(storedAfterFlip.AudioOverride);
+        Assert.False(storedAfterFlip.NeedsTranslation);
+    }
+
+    [Fact]
+    public async Task SetSubtitleNeed_Episode_WritesTheSingleRow()
+    {
+        var (show, _, ep1, _) = NewShow(41);
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+
+        var action = await CreateController().SetSubtitleNeed(MediaType.Episode, ep1.Id, new SubtitleNeedRequest { Needed = true });
+
+        var payload = Assert.IsType<SubtitleNeedResponse>(Assert.IsType<OkObjectResult>(action.Result).Value!);
+        Assert.True(payload.NeedsTranslation);
+        var stored = await _dbContext.Episodes.AsNoTracking().SingleAsync(e => e.Id == ep1.Id);
+        Assert.True(stored.AudioOverride);
+        Assert.True(stored.NeedsTranslation);
+    }
+
+    [Fact]
+    public async Task SetSubtitleNeed_Show_CascadesToEveryEpisode()
+    {
+        var (show, _, ep1, ep2) = NewShow(42);
+        ep1.AudioLanguages = ["zh"];
+        // ep2's audio stays unknown → the aggregated response reports null
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+
+        var action = await CreateController().SetSubtitleNeed(MediaType.Show, 42, new SubtitleNeedRequest { Needed = true });
+
+        var payload = Assert.IsType<SubtitleNeedResponse>(Assert.IsType<OkObjectResult>(action.Result).Value!);
+        Assert.True(payload.NeedsTranslation);
+        Assert.False(payload.NeedsNoSubtitles);
+        Assert.True(payload.AudioOverride);
+        Assert.Null(payload.AudioLanguages);
+
+        var stored = await _dbContext.Episodes.AsNoTracking().Where(e => e.Season.ShowId == 42).ToListAsync();
+        Assert.Equal(2, stored.Count);
+        Assert.All(stored, episode =>
+        {
+            Assert.True(episode.AudioOverride);
+            Assert.True(episode.NeedsTranslation);
+        });
+    }
+
+    [Fact]
+    public async Task SetSubtitleNeed_UnknownIdOrUnsupportedType_Returns404()
+    {
+        Assert.IsType<NotFoundResult>(
+            (await CreateController().SetSubtitleNeed(MediaType.Movie, 999, new SubtitleNeedRequest { Needed = true })).Result);
+        Assert.IsType<NotFoundResult>(
+            (await CreateController().SetSubtitleNeed(MediaType.Show, 999, new SubtitleNeedRequest { Needed = true })).Result);
+        Assert.IsType<NotFoundResult>(
+            (await CreateController().SetSubtitleNeed(MediaType.Season, 1, new SubtitleNeedRequest { Needed = true })).Result);
     }
 }

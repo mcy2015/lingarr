@@ -29,11 +29,11 @@ public class MigrationTests
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
             // The baseline plus the auth-sessions, schedule-cron,
-            // embedded-track, consume-embedded and performance-index
-            // migrations are applied.
-            Assert.Equal(6L, await ExecuteScalarAsync(connection,
+            // embedded-track, consume-embedded, performance-index and
+            // audio-and-language-cache migrations are applied.
+            Assert.Equal(7L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(6L, await ExecuteScalarAsync(connection,
+            Assert.Equal(7L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
@@ -105,7 +105,7 @@ public class MigrationTests
             await using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync(TestContext.Current.CancellationToken);
-                Assert.Equal(17L, await ExecuteScalarAsync(connection,
+                Assert.Equal(18L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
                 Assert.Equal(1L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request'"));
@@ -203,6 +203,66 @@ public class MigrationTests
     }
 
     /// <summary>
+    /// M0007 adds two columns per media table plus the sniff-cache table, so
+    /// rolling it back must return exactly the M0006 state: version back to 6,
+    /// the audio columns gone from movies/episodes (pre-existing columns
+    /// untouched) and subtitle_language_cache dropped with its autoindex.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_AudioAndLanguageCacheMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(6);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(6L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+
+            // The sniff-cache table (and its TEXT-PK autoindex) is gone.
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'subtitle_language_cache'"));
+
+            // The audio columns are gone from both media tables while the
+            // pre-M0007 columns survive.
+            var movieColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"movies\")", columnIndex: 1);
+            Assert.DoesNotContain("audio_languages", movieColumns);
+            Assert.DoesNotContain("audio_override", movieColumns);
+            Assert.DoesNotContain("needs_translation", movieColumns);
+            Assert.DoesNotContain("no_subtitle_needed", movieColumns);
+            Assert.Contains("subtitle_coverage_json", movieColumns);
+
+            var episodeColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"episodes\")", columnIndex: 1);
+            Assert.DoesNotContain("audio_languages", episodeColumns);
+            Assert.DoesNotContain("audio_override", episodeColumns);
+            Assert.DoesNotContain("needs_translation", episodeColumns);
+            Assert.DoesNotContain("no_subtitle_needed", episodeColumns);
+            Assert.Contains("include_in_translation", episodeColumns);
+
+            // M0006's indexes survive the rollback.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name = 'ux_movies_radarr_id'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
     /// Locks in the schema shape the squash verified against the old
     /// 29-migration chain: tables, column names in order, foreign keys and
     /// explicit indexes. Fails when the baseline drifts from the contract the
@@ -225,13 +285,14 @@ public class MigrationTests
                 ["settings"] = ["key", "value", "provider"],
                 ["movies"] = ["id", "radarr_id", "title", "file_name", "path", "media_hash", "date_added",
                     "translation_age_threshold", "created_at", "updated_at", "include_in_translation",
-                    "subtitle_coverage_json"],
+                    "subtitle_coverage_json", "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed"],
                 ["shows"] = ["id", "sonarr_id", "title", "path", "date_added", "translation_age_threshold",
                     "created_at", "updated_at", "include_in_translation", "subtitle_coverage_json"],
                 ["seasons"] = ["id", "season_number", "path", "show_id", "created_at", "updated_at",
                     "include_in_translation"],
                 ["episodes"] = ["id", "sonarr_id", "episode_number", "title", "file_name", "path", "media_hash",
-                    "season_id", "date_added", "created_at", "updated_at", "include_in_translation"],
+                    "season_id", "date_added", "created_at", "updated_at", "include_in_translation",
+                    "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed"],
                 ["images"] = ["id", "type", "path", "show_id", "movie_id"],
                 ["path_mappings"] = ["id", "source_path", "destination_path", "media_type", "created_at", "updated_at"],
                 ["translation_requests"] = ["id", "job_id", "media_id", "title", "source_language", "target_language",
@@ -254,6 +315,7 @@ public class MigrationTests
                 ["media_subtitle_tracks"] = ["id", "media_type", "media_id", "stream_index", "language",
                     "raw_language", "title", "codec", "is_text_based", "file_path", "media_hash",
                     "created_at", "updated_at"],
+                ["subtitle_language_cache"] = ["path", "mtime_ticks", "length", "language", "updated_at"],
                 ["version_info"] = ["version", "applied_on", "description"],
             };
 
@@ -270,9 +332,9 @@ public class MigrationTests
             {
                 // M0006: the external-id lookups are UNIQUE (sync upserts
                 // match on exactly one row per Radarr/Sonarr endpoint).
-                ["movies"] = ["ux_movies_radarr_id"],
+                ["movies"] = ["ux_movies_radarr_id", "ix_movies_needs_translation"],
                 ["shows"] = ["ux_shows_sonarr_id"],
-                ["episodes"] = ["ix_episodes_season_id", "ux_episodes_sonarr_id"],
+                ["episodes"] = ["ix_episodes_season_id", "ux_episodes_sonarr_id", "ix_episodes_needs_translation"],
                 ["images"] = ["ix_images_movie_id", "ix_images_show_id"],
                 ["seasons"] = ["ix_seasons_show_id"],
                 // The TEXT primary key adds an implicit autoindex alongside
@@ -295,6 +357,9 @@ public class MigrationTests
                 ],
                 ["translation_glossaries"] = ["ix_glossary_source_term"],
                 ["media_subtitle_tracks"] = ["ix_media_subtitle_tracks_media_type_media_id"],
+                // The TEXT primary key adds an implicit autoindex, as with
+                // auth_sessions.
+                ["subtitle_language_cache"] = ["sqlite_autoindex_subtitle_language_cache_1"],
                 ["translation_request_events"] = ["ix_translation_request_events_translation_request_id"],
                 ["translation_request_lines"] = ["ix_translation_request_lines_translation_request_id"],
                 ["daily_statistics"] = ["ix_daily_statistics_date"],

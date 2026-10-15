@@ -127,6 +127,23 @@
                                         class="mono text-secondary-content/60 inline-flex items-center text-[11px]">
                                         +{{ item.tracks.length - visibleTrackCount }}
                                     </span>
+                                    <!-- 需求卡 B:原生中文弱标记 —— 仅真实豁免态渲染;
+                                         音轨未知渲染「?」弱标记(与 audio-unknown 过滤
+                                         一一对应,AC10),缺失字段的存量载荷不渲染 -->
+                                    <span
+                                        v-if="item.needsNoSubtitles"
+                                        class="mono border-line/60 text-secondary-content/70 inline-flex items-center rounded border border-dashed px-1 py-px text-[10px]"
+                                        :title="t('library.nativeBadgeTitle')"
+                                        data-test="native-audio-badge">
+                                        {{ t('library.nativeBadge') }}
+                                    </span>
+                                    <span
+                                        v-else-if="item.audioLanguages === null"
+                                        class="mono border-line/60 text-secondary-content/50 inline-flex items-center rounded border border-dashed px-1 py-px text-[10px]"
+                                        :title="t('library.audioUnknownBadgeTitle')"
+                                        data-test="audio-unknown-badge">
+                                        ? {{ t('library.audioUnknownBadge') }}
+                                    </span>
                                 </div>
                             </td>
                             <td :class="tdClass">
@@ -283,12 +300,17 @@ const typeOptions = computed(() => [
     { label: t('library.tabs.movies'), value: 'movie' as LibraryType }
 ])
 
+/// Requirement card B (1st batch): two audio-derived states join the filter —
+///「无需字幕」(native, exempt via target-covering audio or manual mark) and
+///「音轨未知」(audio-unknown). Both pass straight through as the state param.
 const stateOptions = computed(() => [
     { label: t('library.state.inProgress'), value: 'InProgress' },
     { label: t('library.state.queued'), value: 'Queued' },
     { label: t('library.state.completed'), value: 'Completed' },
     { label: t('library.state.failed'), value: 'Failed' },
-    { label: t('library.state.none'), value: 'None' }
+    { label: t('library.state.none'), value: 'None' },
+    { label: t('library.state.native'), value: 'native' },
+    { label: t('library.state.audioUnknown'), value: 'audio-unknown' }
 ])
 
 const targetLanguages = computed(() => {

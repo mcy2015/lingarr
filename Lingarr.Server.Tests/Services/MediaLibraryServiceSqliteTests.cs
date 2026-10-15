@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
@@ -13,6 +15,7 @@ using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Translation;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -27,7 +30,8 @@ namespace Lingarr.Server.Tests.Services;
 /// Behavioural parity with the previous in-memory aggregation is asserted on
 /// the same fixtures: state precedence, latest-request-wins, tie-breaking,
 /// filters, ordering and paging boundaries, plus the single-media direct
-/// path behind /media/library?id=.
+/// path behind /media/library?id=. The audio-aware states (PRD card A) get
+/// their own SQL-pushdown assertions via the recorded command log.
 /// </summary>
 public class MediaLibraryServiceSqliteTests : IDisposable
 {
@@ -35,6 +39,7 @@ public class MediaLibraryServiceSqliteTests : IDisposable
     private readonly LingarrDbContext _dbContext;
     private readonly Mock<ISettingService> _settingService = new();
     private readonly Mock<ICostService> _costService = new();
+    private readonly List<string> _sqlLog = [];
     private int _nextExternalId = 100;
 
     public MediaLibraryServiceSqliteTests()
@@ -43,6 +48,7 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         _connection.Open();
         _dbContext = new LingarrDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
             .UseSqlite(_connection)
+            .AddInterceptors(new RecordingInterceptor(_sqlLog))
             .Options);
         _dbContext.Database.EnsureCreated();
 
@@ -55,6 +61,19 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         _settingService
             .Setup(s => s.GetSetting(It.IsAny<string>()))
             .ReturnsAsync("libretranslate");
+    }
+
+    private sealed class RecordingInterceptor(List<string> log) : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            log.Add(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 
     public void Dispose()
@@ -114,7 +133,11 @@ public class MediaLibraryServiceSqliteTests : IDisposable
     private async Task<Movie> SeedMovieAsync(
         string title,
         Dictionary<string, MediaLanguageCoverage>? coverage = null,
-        int? explicitId = null)
+        int? explicitId = null,
+        string[]? audioLanguages = null,
+        bool? audioOverride = null,
+        bool needsTranslation = false,
+        bool noSubtitleNeeded = false)
     {
         var movie = new Movie
         {
@@ -123,7 +146,11 @@ public class MediaLibraryServiceSqliteTests : IDisposable
             FileName = title + ".mkv",
             Path = "/movies/" + title,
             DateAdded = DateTimeOffset.UtcNow,
-            SubtitleCoverage = coverage
+            SubtitleCoverage = coverage,
+            AudioLanguages = audioLanguages,
+            AudioOverride = audioOverride,
+            NeedsTranslation = needsTranslation,
+            NoSubtitleNeeded = noSubtitleNeeded
         };
         if (explicitId is not null)
         {
@@ -331,5 +358,112 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         // unknown id and type mismatches stay 404-shaped
         Assert.Null(await service.GetLibraryItem(MediaType.Movie, 999));
         Assert.Null(await service.GetLibraryItem(null, 999));
+    }
+
+    // ── audio-aware states (PRD card A): SQL pushdown + item fields ──
+
+    [Fact]
+    public async Task NativeFilterPushesDownToSqlAndFlagsItems()
+    {
+        // native movie: the scan judged it not needing (zh audio exempt)
+        await SeedMovieAsync("Native Movie", audioLanguages: ["zh"], needsTranslation: false, noSubtitleNeeded: true);
+        // still missing the target
+        await SeedMovieAsync("Gap Movie", audioLanguages: ["en"], needsTranslation: true);
+        // show whose episodes all need nothing
+        var nativeShow = await SeedShowAsync("Native Show", [2]);
+        foreach (var episode in EpisodesOf(nativeShow))
+        {
+            episode.NeedsTranslation = false;
+            episode.NoSubtitleNeeded = true;
+        }
+        // show with one episode still needing
+        var gapShow = await SeedShowAsync("Gap Show", [2]);
+        EpisodesOf(gapShow)[0].NeedsTranslation = false;
+        EpisodesOf(gapShow)[1].NeedsTranslation = true;
+        await _dbContext.SaveChangesAsync();
+
+        _sqlLog.Clear();
+        var result = await CreateService().GetLibrary(
+            null, null, MediaLibraryService.NativeState, null, "Title", true, 1, 20);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(["Native Movie", "Native Show"], result.Items.Select(i => i.Title).ToArray());
+        Assert.All(result.Items, item => Assert.True(item.NeedsNoSubtitles));
+
+        // the state filtered inside SQL, over the needs flags (movies) and
+        // the per-episode aggregate (shows) — not in memory after the fact
+        var mediaQueries = _sqlLog.Where(sql => sql.Contains("FROM \"movies\"", StringComparison.OrdinalIgnoreCase)
+                                                || sql.Contains("FROM \"shows\"", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        // The test context has no snake-case naming convention, so accept
+        // both "needs_translation" (production) and "NeedsTranslation" (raw
+        // model naming) by comparing underscore-stripped, case-insensitively.
+        Assert.Contains(mediaQueries, sql =>
+            sql.Replace("_", "").Contains("nosubtitleneeded", StringComparison.OrdinalIgnoreCase));
+        // an episode-less show is not native (vacuous All would lie)
+        await SeedShowAsync("Empty Show", Array.Empty<int>());
+        var withEmpty = await CreateService().GetLibrary(
+            MediaType.Show, null, MediaLibraryService.NativeState, null, "Title", true, 1, 20);
+        Assert.Equal(["Native Show"], withEmpty.Items.Select(i => i.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task AudioUnknownFilterPushesDownToSqlAndAggregatesShows()
+    {
+        await SeedMovieAsync("Unknown Audio", audioLanguages: null);
+        await SeedMovieAsync("Known Audio", audioLanguages: ["en"]);
+        var show = await SeedShowAsync("Mixed Show", [2]);
+        EpisodesOf(show)[0].AudioLanguages = ["zh"];
+        // episode 2 stays null → the whole show reports unknown audio
+        await _dbContext.SaveChangesAsync();
+
+        _sqlLog.Clear();
+        var result = await CreateService().GetLibrary(
+            null, null, MediaLibraryService.AudioUnknownState, null, "Title", true, 1, 20);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(["Mixed Show", "Unknown Audio"], result.Items.Select(i => i.Title).ToArray());
+        Assert.Null(result.Items.Single(i => i.Title == "Unknown Audio").AudioLanguages);
+        Assert.Null(result.Items.Single(i => i.Title == "Mixed Show").AudioLanguages);
+
+        // the predicate reached SQL as an IS NULL on the audio column
+        Assert.Contains(_sqlLog, sql =>
+            sql.Replace("_", "").Contains("audiolanguages", StringComparison.OrdinalIgnoreCase)
+            && sql.Contains("IS NULL", StringComparison.OrdinalIgnoreCase));
+
+        // known audio never matches the filter and passes through unchanged
+        var known = (await CreateService().GetLibrary(MediaType.Movie, null, null, null, "Title", true, 1, 20))
+            .Items.Single(i => i.Title == "Known Audio");
+        Assert.Equal(["en"], known.AudioLanguages);
+    }
+
+    [Fact]
+    public async Task ItemsCarryAudioLanguagesAndNeedFlags_AggregatingShowsOverEpisodes()
+    {
+        var movie = await SeedMovieAsync("Caper", audioLanguages: ["zh", "en"], needsTranslation: false, noSubtitleNeeded: true);
+        var show = await SeedShowAsync("Union", [2]);
+        var episodes = EpisodesOf(show);
+        episodes[0].AudioLanguages = ["zh"];
+        episodes[1].AudioLanguages = ["en", "zh"];
+        episodes[1].NeedsTranslation = true; // one needing episode keeps the show out of native
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateService().GetLibrary(null, null, null, null, "Title", true, 1, 20);
+
+        var movieItem = result.Items.Single(i => i.Title == "Caper");
+        Assert.Equal(["zh", "en"], movieItem.AudioLanguages); // passthrough, stored order
+        Assert.True(movieItem.NeedsNoSubtitles);
+
+        var showItem = result.Items.Single(i => i.Title == "Union");
+        Assert.Equal(["en", "zh"], showItem.AudioLanguages); // distinct union
+        Assert.False(showItem.NeedsNoSubtitles);
+
+        // the detail direct path reports the same fields
+        var detail = await CreateService().GetLibraryItem(MediaType.Movie, movie.Id);
+        Assert.Equal(["zh", "en"], detail!.AudioLanguages);
+        Assert.True(detail.NeedsNoSubtitles);
+        var showDetail = await CreateService().GetLibraryItem(MediaType.Show, show.Id);
+        Assert.Equal(["en", "zh"], showDetail!.AudioLanguages);
+        Assert.False(showDetail.NeedsNoSubtitles);
     }
 }

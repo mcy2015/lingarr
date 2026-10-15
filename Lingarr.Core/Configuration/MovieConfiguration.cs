@@ -16,5 +16,16 @@ public class MovieConfiguration : IEntityTypeConfiguration<Movie>
         
         builder.Navigation(m => m.Images)
             .AutoInclude();
+        // AudioLanguages persists as a JSON TEXT column (M0007); null means
+        // "unknown", so nulls pass through untouched and the converter only
+        // round-trips actual arrays.
+        builder.Property(e => e.AudioLanguages)
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v),
+                s => string.IsNullOrEmpty(s)
+                    ? Array.Empty<string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<string[]>(s)!)
+            .HasColumnType("TEXT");
+
     }
 }

@@ -25,6 +25,13 @@ public class MediaSubtitlesResponse
     public List<MediaSubtitleFile> Files { get; set; } = [];
     public List<MediaEmbeddedTrack> Embedded { get; set; } = [];
     public bool EmbeddedScanned { get; set; }
+
+    /// <summary>
+    /// Normalized audio track languages of the media (PRD card A); null while
+    /// unknown. Shows aggregate over their episodes: null when any episode is
+    /// unknown, else the distinct union.
+    /// </summary>
+    public string[]? AudioLanguages { get; set; }
 }
 
 /// <summary>

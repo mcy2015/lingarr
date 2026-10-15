@@ -91,11 +91,99 @@ public class EmbeddedTrackServiceTests
     [Fact]
     public void Parse_SkipsVideoStreamsReportAndNoStreamsReport()
     {
-        // -select_streams s already filters, but a report without streams
-        // (or a non-array one) must parse to an empty list, not throw.
+        // Card A removed -select_streams s, so video/audio/attachment streams
+        // now reach the parser and must be filtered by codec_type; a report
+        // without streams (or a non-array one) still parses to an empty list.
+        var json = WrapStreams(
+            """{ "index": 0, "codec_name": "h264", "codec_type": "video", "tags": { "language": "eng" } }""",
+            """{ "index": 1, "codec_name": "eac3", "codec_type": "audio", "tags": { "language": "chi" } }""",
+            """{ "index": 3, "codec_name": "ttf", "codec_type": "attachment" }""",
+            """{ "index": 4, "codec_name": "subrip", "codec_type": "subtitle", "tags": { "language": "chi" } }""");
+
+        var tracks = EmbeddedTrackService.ParseFFprobeOutput(json);
+
+        var track = Assert.Single(tracks);
+        Assert.Equal(4, track.StreamIndex);
+        Assert.Equal("zh", track.Language);
+
         Assert.Empty(EmbeddedTrackService.ParseFFprobeOutput("""{ "streams": [] }"""));
         Assert.Empty(EmbeddedTrackService.ParseFFprobeOutput("""{}"""));
         Assert.Empty(EmbeddedTrackService.ParseFFprobeOutput("""{ "streams": null }"""));
+    }
+
+    [Fact]
+    public void Parse_StreamWithoutCodecType_StillParsesAsSubtitleTrack()
+    {
+        // Legacy behavior: -select_streams-era reports (and their fixtures)
+        // carry no codec_type — every stream in them was a subtitle stream.
+        var json = WrapStreams(
+            """{ "index": 7, "codec_name": "mov_text", "tags": { "language": "eng" } }""");
+
+        var tracks = EmbeddedTrackService.ParseFFprobeOutput(json);
+
+        var track = Assert.Single(tracks);
+        Assert.Equal("srt", track.Codec);
+        Assert.Equal("en", track.Language);
+    }
+
+    // ── card A: audio-language extraction from the same report ─────
+
+    [Fact]
+    public void ParseAudioLanguages_CollectsDistinctNormalizedCodes_InStreamOrder()
+    {
+        var json = WrapStreams(
+            """{ "index": 0, "codec_name": "h264", "codec_type": "video" }""",
+            """{ "index": 1, "codec_name": "eac3", "codec_type": "audio", "tags": { "language": "chi" } }""",
+            """{ "index": 2, "codec_name": "ac3", "codec_type": "audio", "tags": { "language": "english" } }""",
+            """{ "index": 3, "codec_name": "truehd", "codec_type": "audio", "tags": { "language": "zho" } }""",
+            """{ "index": 4, "codec_name": "truehd", "codec_type": "audio" }""",
+            """{ "index": 5, "codec_name": "subrip", "codec_type": "subtitle", "tags": { "language": "kor" } }""");
+
+        var languages = EmbeddedTrackService.ParseAudioLanguages(json);
+
+        // chi and zho fold onto zh (deduplicated); the name "english" parses
+        // through the filename-parser name table; the tagless audio stream
+        // and the subtitle stream contribute nothing.
+        Assert.Equal(["zh", "en"], languages);
+    }
+
+    [Fact]
+    public void ParseAudioLanguages_UndAndUnrecognizedTags_ContributeNothing()
+    {
+        // "probed but nothing recognized" must stay empty so callers keep
+        // the column null instead of storing "[]".
+        var json = WrapStreams(
+            """{ "index": 1, "codec_type": "audio", "tags": { "language": "und" } }""",
+            """{ "index": 2, "codec_type": "audio", "tags": { "language": "gibberish" } }""",
+            """{ "index": 3, "codec_type": "audio" }""");
+
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguages(json));
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguages("""{ "streams": [] }"""));
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguages("""{}"""));
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguages("""{ "streams": null }"""));
+    }
+
+    [Fact]
+    public void ParseAudioLanguageString_SplitsTheSlashJoinedArrTruthString()
+    {
+        Assert.Equal(["en", "zh"], EmbeddedTrackService.ParseAudioLanguageString("english / chi"));
+        Assert.Equal(["zh"], EmbeddedTrackService.ParseAudioLanguageString("chi"));
+        // duplicates collapse; und/unknown tokens drop out; blank input is empty
+        Assert.Equal(["en", "zh"], EmbeddedTrackService.ParseAudioLanguageString("english / chi / english"));
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguageString("und / gibberish"));
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguageString(null));
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguageString("   "));
+    }
+
+    [Fact]
+    public void NormalizeLanguageNames_FoldsAggregateGuesses_AndDropsUnknownNames()
+    {
+        // *arr's languages aggregate carries display names and an "Unknown"
+        // placeholder — unknowns drop out instead of guessing.
+        var codes = EmbeddedTrackService.NormalizeLanguageNames(
+            ["English", "chi", "Unknown", null, "Japanese"]);
+
+        Assert.Equal(["en", "zh", "ja"], codes);
     }
 
     [Fact]

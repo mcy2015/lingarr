@@ -93,6 +93,13 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
         return http
             .get(`${resource}/${mediaType}/${id}/subtitles`)
             .then((response) => response.data)
+    },
+    /// Requirement card A/B: set the manual「需要字幕」override. The response
+    /// carries the resulting effective needsNoSubtitles state.
+    subtitleNeed<T>(mediaType: MediaType, id: number, needed: boolean): Promise<T> {
+        return http
+            .post(`${resource}/${mediaType}/${id}/subtitle-need`, { needed })
+            .then((response) => response.data)
     }
 })
 

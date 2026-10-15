@@ -36,6 +36,10 @@ public sealed record ParsedEmbeddedTrack(
 /// (StreamIndex = -1) carrying the incremental "path|mtime" key, plus one row
 /// per subtitle stream; a scan replaces all rows of the file it belongs to.
 /// F2b additionally extracts text tracks via ffmpeg as translation sources.
+/// PRD card A piggybacks on the same probe: the report now carries audio
+/// streams too, and their normalized languages backfill
+/// movies/episodes.audio_languages while that column is still null
+/// (*arr payloads outrank the local probe).
 /// </summary>
 public class EmbeddedTrackService : IEmbeddedTrackService
 {
@@ -177,16 +181,16 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         // exactly where the previous one stopped, because already-scanned
         // files are free (marker skip, no ffprobe).
         targets.AddRange((await _dbContext.Movies
-                .Select(movie => new { movie.Id, movie.Path, movie.FileName })
+                .Select(movie => new { movie.Id, movie.Path, movie.FileName, movie.AudioLanguages })
                 .OrderBy(movie => movie.Id)
                 .ToListAsync(cancellationToken))
-            .Select(movie => new ScanTarget(MediaType.Movie, movie.Id, movie.Path, movie.FileName)));
+            .Select(movie => new ScanTarget(MediaType.Movie, movie.Id, movie.Path, movie.FileName, movie.AudioLanguages)));
 
         targets.AddRange((await _dbContext.Episodes
-                .Select(episode => new { episode.Id, episode.Path, episode.FileName })
+                .Select(episode => new { episode.Id, episode.Path, episode.FileName, episode.AudioLanguages })
                 .OrderBy(episode => episode.Id)
                 .ToListAsync(cancellationToken))
-            .Select(episode => new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName)));
+            .Select(episode => new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName, episode.AudioLanguages)));
 
         if (targets.Count == 0)
         {
@@ -232,9 +236,13 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     }
 
     /// <summary>
-    /// Pure parser for ffprobe's <c>-print_format json -show_streams
-    /// -select_streams s</c> output: one <see cref="ParsedEmbeddedTrack"/> per
-    /// subtitle stream, in stream order. Language tags are normalized through
+    /// Pure parser for ffprobe's <c>-print_format json -show_streams</c>
+    /// output (card A removed <c>-select_streams s</c> so audio streams reach
+    /// the parser too): one <see cref="ParsedEmbeddedTrack"/> per subtitle
+    /// stream, in stream order. Non-subtitle streams are skipped; a stream
+    /// without a codec_type keeps parsing as a subtitle stream — the
+    /// -select_streams-era reports (and their unit fixtures) carry none.
+    /// Language tags are normalized through
     /// <see cref="SubtitleLanguageParser"/> (zh-CN → zh); unrecognised tags
     /// keep <see cref="ParsedEmbeddedTrack.RawLanguage"/> with a null
     /// <see cref="ParsedEmbeddedTrack.Language"/>. Throws
@@ -254,6 +262,11 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
         foreach (var stream in streams.EnumerateArray())
         {
+            if (!IsSubtitleStream(stream))
+            {
+                continue;
+            }
+
             if (!stream.TryGetProperty("index", out var indexElement)
                 || !indexElement.TryGetInt32(out var streamIndex))
             {
@@ -292,6 +305,131 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         }
 
         return tracks;
+    }
+
+    /// <summary>
+    /// Pure parser counterpart of <see cref="ParseFFprobeOutput"/> for the
+    /// audio streams of the same report: the distinct normalized languages in
+    /// stream order ("chi" + "english" → ["zh","en"]). Streams without a
+    /// language tag and unrecognized/und tags contribute nothing, so an empty
+    /// result means "probed, still unknown" — callers keep the column null
+    /// instead of storing an empty array.
+    /// </summary>
+    public static List<string> ParseAudioLanguages(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var languages = new List<string>();
+
+        if (!document.RootElement.TryGetProperty("streams", out var streams)
+            || streams.ValueKind != JsonValueKind.Array)
+        {
+            return languages;
+        }
+
+        foreach (var stream in streams.EnumerateArray())
+        {
+            if (!IsAudioStream(stream))
+            {
+                continue;
+            }
+
+            var normalized = NormalizeLanguage(ReadLanguageTag(stream));
+            if (normalized != null && !languages.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+            {
+                languages.Add(normalized);
+            }
+        }
+
+        return languages;
+    }
+
+    /// <summary>
+    /// Normalized distinct codes from one *arr mediaInfo.audioLanguages truth
+    /// string ("english / chi" → ["en","zh"]): the highest-trust audio source
+    /// of PRD card A. "und" and unrecognized tokens drop out, preserving
+    /// first-occurrence order.
+    /// </summary>
+    public static List<string> ParseAudioLanguageString(string? audioLanguages)
+    {
+        var codes = new List<string>();
+        if (string.IsNullOrWhiteSpace(audioLanguages))
+        {
+            return codes;
+        }
+
+        foreach (var token in audioLanguages.Split('/',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var normalized = NormalizeLanguage(token);
+            if (normalized != null && !codes.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+            {
+                codes.Add(normalized);
+            }
+        }
+
+        return codes;
+    }
+
+    /// <summary>
+    /// Normalized distinct codes from the *arr languages aggregate names
+    /// ([{name:"English"}] → ["en"]) — the lower-trust fallback of the card A
+    /// chain. Unknown names (including *arr's "Unknown") drop out.
+    /// </summary>
+    public static List<string> NormalizeLanguageNames(IEnumerable<string?> names)
+    {
+        var codes = new List<string>();
+        foreach (var name in names)
+        {
+            var normalized = NormalizeLanguage(name);
+            if (normalized != null && !codes.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+            {
+                codes.Add(normalized);
+            }
+        }
+
+        return codes;
+    }
+
+    /// <summary>
+    /// True when the stream explicitly declares codec_type "audio" (the
+    /// card A piggyback source). Reports without codec_type never match.
+    /// </summary>
+    private static bool IsAudioStream(JsonElement stream) =>
+        stream.TryGetProperty("codec_type", out var typeElement)
+        && typeElement.ValueKind == JsonValueKind.String
+        && string.Equals(typeElement.GetString(), "audio", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True for streams that become subtitle tracks. A missing or empty
+    /// codec_type counts as one — the -select_streams s era reports carried
+    /// none, and every stream that reached the parser was a subtitle stream.
+    /// </summary>
+    private static bool IsSubtitleStream(JsonElement stream)
+    {
+        if (!stream.TryGetProperty("codec_type", out var typeElement)
+            || typeElement.ValueKind != JsonValueKind.String)
+        {
+            return true;
+        }
+
+        var codecType = typeElement.GetString();
+        return string.IsNullOrEmpty(codecType)
+            || string.Equals(codecType, "subtitle", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The trimmed language tag of a stream, or null when absent/blank.</summary>
+    private static string? ReadLanguageTag(JsonElement stream)
+    {
+        if (!stream.TryGetProperty("tags", out var tags)
+            || tags.ValueKind != JsonValueKind.Object
+            || !tags.TryGetProperty("language", out var languageElement)
+            || languageElement.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var tag = languageElement.GetString()?.Trim();
+        return string.IsNullOrWhiteSpace(tag) ? null : tag;
     }
 
     /// <summary>
@@ -567,7 +705,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     /// </summary>
     private Dictionary<(int Type, int Id), string?> Markers { get; set; } = [];
 
-    private sealed record ScanTarget(MediaType Type, int Id, string? Directory, string? FileName);
+    private sealed record ScanTarget(MediaType Type, int Id, string? Directory, string? FileName, string[]? AudioLanguages);
 
     private async Task<EmbeddedTrackScanSummary> ScanTargets(
         List<ScanTarget> targets,
@@ -583,7 +721,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     {
         int probed = 0, skipped = 0, missing = 0, failed = 0, processed = 0, work = 0;
 
-        foreach (var (type, id, directory, fileName) in targets)
+        foreach (var target in targets)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -607,7 +745,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
                     processed, targets.Count);
             }
 
-            var outcome = await ScanOne(type, id, directory, fileName, force, cancellationToken);
+            var outcome = await ScanOne(target, force, cancellationToken);
             switch (outcome)
             {
                 case ScanOutcome.Probed:
@@ -652,14 +790,13 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     }
 
     private async Task<ScanOutcome> ScanOne(
-        MediaType type,
-        int id,
-        string? directory,
-        string? fileName,
+        ScanTarget target,
         bool force,
         CancellationToken cancellationToken)
     {
-        var filePath = ResolveFilePath(directory, fileName, out var noPath);
+        var type = target.Type;
+        var id = target.Id;
+        var filePath = ResolveFilePath(target.Directory, target.FileName, out var noPath);
         if (noPath)
         {
             // Nothing probeable and nothing to show — drop stale rows.
@@ -702,9 +839,11 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         }
 
         List<ParsedEmbeddedTrack> tracks;
+        List<string> audioLanguages;
         try
         {
             tracks = ParseFFprobeOutput(json);
+            audioLanguages = ParseAudioLanguages(json);
         }
         catch (JsonException ex)
         {
@@ -715,6 +854,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         }
 
         QueueReplace(type, id, filePath, tracks, key);
+        QueueAudioLanguageUpdate(target, audioLanguages);
         if (tracks.Count > 0)
         {
             _logger.LogInformation(
@@ -771,6 +911,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
     private readonly List<(MediaType Type, int Id)> _pendingRemovals = [];
     private readonly List<MediaSubtitleTrack> _pendingTracks = [];
+    private readonly List<(MediaType Type, int Id, string[] Codes)> _pendingAudioUpdates = [];
     private int _filesSinceFlush;
 
     /// <summary>Queues the replacement of every row of the media item.</summary>
@@ -825,14 +966,32 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     }
 
     /// <summary>
+    /// Card A piggyback: queues the audio-language backfill gathered by the
+    /// probe of this file — but only while the column is null. *arr payloads
+    /// outrank the local probe, so a sync-written value is never overwritten,
+    /// and "probed but no recognized audio language" stays null ("unknown")
+    /// instead of becoming an empty array.
+    /// </summary>
+    private void QueueAudioLanguageUpdate(ScanTarget target, List<string> audioLanguages)
+    {
+        if (target.AudioLanguages != null || audioLanguages.Count == 0)
+        {
+            return;
+        }
+
+        _pendingAudioUpdates.Add((target.Type, target.Id, [.. audioLanguages]));
+    }
+
+    /// <summary>
     /// Persists every queued operation in a single transaction: batched
-    /// ExecuteDelete per media type, then one SaveChanges for all inserts.
-    /// Deletes run before the inserts land, so a replaced file's old rows
-    /// cannot collide with its fresh ones.
+    /// ExecuteDelete per media type, then one SaveChanges for all inserts and
+    /// batched ExecuteUpdate statements for the audio backfills. Deletes run
+    /// before the inserts land, so a replaced file's old rows cannot collide
+    /// with its fresh ones.
     /// </summary>
     private async Task FlushAsync(CancellationToken cancellationToken)
     {
-        if (_pendingRemovals.Count == 0 && _pendingTracks.Count == 0)
+        if (_pendingRemovals.Count == 0 && _pendingTracks.Count == 0 && _pendingAudioUpdates.Count == 0)
         {
             return;
         }
@@ -852,11 +1011,59 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
         _dbContext.MediaSubtitleTracks.AddRange(_pendingTracks);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await FlushAudioUpdatesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         _pendingRemovals.Clear();
         _pendingTracks.Clear();
         _filesSinceFlush = 0;
+    }
+
+    /// <summary>
+    /// Audio backfills as batched ExecuteUpdate statements grouped by
+    /// (media type, JSON) — the same statement shape as the batched deletes,
+    /// no tracker round trip on a 100k-scale first scan. updated_at is bumped
+    /// alongside so the row bookkeeping stays honest.
+    /// </summary>
+    private async Task FlushAudioUpdatesAsync(CancellationToken cancellationToken)
+    {
+        if (_pendingAudioUpdates.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var group in _pendingAudioUpdates.GroupBy(
+                     update => (update.Type, Codes: string.Join(",", update.Codes))))
+        {
+            var mediaType = group.Key.Type;
+            var codes = group.First().Codes;
+            foreach (var idChunk in group.Select(update => update.Id).Distinct().Chunk(DeleteChunkSize))
+            {
+                var ids = idChunk.ToList();
+                switch (mediaType)
+                {
+                    case MediaType.Movie:
+                        await _dbContext.Movies
+                            .Where(movie => ids.Contains(movie.Id))
+                            .ExecuteUpdateAsync(setters => setters
+                                .SetProperty(movie => movie.AudioLanguages, codes)
+                                .SetProperty(movie => movie.UpdatedAt, DateTimeOffset.UtcNow),
+                                cancellationToken);
+                        break;
+
+                    case MediaType.Episode:
+                        await _dbContext.Episodes
+                            .Where(episode => ids.Contains(episode.Id))
+                            .ExecuteUpdateAsync(setters => setters
+                                .SetProperty(episode => episode.AudioLanguages, codes)
+                                .SetProperty(episode => episode.UpdatedAt, DateTimeOffset.UtcNow),
+                                cancellationToken);
+                        break;
+                }
+            }
+        }
+
+        _pendingAudioUpdates.Clear();
     }
 
     /// <summary>Incremental key: content of Movie.MediaHash belongs to the translation
@@ -891,36 +1098,36 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             case MediaType.Movie:
                 var movie = await _dbContext.Movies
                     .Where(item => item.Id == id)
-                    .Select(item => new { item.Id, item.Path, item.FileName })
+                    .Select(item => new { item.Id, item.Path, item.FileName, item.AudioLanguages })
                     .FirstOrDefaultAsync(cancellationToken);
                 return movie == null
                     ? []
-                    : [new ScanTarget(MediaType.Movie, movie.Id, movie.Path, movie.FileName)];
+                    : [new ScanTarget(MediaType.Movie, movie.Id, movie.Path, movie.FileName, movie.AudioLanguages)];
 
             case MediaType.Episode:
                 var episode = await _dbContext.Episodes
                     .Where(item => item.Id == id)
-                    .Select(item => new { item.Id, item.Path, item.FileName })
+                    .Select(item => new { item.Id, item.Path, item.FileName, item.AudioLanguages })
                     .FirstOrDefaultAsync(cancellationToken);
                 return episode == null
                     ? []
-                    : [new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName)];
+                    : [new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName, episode.AudioLanguages)];
 
             case MediaType.Season:
                 return (await _dbContext.Episodes
                         .Where(episode => episode.SeasonId == id)
-                        .Select(episode => new { episode.Id, episode.Path, episode.FileName })
+                        .Select(episode => new { episode.Id, episode.Path, episode.FileName, episode.AudioLanguages })
                         .ToListAsync(cancellationToken))
-                    .Select(episode => new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName))
+                    .Select(episode => new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName, episode.AudioLanguages))
                     .ToList();
 
             case MediaType.Show:
                 return (await _dbContext.Episodes
                         .Where(episode => _dbContext.Seasons.Any(season =>
                             season.Id == episode.SeasonId && season.ShowId == id))
-                        .Select(episode => new { episode.Id, episode.Path, episode.FileName })
+                        .Select(episode => new { episode.Id, episode.Path, episode.FileName, episode.AudioLanguages })
                         .ToListAsync(cancellationToken))
-                    .Select(episode => new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName))
+                    .Select(episode => new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName, episode.AudioLanguages))
                     .ToList();
 
             default:
@@ -944,13 +1151,14 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             CreateNoWindow = true
         };
         // ArgumentList escapes per platform — container paths with spaces or
-        // quotes survive without manual quoting.
+        // quotes survive without manual quoting. Card A: no -select_streams s
+        // — audio streams must reach the parser for the audio-language
+        // piggyback (still exactly one ffprobe per file).
         foreach (var argument in new[]
                  {
                      "-v", "quiet",
                      "-print_format", "json",
                      "-show_streams",
-                     "-select_streams", "s",
                      filePath
                  })
         {
