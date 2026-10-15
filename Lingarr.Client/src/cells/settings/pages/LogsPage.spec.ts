@@ -8,6 +8,7 @@ import en from '@/i18n/locales/en.json'
 import LogsPage from '@/cells/settings/pages/LogsPage.vue'
 import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { useUiStore } from '@/cells/app/stores/ui'
+import { useToastStore } from '@/cells/app/stores/toast'
 import { ILogEntry } from '@/types'
 
 // A stand-in EventSource: the page only assigns onmessage/onerror and calls
@@ -153,6 +154,91 @@ describe('LogsPage (drill-down, prototype screen-11)', () => {
         expect(wrapper.find('[data-test="log-list"]').text()).toContain(
             en.settings.logs.waiting
         )
+    })
+
+    it('copies the filtered view to the clipboard and toasts success', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined)
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true
+        })
+
+        const { wrapper } = await mountPage()
+
+        await wrapper.find('[data-test="log-copy"]').trigger('click')
+        await Promise.resolve()
+
+        const toastStore = useToastStore()
+        expect(toastStore.toasts.at(-1)).toMatchObject({
+            message: en.settings.logs.copied,
+            type: 'success'
+        })
+        expect(writeText).toHaveBeenCalledTimes(1)
+        const copied = writeText.mock.calls[0][0] as string
+        // same text as export: header block + every filtered row
+        expect(copied).toContain(en.settings.logs.exportTitle)
+        expect(copied).toContain('request #2417 batch 3/4')
+        expect(copied).toContain('TranslationJob #2409 failed')
+
+        // frozen filter semantics: copying under the ERROR chip only takes the error row
+        await wrapper.find('[data-test="log-chip-error"]').trigger('click')
+        await wrapper.find('[data-test="log-copy"]').trigger('click')
+        await Promise.resolve()
+
+        const filtered = writeText.mock.calls.at(-1)![0] as string
+        expect(filtered).toContain('TranslationJob #2409 failed')
+        expect(filtered).not.toContain('request #2417 batch 3/4')
+    })
+
+    it('falls back to execCommand when the clipboard API rejects the write', async () => {
+        const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true
+        })
+        let copiedText: string | undefined
+        document.execCommand = vi.fn(() => {
+            copiedText = document.querySelector('textarea')?.value
+            return true
+        })
+
+        const { wrapper } = await mountPage()
+
+        await wrapper.find('[data-test="log-copy"]').trigger('click')
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(document.execCommand).toHaveBeenCalledWith('copy')
+        expect(copiedText).toContain('request #2417 batch 3/4')
+        expect(copiedText).toContain('TranslationJob #2409 failed')
+        const toastStore = useToastStore()
+        expect(toastStore.toasts.at(-1)).toMatchObject({
+            message: en.settings.logs.copied,
+            type: 'success'
+        })
+    })
+
+    it('toasts failure when every clipboard path rejects the write', async () => {
+        const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true
+        })
+        document.execCommand = vi.fn(() => false)
+
+        const { wrapper } = await mountPage()
+
+        await wrapper.find('[data-test="log-copy"]').trigger('click')
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        const toastStore = useToastStore()
+        expect(toastStore.toasts.at(-1)).toMatchObject({
+            message: en.settings.logs.copyFailed,
+            type: 'error'
+        })
     })
 
     it('registers the export CTA and closes the stream on unmount', async () => {

@@ -36,6 +36,13 @@
             <button
                 type="button"
                 class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                data-test="log-copy"
+                @click="copyLogs">
+                {{ t('settings.logs.copy') }}
+            </button>
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
                 data-test="log-clear"
                 @click="clearLogs">
                 {{ t('settings.logs.clear') }}
@@ -101,11 +108,13 @@ import { formatDate, formatTime } from '@/cells/app/utils/date'
 import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
 import { useUiStore } from '@/cells/app/stores/ui'
+import { useToastStore } from '@/cells/app/stores/toast'
 
 const logsApi = logsService()
 
 const { t } = useI18n()
 const uiStore = useUiStore()
+const toastStore = useToastStore()
 const logs = ref<ILogEntry[]>([])
 const autoScroll = ref(true)
 const logContainer = ref<HTMLElement | null>(null)
@@ -212,29 +221,33 @@ const clearLogs = () => {
     logs.value = []
 }
 
-/// Export follows the current level filter (frozen semantics: the CTA
-/// downloads what is on screen, not the hidden rows).
+/// Export and copy share the same text (frozen semantics: they act on what
+/// is on screen under the current level filter, not the hidden rows).
+const buildLogText = (): string => {
+    let content = `${t('settings.logs.exportTitle')}\n`
+    content += `${t('settings.logs.exportGenerated', { datetime: new Date().toLocaleString() })}\n`
+    content += `${t('settings.logs.exportTotalEntries', { count: filteredLogs.value.length })}\n`
+    content += `${'='.repeat(80)}\n\n`
+
+    filteredLogs.value.forEach((log) => {
+        content += `[${formatDate(log.timestamp)} ${formatTime(log.timestamp)}] [${log.logLevel}] [${log.category}] ${log.message}\n`
+
+        // Include stack trace
+        if (log.stackTrace) {
+            content += `${t('settings.logs.exportStackTrace')}\n${log.stackTrace}\n`
+        }
+
+        content += `\n`
+    })
+
+    return content
+}
+
 const exportLogs = () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const filename = `system-logs-${timestamp}.txt`
 
-    let exportContent = `${t('settings.logs.exportTitle')}\n`
-    exportContent += `${t('settings.logs.exportGenerated', { datetime: new Date().toLocaleString() })}\n`
-    exportContent += `${t('settings.logs.exportTotalEntries', { count: filteredLogs.value.length })}\n`
-    exportContent += `${'='.repeat(80)}\n\n`
-
-    filteredLogs.value.forEach((log) => {
-        exportContent += `[${formatDate(log.timestamp)} ${formatTime(log.timestamp)}] [${log.logLevel}] [${log.category}] ${log.message}\n`
-
-        // Include stack trace
-        if (log.stackTrace) {
-            exportContent += `${t('settings.logs.exportStackTrace')}\n${log.stackTrace}\n`
-        }
-
-        exportContent += `\n`
-    })
-
-    const blob = new Blob([exportContent], { type: 'text/plain' })
+    const blob = new Blob([buildLogText()], { type: 'text/plain' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -243,6 +256,41 @@ const exportLogs = () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
+}
+
+const writeClipboard = async (text: string): Promise<void> => {
+    // The async clipboard API can be missing (plain HTTP over a LAN IP is
+    // not a secure context) or reject (permission denied in embedded
+    // webviews). The execCommand path covers both while the click's
+    // user-gesture context is still active.
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text)
+            return
+        }
+    } catch {
+        // fall through to the execCommand fallback
+    }
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+        if (!document.execCommand('copy')) throw new Error('execCommand copy returned false')
+    } finally {
+        document.body.removeChild(textarea)
+    }
+}
+
+const copyLogs = async () => {
+    try {
+        await writeClipboard(buildLogText())
+        toastStore.push({ message: t('settings.logs.copied'), type: 'success' })
+    } catch {
+        toastStore.push({ message: t('settings.logs.copyFailed'), type: 'error' })
+    }
 }
 
 watch(
