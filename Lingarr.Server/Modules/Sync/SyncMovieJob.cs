@@ -1,6 +1,5 @@
 using Hangfire;
 using Lingarr.Core.Configuration;
-using Lingarr.Core.Data;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Filters;
 using Lingarr.Server.Modules.Integration;
@@ -18,22 +17,19 @@ public class SyncMovieJob
     private readonly IScheduleService _scheduleService;
     private readonly IMovieSyncService _movieSyncService;
     private readonly ISettingService _settingService;
-    private readonly LingarrDbContext _dbContext;
 
     public SyncMovieJob(
         IRadarrService radarrService,
         ILogger<SyncMovieJob> logger,
         IScheduleService scheduleService,
         IMovieSyncService movieSyncService,
-        ISettingService settingService,
-        LingarrDbContext dbContext)
+        ISettingService settingService)
     {
         _radarrService = radarrService;
         _logger = logger;
         _scheduleService = scheduleService;
         _movieSyncService = movieSyncService;
         _settingService = settingService;
-        _dbContext = dbContext;
     }
 
     [DisableConcurrentExecution(timeoutInSeconds: 5 * 60)]
@@ -48,18 +44,18 @@ public class SyncMovieJob
         {
             await _scheduleService.UpdateJobState(jobName, JobStatus.Processing.GetDisplayName());
 
-            var movies = await _radarrService.GetMovies();
-            if (movies == null) return;
-
-            _logger.LogInformation("Fetched {Count} movies from Radarr", movies.Count());
-
+            // No whole-run transaction on purpose: a multi-hour outer transaction holds
+            // the SQLite write lock and blocks WAL checkpoints. Batches of 100 commit
+            // autonomously inside MovieSyncService; a mid-run failure leaves a partial
+            // sync that the next run completes idempotently.
             var defaultInclude = await _settingService.GetSetting(SettingKeys.Integration.RadarrDefaultInclude) == "true";
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            var existingRadarrIds = await _movieSyncService.SyncMovies(
+                _radarrService.GetMovies(), defaultInclude);
 
-            await _movieSyncService.SyncMovies(movies, defaultInclude);
-            await _movieSyncService.RemoveNonExistentMovies(movies.Select(m => m.Id));
+            _logger.LogInformation("Fetched and synced {Count} movies from Radarr", existingRadarrIds.Count);
 
-            await transaction.CommitAsync();
+            await _movieSyncService.RemoveNonExistentMovies(existingRadarrIds);
+
             await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
             _logger.LogInformation("Movies synced successfully.");
         }

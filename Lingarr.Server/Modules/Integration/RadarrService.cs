@@ -14,9 +14,9 @@ public class RadarrService : IRadarrService
     }
 
     /// <inheritdoc />
-    public async Task<List<RadarrMovie>?> GetMovies()
+    public IAsyncEnumerable<RadarrMovie> GetMovies()
     {
-        return await _integrationService.GetApiResponse<List<RadarrMovie>>(
+        return _integrationService.StreamApiResponse<RadarrMovie>(
             "/api/v3/movie/",
             new IntegrationSettingKeys
             {

@@ -8,14 +8,18 @@ namespace Lingarr.Server.Modules.Integration;
 public interface IRadarrService
 {
     /// <summary>
-    /// Asynchronously retrieves a list of movies from the Radarr API.
+    /// Streams the full movie library from the Radarr API element by element.
+    /// The response body is never buffered as a whole — at 100k movies the
+    /// /api/v3/movie payload reaches hundreds of MB and must not be materialized
+    /// into a single <see cref="List{T}"/>.
     /// </summary>
     /// <returns>
-    /// This method calls the Radarr API to fetch movies
-    /// The task result contains a <see cref="List{T}"/> of <see cref="RadarrMovie"/>
-    /// objects representing all movies, or <c>null</c> if the API call fails.
+    /// An <see cref="IAsyncEnumerable{T}"/> of <see cref="RadarrMovie"/> that yields
+    /// each movie as it is deserialized from the response stream.
     /// </returns>
-    Task<List<RadarrMovie>?> GetMovies();
+    /// <exception cref="InvalidOperationException">Thrown when the Radarr settings are not configured.</exception>
+    /// <exception cref="HttpRequestException">Thrown when the API request fails.</exception>
+    IAsyncEnumerable<RadarrMovie> GetMovies();
 
     /// <summary>
     /// Asynchronously retrieves a movie from the Radarr API.

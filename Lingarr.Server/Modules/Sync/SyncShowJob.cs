@@ -1,6 +1,5 @@
 using Hangfire;
 using Lingarr.Core.Configuration;
-using Lingarr.Core.Data;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Filters;
 using Lingarr.Server.Modules.Integration;
@@ -13,7 +12,6 @@ namespace Lingarr.Server.Modules.Sync;
 
 public class SyncShowJob
 {
-    private readonly LingarrDbContext _dbContext;
     private readonly ISonarrService _sonarrService;
     private readonly ILogger<SyncShowJob> _logger;
     private readonly IScheduleService _scheduleService;
@@ -21,14 +19,12 @@ public class SyncShowJob
     private readonly ISettingService _settingService;
 
     public SyncShowJob(
-        LingarrDbContext dbContext,
         ISonarrService sonarrService,
         ILogger<SyncShowJob> logger,
         IScheduleService scheduleService,
         IShowSyncService showSyncService,
         ISettingService settingService)
     {
-        _dbContext = dbContext;
         _sonarrService = sonarrService;
         _logger = logger;
         _scheduleService = scheduleService;
@@ -54,12 +50,13 @@ public class SyncShowJob
             _logger.LogInformation("Fetched {ShowCount} shows from Sonarr", shows.Count);
 
             var defaultInclude = await _settingService.GetSetting(SettingKeys.Integration.SonarrDefaultInclude) == "true";
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
 
+            // No whole-run transaction on purpose (see SyncMovieJob): batches of 100
+            // commit autonomously inside ShowSyncService; a mid-run failure leaves a
+            // partial sync that the next run completes idempotently.
             await _showSyncService.SyncShows(shows, defaultInclude);
             await _showSyncService.RemoveNonExistentShows(shows.Select(s => s.Id).ToHashSet());
 
-            await transaction.CommitAsync();
             await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
             _logger.LogInformation("Shows synced successfully.");
         }

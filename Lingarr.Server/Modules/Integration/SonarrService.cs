@@ -28,8 +28,10 @@ public class SonarrService : ISonarrService
     /// <inheritdoc />
     public async Task<List<SonarrEpisode>?> GetEpisodes(int seriesNumber, int seasonNumber)
     {
+        // includeImages omitted: the episode resources embed episodeFile already and
+        // image blobs were never consumed here — they only inflated the payload 2-5x.
         return await _integrationService.GetApiResponse<List<SonarrEpisode>>(
-            $"/api/v3/episode?seriesId={seriesNumber}&seasonNumber={seasonNumber}&includeImages=true",
+            $"/api/v3/episode?seriesId={seriesNumber}&seasonNumber={seasonNumber}",
             new IntegrationSettingKeys
             {
                 Url = "sonarr_url",
@@ -41,19 +43,7 @@ public class SonarrService : ISonarrService
     public async Task<SonarrEpisode?> GetEpisode(int episodeNumber)
     {
         return await _integrationService.GetApiResponse<SonarrEpisode>(
-            $"/api/v3/episode/{episodeNumber}?includeImages=true",
-            new IntegrationSettingKeys
-            {
-                Url = "sonarr_url",
-                ApiKey = "sonarr_api_key"
-            });
-    }
-    
-    /// <inheritdoc />
-    public async Task<SonarrEpisodePath?> GetEpisodePath(int episodeId)
-    {
-        return await _integrationService.GetApiResponse<SonarrEpisodePath>(
-            $"/api/v3/episode/{episodeId}",
+            $"/api/v3/episode/{episodeNumber}",
             new IntegrationSettingKeys
             {
                 Url = "sonarr_url",

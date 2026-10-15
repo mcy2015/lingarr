@@ -186,28 +186,13 @@ public class MediaService : IMediaService
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            // Episode doesn't exist in Sonarr
-            _logger.LogWarning("Episode with Sonarr ID {EpisodeId} not found in Sonarr (404)", episodeNumber);
-            try
-            {
-                // Attempt a more comprehensive resync of all shows in case the Sonarr ID is stale
-                _logger.LogInformation("Sonarr episode {EpisodeId} returned 404 — attempting full show resync as a fallback.", episodeNumber);
-                var shows = await _sonarrService.GetShows();
-                if (shows != null && shows.Any())
-                {
-                    await _showSyncService.SyncShows(shows, defaultInclude);
-                    // Try to find the episode again after resync
-                    var matchedEpisode = await _dbContext.Episodes.Where(s => s.SonarrId == episodeNumber).FirstOrDefaultAsync();
-                    if (matchedEpisode != null)
-                    {
-                        return matchedEpisode.Id;
-                    }
-                }
-            }
-            catch (Exception syncEx)
-            {
-                _logger.LogWarning(syncEx, "Resync attempt after Sonarr 404 failed for episode {EpisodeId}", episodeNumber);
-            }
+            // Episode doesn't exist in Sonarr. A full-library resync from here would
+            // pull every show and episode through the webhook queue (hours on a large
+            // library) just to resolve one stale id; the scheduled show sync already
+            // reconciles removals, so log and bail out.
+            _logger.LogWarning(
+                "Episode with Sonarr ID {EpisodeId} not found in Sonarr (404); skipping. The next scheduled show sync will reconcile the library.",
+                episodeNumber);
             return 0;
         }
         catch (Exception ex)

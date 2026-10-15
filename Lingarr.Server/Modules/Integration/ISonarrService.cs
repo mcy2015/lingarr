@@ -18,17 +18,21 @@ public interface ISonarrService
 
     /// <summary>
     /// Asynchronously retrieves a list of episodes for a specified series and season from the Sonarr API.
+    /// Each episode embeds its <c>episodeFile</c> (path/dateAdded) when it has a file, so episode
+    /// paths can be taken from this single response without further per-episode lookups.
     /// </summary>
     /// <param name="seriesNumber">The ID of the series for which episodes are to be retrieved.</param>
     /// <param name="seasonNumber">The season number within the series for which episodes are to be retrieved.</param>
     /// <returns>
-    /// A task that represents the asynchronous operation. The task result contains a <see cref="List{T}"/> of <see cref="SonarrEpisode"/> 
+    /// A task that represents the asynchronous operation. The task result contains a <see cref="List{T}"/> of <see cref="SonarrEpisode"/>
     /// objects with the list of episodes, or <c>null</c> if the API call fails.
     /// </returns>
     Task<List<SonarrEpisode>?> GetEpisodes(int seriesNumber, int seasonNumber);
 
     /// <summary>
     /// Asynchronously retrieves an episode for a speicified episode id from the Sonarr API.
+    /// The response embeds <c>episodeFile</c> (path/dateAdded) and <c>series</c>, so callers
+    /// no longer need a separate per-episode path lookup.
     /// </summary>
     /// <param name="episodeNumber">The ID of the episode for which the data are to be retrieved.</param>
     /// <returns>
@@ -36,14 +40,4 @@ public interface ISonarrService
     /// object or <c>null</c> if the API call fails.
     /// </returns>
     Task<SonarrEpisode?> GetEpisode(int episodeNumber);
-
-    /// <summary>
-    /// Asynchronously retrieves the path information for a specified episode from the Sonarr API.
-    /// </summary>
-    /// <param name="episodeNumber">The ID of the episode for which the path information is to be retrieved.</param>
-    /// <returns>
-    /// A task that represents the asynchronous operation. The task result contains a <see cref="SonarrEpisodePath"/> 
-    /// with the path information of the episode, or <c>null</c> if the API call fails.
-    /// </returns>
-    Task<SonarrEpisodePath?> GetEpisodePath(int episodeNumber);
 }

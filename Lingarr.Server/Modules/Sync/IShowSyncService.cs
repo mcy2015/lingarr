@@ -18,11 +18,11 @@ public interface IShowSyncService
     /// </summary>
     /// <param name="show">The show to sync</param>
     /// <param name="defaultInclude">Whether new shows/seasons/episodes should be included in translation by default</param>
-    /// <returns>A task representing the asynchronous operation</returns>
+    /// <returns>A task representing the asynchronous operation and the synchronized show</returns>
     Task<Show> SyncShow(SonarrShow show, bool defaultInclude);
 
     /// <summary>
-    /// Removes shows that no longer exist in Sonarr
+    /// Removes shows that no longer exist in Sonarr (set-based DELETEs, no child entities materialized)
     /// </summary>
     /// <param name="existingSonarrIds">The set of currently existing Sonarr show IDs</param>
     /// <returns>A task representing the asynchronous operation</returns>

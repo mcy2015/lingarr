@@ -1,6 +1,5 @@
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
-using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Sync;
 using Lingarr.Server.Models.Integrations;
 
@@ -8,35 +7,32 @@ namespace Lingarr.Server.Modules.Sync;
 
 public class EpisodeSync : IEpisodeSync
 {
-    private readonly ISonarrService _sonarrService;
     private readonly PathConversionService _pathConversionService;
 
-    public EpisodeSync(
-        ISonarrService sonarrService,
-        PathConversionService pathConversionService)
+    public EpisodeSync(PathConversionService pathConversionService)
     {
-        _sonarrService = sonarrService;
         _pathConversionService = pathConversionService;
     }
 
     /// <inheritdoc />
-    public async Task SyncEpisodes(SonarrShow show, Season season, bool defaultInclude = true)
+    public Task SyncEpisodes(Season season, IReadOnlyList<SonarrEpisode>? episodes, bool defaultInclude = true)
     {
-        var episodes = await _sonarrService.GetEpisodes(show.Id, season.SeasonNumber);
-        if (episodes == null) return;
+        if (episodes == null) return Task.CompletedTask;
 
         foreach (var episode in episodes.Where(e => e.HasFile))
         {
-            var episodePathResult = await _sonarrService.GetEpisodePath(episode.Id);
+            // Paths/dates come straight from the episode resource; no per-episode
+            // HTTP round trip (previously one GetEpisodePath call per episode).
             var episodePath = _pathConversionService.ConvertAndMapPath(
-                episodePathResult?.EpisodeFile.Path ?? string.Empty,
+                episode.EpisodeFile?.Path ?? string.Empty,
                 MediaType.Show
             );
 
-            SyncEpisode(episode, episodePath, season, episodePathResult?.EpisodeFile.DateAdded, defaultInclude);
+            SyncEpisode(episode, episodePath, season, episode.EpisodeFile?.DateAdded, defaultInclude);
         }
 
         RemoveNonExistentEpisodes(season, episodes);
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -79,7 +75,7 @@ public class EpisodeSync : IEpisodeSync
     /// </summary>
     /// <param name="season">The season entity containing the episodes to check</param>
     /// <param name="currentEpisodes">The list of currently existing Sonarr episodes</param>
-    private static void RemoveNonExistentEpisodes(Season season, List<SonarrEpisode> currentEpisodes)
+    private static void RemoveNonExistentEpisodes(Season season, IReadOnlyList<SonarrEpisode> currentEpisodes)
     {
         var episodesToRemove = season.Episodes
             .Where(seasonEpisode => currentEpisodes.All(episode => episode.Id != seasonEpisode.SonarrId))

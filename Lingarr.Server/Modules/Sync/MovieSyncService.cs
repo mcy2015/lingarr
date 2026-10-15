@@ -24,25 +24,31 @@ public class MovieSyncService : IMovieSyncService
     }
 
     /// <inheritdoc />
-    public async Task SyncMovies(List<RadarrMovie> movies, bool defaultInclude)
+    public async Task<List<int>> SyncMovies(IAsyncEnumerable<RadarrMovie> movies, bool defaultInclude)
     {
         var processedCount = 0;
+        // Movies flow through in batches of BatchSize; only the (small) id list is
+        // retained for the whole run so orphan removal knows what still exists.
+        var radarrIds = new List<int>();
 
-        foreach (var movie in movies)
+        await foreach (var movie in movies)
         {
+            radarrIds.Add(movie.Id);
             await _movieSync.SyncMovie(movie, defaultInclude);
             processedCount++;
 
             if (processedCount % BatchSize == 0)
             {
-                await SaveChanges(processedCount, movies.Count);
+                await SaveChanges(processedCount);
             }
         }
 
         if (processedCount % BatchSize != 0)
         {
-            await SaveChanges(processedCount, movies.Count);
+            await SaveChanges(processedCount);
         }
+
+        return radarrIds;
     }
 
     /// <inheritdoc />
@@ -77,19 +83,21 @@ public class MovieSyncService : IMovieSyncService
             _dbContext.Movies.RemoveRange(moviesToRemove);
 
             await _dbContext.SaveChangesAsync();
+            _dbContext.ChangeTracker.Clear();
         }
     }
 
     /// <summary>
-    /// Saves pending changes to the database and logs the sync progress
+    /// Saves pending changes to the database and logs the sync progress. The change
+    /// tracker is cleared after every batch so the tracked graph does not grow
+    /// monotonically across a 20k-movie run.
     /// </summary>
     /// <param name="processedCount">The number of movies processed so far</param>
-    /// <param name="totalCount">The total number of movies to process</param>
-    /// <returns>A task representing the asynchronous operation</returns>
-    private async Task SaveChanges(int processedCount, int totalCount)
+    private async Task SaveChanges(int processedCount)
     {
         await _dbContext.SaveChangesAsync();
-        _logger.LogInformation("Synced and saved {ProcessedCount} out of {TotalCount} movies", 
-            processedCount, totalCount);
+        _dbContext.ChangeTracker.Clear();
+        _logger.LogInformation("Synced and saved {ProcessedCount} movies so far",
+            processedCount);
     }
 }
