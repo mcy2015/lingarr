@@ -34,6 +34,44 @@ secrets:
 | `SQLITE_DB_PATH`           | Path to the SQLite application database file. Relative paths resolve against `/app/config/`; defaults to `lingarr.db`.                        |
 | `DB_HANGFIRE_SQLITE_PATH`  | Path to the SQLite database file used by the Hangfire job store. Defaults to `/app/config/Hangfire.db`.                                       |
 
+#### Job schedules and staggering
+
+Recurring jobs and their default crons (interpreted in the timezone set by `TZ`):
+
+| Job                    | Default cron  | What it does                                                       |
+|------------------------|---------------|--------------------------------------------------------------------|
+| `SyncMovieJob`         | `0 4 * * *`   | Full Radarr library sync                                            |
+| `SyncShowJob`          | `0 4 * * *`   | Full Sonarr library sync                                            |
+| `AutomatedTranslationJob` | `0 4 * * *` | Picks untranslated media and queues translation requests            |
+| `EmbeddedTrackScanJob` | `30 4 * * *`  | ffprobe scan of media containers for embedded subtitle/audio tracks |
+| `StatisticsJob`        | `0 3 * * *`   | Daily statistics snapshot                                           |
+| `CleanupJob`           | `0 3 * * 1`   | Weekly prune of expired requests and orphaned extraction files      |
+
+Note that the three heavy jobs default to the same 04:00 instant (and the two
+03:00 maintenance jobs collide on Mondays). With `MAX_CONCURRENT_JOBS` > 1,
+same-minute jobs run in parallel and their I/O stacks up — they all write to
+the same SQLite database (WAL) and read the same media disk, so on large
+libraries each of them takes noticeably longer than it would alone. Even with
+`MAX_CONCURRENT_JOBS=1` (everything serializes) same-instant triggers just
+queue behind each other and make completion times unpredictable.
+
+Staggering is a per-installation decision — the defaults are kept compatible
+with existing setups. If yours is large, a sensible layout is "sync first,
+scans in the middle, translations last" (translations work off the synced
+library):
+
+```
+SyncMovieJob             0 4 * * *
+SyncShowJob             20 4 * * *
+EmbeddedTrackScanJob    40 4 * * *
+AutomatedTranslationJob  0 5 * * *
+StatisticsJob            30 3 * * *     # keep maintenance out of the sync window
+CleanupJob               30 3 * * 0
+```
+
+Crons are edited on the schedules card of the Automation settings page and
+persist in the database.
+
 ---
 
 ### **Radarr Configuration**

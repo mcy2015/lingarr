@@ -116,6 +116,25 @@ networks:
 
 可作为环境变量持久化的应用内设置清单见 [SETTINGS.md](SETTINGS.md);容器支持 `user: "1000:1000"` 以非 root 运行(注意 `./data` 与媒体挂载目录的属主)。
 
+## 定时任务错峰建议
+
+内置定时任务的默认 cron(按 `TZ` 时区解释):`SyncMovieJob`/`SyncShowJob`/`AutomatedTranslationJob` 均为 `0 4 * * *`,`EmbeddedTrackScanJob` 为 `30 4 * * *`,`StatisticsJob` 为每日 `0 3 * * *`,`CleanupJob` 为每周一 `0 3 * * 1`。
+
+**同刻触发的 IO 叠加**:三个重任务默认同一时刻(04:00)触发。`MAX_CONCURRENT_JOBS > 1` 时它们并行,同时对同一个 SQLite 库(WAL 写)与媒体盘施加 IO,大库下互相拖慢;即使 `= 1`(全队列串行),同刻触发也只能排队执行,完成时间不可预测,且每周一 03:00 统计与清理还会再叠一层。
+
+错峰属于用户配置决策,默认值保持兼容不动;库大的部署建议按"同步先行 → 扫描居中 → 翻译殿后"手动错开(翻译基于同步后的库):
+
+```
+SyncMovieJob             0 4 * * *
+SyncShowJob             20 4 * * *
+EmbeddedTrackScanJob    40 4 * * *
+AutomatedTranslationJob  0 5 * * *
+StatisticsJob            30 3 * * *     # 维护任务避开同步窗口
+CleanupJob               30 3 * * 0
+```
+
+在 设置 → 自动化 的定时任务卡片修改 cron,值持久化在库中;详见 [SETTINGS.md](SETTINGS.md) 的 "Job schedules and staggering" 一节。
+
 ## 开发
 
 ```bash

@@ -68,23 +68,30 @@ public class MovieSyncService : IMovieSyncService
     /// <inheritdoc />
     public async Task RemoveNonExistentMovies(IEnumerable<int> existingRadarrIds)
     {
-        var moviesToRemove = await _dbContext.Movies
-            .Include(m => m.Images)
-            .Where(movie => !existingRadarrIds.Contains(movie.RadarrId))
-            .ToListAsync();
+        // ExecuteDelete bypasses the change tracker; drop anything still tracked
+        // from the preceding sync batches so stale instances cannot be
+        // resurrected later (same contract as ShowSyncService).
+        _dbContext.ChangeTracker.Clear();
 
-        if (moviesToRemove.Any())
+        var orphanedCount = await _dbContext.Movies
+            .CountAsync(movie => !existingRadarrIds.Contains(movie.RadarrId));
+        if (orphanedCount == 0)
         {
-            _logger.LogInformation("Removing {Count} movies that no longer exist in Radarr", moviesToRemove.Count);
-
-            // Bulk remove all images and movies
-            var imagesToRemove = moviesToRemove.SelectMany(m => m.Images).ToList();
-            _dbContext.Images.RemoveRange(imagesToRemove);
-            _dbContext.Movies.RemoveRange(moviesToRemove);
-
-            await _dbContext.SaveChangesAsync();
-            _dbContext.ChangeTracker.Clear();
+            return;
         }
+
+        _logger.LogInformation("Removing {Count} movies that no longer exist in Radarr", orphanedCount);
+
+        // Child-first set-based deletes (S2 precedent, ShowSyncService): images
+        // before movies, no Include graph materialized and a constant number of
+        // DELETE statements no matter how many movies go — the old per-row
+        // RemoveRange issued 2K+1 statements for K orphaned movies.
+        await _dbContext.Images
+            .Where(image => image.Movie != null && !existingRadarrIds.Contains(image.Movie.RadarrId))
+            .ExecuteDeleteAsync();
+        await _dbContext.Movies
+            .Where(movie => !existingRadarrIds.Contains(movie.RadarrId))
+            .ExecuteDeleteAsync();
     }
 
     /// <summary>

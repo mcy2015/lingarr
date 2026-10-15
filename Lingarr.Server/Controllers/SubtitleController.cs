@@ -3,6 +3,7 @@ using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.Sync;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lingarr.Server.Controllers;
@@ -15,27 +16,41 @@ public class SubtitleController : ControllerBase
     private readonly ISubtitleService _subtitleService;
     private readonly ISubtitleImportService _subtitleImportService;
     private readonly ISubtitleNormalizeService _subtitleNormalizeService;
+    private readonly PathConversionService _pathConversionService;
 
     public SubtitleController(
         ISubtitleService subtitleService,
         ISubtitleImportService subtitleImportService,
-        ISubtitleNormalizeService subtitleNormalizeService)
+        ISubtitleNormalizeService subtitleNormalizeService,
+        PathConversionService pathConversionService)
     {
         _subtitleService = subtitleService;
         _subtitleImportService = subtitleImportService;
         _subtitleNormalizeService = subtitleNormalizeService;
+        _pathConversionService = pathConversionService;
     }
 
     /// <summary>
     /// Retrieves a list of subtitle files located at the specified path.
     /// </summary>
-    /// <param name="subtitlePath">The directory path to search for subtitle files.This path is relative to the media folder
-    /// and should not start with a forward slash.</param>
+    /// <param name="subtitlePath">The directory path to search for subtitle files.
+    /// The path must lie inside a library media root (path-mapping destinations,
+    /// or the library directories themselves when no mapping is configured);
+    /// anything else is rejected with 400 before the filesystem is touched.</param>
     /// <returns>Returns an HTTP 200 OK response with a list of <see cref="Subtitles"/> objects found at the specified path.</returns>
     [HttpPost("all")]
     public async Task<ActionResult<List<Subtitles>>> GetAllSubtitles([FromBody] SubtitlePath subtitlePath)
     {
-        var value = await _subtitleService.GetAllSubtitles(subtitlePath.Path);
+        // Audit S6/P1-12: this endpoint used to recurse into any readable
+        // server directory. The whitelist check runs before any filesystem
+        // access, so rejected paths can neither be enumerated nor probed.
+        var rejection = await _pathConversionService.ValidatePathInsideMediaRootsAsync(subtitlePath?.Path);
+        if (rejection is not null)
+        {
+            return BadRequest(new { message = rejection });
+        }
+
+        var value = await _subtitleService.GetAllSubtitles(subtitlePath!.Path);
         return Ok(value);
     }
 
@@ -65,15 +80,21 @@ public class SubtitleController : ControllerBase
 
     /// <summary>
     /// Lists supported subtitle files under a server directory, recursively
-    /// (A7) — feeds the import workbench's path scan.
+    /// (A7) — feeds the import workbench's path scan. The directory must lie
+    /// inside a library media root (same whitelist as /subtitle/all); paths
+    /// outside are rejected with 400 before the filesystem is touched.
     /// </summary>
     [HttpPost("scan-path")]
     public async Task<ActionResult<List<ScannedSubtitleFile>>> ScanPath(
         [FromBody] SubtitlePath request)
     {
-        if (string.IsNullOrWhiteSpace(request.Path))
+        // The validator also covers the empty-path case ("Path is required."),
+        // and runs before Directory.Exists so outside-library paths cannot be
+        // probed for existence via the 404/200 split.
+        var rejection = await _pathConversionService.ValidatePathInsideMediaRootsAsync(request.Path);
+        if (rejection is not null)
         {
-            return BadRequest(new { message = "Path is required." });
+            return BadRequest(new { message = rejection });
         }
 
         try

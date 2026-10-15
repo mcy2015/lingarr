@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using Lingarr.Core.Data;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Models.Api;
+using Lingarr.Server.Modules.Sync;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
 using Lingarr.Server.Modules.Subtitle;
@@ -17,7 +20,12 @@ public class SubtitleControllerNormalizeTests
     private static SubtitleController CreateController(Mock<ISubtitleNormalizeService>? normalize = null) => new(
         new Mock<ISubtitleService>().Object,
         new Mock<ISubtitleImportService>().Object,
-        (normalize ?? new Mock<ISubtitleNormalizeService>()).Object);
+        (normalize ?? new Mock<ISubtitleNormalizeService>()).Object,
+        new PathConversionService(
+            new LingarrDbContext(
+                new DbContextOptionsBuilder<LingarrDbContext>()
+                    .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                    .Options)));
 
     [Fact]
     public async Task NormalizePreview_InvalidMediaType_ReturnsBadRequest()
