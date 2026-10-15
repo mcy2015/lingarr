@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
@@ -21,6 +22,35 @@ public class MediaController : ControllerBase
     private readonly IMediaLibraryService _mediaLibraryService;
     private readonly ISubtitleService _subtitleService;
     private readonly LingarrDbContext _dbContext;
+
+    // ── subtitle file cache (audit P1-5) ───────────────────────────
+    //
+    // The detail page's subtitle card re-scans every season directory on
+    // every view. The Files list cannot be reconstructed from the statistics
+    // snapshot (it is per-language aggregates, not per-file rows), so the
+    // last scan of a directory is kept for a short TTL: repeated views
+    // within the window serve the cached list, the next view after expiry
+    // re-scans once. Entries are read-only once stored.
+
+    private static readonly ConcurrentDictionary<string, SubtitleFileCacheEntry> SubtitleFileCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Lifetime of a cached directory scan. Settable so tests can expire entries deterministically.</summary>
+    public static TimeSpan SubtitleFileCacheTtl { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>Drops one directory's cached scan (every directory when null).</summary>
+    public static void InvalidateSubtitleFileCache(string? directory = null)
+    {
+        if (directory == null)
+        {
+            SubtitleFileCache.Clear();
+            return;
+        }
+
+        SubtitleFileCache.TryRemove(directory, out _);
+    }
+
+    private sealed record SubtitleFileCacheEntry(DateTimeOffset ExpiresAt, List<MediaSubtitleFile> Files);
 
     public MediaController(
         IMediaService mediaService,
@@ -84,15 +114,27 @@ public class MediaController : ControllerBase
         var files = new List<MediaSubtitleFile>();
         foreach (var directory in directories)
         {
+            // Audit P1-5: serve the cached scan while it is fresh; only an
+            // expired/absent entry hits the disk (the now single-pass
+            // GetAllSubtitles from audit P0-4).
+            var now = DateTimeOffset.UtcNow;
+            if (SubtitleFileCache.TryGetValue(directory, out var cached) && cached.ExpiresAt > now)
+            {
+                files.AddRange(cached.Files);
+                continue;
+            }
+
             var subtitles = await _subtitleService.GetAllSubtitles(directory);
-            files.AddRange(subtitles.Select(subtitle => new MediaSubtitleFile
+            var scanned = subtitles.Select(subtitle => new MediaSubtitleFile
             {
                 FileName = Path.GetFileName(subtitle.Path),
                 Directory = Path.GetDirectoryName(subtitle.Path) ?? string.Empty,
                 Languages = subtitle.Languages.Count > 0 ? subtitle.Languages : [subtitle.Language],
                 Format = subtitle.Format.TrimStart('.'),
                 Bytes = System.IO.File.Exists(subtitle.Path) ? new FileInfo(subtitle.Path).Length : 0
-            }));
+            }).ToList();
+            SubtitleFileCache[directory] = new SubtitleFileCacheEntry(now + SubtitleFileCacheTtl, scanned);
+            files.AddRange(scanned);
         }
 
         // Embedded tracks of the last scan: movies own their rows directly,

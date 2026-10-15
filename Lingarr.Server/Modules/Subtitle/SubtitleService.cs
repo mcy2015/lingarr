@@ -21,6 +21,7 @@ public class SubtitleService : ISubtitleService
     private readonly ISettingService _settingService;
     private readonly ISubtitleEncodingService _encodingService;
     private readonly Func<string, byte[]> _readSubtitleHead;
+    private readonly Func<string, IEnumerable<string>> _enumerateFiles;
 
     // Content-sniff results keyed on (path, mtime, length) — edits invalidate
     // the entry. Static because scans run in fresh scopes; the cache should
@@ -34,7 +35,8 @@ public class SubtitleService : ISubtitleService
         LanguageCodeService languageCodeService,
         ISettingService settingService,
         ISubtitleEncodingService? subtitleEncodingService = null,
-        Func<string, byte[]>? subtitleHeadReader = null)
+        Func<string, byte[]>? subtitleHeadReader = null,
+        Func<string, IEnumerable<string>>? directoryEnumerator = null)
     {
         _logger = logger;
         _languageCodeService = languageCodeService;
@@ -43,6 +45,10 @@ public class SubtitleService : ISubtitleService
         // tests inject counting stubs without DI ceremony.
         _encodingService = subtitleEncodingService ?? new SubtitleEncodingService();
         _readSubtitleHead = subtitleHeadReader ?? ReadSubtitleHead;
+        // Audit P0-4: one recursive traversal per directory instead of one
+        // per supported extension.
+        _enumerateFiles = directoryEnumerator
+            ?? (path => Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories));
     }
 
     private readonly record struct SniffCacheKey(string Path, long LastWriteUtcTicks, long Length);
@@ -58,73 +64,102 @@ public class SubtitleService : ISubtitleService
             return Task.FromResult(new List<Subtitles>());
         }
 
+        // Audit P0-4: ONE physical traversal of the directory tree. The old
+        // code ran Directory.GetFiles(*, AllDirectories) once per extension
+        // (4 recursive sweeps); this enumerates once with "*" and buckets the
+        // files by their (lowercased) extension. The extension buckets are
+        // emitted in SupportedExtensions order so the result list keeps the
+        // exact ordering the per-extension sweeps produced — consumers that
+        // pick a "first match" see the same list. Matching is
+        // case-insensitive, so ".SRT" is found on case-sensitive filesystems
+        // too; extensions beyond the known set (including the Windows
+        // "*.srt"-matches-".srtx" quirk) are excluded.
+        var filesByExtension = SupportedExtensions.ToDictionary(
+            extension => extension,
+            _ => new List<string>(),
+            StringComparer.Ordinal);
+
+        foreach (var file in _enumerateFiles(path))
+        {
+            var extension = Path.GetExtension(file).ToLowerInvariant();
+            if (filesByExtension.TryGetValue(extension, out var bucket))
+            {
+                bucket.Add(file);
+            }
+        }
+
         var subtitles = new List<Subtitles>();
         foreach (var extension in SupportedExtensions)
         {
-            var files = Directory.GetFiles(path, $"*{extension}", SearchOption.AllDirectories);
-
-            var subtitleFiles = files.Select(file =>
-            {
-                var fileName = Path.GetFileNameWithoutExtension(file);
-                var parts = fileName.Split('.').Reverse().ToList();
-                var language = "";
-                var languages = new List<string>();
-                var caption = "";
-
-                // First look for caption
-                var captionPart = parts.FirstOrDefault(p => SupportedCaptions.Contains(p.ToLower()));
-                if (captionPart != null)
-                {
-                    caption = captionPart.ToLower();
-                    parts.Remove(captionPart);
-                }
-
-                // Then look for language in remaining parts. Fansub tags
-                // (chs/sc/scjp/简日…) parse into one or two canonical codes;
-                // the first hit wins and a dual-language file carries both.
-                var languagePart = parts.FirstOrDefault(p => SubtitleLanguageParser.TryParse(p, out _));
-                if (languagePart != null
-                    && SubtitleLanguageParser.TryParse(languagePart, out var parsed))
-                {
-                    languages = parsed.ToList();
-                    language = parsed[0];
-                    parts.Remove(languagePart);
-                }
-                // Hindi is an exception, if we didn't find a language, and we did found Hindi, We set that as language
-                else if (caption == "hi" && language == "")
-                {
-                    language = caption;
-                    languages = [caption];
-                    caption = "";
-                }
-
-                // Filename tags always win; content sniffing only rescues files
-                // that would otherwise land on "unknown" (requirement F1).
-                if (string.IsNullOrEmpty(language))
-                {
-                    var sniffed = SniffContentLanguage(file);
-                    if (sniffed is not null)
-                    {
-                        language = sniffed;
-                        languages = [sniffed];
-                    }
-                }
-
-                return new Subtitles
-                {
-                    Path = file,
-                    FileName = fileName,
-                    Language = string.IsNullOrEmpty(language) ? "unknown" : language,
-                    Languages = languages.Count > 0 ? languages : ["unknown"],
-                    Caption = caption,
-                    Format = extension
-                };
-            });
-
-            subtitles.AddRange(subtitleFiles);
+            subtitles.AddRange(filesByExtension[extension].Select(file => ParseSubtitleFile(file, extension)));
         }
 
         return Task.FromResult(subtitles);
+    }
+
+    /// <summary>
+    /// Parses one discovered subtitle file: caption tag, language tag(s)
+    /// (fansub and dual-language forms) and — only when the file name carries
+    /// no language at all — the content sniff. The extension comes from the
+    /// bucket the file was collected into, so <see cref="Subtitles.Format"/>
+    /// stays the canonical lowercase form.
+    /// </summary>
+    private Subtitles ParseSubtitleFile(string file, string extension)
+    {
+        var fileName = Path.GetFileNameWithoutExtension(file);
+        var parts = fileName.Split('.').Reverse().ToList();
+        var language = "";
+        var languages = new List<string>();
+        var caption = "";
+
+        // First look for caption
+        var captionPart = parts.FirstOrDefault(p => SupportedCaptions.Contains(p.ToLower()));
+        if (captionPart != null)
+        {
+            caption = captionPart.ToLower();
+            parts.Remove(captionPart);
+        }
+
+        // Then look for language in remaining parts. Fansub tags
+        // (chs/sc/scjp/简日…) parse into one or two canonical codes;
+        // the first hit wins and a dual-language file carries both.
+        var languagePart = parts.FirstOrDefault(p => SubtitleLanguageParser.TryParse(p, out _));
+        if (languagePart != null
+            && SubtitleLanguageParser.TryParse(languagePart, out var parsed))
+        {
+            languages = parsed.ToList();
+            language = parsed[0];
+            parts.Remove(languagePart);
+        }
+        // Hindi is an exception, if we didn't find a language, and we did found Hindi, We set that as language
+        else if (caption == "hi" && language == "")
+        {
+            language = caption;
+            languages = [caption];
+            caption = "";
+        }
+
+        // Filename tags always win; content sniffing only rescues files
+        // that would otherwise land on "unknown" (requirement F1).
+        if (string.IsNullOrEmpty(language))
+        {
+            var sniffed = SniffContentLanguage(file);
+            if (sniffed is not null)
+            {
+                language = sniffed;
+                languages = [sniffed];
+            }
+        }
+
+        return new Subtitles
+        {
+            Path = file,
+            FileName = fileName,
+            Language = string.IsNullOrEmpty(language) ? "unknown" : language,
+            Languages = languages.Count > 0 ? languages : ["unknown"],
+            Caption = caption,
+            Format = extension
+        };
     }
 
     /// <summary>

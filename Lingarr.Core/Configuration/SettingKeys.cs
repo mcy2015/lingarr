@@ -154,6 +154,22 @@ public static class SettingKeys
         public const string EmbeddedTrackSchedule = "embedded_track_schedule";
 
         /// <summary>
+        /// Upper bound of media files one embedded track scan run may probe
+        /// (audit P0-6). Already-scanned files are free (marker skip), so the
+        /// next run resumes right after the last processed file. Values below
+        /// 1 or a missing/blank setting fall back to
+        /// <see cref="DefaultEmbeddedScanBatchLimit"/> — no migration needed.
+        /// </summary>
+        public const string EmbeddedScanBatchLimit = "embedded_scan_batch_limit";
+
+        /// <summary>
+        /// Fallback used when <see cref="EmbeddedScanBatchLimit"/> is absent,
+        /// blank or unparsable — mirrors the SubtitleNamingTemplate fallback
+        /// pattern (code default, no seeded row).
+        /// </summary>
+        public const int DefaultEmbeddedScanBatchLimit = 500;
+
+        /// <summary>
         /// JSON list of user-created recurring job definitions from the schedule
         /// screen「＋ new job」. Persisted so Initialize() can re-register them
         /// after a restart. Each entry: { jobId, jobType, cron, enabled }.

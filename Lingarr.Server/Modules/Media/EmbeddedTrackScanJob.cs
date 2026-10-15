@@ -11,7 +11,8 @@ namespace Lingarr.Server.Modules.Media;
 /// Daily ffprobe sweep over every movie and episode file, persisting the
 /// embedded subtitle tracks the detail page's「内嵌轨道」section shows
 /// (F2a). Skips files whose mtime matches the stored scan marker, so steady
-/// runs are cheap.
+/// runs are cheap; the per-run batch limit (audit P0-6) bounds first-full
+/// runs and resumes from the markers on the next trigger.
 /// </summary>
 public class EmbeddedTrackScanJob
 {
@@ -29,7 +30,16 @@ public class EmbeddedTrackScanJob
         _logger = logger;
     }
 
-    [DisableConcurrentExecution(timeoutInSeconds: 5 * 60)]
+    // Audit P0-6: the previous DisableConcurrentExecution(5min) +
+    // AutomaticRetry(0) combination meant "a first full run that outlives
+    // the lock timeout makes every later daily trigger fail". Replaced by an
+    // in-process guard: deployment is a single container (Hangfire SQLite
+    // storage is single-server by design), so a process-level flag covers
+    // every real overlap window. When the previous instance is still
+    // running, this trigger logs, reports success and leaves the work to
+    // the next scheduled run (which resumes from the stored markers).
+    private static volatile bool _scanInProgress;
+
     [AutomaticRetry(Attempts = 0)]
     [Queue("system")]
     public async Task Execute()
@@ -37,6 +47,15 @@ public class EmbeddedTrackScanJob
         var jobName = JobContextFilter.GetCurrentJobTypeName();
         _logger.LogInformation("Embedded track scan job initiated");
 
+        if (_scanInProgress)
+        {
+            _logger.LogInformation(
+                "Embedded track scan skipped: the previous run is still processing. This trigger succeeds without scanning; the next scheduled run resumes from the stored markers.");
+            await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
+            return;
+        }
+
+        _scanInProgress = true;
         try
         {
             await _scheduleService.UpdateJobState(jobName, JobStatus.Processing.GetDisplayName());
@@ -69,6 +88,10 @@ public class EmbeddedTrackScanJob
             _logger.LogError(ex,
                 "An error occurred during the embedded track scan. Exception details: {ExceptionMessage}, Stack Trace: {StackTrace}",
                 ex.Message, ex.StackTrace);
+        }
+        finally
+        {
+            _scanInProgress = false;
         }
     }
 }

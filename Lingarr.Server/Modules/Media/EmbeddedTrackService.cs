@@ -2,11 +2,13 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Exceptions;
 using Lingarr.Server.Models.FileSystem;
+using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -40,6 +42,16 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     /// <summary>Progress log cadence for ScanAll (files between two log lines).</summary>
     public const int ProgressLogInterval = 25;
 
+    /// <summary>
+    /// Audit P0-6: number of file replacements buffered before one write
+    /// transaction is flushed (plus a final flush per run). The old pipeline
+    /// issued two write transactions per file.
+    /// </summary>
+    public const int FlushBatchSize = 50;
+
+    /// <summary>Id chunk size for batched deletes — headroom under SQLite's parameter limit.</summary>
+    private const int DeleteChunkSize = 500;
+
     private const int ProbeTimeoutMs = 10_000;
 
     /// <summary>Extraction is a stream copy plus text conversion — generous cap.</summary>
@@ -54,6 +66,13 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         string binary,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs ffprobe on one media file and returns its JSON report. Injectable
+    /// so the scan pipeline (batch limit, resume, flush cadence) is testable
+    /// without spawning a process.
+    /// </summary>
+    public delegate Task<string> FfprobeRunner(string filePath, CancellationToken cancellationToken);
 
     /// <summary>Container codec_name → display codec ("subrip" → "srt"…).</summary>
     private static readonly Dictionary<string, string> CodecAliases = new(StringComparer.OrdinalIgnoreCase)
@@ -96,6 +115,8 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     private readonly ILogger<EmbeddedTrackService> _logger;
     private readonly IHostEnvironment _environment;
     private readonly FfmpegRunner _ffmpegRunner;
+    private readonly FfprobeRunner _ffprobeRunner;
+    private readonly ISettingService? _settingService;
     private string? _ffprobePath;
     private string? _ffmpegPath;
     private bool _ffprobeResolved;
@@ -106,7 +127,9 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         ILogger<EmbeddedTrackService> logger,
         IHostEnvironment? environment = null,
         FfmpegRunner? ffmpegRunner = null,
-        Func<string>? ffmpegPathResolver = null)
+        Func<string>? ffmpegPathResolver = null,
+        ISettingService? settingService = null,
+        FfprobeRunner? ffprobeRunner = null)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -116,6 +139,10 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         _environment = environment ?? new Microsoft.Extensions.Hosting.Internal.HostingEnvironment();
         _ffmpegRunner = ffmpegRunner ?? RunFfmpeg;
         _ffmpegPathResolver = ffmpegPathResolver ?? ResolveFfmpegPath;
+        // Audit P0-6: the batch limit setting (code fallback default — no
+        // migration) and an injectable probe keep the scan pipeline testable.
+        _settingService = settingService;
+        _ffprobeRunner = ffprobeRunner ?? RunFFprobe;
     }
 
     private readonly Func<string> _ffmpegPathResolver;
@@ -145,13 +172,19 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     {
         var targets = new List<ScanTarget>();
 
+        // Audit P0-6: deterministic id order turns the marker table into a
+        // stable resume cursor — a run cut short by the batch limit continues
+        // exactly where the previous one stopped, because already-scanned
+        // files are free (marker skip, no ffprobe).
         targets.AddRange((await _dbContext.Movies
                 .Select(movie => new { movie.Id, movie.Path, movie.FileName })
+                .OrderBy(movie => movie.Id)
                 .ToListAsync(cancellationToken))
             .Select(movie => new ScanTarget(MediaType.Movie, movie.Id, movie.Path, movie.FileName)));
 
         targets.AddRange((await _dbContext.Episodes
                 .Select(episode => new { episode.Id, episode.Path, episode.FileName })
+                .OrderBy(episode => episode.Id)
                 .ToListAsync(cancellationToken))
             .Select(episode => new ScanTarget(MediaType.Episode, episode.Id, episode.Path, episode.FileName)));
 
@@ -162,7 +195,40 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         }
 
         await LoadMarkers(cancellationToken);
-        return await ScanTargets(targets, force, cancellationToken);
+        var workLimit = await ResolveBatchLimit();
+        return await ScanTargets(targets, force, workLimit, cancellationToken);
+    }
+
+    /// <summary>
+    /// Audit P0-6: per-run probe budget. A missing, blank or unparsable
+    /// <see cref="SettingKeys.Automation.EmbeddedScanBatchLimit"/> value (or
+    /// one below 1) falls back to
+    /// <see cref="SettingKeys.Automation.DefaultEmbeddedScanBatchLimit"/> —
+    /// the code-default pattern of SubtitleNamingTemplate, no migration.
+    /// </summary>
+    private async Task<int> ResolveBatchLimit()
+    {
+        try
+        {
+            if (_settingService != null)
+            {
+                var raw = await _settingService.GetSetting(SettingKeys.Automation.EmbeddedScanBatchLimit);
+                if (!string.IsNullOrWhiteSpace(raw)
+                    && int.TryParse(raw, out var parsed)
+                    && parsed > 0)
+                {
+                    return parsed;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Embedded track scan: reading the batch limit setting failed — using the default of {Default}",
+                SettingKeys.Automation.DefaultEmbeddedScanBatchLimit);
+        }
+
+        return SettingKeys.Automation.DefaultEmbeddedScanBatchLimit;
     }
 
     /// <summary>
@@ -507,12 +573,32 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         List<ScanTarget> targets,
         bool force,
         CancellationToken cancellationToken)
+        => await ScanTargets(targets, force, workLimit: null, cancellationToken);
+
+    private async Task<EmbeddedTrackScanSummary> ScanTargets(
+        List<ScanTarget> targets,
+        bool force,
+        int? workLimit,
+        CancellationToken cancellationToken)
     {
-        int probed = 0, skipped = 0, missing = 0, failed = 0, processed = 0;
+        int probed = 0, skipped = 0, missing = 0, failed = 0, processed = 0, work = 0;
 
         foreach (var (type, id, directory, fileName) in targets)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Audit P0-6: the run stops after workLimit files that needed
+            // work (probe / missing / failed). Unchanged files cost no
+            // ffprobe and never consume budget, so the next run picks up
+            // where this one stopped without re-probing anything.
+            if (workLimit is int limit && work >= limit)
+            {
+                _logger.LogInformation(
+                    "Embedded track scan: batch limit of {Limit} reached — {Deferred} of {Total} files deferred to the next run",
+                    limit, targets.Count - processed, targets.Count);
+                break;
+            }
+
             processed++;
             if (processed % ProgressLogInterval == 0)
             {
@@ -526,18 +612,30 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             {
                 case ScanOutcome.Probed:
                     probed++;
+                    work++;
                     break;
                 case ScanOutcome.Skipped:
                     skipped++;
                     break;
                 case ScanOutcome.Missing:
                     missing++;
+                    work++;
                     break;
                 case ScanOutcome.Failed:
                     failed++;
+                    work++;
                     break;
             }
+
+            if (_filesSinceFlush >= FlushBatchSize)
+            {
+                await FlushAsync(cancellationToken);
+            }
         }
+
+        // Whatever the run ended on (limit, end of list), queued row
+        // replacements are persisted before returning.
+        await FlushAsync(cancellationToken);
 
         _logger.LogInformation(
             "Embedded track scan finished: {Total} files — {Probed} probed, {Skipped} unchanged, {Missing} without file, {Failed} failed",
@@ -565,7 +663,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         if (noPath)
         {
             // Nothing probeable and nothing to show — drop stale rows.
-            await RemoveRows(type, id, cancellationToken);
+            QueueRemoval(type, id);
             return ScanOutcome.Skipped;
         }
 
@@ -574,7 +672,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             _logger.LogWarning(
                 "Embedded track scan: media file missing for {MediaType} {MediaId} at {Path}",
                 type, id, filePath);
-            await ReplaceRows(type, id, filePath, [], MediaSubtitleTrack.MissingFileHash, cancellationToken);
+            QueueReplace(type, id, filePath, [], MediaSubtitleTrack.MissingFileHash);
             return ScanOutcome.Missing;
         }
 
@@ -589,7 +687,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         string json;
         try
         {
-            json = await RunFFprobe(filePath, cancellationToken);
+            json = await _ffprobeRunner(filePath, cancellationToken);
         }
         catch (FFprobeUnavailableException)
         {
@@ -616,7 +714,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             return ScanOutcome.Failed;
         }
 
-        await ReplaceRows(type, id, filePath, tracks, key, cancellationToken);
+        QueueReplace(type, id, filePath, tracks, key);
         if (tracks.Count > 0)
         {
             _logger.LogInformation(
@@ -663,18 +761,29 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         return combined;
     }
 
-    /// <summary>Deletes every row of the media item and inserts the fresh scan.</summary>
-    private async Task ReplaceRows(
+    // ── batched persistence (audit P0-6) ──────────────────────────
+    //
+    // The old pipeline wrote per file: one ExecuteDelete (implicit
+    // transaction) plus one SaveChanges — two WAL commits per scanned file.
+    // Replacements are now queued and flushed in one transaction per
+    // FlushBatchSize files; a crash before a flush only loses that batch,
+    // which the next run re-probes (the scan is idempotent).
+
+    private readonly List<(MediaType Type, int Id)> _pendingRemovals = [];
+    private readonly List<MediaSubtitleTrack> _pendingTracks = [];
+    private int _filesSinceFlush;
+
+    /// <summary>Queues the replacement of every row of the media item.</summary>
+    private void QueueReplace(
         MediaType type,
         int id,
         string filePath,
         List<ParsedEmbeddedTrack> tracks,
-        string scanKey,
-        CancellationToken cancellationToken)
+        string scanKey)
     {
-        await RemoveRows(type, id, cancellationToken);
+        _pendingRemovals.Add((type, id));
 
-        _dbContext.MediaSubtitleTracks.AddRange(tracks.Select(track => new MediaSubtitleTrack
+        _pendingTracks.AddRange(tracks.Select(track => new MediaSubtitleTrack
         {
             MediaType = type,
             MediaId = id,
@@ -687,7 +796,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             FilePath = filePath,
             MediaHash = scanKey
         }));
-        _dbContext.MediaSubtitleTracks.Add(new MediaSubtitleTrack
+        _pendingTracks.Add(new MediaSubtitleTrack
         {
             MediaType = type,
             MediaId = id,
@@ -700,18 +809,54 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             FilePath = filePath,
             MediaHash = scanKey
         });
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        _filesSinceFlush++;
 
-        // keep the in-memory marker cache in step with what the DB now holds
+        // keep the in-memory marker cache in step with what the DB will hold
+        // after the flush; (type, id) targets are unique within a run.
         Markers[((int)type, id)] = scanKey;
     }
 
-    private async Task RemoveRows(MediaType type, int id, CancellationToken cancellationToken)
+    /// <summary>Queues the deletion of every row of the media item.</summary>
+    private void QueueRemoval(MediaType type, int id)
     {
-        await _dbContext.MediaSubtitleTracks
-            .Where(track => track.MediaType == type && track.MediaId == id)
-            .ExecuteDeleteAsync(cancellationToken);
+        _pendingRemovals.Add((type, id));
+        _filesSinceFlush++;
         Markers.Remove(((int)type, id));
+    }
+
+    /// <summary>
+    /// Persists every queued operation in a single transaction: batched
+    /// ExecuteDelete per media type, then one SaveChanges for all inserts.
+    /// Deletes run before the inserts land, so a replaced file's old rows
+    /// cannot collide with its fresh ones.
+    /// </summary>
+    private async Task FlushAsync(CancellationToken cancellationToken)
+    {
+        if (_pendingRemovals.Count == 0 && _pendingTracks.Count == 0)
+        {
+            return;
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        foreach (var group in _pendingRemovals.GroupBy(removal => removal.Type))
+        {
+            var mediaType = group.Key;
+            foreach (var idChunk in group.Select(removal => removal.Id).Chunk(DeleteChunkSize))
+            {
+                var ids = idChunk.ToList();
+                await _dbContext.MediaSubtitleTracks
+                    .Where(track => track.MediaType == mediaType && ids.Contains(track.MediaId))
+                    .ExecuteDeleteAsync(cancellationToken);
+            }
+        }
+
+        _dbContext.MediaSubtitleTracks.AddRange(_pendingTracks);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        _pendingRemovals.Clear();
+        _pendingTracks.Clear();
+        _filesSinceFlush = 0;
     }
 
     /// <summary>Incremental key: content of Movie.MediaHash belongs to the translation

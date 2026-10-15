@@ -256,6 +256,119 @@ public class MediaControllerTests
         Assert.IsType<NotFoundResult>(action.Result);
     }
 
+    // ── subtitle card cache (audit P1-5) ────────────────────────────
+
+    // Unique per test run: the cache is static and lives across tests, so a
+    // fixed path would leak state between them.
+    private static string FreshDirectory() => $"/movies/cache-{Guid.NewGuid():N}";
+
+    private void SetupScanResult(string directory, params string[] files) =>
+        _subtitleService
+            .Setup(service => service.GetAllSubtitles(directory))
+            .ReturnsAsync(files.Select(file => new Subtitles
+            {
+                Path = $"{directory}/{file}.zh.srt",
+                FileName = $"{file}.zh",
+                Language = "zh",
+                Languages = ["zh"],
+                Format = ".srt"
+            }).ToList());
+
+    [Fact]
+    public async Task GetMediaSubtitles_RepeatedRequest_IsServedFromCacheWithoutRescan()
+    {
+        var directory = FreshDirectory();
+        var movie = NewMovie(20, directory, "movie.mkv");
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        SetupScanResult(directory, "movie");
+
+        var first = await CreateController().GetMediaSubtitles(MediaType.Movie, 20);
+        var second = await CreateController().GetMediaSubtitles(MediaType.Movie, 20);
+
+        // the disk (GetAllSubtitles) is hit exactly once — audit P1-5
+        _subtitleService.Verify(service => service.GetAllSubtitles(directory), Times.Once);
+
+        var firstPayload = Assert.IsType<MediaSubtitlesResponse>(Assert.IsType<OkObjectResult>(first.Result).Value!);
+        var secondPayload = Assert.IsType<MediaSubtitlesResponse>(Assert.IsType<OkObjectResult>(second.Result).Value!);
+        Assert.Equal(
+            firstPayload.Files.Select(file => file.FileName).ToList(),
+            secondPayload.Files.Select(file => file.FileName).ToList());
+        Assert.Single(secondPayload.Files);
+    }
+
+    [Fact]
+    public async Task GetMediaSubtitles_ExpiredCache_RescansTheDirectory()
+    {
+        var originalTtl = MediaController.SubtitleFileCacheTtl;
+        MediaController.SubtitleFileCacheTtl = TimeSpan.FromMilliseconds(-1); // instantly stale
+        try
+        {
+            var directory = FreshDirectory();
+            var movie = NewMovie(21, directory, "movie.mkv");
+            _dbContext.Movies.Add(movie);
+            await _dbContext.SaveChangesAsync();
+            SetupScanResult(directory, "movie");
+
+            await CreateController().GetMediaSubtitles(MediaType.Movie, 21);
+            await CreateController().GetMediaSubtitles(MediaType.Movie, 21);
+
+            _subtitleService.Verify(service => service.GetAllSubtitles(directory), Times.Exactly(2));
+        }
+        finally
+        {
+            MediaController.SubtitleFileCacheTtl = originalTtl;
+        }
+    }
+
+    [Fact]
+    public async Task GetMediaSubtitles_ShowCachesEverySeasonDirectoryIndependently()
+    {
+        // two season directories under one show: the first view scans both,
+        // the second view scans neither
+        var (show, _, _, _) = NewShow(22);
+        var seasonA = show.Seasons[0].Path!;
+        var seasonB = seasonA + "-b";
+        show.Seasons.Add(new Season
+        {
+            Id = 2300,
+            SeasonNumber = 2,
+            Path = seasonB,
+            ShowId = show.Id,
+            Show = show,
+            Episodes = []
+        });
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+        SetupScanResult(seasonA, "show.s01e01");
+        SetupScanResult(seasonB, "show.s02e01");
+
+        var first = await CreateController().GetMediaSubtitles(MediaType.Show, 22);
+        var second = await CreateController().GetMediaSubtitles(MediaType.Show, 22);
+
+        _subtitleService.Verify(service => service.GetAllSubtitles(seasonA), Times.Once);
+        _subtitleService.Verify(service => service.GetAllSubtitles(seasonB), Times.Once);
+
+        var payload = Assert.IsType<MediaSubtitlesResponse>(Assert.IsType<OkObjectResult>(second.Result).Value!);
+        Assert.Equal(2, payload.Files.Count);
+    }
+
+    [Fact]
+    public async Task GetMediaSubtitles_InvalidatedCache_Rescans()
+    {
+        var directory = FreshDirectory();
+        var movie = NewMovie(23, directory, "movie.mkv");
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        SetupScanResult(directory, "movie");
+
+        await CreateController().GetMediaSubtitles(MediaType.Movie, 23);
+        MediaController.InvalidateSubtitleFileCache(directory);
+        await CreateController().GetMediaSubtitles(MediaType.Movie, 23);
+
+        _subtitleService.Verify(service => service.GetAllSubtitles(directory), Times.Exactly(2));
+    }
+
     // ── library: pageSize clamp + single-media detail path (audit P0-8/P2) ──
 
     [Fact]
