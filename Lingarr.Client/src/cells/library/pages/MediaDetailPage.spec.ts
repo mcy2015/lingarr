@@ -27,23 +27,31 @@ const translateSubtitleMock = vi.hoisted(() => vi.fn())
 const translateEmbeddedTrackMock = vi.hoisted(() => vi.fn())
 const getActiveTranslationsMock = vi.hoisted(() => vi.fn())
 const mediaSubtitlesMock = vi.hoisted(() => vi.fn())
+const subtitleNeedMock = vi.hoisted(() => vi.fn())
 
-/// mediaSubtitles payload shape (F2a): external files + embedded tracks.
+/// mediaSubtitles payload shape (F2a + requirement card A/B): external
+/// files + embedded tracks + the container's audio languages (null=unknown).
 const subtitlesPayload = (
     overrides: Partial<{
         files: unknown[]
         embedded: unknown[]
         embeddedScanned: boolean
+        audioLanguages: string[] | null
     }> = {}
 ) => ({
     files: [],
     embedded: [],
     embeddedScanned: false,
+    audioLanguages: null,
     ...overrides
 })
 
 vi.mock('@/cells/app/api/mediaService', () => ({
-    mediaService: () => ({ library: libraryMock, mediaSubtitles: mediaSubtitlesMock })
+    mediaService: () => ({
+        library: libraryMock,
+        mediaSubtitles: mediaSubtitlesMock,
+        subtitleNeed: subtitleNeedMock
+    })
 }))
 
 vi.mock('@/cells/app/api/translationRequestService', () => ({
@@ -400,6 +408,14 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
         const links = wrapper.findAll('a').filter((a) => a.attributes('href') === '/queue/9')
         expect(links).toHaveLength(1)
     })
+
+    it('keeps the single media id filter for movie histories', async () => {
+        await mountDetail('movie', '/library/movie/7')
+
+        // a movie is its own media: the legacy single-id filter still applies
+        expect(requestsMock).toHaveBeenCalledTimes(1)
+        expect(requestsMock).toHaveBeenCalledWith(1, '', 'CreatedAt', false, null, '7')
+    })
 })
 
 describe('MediaDetailPage · 剧集详情(screen-07)', () => {
@@ -482,6 +498,63 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
         expect(translateSubtitleMock).not.toHaveBeenCalled()
         expect(toastStore.toasts[0].message).toBe(en.mediaDetail.show.noneQueued)
         expect(router.currentRoute.value.name).toBe('media-detail-show')
+    })
+
+    it('scopes the episode history to the parent show instead of an episode id list', async () => {
+        await mountDetail('show', '/library/show/3')
+
+        // P1-6: the show's episode requests roll up server-side by the parent
+        // show id — no comma-joined episode id list travels in the URL
+        expect(requestsMock).toHaveBeenCalledTimes(1)
+        expect(requestsMock).toHaveBeenCalledWith(1, '', 'CreatedAt', false, null, null, 3)
+        expect(String(requestsMock.mock.calls[0][5] ?? '')).not.toContain('21,22,23')
+    })
+
+    it('pages the per-episode table at 100 rows for thousand-episode seasons', async () => {
+        const episodes = Array.from({ length: 250 }, (_, i) => ({
+            id: 1000 + i,
+            episodeNumber: i + 1,
+            title: `Episode ${i + 1}`,
+            fileName: `show.s01e${String(i + 1).padStart(3, '0')}.mkv`
+        }))
+        const bigShowItem = {
+            ...showItem,
+            episodeCount: 250,
+            show: {
+                ...showItem.show!,
+                seasons: [{ ...showItem.show!.seasons[0], episodes }]
+            }
+        } as unknown as IMediaLibraryItem
+        libraryMock.mockResolvedValue({
+            items: [bigShowItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+
+        const { wrapper } = await mountDetail('show', '/library/show/3')
+
+        const table = wrapper.find('table')
+        // page 1 of a 250-episode season renders exactly the page size
+        const dataRows = table
+            .findAll('tbody tr')
+            .filter((row) => row.text() !== en.mediaDetail.noEpisodes)
+        expect(dataRows).toHaveLength(100)
+        expect(wrapper.find('[data-test="episode-pager"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="episode-pager-label"]').text()).toBe('1 / 3')
+        expect(wrapper.find('[data-test="episode-pager-prev"]').attributes('disabled')).toBeDefined()
+
+        await wrapper.find('[data-test="episode-pager-next"]').trigger('click')
+        expect(
+            table.findAll('tbody tr').filter((row) => row.text() !== en.mediaDetail.noEpisodes)
+        ).toHaveLength(100)
+
+        await wrapper.find('[data-test="episode-pager-next"]').trigger('click')
+        expect(
+            table.findAll('tbody tr').filter((row) => row.text() !== en.mediaDetail.noEpisodes)
+        ).toHaveLength(50)
+        expect(wrapper.find('[data-test="episode-pager-label"]').text()).toBe('3 / 3')
+        expect(wrapper.find('[data-test="episode-pager-next"]').attributes('disabled')).toBeDefined()
     })
 
     it('links the episode detail button to the episode request when one is in flight or failed', async () => {
@@ -917,6 +990,123 @@ describe('MediaDetailPage · 内嵌轨道翻译(F2b · 剧集)', () => {
         })
         expect(toastStore.toasts[0].message).toBe(
             en.mediaDetail.subtitleFiles.embedded.queuedToast.replace('{id}', '92')
+        )
+    })
+})
+
+// ═══ 需求卡 B:音轨行 + 「标记需要字幕/取消标记」(电影)════════════
+describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电影)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        // The mark toggle refreshes the list row in place (by design), so a
+        // fresh shallow copy per test keeps the module-level movieItem from
+        // carrying a previous test's needsNoSubtitles mutation forward.
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('states the unknown audio honestly and marks the media as needing subtitles', async () => {
+        subtitleNeedMock.mockResolvedValue({ needsNoSubtitles: true })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        const row = card.find('[data-test="audio-languages-row"]')
+        expect(row.exists()).toBe(true)
+        // null audio renders the honest unknown hint, never fake codes
+        expect(row.find('[data-test="audio-languages-value"]').exists()).toBe(false)
+        expect(row.find('[data-test="audio-languages-unknown"]').text()).toBe(
+            en.mediaDetail.audio.unknown
+        )
+
+        // unknown audio is conservatively unexempted → the mark entry shows
+        const toggle = row.find('[data-test="subtitle-need-toggle"]')
+        expect(toggle.text()).toBe(en.mediaDetail.audio.markNeeded)
+
+        await toggle.trigger('click')
+        await settle()
+
+        expect(subtitleNeedMock).toHaveBeenCalledTimes(1)
+        expect(subtitleNeedMock).toHaveBeenCalledWith('Movie', 7, true)
+        expect(toastStore.toasts[0].message).toBe(en.mediaDetail.audio.markedToast)
+        expect(toastStore.toasts[0].type).toBe('success')
+        // in-place refresh: only the subtitle card is re-fetched (no reload)
+        expect(mediaSubtitlesMock).toHaveBeenCalledTimes(2)
+        // the response's effective state drives the toggle's new label
+        expect(wrapper.find('[data-test="subtitle-need-toggle"]').text()).toBe(
+            en.mediaDetail.audio.cancelMark
+        )
+    })
+
+    it('lists the mono audio codes and offers the override for target-covering audio', async () => {
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem, needsNoSubtitles: true }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload({ audioLanguages: ['en', 'zh'] }))
+        subtitleNeedMock.mockResolvedValue({ needsNoSubtitles: false })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const row = wrapper.find('[data-test="audio-languages-row"]')
+        expect(row.find('[data-test="audio-languages-value"]').text()).toBe('en · zh')
+        expect(row.find('[data-test="audio-languages-unknown"]').exists()).toBe(false)
+
+        // exempt via zh audio → the entry overrides it back into the pool
+        const toggle = row.find('[data-test="subtitle-need-toggle"]')
+        expect(toggle.text()).toBe(en.mediaDetail.audio.markNeeded)
+
+        await toggle.trigger('click')
+        await settle()
+
+        expect(subtitleNeedMock).toHaveBeenCalledWith('Movie', 7, true)
+        expect(toastStore.toasts[0].type).toBe('success')
+        // reversible (AC5): with the override active the entry flips
+        expect(wrapper.find('[data-test="subtitle-need-toggle"]').text()).toBe(
+            en.mediaDetail.audio.cancelMark
+        )
+    })
+
+    it('renders no entry when known audio simply lacks the target language', async () => {
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload({ audioLanguages: ['ja'] }))
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const row = wrapper.find('[data-test="audio-languages-row"]')
+        expect(row.find('[data-test="audio-languages-value"]').text()).toBe('ja')
+        expect(row.find('[data-test="subtitle-need-toggle"]').exists()).toBe(false)
+    })
+
+    it('toasts the readable server error and keeps the state when the mark is rejected', async () => {
+        subtitleNeedMock.mockRejectedValue({
+            isAxiosError: true,
+            message: 'Network Error',
+            response: { data: { message: 'media not found' } }
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="subtitle-need-toggle"]').trigger('click')
+        await settle()
+
+        expect(toastStore.toasts[0].type).toBe('error')
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.audio.failedToast.replace('{message}', 'media not found')
+        )
+        // no in-place refresh on failure, label unchanged
+        expect(mediaSubtitlesMock).toHaveBeenCalledTimes(1)
+        expect(wrapper.find('[data-test="subtitle-need-toggle"]').text()).toBe(
+            en.mediaDetail.audio.markNeeded
         )
     })
 })

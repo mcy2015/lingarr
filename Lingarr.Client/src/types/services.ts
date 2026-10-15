@@ -86,6 +86,11 @@ export interface IMediaService {
     /// External files plus embedded tracks of one media item (see
     /// IMediaSubtitlesResponse).
     mediaSubtitles<T>(mediaType: MediaType, id: number): Promise<T>
+    /// Requirement card A/B: set the manual「需要字幕」override of one media
+    /// item (needed=true → needs subtitles, needed=false → lifts the mark
+    /// and re-exempts). The response carries the resulting effective state
+    /// (see ISubtitleNeedResponse).
+    subtitleNeed<T>(mediaType: MediaType, id: number, needed: boolean): Promise<T>
 }
 
 /// One external subtitle file next to a media item; languages carries every
@@ -121,6 +126,15 @@ export interface IMediaSubtitlesResponse {
     files: IMediaSubtitleFile[]
     embedded: IMediaEmbeddedTrack[]
     embeddedScanned: boolean
+    /// Requirement card A: normalized audio language codes of the media's
+    /// container (['zh', 'en']); null = unknown (nothing probed / und only).
+    audioLanguages: string[] | null
+}
+
+/// POST api/media/{mediaType}/{id}/subtitle-need response: the effective
+///「无需字幕」state after applying the requested「需要字幕」mark.
+export interface ISubtitleNeedResponse {
+    needsNoSubtitles: boolean
 }
 
 export interface ISettingService {
@@ -400,7 +414,8 @@ export interface ITranslationRequestService {
         sortBy: string,
         ascending: boolean,
         status?: string | null,
-        mediaIds?: string | null
+        mediaIds?: string | null,
+        mediaParentId?: number | null
     ): Promise<T>
     statusCounts(): Promise<Record<string, number>>
     getRecentEvents(take: number): Promise<ITranslationRequestEventSummary[]>

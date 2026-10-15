@@ -133,6 +133,11 @@ public class TranslationRequestController : ControllerBase
     /// <param name="status">Optional status filter for the queue tabs</param>
     /// <param name="pageSize">Number of items per page</param>
     /// <param name="pageNumber">Page number to retrieve</param>
+    /// <param name="mediaIds">Optional comma-separated media ids to filter by (movie detail histories)</param>
+    /// <param name="mediaParentId">
+    /// Optional parent show id: returns only requests whose media is an episode of that show,
+    /// pushed down to SQL over episode→season→show (scale audit P1-6, replaces episode-id URL lists)
+    /// </param>
     /// <response code="200">Returns the paginated list of translation requests</response>
     /// <response code="500">If there was an error checking for updates</response>
     /// <returns>ActionResult containing the paginated list of translation requests</returns>
@@ -144,7 +149,8 @@ public class TranslationRequestController : ControllerBase
         int pageSize = 20,
         int pageNumber = 1,
         TranslationStatus? status = null,
-        string? mediaIds = null)
+        string? mediaIds = null,
+        int? mediaParentId = null)
     {
         var value = await _translationRequestService.GetTranslationRequests(
             searchQuery,
@@ -153,7 +159,8 @@ public class TranslationRequestController : ControllerBase
             pageNumber,
             pageSize,
             status,
-            mediaIds);
+            mediaIds,
+            mediaParentId);
 
         return Ok(value);
     }

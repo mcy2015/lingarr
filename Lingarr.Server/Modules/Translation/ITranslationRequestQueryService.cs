@@ -30,6 +30,15 @@ public interface ITranslationRequestQueryService
     /// Retrieves a paginated list of translation requests with optional filtering and sorting.
     /// Returns list-row summaries; entity internals are not exposed.
     /// </summary>
+    /// <param name="mediaIds">
+    /// Optional comma-separated media ids to filter by (legacy per-media filter,
+    /// still used by movie detail histories).
+    /// </param>
+    /// <param name="mediaParentId">
+    /// Optional parent show id: when set, only requests whose media is an
+    /// episode of that show are returned (SQL pushdown over episode→season→show,
+    /// scale audit P1-6 — replaces thousand-id URL lists).
+    /// </param>
     Task<PagedResult<TranslationRequestSummary>> GetTranslationRequests(
         string? searchQuery,
         string? orderBy,
@@ -37,7 +46,8 @@ public interface ITranslationRequestQueryService
         int pageNumber,
         int pageSize,
         TranslationStatus? status = null,
-        string? mediaIds = null);
+        string? mediaIds = null,
+        int? mediaParentId = null);
 
     /// <summary>
     /// Request count per translation status, for the queue filter tabs.

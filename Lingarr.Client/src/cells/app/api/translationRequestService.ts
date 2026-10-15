@@ -18,7 +18,8 @@ const service = (
         orderBy: string,
         ascending: boolean,
         status?: string | null,
-        mediaIds?: string | null
+        mediaIds?: string | null,
+        mediaParentId?: number | null
     ): Promise<T> {
         return http
             .get(
@@ -28,7 +29,8 @@ const service = (
                     orderBy: orderBy,
                     ascending: ascending,
                     status: status ?? '',
-                    mediaIds: mediaIds ?? ''
+                    mediaIds: mediaIds ?? '',
+                    mediaParentId: mediaParentId ?? ''
                 })
             )
             .then((response) => response.data)

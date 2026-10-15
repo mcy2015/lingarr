@@ -184,6 +184,33 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- ═══ 千集季分页(P2):每页 100 行,页码为真实切片计数 ═══ -->
+                <div
+                    v-if="episodePageCount > 1"
+                    class="border-line flex shrink-0 items-center justify-center gap-3 border-t px-4 py-2"
+                    data-test="episode-pager">
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
+                        :disabled="episodePage === 1"
+                        :aria-label="t('mediaDetail.episodePagePrev')"
+                        data-test="episode-pager-prev"
+                        @click="episodePage--">
+                        ‹
+                    </button>
+                    <span class="mono text-secondary-content text-xs" data-test="episode-pager-label">
+                        {{ episodePage }} / {{ episodePageCount }}
+                    </span>
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
+                        :disabled="episodePage === episodePageCount"
+                        :aria-label="t('mediaDetail.episodePageNext')"
+                        data-test="episode-pager-next"
+                        @click="episodePage++">
+                        ›
+                    </button>
+                </div>
             </div>
         </template>
 
@@ -234,6 +261,38 @@
                 <span class="mono text-secondary-content ml-auto text-xs">
                     {{ t('mediaDetail.subtitleFiles.count', { count: subtitleFiles.length }) }}
                 </span>
+            </div>
+
+            <!-- ═══ 需求卡 B:音轨行 —— mono 语言码(null=未知);「标记需要字幕/取消标记」
+                 入口按真实豁免态渲染,已知音轨且不含目标语言时不渲染任何入口 ═══ -->
+            <div
+                v-if="item"
+                class="border-line/60 bg-tertiary/40 flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1 border-b px-4 py-2 text-[12.5px]"
+                data-test="audio-languages-row">
+                <span class="text-secondary-content text-[11px] font-semibold tracking-wide">
+                    {{ t('mediaDetail.audio.title') }}
+                </span>
+                <span
+                    v-if="audioLanguages"
+                    class="mono text-primary-content text-[11.5px]"
+                    data-test="audio-languages-value">
+                    {{ audioLanguages.join(' · ') }}
+                </span>
+                <span
+                    v-else
+                    class="text-secondary-content/70 text-xs"
+                    data-test="audio-languages-unknown">
+                    {{ t('mediaDetail.audio.unknown') }}
+                </span>
+                <button
+                    v-if="subtitleNeedAction"
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
+                    :disabled="subtitleNeedBusy"
+                    data-test="subtitle-need-toggle"
+                    @click="toggleSubtitleNeed(subtitleNeedAction.needed)">
+                    {{ subtitleNeedAction.label }}
+                </button>
             </div>
             <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
                 <div
@@ -418,6 +477,7 @@ import {
     ISeason,
     IShow,
     ISubtitle,
+    ISubtitleNeedResponse,
     ITranslationRequest,
     IPagedResult,
     SETTINGS,
@@ -459,7 +519,12 @@ const activeSeason = ref<number | null>(null)
 const isShow = computed(() => props.type === 'show')
 const show = computed<IShow | null>(() => item.value?.show ?? null)
 const seasons = computed<ISeason[]>(() => show.value?.seasons ?? [])
-const episodes = computed<EpisodeRow[]>(() => {
+/// Full episode list of the active season — the per-episode table pages over
+/// it client-side (thousand-episode seasons render 100 rows per page), while
+/// season-wide actions (translate missing) still walk every episode.
+const EPISODE_PAGE_SIZE = 100
+const episodePage = ref(1)
+const seasonEpisodes = computed<EpisodeRow[]>(() => {
     const season = seasons.value.find((s) => s.seasonNumber === activeSeason.value)
     return (season?.episodes ?? []).map((ep) => ({
         id: ep.id,
@@ -468,6 +533,18 @@ const episodes = computed<EpisodeRow[]>(() => {
         fileName: ep.fileName ?? '',
         season: season as ISeason
     }))
+})
+const episodes = computed<EpisodeRow[]>(() =>
+    seasonEpisodes.value.slice(
+        (episodePage.value - 1) * EPISODE_PAGE_SIZE,
+        episodePage.value * EPISODE_PAGE_SIZE
+    )
+)
+const episodePageCount = computed(() =>
+    Math.max(1, Math.ceil(seasonEpisodes.value.length / EPISODE_PAGE_SIZE))
+)
+watch(activeSeason, () => {
+    episodePage.value = 1
 })
 
 const trackedLanguages = computed<string[]>(() => {
@@ -482,6 +559,51 @@ const firstTargetLanguage = computed<ILanguage | null>(() => {
     const languages = (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
     return languages[0] ?? null
 })
+
+// ── 音轨行 · 字幕需求标记(需求卡 A/B)══════════════════════════
+
+/// Audio languages of the audio row: the subtitle-card payload (per-media
+/// scan, refreshed after every mark) wins; the library row backs the card
+/// up when that payload failed to load. null = unknown — the row then
+/// states so honestly instead of inventing codes.
+const audioLanguages = computed<string[] | null>(() => {
+    if (subtitlePayload.value) return subtitlePayload.value.audioLanguages
+    return item.value?.audioLanguages ?? null
+})
+
+/// Whether the container audio already covers the first configured target
+/// language — the automatic「无需字幕」exemption basis of requirement card A.
+const audioContainsTarget = computed<boolean>(() => {
+    const audio = audioLanguages.value
+    const target = firstTargetLanguage.value?.code?.toLowerCase()
+    if (!audio || !target) return false
+    return audio.some((code) => code.toLowerCase() === target)
+})
+
+/// The audio row's single toggle. 「标记需要字幕」(needed=true) pulls an
+/// exempt item back into the needing pool — it overrides the automatic
+/// target-covering exemption (AC5 reversible) and confirms unknown-audio
+/// items;「取消标记」(needed=false) lifts the mark so the exemption
+/// re-applies. Known audio without the target has nothing to toggle — no
+/// entry renders there.
+const subtitleNeedAction = computed<{ label: string; needed: boolean } | null>(() => {
+    const media = item.value
+    if (!media) return null
+    if (media.needsNoSubtitles) {
+        return audioContainsTarget.value
+            ? { label: t('mediaDetail.audio.markNeeded'), needed: true }
+            : { label: t('mediaDetail.audio.cancelMark'), needed: false }
+    }
+    if (audioLanguages.value === null) {
+        return { label: t('mediaDetail.audio.markNeeded'), needed: true }
+    }
+    if (audioContainsTarget.value) {
+        return { label: t('mediaDetail.audio.cancelMark'), needed: false }
+    }
+    return null
+})
+
+const subtitleNeedBusy = ref(false)
 
 const configuredSourceCodes = computed<string[]>(() => {
     const languages = (settingStore.getSetting(SETTINGS.SOURCE_LANGUAGES) ?? []) as ILanguage[]
@@ -631,30 +753,37 @@ async function load(): Promise<void> {
         await loadSeasonSubtitles(seasons.value[0])
     }
 
-    // requests: per-episode (shows) or the movie itself
-    const ids = isShow.value
-        ? seasons.value.flatMap((s) => s.episodes.map((e) => e.id))
-        : [item.value.id]
-    if (ids.length > 0) {
-        const historyPage = await translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
-            1,
-            '',
-            'CreatedAt',
-            false,
-            null,
-            ids.join(',')
-        )
-        history.value = historyPage.items
-        const latest = new Map<number, ITranslationRequest>()
-        for (const request of history.value) {
-            if (request.mediaId == null) continue
-            const current = latest.get(request.mediaId)
-            if (!current || (request.updatedAt ?? '') > (current.updatedAt ?? '')) {
-                latest.set(request.mediaId, request)
-            }
+    // requests: a show's episode history rolls up server-side by the parent
+    // show (P1-6 — no episode-id URL list for thousand-episode seasons);
+    // movies keep the single media id filter
+    const historyPage = isShow.value
+        ? await translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
+              1,
+              '',
+              'CreatedAt',
+              false,
+              null,
+              null,
+              item.value.id
+          )
+        : await translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
+              1,
+              '',
+              'CreatedAt',
+              false,
+              null,
+              String(item.value.id)
+          )
+    history.value = historyPage.items
+    const latest = new Map<number, ITranslationRequest>()
+    for (const request of history.value) {
+        if (request.mediaId == null) continue
+        const current = latest.get(request.mediaId)
+        if (!current || (request.updatedAt ?? '') > (current.updatedAt ?? '')) {
+            latest.set(request.mediaId, request)
         }
-        requestsByEpisode.value = latest
     }
+    requestsByEpisode.value = latest
 }
 
 /// 字幕文件行的语言标签:常见码用本地化名,其余回退原码。
@@ -886,11 +1015,56 @@ async function translateEmbeddedTrack(
     }
 }
 
+/// 「标记需要字幕/取消标记」(需求卡 A/B): the response carries the resulting
+/// effective needsNoSubtitles state — apply it in place (the list-derived
+/// row object is the same reference), toast, then refresh just the subtitle
+/// card so the audio row re-renders from a fresh payload. Never a full
+/// page reload.
+async function toggleSubtitleNeed(needed: boolean): Promise<void> {
+    const media = item.value
+    if (!media || subtitleNeedBusy.value) return
+    subtitleNeedBusy.value = true
+    try {
+        const result = await mediaApi.subtitleNeed<ISubtitleNeedResponse>(
+            isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE,
+            media.id,
+            needed
+        )
+        media.needsNoSubtitles = result.needsNoSubtitles
+        toastStore.push({
+            message: needed
+                ? t('mediaDetail.audio.markedToast')
+                : t('mediaDetail.audio.unmarkedToast'),
+            type: 'success'
+        })
+        try {
+            subtitlePayload.value = await mediaApi.mediaSubtitles<IMediaSubtitlesResponse>(
+                isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE,
+                media.id
+            )
+        } catch {
+            subtitlePayload.value = null
+        }
+    } catch (error) {
+        const detail = axios.isAxiosError(error)
+            ? ((error.response?.data as { message?: string } | undefined)?.message ??
+              error.message)
+            : String(error)
+        toastStore.push({
+            message: t('mediaDetail.audio.failedToast', { message: detail }),
+            type: 'error'
+        })
+    } finally {
+        subtitleNeedBusy.value = false
+    }
+}
+
 /// Screen button + topbar CTA (shared action): queue every episode of the
 /// active season that still lacks the target-language track, then report
 /// the real count and follow the jobs into the queue screen.
 async function translateMissing(language: ILanguage): Promise<void> {
-    const missing = episodes.value.filter(
+    // season-wide action: walk the full season list, not just the visible page
+    const missing = seasonEpisodes.value.filter(
         (ep) => episodeSource(ep) && !episodeHas(ep, language.code)
     )
     if (missing.length === 0) {

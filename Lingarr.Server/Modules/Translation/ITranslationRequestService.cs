@@ -94,7 +94,8 @@ public interface ITranslationRequestService
         int pageNumber,
         int pageSize,
         TranslationStatus? status = null,
-        string? mediaIds = null);
+        string? mediaIds = null,
+        int? mediaParentId = null);
 
     /// <summary>
     /// Request count per translation status, for the queue filter tabs.

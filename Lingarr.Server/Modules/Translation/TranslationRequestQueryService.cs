@@ -151,13 +151,33 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
         int pageNumber,
         int pageSize,
         TranslationStatus? status = null,
-        string? mediaIds = null)
+        string? mediaIds = null,
+        int? mediaParentId = null)
     {
         var query = _dbContext.TranslationRequests
             .AsSplitQuery()
             .AsQueryable();
 
-        // media detail history: requests of a show come in per-episode ids
+        // media detail history (scale audit P1-6): a show's episode requests
+        // roll up by the owning show instead of a per-episode id list in the
+        // URL — the episode→season→show join stays in SQL as a correlated
+        // EXISTS, so no mediaIds IN(...) is built for show histories.
+        // Episode requests historically carry MediaType Show or Episode (the
+        // library aggregation reads the former, request creation writes the
+        // latter), so both conventions match; other media types never do.
+        if (mediaParentId is { } parentShowId)
+        {
+            query = query.Where(translationRequest =>
+                translationRequest.MediaId != null
+                && (translationRequest.MediaType == MediaType.Episode
+                    || translationRequest.MediaType == MediaType.Show)
+                && _dbContext.Episodes.Any(episode =>
+                    episode.Id == translationRequest.MediaId
+                    && episode.Season.ShowId == parentShowId));
+        }
+
+        // legacy per-media filter, kept for callers without a parent (movie
+        // detail histories pass a single id)
         var mediaIdList = mediaIds?
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(int.Parse)

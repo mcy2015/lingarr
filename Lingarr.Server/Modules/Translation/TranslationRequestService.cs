@@ -85,8 +85,9 @@ public class TranslationRequestService : ITranslationRequestService
         int pageNumber,
         int pageSize,
         TranslationStatus? status = null,
-        string? mediaIds = null)
-        => _queryService.GetTranslationRequests(searchQuery, orderBy, ascending, pageNumber, pageSize, status, mediaIds);
+        string? mediaIds = null,
+        int? mediaParentId = null)
+        => _queryService.GetTranslationRequests(searchQuery, orderBy, ascending, pageNumber, pageSize, status, mediaIds, mediaParentId);
 
     /// <inheritdoc />
     public Task<Dictionary<TranslationStatus, int>> GetStatusCounts()
