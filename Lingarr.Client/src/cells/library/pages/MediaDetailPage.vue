@@ -220,9 +220,10 @@
             </div>
         </div>
 
-        <!-- ═══ 字幕文件:目录下实际存在的外挂字幕(覆盖 chips 的地面真值);
-             双语文件(scjp/简日…)一行带两枚语言标签;下段内嵌轨道为 ffprobe
-             探测结果(F2a 纯展示,PGS 等图形轨标注不可翻译)═══ -->
+        <!-- ═══ Subtitle files: external subtitle files actually existing under the directory (ground truth of the covering chips);
+             dual-language files (scjp/简日…) one row with two language tags; the embedded track section below shows ffprobe detection
+             results (F2b: text tracks with recognized language and uncovered target language have a translate entry; graphic tracks
+             such as PGS are marked non-translatable and have no entry) ═══ -->
         <div
             class="border-line bg-secondary flex max-h-[240px] min-h-0 flex-col rounded-md border"
             data-test="subtitle-files-card">
@@ -272,8 +273,7 @@
                 </div>
 
                 <!-- ═══ 内嵌轨道分区:每轨一行(语言 chip · 标题 · codec);
-                     图形轨(PGS/DVB…)标「图形 · 不可翻译」且无动作入口 ═══ -->
-                <div
+                     图形轨(PGS/DVB…)标「图形 · 不可翻译」且无动作入口 ═══ -->                <div
                     class="border-line/60 bg-tertiary flex items-center gap-2.5 border-y px-4 py-1.5"
                     data-test="embedded-tracks-section">
                     <h3 class="text-secondary-content text-[11px] font-semibold tracking-wide">
@@ -302,7 +302,7 @@
                 <template v-else>
                     <div
                         v-for="track in embeddedTracks"
-                        :key="track.streamIndex"
+                        :key="`${track.mediaId}-${track.streamIndex}`"
                         class="border-line flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b px-4 py-2 text-[12.5px] last:border-b-0"
                         data-test="embedded-track-row">
                         <span class="mono text-secondary-content/70 w-8 flex-none text-[10.5px]">
@@ -336,6 +336,18 @@
                         <span class="mono text-secondary-content flex-none text-[10.5px] uppercase">
                             {{ track.codec }}
                         </span>
+                        <!-- F2b: 文本轨 + 已识别语言 + 仍有未覆盖的目标语言 → 翻译入口;
+                             图形轨/语言未知/目标全覆盖时不渲染 -->
+                        <ContextMenu
+                            v-if="embeddedTrackTranslatable(track)"
+                            @select="(language) => translateEmbeddedTrack(track, language)">
+                            <button
+                                type="button"
+                                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
+                                data-test="embedded-translate">
+                                {{ t('mediaDetail.subtitleFiles.embedded.translate') }}
+                            </button>
+                        </ContextMenu>
                     </div>
                 </template>
             </div>
@@ -400,6 +412,7 @@ import { useUiStore } from '@/cells/app/stores/ui'
 import {
     ILanguage,
     MEDIA_TYPE,
+    IMediaEmbeddedTrack,
     IMediaLibraryItem,
     IMediaSubtitlesResponse,
     ISeason,
@@ -782,6 +795,95 @@ async function translateEpisode(ep: EpisodeRow, language: ILanguage): Promise<vo
         language,
         MEDIA_TYPE.EPISODE
     )
+}
+
+// ── 内嵌轨道翻译(F2b)══════════════════════════════════════
+
+/// Episodes by id across all seasons — show-level embedded rows carry their
+/// owning episode's mediaId, this maps it back to the episode's file name.
+const episodeById = computed(() => {
+    const map = new Map<number, { id: number; fileName?: string | null }>()
+    for (const season of seasons.value) {
+        for (const episode of season.episodes) {
+            map.set(episode.id, episode)
+        }
+    }
+    return map
+})
+
+/// Languages the owning media item already covers: external subtitle files
+/// plus embedded track languages (the same union the server gates on).
+/// Movies own the whole payload; show rows scope external files to the
+/// owning episode through base-name matching.
+function coveredLanguagesFor(mediaId: number): Set<string> {
+    const covered = new Set<string>()
+    if (!isShow.value) {
+        for (const file of subtitleFiles.value) {
+            for (const language of file.languages) covered.add(language.toLowerCase())
+        }
+        for (const track of embeddedTracks.value) {
+            if (track.language) covered.add(track.language.toLowerCase())
+        }
+        return covered
+    }
+
+    const episode = episodeById.value.get(mediaId)
+    const base = episode?.fileName
+        ? episode.fileName.replace(/\.[^.]+$/, '').toLowerCase()
+        : null
+    for (const file of subtitleFiles.value) {
+        if (base && !file.fileName.toLowerCase().startsWith(base + '.')) continue
+        for (const language of file.languages) covered.add(language.toLowerCase())
+    }
+    for (const track of embeddedTracks.value) {
+        if (track.mediaId === mediaId && track.language) {
+            covered.add(track.language.toLowerCase())
+        }
+    }
+    return covered
+}
+
+/// Entry gating: text track + recognized language + at least one configured
+/// target language not covered yet. Graphic tracks and unknown-language
+/// tracks never get the entry; the server re-checks on initiation.
+function embeddedTrackTranslatable(track: IMediaEmbeddedTrack): boolean {
+    if (!track.isTextBased || !track.language) return false
+    const covered = coveredLanguagesFor(track.mediaId)
+    const targets = (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
+    return targets.some((target) => !covered.has(target.code.toLowerCase()))
+}
+
+async function translateEmbeddedTrack(
+    track: IMediaEmbeddedTrack,
+    language: ILanguage
+): Promise<void> {
+    if (!track.language) return
+    try {
+        const requestId = await translateStore.translateEmbeddedTrack({
+            mediaType: isShow.value ? MEDIA_TYPE.EPISODE : MEDIA_TYPE.MOVIE,
+            mediaId: track.mediaId,
+            streamIndex: track.streamIndex,
+            sourceLanguage: track.language,
+            targetLanguage: language.code
+        })
+        toastStore.push({
+            message: t('mediaDetail.subtitleFiles.embedded.queuedToast', { id: requestId }),
+            type: 'success'
+        })
+        await load()
+        if (settingStore.getSetting(SETTINGS.NAVIGATE_TO_DETAILS_ON_REQUEST) === 'true') {
+            await router.push({ name: 'queue-detail', params: { id: requestId } })
+        }
+    } catch (error) {
+        const detail = axios.isAxiosError(error)
+            ? ((error.response?.data as { message?: string } | undefined)?.message ??
+              error.message)
+            : String(error)
+        toastStore.push({
+            message: t('mediaDetail.subtitleFiles.embedded.queuedFailed', { message: detail }),
+            type: 'error'
+        })
+    }
 }
 
 /// Screen button + topbar CTA (shared action): queue every episode of the

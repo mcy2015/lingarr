@@ -28,15 +28,15 @@ public class MigrationTests
             await using var connection = new SqliteConnection(connectionString);
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
-            // The baseline plus the auth-sessions, schedule-cron and
-            // embedded-track migrations are applied.
-            Assert.Equal(4L, await ExecuteScalarAsync(connection,
+            // The baseline plus the auth-sessions, schedule-cron,
+            // embedded-track and consume-embedded migrations are applied.
+            Assert.Equal(5L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(4L, await ExecuteScalarAsync(connection,
+            Assert.Equal(5L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
-            Assert.Equal(89L, await ExecuteScalarAsync(connection,
+            Assert.Equal(90L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
@@ -51,6 +51,10 @@ public class MigrationTests
             // M0004 seeds the embedded track scan cron at its daily 04:30 default.
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'embedded_track_schedule' AND value = '30 4 * * *'"));
+
+            // M0005 seeds the F2b automation opt-in off by default.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'consume_embedded_tracks' AND value = 'false'"));
 
             // Fresh installs ship with authentication enabled (secure default).
             Assert.Equal(1L, await ExecuteScalarAsync(connection,

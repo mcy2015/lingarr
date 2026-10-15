@@ -30,10 +30,14 @@ public class MediaSubtitlesResponse
 /// <summary>
 /// One embedded subtitle stream inside the media container. Graphic tracks
 /// (PGS, DVB…) carry <see cref="IsTextBased"/> = false — display-only, no
-/// translation entry point.
+/// translation entry point. <see cref="MediaId"/> names the movie/episode
+/// that physically owns the stream, so show-level payloads (which aggregate
+/// over episodes) stay attributable for per-track actions (F2b).
 /// </summary>
 public class MediaEmbeddedTrack
 {
+    /// <summary>Id of the owning movie / episode.</summary>
+    public int MediaId { get; set; }
     public int StreamIndex { get; set; }
     /// <summary>Normalized code (zh-CN → zh); null when the tag was unrecognised.</summary>
     public string? Language { get; set; }

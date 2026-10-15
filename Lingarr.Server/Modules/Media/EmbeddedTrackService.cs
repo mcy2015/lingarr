@@ -6,8 +6,10 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Exceptions;
+using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Subtitle;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 
 namespace Lingarr.Server.Modules.Media;
 
@@ -31,6 +33,7 @@ public sealed record ParsedEmbeddedTrack(
 /// display only). Each scanned file ends up with one scan-marker row
 /// (StreamIndex = -1) carrying the incremental "path|mtime" key, plus one row
 /// per subtitle stream; a scan replaces all rows of the file it belongs to.
+/// F2b additionally extracts text tracks via ffmpeg as translation sources.
 /// </summary>
 public class EmbeddedTrackService : IEmbeddedTrackService
 {
@@ -38,6 +41,19 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     public const int ProgressLogInterval = 25;
 
     private const int ProbeTimeoutMs = 10_000;
+
+    /// <summary>Extraction is a stream copy plus text conversion — generous cap.</summary>
+    private const int ExtractTimeoutMs = 120_000;
+
+    /// <summary>
+    /// Runs the ffmpeg extraction binary and returns its stderr (used in
+    /// failure messages). Injectable so unit tests exercise the reuse and
+    /// failure logic without spawning a process.
+    /// </summary>
+    public delegate Task<string> FfmpegRunner(
+        string binary,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken);
 
     /// <summary>Container codec_name → display codec ("subrip" → "srt"…).</summary>
     private static readonly Dictionary<string, string> CodecAliases = new(StringComparer.OrdinalIgnoreCase)
@@ -78,14 +94,31 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
     private readonly LingarrDbContext _dbContext;
     private readonly ILogger<EmbeddedTrackService> _logger;
+    private readonly IHostEnvironment _environment;
+    private readonly FfmpegRunner _ffmpegRunner;
     private string? _ffprobePath;
+    private string? _ffmpegPath;
     private bool _ffprobeResolved;
+    private bool _ffmpegResolved;
 
-    public EmbeddedTrackService(LingarrDbContext dbContext, ILogger<EmbeddedTrackService> logger)
+    public EmbeddedTrackService(
+        LingarrDbContext dbContext,
+        ILogger<EmbeddedTrackService> logger,
+        IHostEnvironment? environment = null,
+        FfmpegRunner? ffmpegRunner = null,
+        Func<string>? ffmpegPathResolver = null)
     {
         _dbContext = dbContext;
         _logger = logger;
+        // Optional collaborators default to the production behavior — tests
+        // inject a stub environment (temp content root) and a recording
+        // ffmpeg runner without DI ceremony, mirroring SubtitleService.
+        _environment = environment ?? new Microsoft.Extensions.Hosting.Internal.HostingEnvironment();
+        _ffmpegRunner = ffmpegRunner ?? RunFfmpeg;
+        _ffmpegPathResolver = ffmpegPathResolver ?? ResolveFfmpegPath;
     }
+
+    private readonly Func<string> _ffmpegPathResolver;
 
     /// <inheritdoc />
     public async Task<EmbeddedTrackScanSummary> ScanMedia(
@@ -221,6 +254,234 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
     private static string NormalizeCodec(string codecName) =>
         CodecAliases.GetValueOrDefault(codecName, codecName.ToLowerInvariant());
+
+    // ── extraction (F2b) ──────────────────────────────────────────
+
+    /// <summary>
+    /// File name of the materialized translation source next to the video:
+    /// <c>{videoBase}.{language}.srt</c>. Public so <see cref="MediaSubtitleProcessor"/>
+    /// can predict the path before extraction (it becomes part of the media
+    /// hash), while the writing itself happens in
+    /// <see cref="PrepareTranslationSource"/>.
+    /// </summary>
+    public static string TranslationSourceFileName(string? mediaFileName, string language)
+    {
+        // Entity file names carry no extension and release base names contain
+        // dots, so only a known video extension is stripped — never the last
+        // dot-separated segment.
+        var baseName = mediaFileName ?? "embedded";
+        foreach (var extension in VideoExtensions)
+        {
+            if (baseName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                baseName = baseName[..^extension.Length];
+                break;
+            }
+        }
+
+        return $"{baseName}.{language.ToLowerInvariant()}.srt";
+    }
+
+    /// <summary>
+    /// The languages a media item already covers: every language of its
+    /// external subtitle files plus every recognized language of its embedded
+    /// text/graphic tracks, all lowercased. This union is what "target
+    /// language already present" means for F2b (manual initiation rejects,
+    /// the automated processor skips).
+    /// </summary>
+    public static HashSet<string> BuildAvailableLanguages(
+        IEnumerable<Subtitles> externalSubtitles,
+        IEnumerable<MediaSubtitleTrack> embeddedTracks)
+    {
+        var languages = new HashSet<string>();
+        foreach (var subtitle in externalSubtitles)
+        {
+            // collection expressions need a target type — no `var` here.
+            List<string> carried = subtitle.Languages.Count > 0 ? subtitle.Languages : [subtitle.Language];
+            foreach (var language in carried)
+            {
+                if (!string.IsNullOrEmpty(language))
+                {
+                    languages.Add(language.ToLowerInvariant());
+                }
+            }
+        }
+
+        foreach (var track in embeddedTracks)
+        {
+            if (!string.IsNullOrEmpty(track.Language))
+            {
+                languages.Add(track.Language.ToLowerInvariant());
+            }
+        }
+
+        return languages;
+    }
+
+    /// <inheritdoc />
+    public async Task<string> ExtractTrack(
+        MediaType mediaType,
+        int mediaId,
+        int streamIndex,
+        CancellationToken cancellationToken = default)
+    {
+        var track = await LoadTrack(mediaType, mediaId, streamIndex, cancellationToken);
+        ValidateExtractable(track);
+
+        var container = track.FilePath;
+        if (string.IsNullOrEmpty(container) || !File.Exists(container))
+        {
+            throw new InvalidOperationException(
+                $"The media container '{container}' recorded for {mediaType} {mediaId} no longer exists on disk. " +
+                "Re-index the media and run the embedded track scan again.");
+        }
+
+        var target = ExtractionFilePath(mediaType, mediaId, streamIndex);
+        // Same track translated again → the previous extraction is reused; a
+        // zero-byte leftover from a crashed run does not count.
+        if (File.Exists(target) && new FileInfo(target).Length > 0)
+        {
+            _logger.LogDebug(
+                "Embedded track extraction reused for {MediaType} {MediaId} stream {StreamIndex}: {Path}",
+                mediaType, mediaId, streamIndex, target);
+            return target;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        _logger.LogInformation(
+            "Extracting embedded subtitle stream {StreamIndex} of {MediaType} {MediaId} to {Path}",
+            streamIndex, mediaType, mediaId, target);
+
+        // ASS/mov_text are converted to SRT (-c:s srt) so the regular SRT
+        // parser can read the result; graphics styling is lost, text isn't.
+        string stderr;
+        try
+        {
+            stderr = await _ffmpegRunner(
+                _ffmpegPathResolver(),
+                ["-y", "-i", container, "-map", $"0:{streamIndex}", "-c:s", "srt", target],
+                cancellationToken);
+        }
+        catch
+        {
+            // never leave a partial extraction behind for the reuse check
+            if (File.Exists(target))
+            {
+                try { File.Delete(target); } catch { /* best effort */ }
+            }
+            throw;
+        }
+
+        if (!File.Exists(target) || new FileInfo(target).Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"ffmpeg extracted nothing for stream {streamIndex} of {container}.{(string.IsNullOrWhiteSpace(stderr) ? string.Empty : " " + stderr.Trim())}");
+        }
+
+        return target;
+    }
+
+    /// <inheritdoc />
+    public async Task<string> PrepareTranslationSource(
+        MediaType mediaType,
+        int mediaId,
+        int streamIndex,
+        CancellationToken cancellationToken = default)
+    {
+        var extracted = await ExtractTrack(mediaType, mediaId, streamIndex, cancellationToken);
+        var track = await LoadTrack(mediaType, mediaId, streamIndex, cancellationToken);
+        var media = await ResolveMediaDirectory(mediaType, mediaId, cancellationToken);
+
+        var sourcePath = Path.Combine(
+            media.Directory,
+            TranslationSourceFileName(media.FileName, track.Language ?? "unknown"));
+
+        if (!File.Exists(sourcePath) || new FileInfo(sourcePath).Length == 0)
+        {
+            File.Copy(extracted, sourcePath, overwrite: true);
+            _logger.LogInformation(
+                "Materialized embedded track {StreamIndex} of {MediaType} {MediaId} as translation source {Path}",
+                streamIndex, mediaType, mediaId, sourcePath);
+        }
+
+        return sourcePath;
+    }
+
+    /// <summary>
+    /// Deterministic extraction cache path:
+    /// <c>{contentRoot}/config/imports/embedded/embedded.{type}.{id}.s{index}.srt</c>.
+    /// </summary>
+    private string ExtractionFilePath(MediaType mediaType, int mediaId, int streamIndex) =>
+        Path.Combine(
+            _environment.ContentRootPath,
+            "config", "imports", "embedded",
+            $"embedded.{mediaType.ToString().ToLowerInvariant()}.{mediaId}.s{streamIndex}.srt");
+
+    private async Task<MediaSubtitleTrack> LoadTrack(
+        MediaType mediaType,
+        int mediaId,
+        int streamIndex,
+        CancellationToken cancellationToken)
+    {
+        var track = await _dbContext.MediaSubtitleTracks
+            .FirstOrDefaultAsync(candidate =>
+                candidate.MediaType == mediaType
+                && candidate.MediaId == mediaId
+                && candidate.StreamIndex == streamIndex, cancellationToken);
+        if (track == null)
+        {
+            throw new InvalidOperationException(
+                $"No embedded track with stream index {streamIndex} is recorded for {mediaType} {mediaId}. " +
+                "Run the embedded track scan (Settings → Automation) first.");
+        }
+
+        return track;
+    }
+
+    private static void ValidateExtractable(MediaSubtitleTrack track)
+    {
+        if (!track.IsTextBased)
+        {
+            throw new InvalidOperationException(
+                $"Embedded stream {track.StreamIndex} ({track.Codec}) is image-based and cannot be extracted as text.");
+        }
+    }
+
+    private sealed record MediaDirectory(string Directory, string? FileName);
+
+    private async Task<MediaDirectory> ResolveMediaDirectory(
+        MediaType mediaType,
+        int mediaId,
+        CancellationToken cancellationToken)
+    {
+        switch (mediaType)
+        {
+            case MediaType.Movie:
+                var movie = await _dbContext.Movies
+                    .Where(item => item.Id == mediaId)
+                    .Select(item => new { item.Path, item.FileName })
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (movie?.Path != null)
+                {
+                    return new MediaDirectory(movie.Path, movie.FileName);
+                }
+                break;
+
+            case MediaType.Episode:
+                var episode = await _dbContext.Episodes
+                    .Where(item => item.Id == mediaId)
+                    .Select(item => new { item.Path, item.FileName })
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (episode?.Path != null)
+                {
+                    return new MediaDirectory(episode.Path, episode.FileName);
+                }
+                break;
+        }
+
+        throw new InvalidOperationException(
+            $"{mediaType} {mediaId} has no media directory on record, so the extracted track cannot be placed next to the video.");
+    }
 
     // ── scan pipeline ─────────────────────────────────────────────
 
@@ -587,6 +848,71 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     }
 
     /// <summary>
+    /// Production ffmpeg runner: writes the extraction to the output path
+    /// named in the arguments and returns stderr for the failure message.
+    /// </summary>
+    private static async Task<string> RunFfmpeg(
+        string binary,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = binary,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = new Process { StartInfo = startInfo };
+        try
+        {
+            process.Start();
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            throw new FFprobeUnavailableException(
+                $"ffmpeg binary '{binary}' could not be started.", ex);
+        }
+
+        // ffmpeg logs to stderr; stdout stays empty but must drain anyway.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        try
+        {
+            await Task.WhenAny(process.WaitForExitAsync(cancellationToken), Task.Delay(ExtractTimeoutMs, cancellationToken));
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                throw new TimeoutException($"ffmpeg exceeded the {ExtractTimeoutMs / 1000}s extraction timeout.");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            throw;
+        }
+
+        var stderrResult = await stderrTask;
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"ffmpeg exited with code {process.ExitCode}.{(string.IsNullOrWhiteSpace(stderrResult) ? string.Empty : " " + stderrResult.Trim())}");
+        }
+
+        _ = await stdoutTask;
+        return stderrResult;
+    }
+
+    /// <summary>
     /// Resolves the ffprobe binary once per service instance:
     /// LINGARR_FFPROBE_PATH when set, otherwise the first ffprobe on PATH.
     /// Throws <see cref="FFprobeUnavailableException"/> with an install hint
@@ -600,31 +926,48 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             return _ffprobePath!;
         }
 
-        var configured = Environment.GetEnvironmentVariable("LINGARR_FFPROBE_PATH");
+        _ffprobePath = ResolveBinaryPath("ffprobe", "LINGARR_FFPROBE_PATH");
+        _ffprobeResolved = true;
+        return _ffprobePath;
+    }
+
+    /// <summary>ffmpeg counterpart of <see cref="ResolveFFprobePath"/> (LINGARR_FFMPEG_PATH / PATH).</summary>
+    private string ResolveFfmpegPath()
+    {
+        if (_ffmpegResolved)
+        {
+            return _ffmpegPath!;
+        }
+
+        _ffmpegPath = ResolveBinaryPath("ffmpeg", "LINGARR_FFMPEG_PATH");
+        _ffmpegResolved = true;
+        return _ffmpegPath;
+    }
+
+    /// <summary>Env override → first match on PATH; install hint when neither exists.</summary>
+    private static string ResolveBinaryPath(string binary, string environmentVariable)
+    {
+        var configured = Environment.GetEnvironmentVariable(environmentVariable);
         if (!string.IsNullOrWhiteSpace(configured))
         {
             if (File.Exists(configured))
             {
-                _ffprobePath = configured;
-                _ffprobeResolved = true;
-                return _ffprobePath;
+                return configured;
             }
 
             throw new FFprobeUnavailableException(
-                $"LINGARR_FFPROBE_PATH points at '{configured}' but no file exists there.");
+                $"{environmentVariable} points at '{configured}' but no file exists there.");
         }
 
-        var onPath = FindOnPath("ffprobe");
+        var onPath = FindOnPath(binary);
         if (onPath == null)
         {
             throw new FFprobeUnavailableException(
-                "ffprobe was not found on PATH. Install ffmpeg (the image does this for you) " +
-                "or point LINGARR_FFPROBE_PATH at the ffprobe binary, then run the embedded track scan again.");
+                $"{binary} was not found on PATH. Install ffmpeg (the image does this for you) " +
+                $"or point {environmentVariable} at the {binary} binary, then run the embedded track scan again.");
         }
 
-        _ffprobePath = onPath;
-        _ffprobeResolved = true;
-        return _ffprobePath;
+        return onPath;
     }
 
     private static string? FindOnPath(string binary)

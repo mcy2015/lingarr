@@ -1,5 +1,11 @@
 import { AxiosStatic } from 'axios'
-import { IImportEstimateResponse, IImportService } from '@/types'
+import {
+    IImportEstimateResponse,
+    IImportService,
+    INormalizeExecuteItem,
+    INormalizeExecuteResponse,
+    INormalizePreviewResponse
+} from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/subtitle'): IImportService => ({
     scanPath: async (path: string) => {
@@ -43,6 +49,29 @@ const service = (http: AxiosStatic, resource = '/api/subtitle'): IImportService 
 
     parseFilenames: async (filenames: string[]) => {
         const response = await http.post(`${resource}/parse-filenames`, { filenames })
+        return response.data
+    },
+
+    /// F3 subtitle normalize: preview computes the rename diff for one
+    /// movie/show without writing; execute renames the confirmed items.
+    normalizePreview: async (
+        mediaType: 'Movie' | 'Show',
+        mediaId: number
+    ): Promise<INormalizePreviewResponse> => {
+        const response = await http.post(`${resource}/normalize/preview`, { mediaType, mediaId })
+        return response.data
+    },
+
+    normalizeExecute: async (params: {
+        mediaType: 'Movie' | 'Show'
+        mediaId: number
+        items: INormalizeExecuteItem[]
+    }): Promise<INormalizeExecuteResponse> => {
+        const response = await http.post(`${resource}/normalize/execute`, {
+            mediaType: params.mediaType,
+            mediaId: params.mediaId,
+            items: params.items
+        })
         return response.data
     },
 

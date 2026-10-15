@@ -52,6 +52,29 @@
             </span>
         </div>
 
+        <!-- F2b:自动化补缺是否消费内嵌文本轨(手动翻译入口不受此开关限制) -->
+        <div
+            class="border-line/60 flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-2.5 text-[13px]"
+            data-test="batch-row-embedded">
+            <b class="flex-none">{{ t('settings.automation.consumeEmbeddedTracks') }}</b>
+            <span
+                class="text-secondary-content min-w-0 flex-1 truncate text-xs"
+                :title="t('settings.automation.consumeEmbeddedTracksHint')">
+                {{ t('settings.automation.consumeEmbeddedTracksHint') }}
+            </span>
+            <span class="ml-auto flex flex-none items-center gap-2.5">
+                <ToggleButton v-model="consumeEmbeddedTracks" size="small">
+                    <span class="text-primary-content text-xs font-medium">
+                        {{
+                            consumeEmbeddedTracks === 'true'
+                                ? t('settings.status.enabled')
+                                : t('settings.status.disabled')
+                        }}
+                    </span>
+                </ToggleButton>
+            </span>
+        </div>
+
         <!-- 编辑模态:cron(本卡即编辑入口)+ 三策略字段,与开关解耦 ───────── -->
         <Teleport to="body">
             <Transition
@@ -192,6 +215,26 @@ const automationEnabled = computed({
 const translationSchedule = computed(
     (): string => (settingsStore.getSetting(SETTINGS.TRANSLATION_SCHEDULE) as string) ?? ''
 )
+
+/// F2b opt-in: automated runs extract text-based embedded tracks as
+/// translation sources. Manual translation from the media page always works.
+const consumeEmbeddedTracks = computed({
+    get: (): string =>
+        (settingsStore.getSetting(SETTINGS.CONSUME_EMBEDDED_TRACKS) as string) ?? 'false',
+    set: (newValue: string): void => {
+        settingsStore
+            .updateSetting(SETTINGS.CONSUME_EMBEDDED_TRACKS, newValue, true)
+            .then(() => {
+                toastStore.push({ message: t('common.saved'), type: 'success' })
+            })
+            .catch(() => {
+                toastStore.push({
+                    message: t('settings.automation.toggleFailed'),
+                    type: 'error'
+                })
+            })
+    }
+})
 const maxTranslationsPerRun = computed(
     (): string => (settingsStore.getSetting(SETTINGS.MAX_TRANSLATIONS_PER_RUN) as string) ?? ''
 )

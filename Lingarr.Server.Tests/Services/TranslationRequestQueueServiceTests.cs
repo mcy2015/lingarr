@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
+using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Translation;
 
@@ -43,6 +44,7 @@ public class TranslationRequestQueueServiceTests : IDisposable
             new Mock<IProgressService>().Object,
             new Mock<ISettingService>().Object,
             new Mock<ISubtitleService>().Object,
+            new Mock<IEmbeddedTrackService>().Object,
             Mock.Of<ILogger<TranslationRequestQueueService>>());
     }
 

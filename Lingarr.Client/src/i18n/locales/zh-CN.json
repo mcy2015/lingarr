@@ -141,7 +141,8 @@
     "import": {
         "tabs": {
             "free": "自由导入",
-            "season": "定向导入 · 整季"
+            "season": "定向导入 · 整季",
+            "normalize": "归整"
         },
         "dropzone": {
             "title": "拖拽字幕文件到此处，或点击选择"
@@ -249,6 +250,52 @@
         },
         "bilingual": {
             "follow": "跟随全局"
+        },
+        "normalize": {
+            "mediaType": {
+                "movie": "电影",
+                "show": "剧集"
+            },
+            "searchPlaceholder": "搜索媒体…",
+            "pickMedia": "选择媒体…",
+            "noMedia": "未找到媒体",
+            "mediaLoadFailed": "媒体列表加载失败：{message}",
+            "preview": "预览",
+            "previewing": "扫描中…",
+            "previewTitle": "归整预览",
+            "meta": "{items} 项可归整 · {skipped} 项跳过",
+            "table": {
+                "old": "当前文件名",
+                "new": "归整后文件名",
+                "language": "语言",
+                "media": "所属媒体"
+            },
+            "skippedTitle": "跳过项（{count}）",
+            "reason": {
+                "noVideoInDirectory": "同目录没有视频文件",
+                "ambiguousVideo": "同目录有多个视频文件",
+                "noEpisodeMatch": "无法匹配到剧集视频",
+                "ambiguousEpisodeMatch": "匹配到多个剧集",
+                "languageUnknown": "无法识别语言",
+                "dualLanguage": "双语字幕，不做归整",
+                "targetConflict": "目标文件名已被占用",
+                "targetCollisionInBatch": "与本批其他文件目标名冲突",
+                "alreadyNormalized": "命名已符合规范"
+            },
+            "empty": "该媒体目录下没有字幕文件。",
+            "nothing": "没有可归整的字幕，全部跳过。",
+            "readOnly": "媒体目录只读，无法执行重命名。",
+            "missingDirectory": "媒体目录在服务器上不存在，请重新索引或检查路径映射。",
+            "confirm": "重命名 {count} 个文件",
+            "confirmHint": "即将按预览重命名以上文件，操作不可撤销。",
+            "confirmAgain": "再点一次确认执行",
+            "cancel": "取消",
+            "executing": "执行中…",
+            "result": "已重命名 {count} 个文件",
+            "resultFailed": "{count} 个文件失败",
+            "rePreview": "重新预览",
+            "previewFailed": "预览失败：{message}",
+            "executeFailed": "执行失败：{message}"
         }
     },
     "overview": {
@@ -520,7 +567,9 @@
             "dailyHint": "限额 {limit} 任务/次 · 新片延迟 电影 {movie}h / 剧集 {show}h",
             "edit": "编辑",
             "editFailed": "请检查标红的字段。",
-            "toggleFailed": "开关切换失败，请重试。"
+            "toggleFailed": "开关切换失败，请重试。",
+            "consumeEmbeddedTracks": "消费内嵌字幕轨",
+            "consumeEmbeddedTracksHint": "每日补缺同时抽取文本型内嵌轨作为翻译源;媒体页的手动翻译不受此开关限制"
         },
         "schedule": {
             "heading": "定时任务",
@@ -973,7 +1022,10 @@
                 "count": "{count} 条轨道",
                 "notScanned": "未探测 · 到 设置 → 自动化 手动运行「内嵌轨道探测」(EmbeddedTrackScanJob)",
                 "empty": "容器内没有内嵌字幕轨",
-                "graphic": "图形 · 不可翻译"
+                "graphic": "图形 · 不可翻译",
+                "translate": "翻译",
+                "queuedToast": "已发起翻译 · 请求 #{id}",
+                "queuedFailed": "发起翻译失败：{message}"
             }
         },
         "lang": {

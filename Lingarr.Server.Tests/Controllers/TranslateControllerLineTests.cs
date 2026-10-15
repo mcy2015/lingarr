@@ -90,6 +90,7 @@ public class TranslateControllerLineTests
             Controller = new TranslateController(
                 translationServiceFactoryMock.Object,
                 new Mock<ITranslationRequestService>().Object,
+                new Mock<ITranslationRequestQueueService>().Object,
                 settingServiceMock.Object,
                 new LanguageCodeService(),
                 new Mock<ITranslationHealthService>().Object,

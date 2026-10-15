@@ -14,11 +14,16 @@ public class SubtitleController : ControllerBase
 {
     private readonly ISubtitleService _subtitleService;
     private readonly ISubtitleImportService _subtitleImportService;
+    private readonly ISubtitleNormalizeService _subtitleNormalizeService;
 
-    public SubtitleController(ISubtitleService subtitleService, ISubtitleImportService subtitleImportService)
+    public SubtitleController(
+        ISubtitleService subtitleService,
+        ISubtitleImportService subtitleImportService,
+        ISubtitleNormalizeService subtitleNormalizeService)
     {
         _subtitleService = subtitleService;
         _subtitleImportService = subtitleImportService;
+        _subtitleNormalizeService = subtitleNormalizeService;
     }
 
     /// <summary>
@@ -165,4 +170,68 @@ public class SubtitleController : ControllerBase
             mediaType, mediaId, season, chineseConvert, isBilingual);
         return Ok(new ImportSubtitlesResponse { Results = results });
     }
+
+    /// <summary>
+    /// Computes the rename plan that would normalize the external subtitle
+    /// file names of one movie or show onto the
+    /// <c>{media base name}.{language}.{ext}</c> form (F3). Pure preview —
+    /// nothing is written. Ambiguous files come back in <c>skipped</c> with a
+    /// reason code.
+    /// </summary>
+    /// <param name="request">Media scope: "Movie" or "Show" plus its id.</param>
+    [HttpPost("normalize/preview")]
+    public async Task<ActionResult<SubtitleNormalizePreviewResponse>> NormalizePreview(
+        [FromBody] SubtitleNormalizeRequest request)
+    {
+        if (!IsValidNormalizeMediaType(request.MediaType))
+        {
+            return BadRequest(new { message = "mediaType must be 'Movie' or 'Show'." });
+        }
+
+        try
+        {
+            return Ok(await _subtitleNormalizeService.Preview(request.MediaType, request.MediaId));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Executes the renames the user confirmed from a preview. Each item is
+    /// re-validated server-side (source exists, target free) before its
+    /// File.Move; failures are reported per item and never block the rest.
+    /// </summary>
+    [HttpPost("normalize/execute")]
+    public async Task<ActionResult<SubtitleNormalizeExecuteResponse>> NormalizeExecute(
+        [FromBody] SubtitleNormalizeExecuteRequest request)
+    {
+        if (!IsValidNormalizeMediaType(request.MediaType))
+        {
+            return BadRequest(new { message = "mediaType must be 'Movie' or 'Show'." });
+        }
+
+        if (request.Items.Count == 0)
+        {
+            return BadRequest(new { message = "No confirmed items provided." });
+        }
+
+        try
+        {
+            return Ok(await _subtitleNormalizeService.Execute(request.MediaType, request.MediaId, request.Items));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    private static bool IsValidNormalizeMediaType(string? mediaType) =>
+        mediaType?.Equals("Movie", StringComparison.OrdinalIgnoreCase) == true
+        || mediaType?.Equals("Show", StringComparison.OrdinalIgnoreCase) == true;
 }

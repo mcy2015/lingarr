@@ -11,6 +11,7 @@ public static class SubtitleModule
     {
         services.AddScoped<ISubtitleService, SubtitleService>();
         services.AddScoped<ISubtitleImportService, SubtitleImportService>();
+        services.AddScoped<ISubtitleNormalizeService, SubtitleNormalizeService>();
         services.AddSingleton<ISubtitleEncodingService, SubtitleEncodingService>();
         services.AddScoped<ISubtitleConversionService, SubtitleConversionService>();
 

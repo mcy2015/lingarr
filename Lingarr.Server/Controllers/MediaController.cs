@@ -138,6 +138,7 @@ public class MediaController : ControllerBase
             Files = files.OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList(),
             Embedded = trackRows.Select(track => new MediaEmbeddedTrack
             {
+                MediaId = track.MediaId,
                 StreamIndex = track.StreamIndex,
                 Language = track.Language,
                 RawLanguage = track.RawLanguage,

@@ -52,6 +52,7 @@ export const SETTINGS = {
     SUBTITLE_TAG: 'subtitle_tag',
     SUBTITLE_NAMING_TEMPLATE: 'subtitle_naming_template',
     IGNORE_CAPTIONS: 'ignore_captions',
+    CONSUME_EMBEDDED_TRACKS: 'consume_embedded_tracks',
     REQUEST_TIMEOUT: 'request_timeout',
     MAX_RETRIES: 'max_retries',
     RETRY_DELAY: 'retry_delay',
@@ -122,6 +123,7 @@ export interface ISettings {
     subtitle_tag: string
     subtitle_naming_template: string
     ignore_captions: string
+    consume_embedded_tracks: string
     request_timeout: string
     max_retries: string
     retry_delay: string

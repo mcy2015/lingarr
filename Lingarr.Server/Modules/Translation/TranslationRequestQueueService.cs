@@ -8,6 +8,7 @@ using Lingarr.Core.Configuration;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
 using Microsoft.EntityFrameworkCore;
+using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 
@@ -30,6 +31,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
     private readonly IProgressService _progressService;
     private readonly ISettingService _settingService;
     private readonly ISubtitleService _subtitleService;
+    private readonly IEmbeddedTrackService _embeddedTrackService;
     private readonly ILogger<TranslationRequestQueueService> _logger;
 
     public TranslationRequestQueueService(
@@ -42,6 +44,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
         IProgressService progressService,
         ISettingService settingService,
         ISubtitleService subtitleService,
+        IEmbeddedTrackService embeddedTrackService,
         ILogger<TranslationRequestQueueService> logger)
     {
         _dbContext = dbContext;
@@ -53,6 +56,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
         _progressService = progressService;
         _settingService = settingService;
         _subtitleService = subtitleService;
+        _embeddedTrackService = embeddedTrackService;
         _logger = logger;
     }
 
@@ -103,6 +107,101 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
         };
 
         return await EnqueueRequest(translationRequest);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CreateEmbeddedTrackRequest(
+        MediaType mediaType,
+        int mediaId,
+        int streamIndex,
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
+    {
+        if (mediaType is not (MediaType.Movie or MediaType.Episode))
+        {
+            throw new InvalidOperationException(
+                $"Embedded tracks can only be translated for movies and episodes, not {mediaType}.");
+        }
+
+        var media = await ResolveMedia(mediaType, mediaId, cancellationToken)
+                    ?? throw new NotFoundException($"No {mediaType} with id {mediaId} exists.");
+        if (string.IsNullOrEmpty(media.Path) || string.IsNullOrEmpty(media.FileName))
+        {
+            throw new InvalidOperationException(
+                $"{mediaType} {mediaId} has no media path on record, so its embedded tracks cannot be read.");
+        }
+
+        var tracks = await _dbContext.MediaSubtitleTracks
+            .Where(track => track.MediaType == mediaType
+                            && track.MediaId == mediaId
+                            && track.StreamIndex >= 0)
+            .ToListAsync(cancellationToken);
+        var track = tracks.FirstOrDefault(candidate => candidate.StreamIndex == streamIndex)
+                    ?? throw new NotFoundException(
+                        $"No embedded track with stream index {streamIndex} is recorded for {mediaType} {mediaId}. Run the embedded track scan first.");
+        if (!track.IsTextBased)
+        {
+            throw new InvalidOperationException(
+                $"Embedded stream {streamIndex} ({track.Codec}) is image-based and cannot be translated.");
+        }
+        if (string.IsNullOrEmpty(track.Language))
+        {
+            throw new InvalidOperationException(
+                $"The language of embedded stream {streamIndex} ('{track.RawLanguage ?? "unmarked"}') could not be recognized, so it cannot serve as a translation source.");
+        }
+
+        // Target-language gate: the union of external subtitle languages and
+        // embedded track languages of this media item.
+        var externalSubtitles = await _subtitleService.GetSubtitles(media.Path, media.FileName);
+        var availableLanguages = EmbeddedTrackService.BuildAvailableLanguages(externalSubtitles, tracks);
+        if (availableLanguages.Contains(targetLanguage.ToLowerInvariant()))
+        {
+            throw new TargetLanguageAlreadyPresentException(
+                $"'{media.Title}' already has {targetLanguage.ToLowerInvariant()} subtitles (external file or embedded track) — translation was not queued.");
+        }
+
+        // Extract (cached) and place the source next to the video so the
+        // output naming and write-back behave exactly like a library request.
+        var sourcePath = await _embeddedTrackService.PrepareTranslationSource(
+            mediaType, mediaId, streamIndex, cancellationToken);
+
+        return await CreateRequest(new TranslateAbleSubtitle
+        {
+            MediaId = mediaId,
+            MediaType = mediaType,
+            SubtitlePath = sourcePath,
+            SourceLanguage = track.Language,
+            TargetLanguage = targetLanguage,
+            SubtitleFormat = ".srt"
+        });
+    }
+
+    private sealed record EmbeddedMedia(string Path, string? FileName, string Title);
+
+    private async Task<EmbeddedMedia?> ResolveMedia(
+        MediaType mediaType,
+        int mediaId,
+        CancellationToken cancellationToken)
+    {
+        switch (mediaType)
+        {
+            case MediaType.Movie:
+                var movie = await _dbContext.Movies
+                    .Where(item => item.Id == mediaId)
+                    .Select(item => new { item.Path, item.FileName, item.Title })
+                    .FirstOrDefaultAsync(cancellationToken);
+                return movie == null ? null : new EmbeddedMedia(movie.Path!, movie.FileName, movie.Title);
+
+            case MediaType.Episode:
+                var episode = await _dbContext.Episodes
+                    .Where(item => item.Id == mediaId)
+                    .Select(item => new { item.Path, item.FileName, item.Title })
+                    .FirstOrDefaultAsync(cancellationToken);
+                return episode == null ? null : new EmbeddedMedia(episode.Path!, episode.FileName, episode.Title);
+
+            default:
+                return null;
+        }
     }
 
     /// <inheritdoc />

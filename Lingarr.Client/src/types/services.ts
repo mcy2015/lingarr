@@ -99,9 +99,12 @@ export interface IMediaSubtitleFile {
 }
 
 /// One embedded subtitle stream inside the media container (ffprobe scan,
-/// F2a). Graphic tracks (PGS…) carry isTextBased=false — display-only, no
-/// translation entry point yet.
+/// F2a). Graphic tracks (PGS…) carry isTextBased=false — display-only. Since
+/// F2b text tracks can be translated; mediaId names the owning movie/episode
+/// (show payloads aggregate over episodes, so each row must stay attributable
+/// for per-track actions).
 export interface IMediaEmbeddedTrack {
+    mediaId: number
     streamIndex: number
     language: string | null
     rawLanguage: string | null
@@ -193,11 +196,73 @@ export interface IImportService {
     estimate(params: {
         files: { name: string; characters: number }[]
     }): Promise<IImportEstimateResponse>
+    /// F3 normalize preview: the rename plan for one movie's or show's
+    /// external subtitles. Never writes.
+    normalizePreview(
+        mediaType: 'Movie' | 'Show',
+        mediaId: number
+    ): Promise<INormalizePreviewResponse>
+    /// F3 normalize execution: renames the confirmed preview items.
+    normalizeExecute(params: {
+        mediaType: 'Movie' | 'Show'
+        mediaId: number
+        items: INormalizeExecuteItem[]
+    }): Promise<INormalizeExecuteResponse>
 }
 
 export interface IImportEstimateResponse {
     cost: number | null
     currency: string
+}
+
+/// Skip reasons of the subtitle normalize preview (F3), mapped onto
+/// import.normalize.reason.* keys. Mirrors the server's reason codes.
+export type INormalizeSkipReason =
+    | 'noVideoInDirectory'
+    | 'ambiguousVideo'
+    | 'noEpisodeMatch'
+    | 'ambiguousEpisodeMatch'
+    | 'languageUnknown'
+    | 'dualLanguage'
+    | 'targetConflict'
+    | 'targetCollisionInBatch'
+    | 'alreadyNormalized'
+
+/// One planned rename of the normalize preview diff.
+export interface INormalizePreviewItem {
+    oldPath: string
+    newPath: string
+    oldName: string
+    newName: string
+    language: string
+    mediaTitle: string
+}
+
+export interface INormalizeSkippedItem {
+    path: string
+    reason: INormalizeSkipReason
+}
+
+/// POST /api/subtitle/normalize/preview. Pure preview — writable=false with
+/// error 'readOnly' | 'missingDirectory' is the blocking error state.
+export interface INormalizePreviewResponse {
+    items: INormalizePreviewItem[]
+    skipped: INormalizeSkippedItem[]
+    writable: boolean
+    error: string | null
+}
+
+/// One user-confirmed rename sent back for execution.
+export interface INormalizeExecuteItem {
+    oldPath: string
+    newPath: string
+    language: string
+    mediaTitle: string
+}
+
+export interface INormalizeExecuteResponse {
+    renamed: number
+    failed: { path: string; error: string }[]
 }
 
 export interface IVersionService {
@@ -213,6 +278,9 @@ export interface ITranslateService {
         mediaType: MediaType
     ): Promise<T>
     bulkTranslate<T>(mediaIds: number[], targetLanguage: string, mediaType: MediaType): Promise<T>
+    /// F2b: translate one text-based embedded subtitle track. The server
+    /// extracts the stream with ffmpeg and creates a regular request.
+    translateEmbeddedTrack<T>(request: ITranslateEmbeddedTrackRequest): Promise<T>
     getLanguages<T>(): Promise<T>
     getHealth(): Promise<ITranslationServiceHealth[]>
     /// Language capability of one named service (P1-3): its concrete
@@ -226,6 +294,21 @@ export interface ITranslateService {
     /// Single-line translation preview through a named service's saved
     /// request template, with glossary hits and per-call cost.
     previewTranslation(request: ITranslationPreviewRequest): Promise<ITranslationPreviewResponse>
+}
+
+/// POST /api/translate/embedded-track body (F2b): translate one text-based
+/// embedded subtitle stream of a movie/episode container.
+export interface ITranslateEmbeddedTrackRequest {
+    /// The media type that owns the container file ('Movie' | 'Episode').
+    mediaType: MediaType
+    /// Movie or episode id whose container carries the track.
+    mediaId: number
+    /// ffprobe stream index of the track inside the container.
+    streamIndex: number
+    /// Normalized source language of the track (informational — the scan row wins).
+    sourceLanguage: string
+    /// Target language code to translate into.
+    targetLanguage: string
 }
 
 /// Inline result of the「测试连接」probe on the settings provider cards

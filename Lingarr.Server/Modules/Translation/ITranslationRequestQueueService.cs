@@ -7,6 +7,14 @@ using Lingarr.Server.Models.FileSystem;
 namespace Lingarr.Server.Modules.Translation;
 
 /// <summary>
+/// The media item already covers the requested target language (external
+/// subtitle file or embedded track), so initiating a translation would
+/// duplicate it. Carries a user-readable message; the endpoint maps it to
+/// HTTP 409.
+/// </summary>
+public sealed class TargetLanguageAlreadyPresentException(string message) : Exception(message);
+
+/// <summary>
 /// Lifecycle operations on translation requests: creation, enqueueing, cancellation,
 /// removal, retry, resume and status updates.
 /// </summary>
@@ -32,6 +40,27 @@ public interface ITranslationRequestQueueService
         MediaType mediaType,
         string? contentHash = null,
         bool isBilingual = false);
+
+    /// <summary>
+    /// F2b: creates a translation request whose source is a text-based
+    /// embedded subtitle track. Extracts the track via ffmpeg (reusing any
+    /// existing extraction), materializes it next to the video so the output
+    /// lands in the media directory, then runs the regular creation path
+    /// (request record, events, progress unchanged).
+    /// <para>
+    /// Throws <see cref="TargetLanguageAlreadyPresentException"/> when the
+    /// target language is already covered by an external file or another
+    /// embedded track of the same media; throws
+    /// <see cref="InvalidOperationException"/> for graphic tracks, unknown
+    /// track languages or extraction failures.
+    /// </para>
+    /// </summary>
+    Task<int> CreateEmbeddedTrackRequest(
+        MediaType mediaType,
+        int mediaId,
+        int streamIndex,
+        string targetLanguage,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Cooperatively pauses a running translation at the next batch boundary.

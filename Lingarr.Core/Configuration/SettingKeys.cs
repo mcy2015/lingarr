@@ -115,6 +115,13 @@ public static class SettingKeys
         public const string SubtitleNamingTemplate = "subtitle_naming_template";
 
         /// <summary>
+        /// F2b: whether the automated translation job also consumes text-based
+        /// embedded subtitle tracks as translation sources ("false" by default
+        /// — manual initiation from the media detail page is always allowed).
+        /// </summary>
+        public const string ConsumeEmbeddedTracks = "consume_embedded_tracks";
+
+        /// <summary>
         /// Fallback used when the <see cref="SubtitleNamingTemplate"/> setting is
         /// absent or blank — reproduces the historical "{base}.{language}" naming,
         /// so no migration is needed for instances that never customized it.

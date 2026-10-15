@@ -4,6 +4,8 @@ using Lingarr.Contracts.Exceptions;
 using Lingarr.Contracts.Models;
 using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
+using Lingarr.Core.Enum;
+using Lingarr.Server.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Lingarr.Server.Models;
@@ -16,6 +18,28 @@ using Lingarr.Server.Modules.Settings;
 
 namespace Lingarr.Server.Controllers;
 
+/// <summary>
+/// F2b manual initiation body: translate one text-based embedded subtitle
+/// track of a movie/episode container.
+/// </summary>
+public class TranslateEmbeddedTrackRequest
+{
+    /// <summary>The media type that owns the container file (Movie or Episode).</summary>
+    public required MediaType MediaType { get; set; }
+
+    /// <summary>Movie or episode id whose container carries the track.</summary>
+    public required int MediaId { get; set; }
+
+    /// <summary>ffprobe stream index of the track inside the container.</summary>
+    public required int StreamIndex { get; set; }
+
+    /// <summary>Normalized source language of the track (informational; the scan row is authoritative).</summary>
+    public string? SourceLanguage { get; set; }
+
+    /// <summary>Target language to translate into.</summary>
+    public required string TargetLanguage { get; set; }
+}
+
 [ApiController]
 [Authorize("LingarrAccess")]
 [Route("api/[controller]")]
@@ -23,6 +47,7 @@ public class TranslateController : ControllerBase
 {
     private readonly ITranslationServiceFactory _translationServiceFactory;
     private readonly ITranslationRequestService _translationRequestService;
+    private readonly ITranslationRequestQueueService _translationRequestQueueService;
     private readonly ISettingService _settings;
     private readonly LanguageCodeService _languageCodeService;
     private readonly ITranslationHealthService _translationHealthService;
@@ -33,6 +58,7 @@ public class TranslateController : ControllerBase
     public TranslateController(
         ITranslationServiceFactory translationServiceFactory,
         ITranslationRequestService translationRequestService,
+        ITranslationRequestQueueService translationRequestQueueService,
         ISettingService settings,
         LanguageCodeService languageCodeService,
         ITranslationHealthService translationHealthService,
@@ -42,6 +68,7 @@ public class TranslateController : ControllerBase
     {
         _translationServiceFactory = translationServiceFactory;
         _translationRequestService = translationRequestService;
+        _translationRequestQueueService = translationRequestQueueService;
         _settings = settings;
         _languageCodeService = languageCodeService;
         _translationHealthService = translationHealthService;
@@ -303,7 +330,7 @@ public class TranslateController : ControllerBase
     /// <summary>
     /// Initiates a translation job for the provided subtitle data.
     /// </summary>
-    /// <param name="translateAbleSubtitle">The subtitle data to be translated. 
+    /// <param name="translateAbleSubtitle">The subtitle data to be translated.
     /// This includes the subtitle path, subtitle source language and subtitle target language.</param>
     /// <returns>Returns an HTTP 200 OK response if the job was successfully enqueued.</returns>
     [HttpPost("file")]
@@ -314,6 +341,54 @@ public class TranslateController : ControllerBase
         {
             JobId = jobId,
         });
+    }
+
+    /// <summary>
+    /// F2b: initiates a translation whose source is a text-based embedded
+    /// subtitle track. The server extracts the track with ffmpeg (reusing an
+    /// existing extraction), places the source next to the video so the
+    /// output is written back into the media directory, and enqueues the
+    /// regular translation request.
+    /// </summary>
+    /// <param name="request">The container-owning media, the stream index and the target language.</param>
+    /// <param name="cancellationToken">Token forwarded into the ffmpeg extraction.</param>
+    /// <response code="200">The request was created; the body carries its id.</response>
+    /// <response code="400">The track is graphic, its language is unknown, or the extraction failed.</response>
+    /// <response code="409">The target language is already covered by an external file or another embedded track.</response>
+    [HttpPost("embedded-track")]
+    public async Task<ActionResult<TranslationJobDto>> TranslateEmbeddedTrack(
+        [FromBody] TranslateEmbeddedTrackRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var jobId = await _translationRequestQueueService.CreateEmbeddedTrackRequest(
+                request.MediaType,
+                request.MediaId,
+                request.StreamIndex,
+                request.TargetLanguage,
+                cancellationToken);
+            return Ok(new TranslationJobDto { JobId = jobId });
+        }
+        catch (TargetLanguageAlreadyPresentException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        // The queue service throws DeepL.NotFoundException for unknown media
+        // (the file's historical binding) — qualified to keep the using list clean.
+        catch (DeepL.NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (FFprobeUnavailableException ex)
+        {
+            // Environment problem, not a client mistake: readable message, 500.
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>

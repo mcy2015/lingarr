@@ -21,6 +21,7 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
     private readonly ISubtitleService _subtitleService;
     private readonly ISettingService _settingService;
     private readonly LingarrDbContext _dbContext;
+    private readonly IEmbeddedTrackService _embeddedTrackService;
     private string _hash = string.Empty;
     private IMedia _media = null!;
     private MediaType _mediaType;
@@ -30,18 +31,20 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
         ILogger<IMediaSubtitleProcessor> logger,
         ISettingService settingService,
         ISubtitleService subtitleService,
-        LingarrDbContext dbContext)
+        LingarrDbContext dbContext,
+        IEmbeddedTrackService embeddedTrackService)
     {
         _translationRequestService = translationRequestService;
         _settingService = settingService;
         _subtitleService = subtitleService;
         _dbContext = dbContext;
         _logger = logger;
+        _embeddedTrackService = embeddedTrackService;
     }
 
     /// <inheritdoc />
     public async Task<bool> ProcessMedia(
-        IMedia media, 
+        IMedia media,
         MediaType mediaType)
     {
         if (media.Path == null || media.FileName == null)
@@ -51,8 +54,18 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
                 mediaType, media.Id);
             return false;
         }
-        
+
         var subtitles = await _subtitleService.GetSubtitles(media.Path, media.FileName);
+
+        // F2b opt-in: text-based embedded tracks join the candidate pool as
+        // lightweight entries whose (deterministic) materialization path only
+        // gets a real file when the track is actually picked as the source.
+        var embeddedStreams = await MergeEmbeddedTracks(subtitles, media, mediaType);
+        if (embeddedStreams != null)
+        {
+            subtitles = embeddedStreams.Value.Candidates;
+        }
+
         if (!subtitles.Any())
         {
             return false;
@@ -69,9 +82,84 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
         {
             return false;
         }
-        
+
         _logger.LogInformation("Initiating subtitle processing.");
-        return await ProcessSubtitles(subtitles, sourceLanguages, targetLanguages, ignoreCaptions);
+        return await ProcessSubtitles(
+            subtitles,
+            sourceLanguages,
+            targetLanguages,
+            ignoreCaptions,
+            embeddedStreams?.StreamIndexes);
+    }
+
+    /// <summary>
+    /// Merged candidate pool when <c>consume_embedded_tracks</c> is on: the
+    /// external files plus one synthetic entry per text-based embedded track.
+    /// The synthetic entry carries the track's future translation-source path
+    /// (<see cref="EmbeddedTrackService.PrepareTranslationSource"/> writes it
+    /// there), so the media hash stays stable once materialized. Extraction
+    /// itself is deferred until an embedded entry is actually selected.
+    /// </summary>
+    private async Task<(List<Subtitles> Candidates, Dictionary<string, int> StreamIndexes)?> MergeEmbeddedTracks(
+        List<Subtitles> externalSubtitles,
+        IMedia media,
+        MediaType mediaType)
+    {
+        if (mediaType is not (MediaType.Movie or MediaType.Episode))
+        {
+            return null;
+        }
+
+        var consume = await _settingService.GetSetting(SettingKeys.Translation.ConsumeEmbeddedTracks);
+        if (consume != "true")
+        {
+            return null;
+        }
+
+        var tracks = await _dbContext.MediaSubtitleTracks
+            .Where(track => track.MediaType == mediaType
+                            && track.MediaId == media.Id
+                            && track.StreamIndex >= 0
+                            && track.IsTextBased
+                            && track.Language != null)
+            .OrderBy(track => track.StreamIndex)
+            .ToListAsync();
+        if (tracks.Count == 0)
+        {
+            return null;
+        }
+
+        var candidates = new List<Subtitles>(externalSubtitles);
+        var externalPaths = externalSubtitles
+            .Select(s => s.Path)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var streamIndexes = new Dictionary<string, int>();
+        foreach (var track in tracks)
+        {
+            var path = Path.Combine(media.Path!, EmbeddedTrackService.TranslationSourceFileName(media.FileName, track.Language!));
+            // An external file already sitting at the materialization path IS
+            // that source — never shadow it with an extraction.
+            if (externalPaths.Contains(path))
+            {
+                continue;
+            }
+
+            candidates.Add(new Subtitles
+            {
+                Path = path,
+                FileName = Path.GetFileNameWithoutExtension(path),
+                Language = track.Language!,
+                Languages = [track.Language!],
+                Caption = string.Empty,
+                Format = ".srt"
+            });
+            streamIndexes[path] = track.StreamIndex;
+        }
+
+        _logger.LogDebug(
+            "Merged {Count} embedded text track(s) of {MediaType} {MediaId} into the source candidate pool",
+            tracks.Count, mediaType, media.Id);
+        return (candidates, streamIndexes);
     }
 
     /// <summary>
@@ -81,12 +169,18 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
     /// <param name="sourceLanguages">The source languages.</param>
     /// <param name="targetLanguages">The target languages.</param>
     /// <param name="ignoreCaptions">The ignore captions setting.</param>
+    /// <param name="embeddedStreamIndexes">
+    /// Translation-source path → stream index of the synthetic embedded
+    /// entries inside <paramref name="subtitles"/> (F2b); null when embedded
+    /// tracks were not merged.
+    /// </param>
     /// <returns>True if new translation requests were created, false otherwise.</returns>
     private async Task<bool> ProcessSubtitles(
         List<Subtitles> subtitles,
         HashSet<string> sourceLanguages,
         HashSet<string> targetLanguages,
-        string ignoreCaptions)
+        string ignoreCaptions,
+        Dictionary<string, int>? embeddedStreamIndexes = null)
     {
         if (sourceLanguages.Count == 0 || targetLanguages.Count == 0)
         {
@@ -156,20 +250,46 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
 
         foreach (var targetLanguage in languagesToTranslate)
         {
+            var subtitlePath = selected.Subtitle.Path;
+            var subtitleFormat = selected.Subtitle.Format;
+
+            // The selected source is a synthetic embedded entry: run ffmpeg
+            // now and swap in the materialized translation source. A failed
+            // extraction skips this media (the run continues), matching how a
+            // missing file is treated.
+            if (embeddedStreamIndexes != null
+                && embeddedStreamIndexes.TryGetValue(selected.Subtitle.Path, out var streamIndex))
+            {
+                try
+                {
+                    subtitlePath = await _embeddedTrackService.PrepareTranslationSource(
+                        _mediaType, _media.Id, streamIndex);
+                    subtitleFormat = ".srt";
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Embedded track extraction failed for {MediaType} {MediaId} stream {StreamIndex} — skipping this media",
+                        _mediaType, _media.Id, streamIndex);
+                    await UpdateHash();
+                    return false;
+                }
+            }
+
             await _translationRequestService.CreateRequest(new TranslateAbleSubtitle
             {
                 MediaId = _media.Id,
                 MediaType = _mediaType,
-                SubtitlePath = selected.Subtitle.Path,
+                SubtitlePath = subtitlePath,
                 TargetLanguage = targetLanguage,
                 SourceLanguage = selected.SourceLanguage,
-                SubtitleFormat = selected.Subtitle.Format
+                SubtitleFormat = subtitleFormat
             });
             _logger.LogInformation(
                 "Initiating translation from |Orange|{sourceLanguage}|/Orange| to |Orange|{targetLanguage}|/Orange| for |Green|{subtitleFile}|/Green|",
                 selected.SourceLanguage,
                 targetLanguage,
-                selected.Subtitle.Path);
+                subtitlePath);
         }
 
         await UpdateHash();

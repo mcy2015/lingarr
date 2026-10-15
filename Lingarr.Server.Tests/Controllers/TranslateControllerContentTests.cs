@@ -218,6 +218,7 @@ public class TranslateControllerContentTests : IDisposable
             _progressServiceMock.Object,
             _settingServiceMock.Object,
             new Mock<ISubtitleService>().Object,
+            new Mock<IEmbeddedTrackService>().Object,
             NullLogger<TranslationRequestQueueService>.Instance);
         var proofreadService = new ProofreadRequestService(
             _context,
@@ -240,6 +241,7 @@ public class TranslateControllerContentTests : IDisposable
         _controller = new TranslateController(
             _translationServiceFactoryMock.Object,
             _translationRequestService,
+            queueService,
             _settingServiceMock.Object,
             new LanguageCodeService(),
             new Mock<ITranslationHealthService>().Object,

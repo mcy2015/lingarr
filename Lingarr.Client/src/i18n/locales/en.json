@@ -141,7 +141,8 @@
     "import": {
         "tabs": {
             "free": "Free import",
-            "season": "Season pack"
+            "season": "Season pack",
+            "normalize": "Normalize"
         },
         "dropzone": {
             "title": "Drag subtitle files here, or click to browse"
@@ -249,6 +250,52 @@
         },
         "bilingual": {
             "follow": "Follow global"
+        },
+        "normalize": {
+            "mediaType": {
+                "movie": "Movie",
+                "show": "Show"
+            },
+            "searchPlaceholder": "Search media…",
+            "pickMedia": "Pick media…",
+            "noMedia": "No media found",
+            "mediaLoadFailed": "Failed to load media list: {message}",
+            "preview": "Preview",
+            "previewing": "Scanning…",
+            "previewTitle": "Normalize preview",
+            "meta": "{items} to rename · {skipped} skipped",
+            "table": {
+                "old": "Current file name",
+                "new": "Normalized file name",
+                "language": "Language",
+                "media": "Media"
+            },
+            "skippedTitle": "Skipped ({count})",
+            "reason": {
+                "noVideoInDirectory": "No video file in the same directory",
+                "ambiguousVideo": "Multiple video files in the same directory",
+                "noEpisodeMatch": "No episode video matched",
+                "ambiguousEpisodeMatch": "Matched multiple episodes",
+                "languageUnknown": "Language not recognizable",
+                "dualLanguage": "Dual-language subtitle, not normalized",
+                "targetConflict": "Target file name already occupied",
+                "targetCollisionInBatch": "Target name collides within this batch",
+                "alreadyNormalized": "Already normalized"
+            },
+            "empty": "No subtitle files in this media directory.",
+            "nothing": "Nothing to normalize — all files skipped.",
+            "readOnly": "The media directory is read-only; renaming cannot run.",
+            "missingDirectory": "The media directory does not exist on the server — reindex or check the path mappings.",
+            "confirm": "Rename {count} files",
+            "confirmHint": "The files above will be renamed as previewed. This cannot be undone.",
+            "confirmAgain": "Click again to confirm",
+            "cancel": "Cancel",
+            "executing": "Renaming…",
+            "result": "Renamed {count} files",
+            "resultFailed": "{count} failed",
+            "rePreview": "Preview again",
+            "previewFailed": "Preview failed: {message}",
+            "executeFailed": "Execution failed: {message}"
         }
     },
     "overview": {
@@ -520,7 +567,9 @@
             "dailyHint": "limit {limit} tasks/run · new-media delay {movie}h movie / {show}h show",
             "edit": "Edit",
             "editFailed": "Please check the highlighted fields.",
-            "toggleFailed": "Failed to toggle, please retry."
+            "toggleFailed": "Failed to toggle, please retry.",
+            "consumeEmbeddedTracks": "Consume embedded subtitle tracks",
+            "consumeEmbeddedTracksHint": "Daily catch-up also extracts text-based embedded tracks as translation sources; manual translation from the media page is always available"
         },
         "schedule": {
             "heading": "Scheduled jobs",
@@ -973,7 +1022,10 @@
                 "count": "{count} tracks",
                 "notScanned": "Not probed · run \"Embedded track scan\" (EmbeddedTrackScanJob) under Settings → Automation",
                 "empty": "No embedded subtitle tracks in the container",
-                "graphic": "Image-based · not translatable"
+                "graphic": "Image-based · not translatable",
+                "translate": "Translate",
+                "queuedToast": "Translation queued · request #{id}",
+                "queuedFailed": "Queueing translation failed: {message}"
             }
         },
         "lang": {

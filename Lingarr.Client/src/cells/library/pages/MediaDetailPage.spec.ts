@@ -24,6 +24,7 @@ const libraryMock = vi.hoisted(() => vi.fn())
 const requestsMock = vi.hoisted(() => vi.fn())
 const collectMock = vi.hoisted(() => vi.fn())
 const translateSubtitleMock = vi.hoisted(() => vi.fn())
+const translateEmbeddedTrackMock = vi.hoisted(() => vi.fn())
 const getActiveTranslationsMock = vi.hoisted(() => vi.fn())
 const mediaSubtitlesMock = vi.hoisted(() => vi.fn())
 
@@ -61,6 +62,7 @@ vi.mock('@/cells/library/services/subtitleService', () => ({
 vi.mock('@/cells/app/api/translateService', () => ({
     translateService: () => ({
         translateSubtitle: translateSubtitleMock,
+        translateEmbeddedTrack: translateEmbeddedTrackMock,
         getLanguages: vi.fn(),
         bulkTranslate: vi.fn()
     })
@@ -292,6 +294,7 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
         requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
         getActiveTranslationsMock.mockResolvedValue([])
         translateSubtitleMock.mockResolvedValue({ jobId: 55 })
+        translateEmbeddedTrackMock.mockResolvedValue({ jobId: 91 })
         mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
     })
 
@@ -413,6 +416,7 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
         collectMock.mockResolvedValue(seasonFiles)
         getActiveTranslationsMock.mockResolvedValue([])
         translateSubtitleMock.mockResolvedValue({ jobId: 77 })
+        translateEmbeddedTrackMock.mockResolvedValue({ jobId: 92 })
         mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
     })
 
@@ -579,6 +583,7 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
             subtitlesPayload({
                 embedded: [
                     {
+                        mediaId: 7,
                         streamIndex: 2,
                         language: 'zh',
                         rawLanguage: 'chi',
@@ -587,6 +592,7 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
                         isTextBased: true
                     },
                     {
+                        mediaId: 7,
                         streamIndex: 3,
                         language: null,
                         rawLanguage: 'und',
@@ -643,5 +649,274 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
         expect(card.find('[data-test="embedded-empty"]').exists()).toBe(true)
         expect(card.text()).toContain(en.mediaDetail.subtitleFiles.embedded.empty)
         expect(card.find('[data-test="embedded-not-scanned"]').exists()).toBe(false)
+    })
+})
+
+// ═══ F2b:内嵌文本轨翻译入口(电影)════════════════════════════
+describe('MediaDetailPage · 内嵌轨道翻译(F2b · 电影)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        libraryMock.mockResolvedValue({
+            items: [movieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        translateEmbeddedTrackMock.mockResolvedValue({ jobId: 91 })
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    const embeddedPayload = (
+        embedded: unknown[],
+        files: unknown[] = []
+    ) =>
+        subtitlesPayload({
+            files,
+            embedded,
+            embeddedScanned: true
+        })
+
+    it('renders the translate entry only on text tracks with a recognized language and uncovered target', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            embeddedPayload([
+                {
+                    mediaId: 7,
+                    streamIndex: 2,
+                    language: 'ja',
+                    rawLanguage: 'jpn',
+                    title: '日本語',
+                    codec: 'ass',
+                    isTextBased: true
+                },
+                {
+                    mediaId: 7,
+                    streamIndex: 3,
+                    language: null,
+                    rawLanguage: 'xyzzy',
+                    title: null,
+                    codec: 'srt',
+                    isTextBased: true
+                },
+                {
+                    mediaId: 7,
+                    streamIndex: 4,
+                    language: 'zh-TW',
+                    rawLanguage: 'zh-TW',
+                    title: null,
+                    codec: 'pgs',
+                    isTextBased: false
+                }
+            ])
+        )
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        const rows = card.findAll('[data-test="embedded-track-row"]')
+        expect(rows).toHaveLength(3)
+
+        // text + recognized + ZH uncovered → entry
+        expect(rows[0].find('[data-test="embedded-translate"]').exists()).toBe(true)
+        // language unknown → no entry
+        expect(rows[1].find('[data-test="embedded-translate"]').exists()).toBe(false)
+        // graphic → no entry
+        expect(rows[2].find('[data-test="embedded-translate"]').exists()).toBe(false)
+    })
+
+    it('hides every entry when the target language is already covered (external or embedded)', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            embeddedPayload(
+                [
+                    {
+                        mediaId: 7,
+                        streamIndex: 2,
+                        language: 'ja',
+                        rawLanguage: 'jpn',
+                        title: null,
+                        codec: 'srt',
+                        isTextBased: true
+                    }
+                ],
+                // an external ZH file already covers the only target language
+                [
+                    {
+                        fileName: 'dune.zh.srt',
+                        directory: '/movies/dune',
+                        languages: ['zh'],
+                        format: 'srt',
+                        bytes: 512
+                    }
+                ]
+            )
+        )
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        expect(
+            wrapper.findAll('[data-test="embedded-translate"]')
+        ).toHaveLength(0)
+    })
+
+    it('queues the embedded-track translation on menu select and toasts the request id', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            embeddedPayload([
+                {
+                    mediaId: 7,
+                    streamIndex: 2,
+                    language: 'ja',
+                    rawLanguage: 'jpn',
+                    title: '日本語',
+                    codec: 'ass',
+                    isTextBased: true
+                }
+            ])
+        )
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const row = wrapper.find('[data-test="embedded-track-row"]')
+        const menu = row.findComponent(ContextMenuStub)
+        expect(menu.exists()).toBe(true)
+
+        menu.vm.$emit('select', { code: 'ZH', name: 'Chinese' })
+        await settle()
+
+        expect(translateEmbeddedTrackMock).toHaveBeenCalledTimes(1)
+        expect(translateEmbeddedTrackMock).toHaveBeenCalledWith({
+            mediaType: 'Movie',
+            mediaId: 7,
+            streamIndex: 2,
+            sourceLanguage: 'ja',
+            targetLanguage: 'ZH'
+        })
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.subtitleFiles.embedded.queuedToast.replace('{id}', '91')
+        )
+        expect(toastStore.toasts[0].type).toBe('success')
+    })
+
+    it('toasts the readable server error when initiation is rejected', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            embeddedPayload([
+                {
+                    mediaId: 7,
+                    streamIndex: 2,
+                    language: 'ja',
+                    rawLanguage: 'jpn',
+                    title: null,
+                    codec: 'srt',
+                    isTextBased: true
+                }
+            ])
+        )
+        translateEmbeddedTrackMock.mockRejectedValue({
+            isAxiosError: true,
+            message: 'Network Error',
+            response: { data: { message: "'Dune: Part Two' already has zh subtitles" } }
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const menu = wrapper
+            .find('[data-test="embedded-track-row"]')
+            .findComponent(ContextMenuStub)
+        menu.vm.$emit('select', { code: 'ZH', name: 'Chinese' })
+        await settle()
+
+        expect(translateEmbeddedTrackMock).toHaveBeenCalledTimes(1)
+        expect(toastStore.toasts[0].type).toBe('error')
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.subtitleFiles.embedded.queuedFailed.replace(
+                '{message}',
+                "'Dune: Part Two' already has zh subtitles"
+            )
+        )
+    })
+})
+
+// ═══ F2b:内嵌文本轨翻译入口(剧集,按集归属)══════════════════
+describe('MediaDetailPage · 内嵌轨道翻译(F2b · 剧集)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        libraryMock.mockResolvedValue({
+            items: [showItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        collectMock.mockResolvedValue(seasonFiles)
+        getActiveTranslationsMock.mockResolvedValue([])
+        translateEmbeddedTrackMock.mockResolvedValue({ jobId: 92 })
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('scopes coverage per episode and queues with the owning episode id', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                // ep01 already has a ZH external file; ep02 does not
+                files: [
+                    {
+                        fileName: 'shogun.s01e01.zh.srt',
+                        directory: '/shows/shogun/s01',
+                        languages: ['zh'],
+                        format: 'srt',
+                        bytes: 256
+                    }
+                ],
+                embedded: [
+                    {
+                        mediaId: 21,
+                        streamIndex: 2,
+                        language: 'en',
+                        rawLanguage: 'eng',
+                        title: 'English',
+                        codec: 'srt',
+                        isTextBased: true
+                    },
+                    {
+                        mediaId: 22,
+                        streamIndex: 2,
+                        language: 'en',
+                        rawLanguage: 'eng',
+                        title: 'English',
+                        codec: 'srt',
+                        isTextBased: true
+                    }
+                ],
+                embeddedScanned: true
+            })
+        )
+        const { wrapper, toastStore } = await mountDetail('show', '/library/show/3')
+
+        const rows = wrapper.findAll('[data-test="embedded-track-row"]')
+        expect(rows).toHaveLength(2)
+
+        // ep01's ZH is covered → no entry; ep02's is not → entry
+        expect(rows[0].find('[data-test="embedded-translate"]').exists()).toBe(false)
+        const menu = rows[1].findComponent(ContextMenuStub)
+        expect(menu.exists()).toBe(true)
+
+        menu.vm.$emit('select', { code: 'ZH', name: 'Chinese' })
+        await settle()
+
+        expect(translateEmbeddedTrackMock).toHaveBeenCalledWith({
+            mediaType: 'Episode',
+            mediaId: 22,
+            streamIndex: 2,
+            sourceLanguage: 'en',
+            targetLanguage: 'ZH'
+        })
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.subtitleFiles.embedded.queuedToast.replace('{id}', '92')
+        )
     })
 })

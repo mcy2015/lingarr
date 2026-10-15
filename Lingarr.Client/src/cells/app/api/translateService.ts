@@ -4,6 +4,7 @@ import {
     IProofreadLineRequest,
     IServiceLanguageResponse,
     ISubtitle,
+    ITranslateEmbeddedTrackRequest,
     ITranslateService,
     ITranslationPreviewRequest,
     ITranslationPreviewResponse,
@@ -34,6 +35,9 @@ const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateServ
         return http
             .post(`${resource}/bulk`, { mediaIds, targetLanguage, mediaType })
             .then((response) => response.data)
+    },
+    translateEmbeddedTrack<T>(request: ITranslateEmbeddedTrackRequest): Promise<T> {
+        return http.post(`${resource}/embedded-track`, request).then((response) => response.data)
     },
     getLanguages<T>(): Promise<T> {
         return http.get(`${resource}/languages`).then((response) => response.data)

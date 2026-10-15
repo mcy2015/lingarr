@@ -59,6 +59,7 @@ public class TranslateControllerConnectionTests
         new(
             factoryMock.Object,
             new Mock<ITranslationRequestService>().Object,
+            new Mock<ITranslationRequestQueueService>().Object,
             (settingsMock ?? new Mock<ISettingService>()).Object,
             new LanguageCodeService(),
             new Mock<ITranslationHealthService>().Object,

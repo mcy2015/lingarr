@@ -209,7 +209,7 @@
         </div>
 
         <!-- ═══ 定向导入 · 整季 ═══ -->
-        <div v-else class="flex min-h-0 flex-1 flex-col gap-3.5">
+        <div v-else-if="activeTab === 'season'" class="flex min-h-0 flex-1 flex-col gap-3.5">
             <div class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
                 <div class="min-w-0">
                     <b class="text-[15px] font-semibold">
@@ -404,6 +404,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- ═══ 归整:批量重命名已有字幕(F3) ═══ -->
+        <NormalizeTab v-else-if="activeTab === 'normalize'" />
     </div>
 </template>
 
@@ -413,6 +416,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import TabComponent from '@/cells/kernel/components/TabComponent.vue'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
+import NormalizeTab from '@/cells/import/components/NormalizeTab.vue'
 import useDebounce from '@/cells/kernel/composables/useDebounce'
 import axios from 'axios'
 import { importService } from '@/cells/import/services/importService'
@@ -464,12 +468,15 @@ onUnmounted(() => {
 })
 
 
-const activeTab = ref<'free' | 'season'>(route.query.tab === 'season' ? 'season' : 'free')
+const activeTab = ref<'free' | 'season' | 'normalize'>(
+    route.query.tab === 'season' ? 'season' : route.query.tab === 'normalize' ? 'normalize' : 'free'
+)
 // labels go through t() inside a computed so switching language re-renders
 // (setup-time evaluation would freeze the labels — the P2 i18n reactivity lesson)
 const tabs = computed<ITabOption[]>(() => [
     { label: t('import.tabs.free'), value: 'free' },
-    { label: t('import.tabs.season'), value: 'season' }
+    { label: t('import.tabs.season'), value: 'season' },
+    { label: t('import.tabs.normalize'), value: 'normalize' }
 ])
 
 const rows = ref<ImportRow[]>([])

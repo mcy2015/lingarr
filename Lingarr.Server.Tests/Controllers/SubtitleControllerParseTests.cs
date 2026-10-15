@@ -13,9 +13,7 @@ public class SubtitleControllerParseTests
     [Fact]
     public void ParseFileNames_MapsParserOutputWithTierNames()
     {
-        var controller = new SubtitleController(
-            new Mock<ISubtitleService>().Object,
-            new Mock<ISubtitleImportService>().Object);
+        var controller = CreateController();
 
         var response = controller.ParseFileNames(new SubtitleFilenameParseRequest
         {
@@ -51,13 +49,16 @@ public class SubtitleControllerParseTests
     [Fact]
     public void ParseFileNames_EmptyList_ReturnsEmpty()
     {
-        var controller = new SubtitleController(
-            new Mock<ISubtitleService>().Object,
-            new Mock<ISubtitleImportService>().Object);
+        var controller = CreateController();
 
         var response = controller.ParseFileNames(new SubtitleFilenameParseRequest { Filenames = [] });
 
         var result = Assert.IsType<OkObjectResult>(response.Result);
         Assert.Empty(Assert.IsType<List<SubtitleFilenameParseResult>>(result.Value));
     }
+
+    private static SubtitleController CreateController() => new(
+        new Mock<ISubtitleService>().Object,
+        new Mock<ISubtitleImportService>().Object,
+        new Mock<ISubtitleNormalizeService>().Object);
 }

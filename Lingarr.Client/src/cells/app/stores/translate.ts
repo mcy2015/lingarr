@@ -1,5 +1,11 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { ILanguage, ISubtitle, IUseTranslateStore, MediaType } from '@/types'
+import {
+    ILanguage,
+    ISubtitle,
+    ITranslateEmbeddedTrackRequest,
+    IUseTranslateStore,
+    MediaType
+} from '@/types'
 import axios from 'axios'
 import { translateService } from '@/cells/app/api/translateService'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
@@ -32,6 +38,13 @@ export const useTranslateStore = defineStore('translate', {
                 target,
                 mediaType
             )
+            await useTranslationRequestStore().fetchActiveTranslations()
+            return result.jobId
+        },
+        /// F2b: queue a translation whose source is a text-based embedded
+        /// subtitle track; the server extracts the stream before enqueueing.
+        async translateEmbeddedTrack(request: ITranslateEmbeddedTrackRequest): Promise<number> {
+            const result = await translateApi.translateEmbeddedTrack<{ jobId: number }>(request)
             await useTranslationRequestStore().fetchActiveTranslations()
             return result.jobId
         },

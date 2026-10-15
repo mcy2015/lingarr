@@ -27,6 +27,7 @@ public abstract class MediaSubtitleProcessorTestBase : IDisposable
     protected readonly Mock<ILogger<IMediaSubtitleProcessor>> LoggerMock;
     protected readonly Mock<ISubtitleService> SubtitleServiceMock;
     protected readonly Mock<ISettingService> SettingServiceMock;
+    protected readonly Mock<IEmbeddedTrackService> EmbeddedTrackServiceMock;
     protected readonly LingarrDbContext DbContext;
     protected readonly Lingarr.Server.Modules.Media.MediaSubtitleProcessor Processor;
 
@@ -36,11 +37,15 @@ public abstract class MediaSubtitleProcessorTestBase : IDisposable
         LoggerMock = new Mock<ILogger<IMediaSubtitleProcessor>>();
         SubtitleServiceMock = new Mock<ISubtitleService>();
         SettingServiceMock = new Mock<ISettingService>();
+        EmbeddedTrackServiceMock = new Mock<IEmbeddedTrackService>();
 
         var options = new DbContextOptionsBuilder<LingarrDbContext>()
             .UseInMemoryDatabase(databaseName: System.Guid.NewGuid().ToString())
             .Options;
         DbContext = new LingarrDbContext(options);
+
+        // consume_embedded_tracks defaults to off (null setting) so the base
+        // processor behaves exactly like the pre-F2b implementation.
 
         SubtitleServiceMock
             .Setup(s => s.SelectSourceSubtitle(
@@ -76,7 +81,8 @@ public abstract class MediaSubtitleProcessorTestBase : IDisposable
             LoggerMock.Object,
             SettingServiceMock.Object,
             SubtitleServiceMock.Object,
-            DbContext);
+            DbContext,
+            EmbeddedTrackServiceMock.Object);
     }
 
     protected async Task<Movie> CreateTestMovie(string fileName = "test.movie")
