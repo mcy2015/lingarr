@@ -38,7 +38,8 @@
 | 9 | `queue-detail` | 任务详情 | 队列行 / 活跃任务行点击 | [screen-09](screen-09-queue-detail.zh-CN.md) |
 | 10 | `request-template` | 请求模版 | 设置 → 服务卡「请求模版」 | [screen-10](screen-10-request-template.zh-CN.md) |
 | 11 | `logs` | 日志 | 队列失败行 / 设置 · 系统 | [screen-11](screen-11-logs.zh-CN.md) |
-| 12 | `schedule` | 定时任务 | 设置 · 系统 | [screen-12](screen-12-schedule.zh-CN.md) |
+| 12 | `schedule` | 定时任务（已退役，/schedule 重定向至 settings/automation#jobs） | 设置 · 系统 | [screen-12](screen-12-schedule.zh-CN.md) |
+| 13 | `sub-history` | 字幕下载记录 | 概览 KPI / 自动化批次「查看记录」 / ⌘K | [screen-13](screen-13-subtitle-search.zh-CN.md) |
 
 ## 跳转关系图
 
@@ -61,9 +62,12 @@
        └─完成写回──→ 任务队列
 设置 ──服务卡──→ 请求模版
      ├─系统组──→ 日志 · 定时任务
+     └─sources 字幕源 / automation 字幕补缺──→ 字幕下载记录(screen-13,2026-10-15 立项增量)
 媒体详情 ──整季导入──→ 导入与转换(season)
          ├─集「校对/详情」→ 校对台 · 任务详情
-         └─「翻译缺失」──→ 任务队列
+         ├─「翻译缺失」──→ 任务队列
+         └─字幕文件卡「搜索字幕」/ 集「翻译 ▾·搜索字幕」──→ #smodal 搜索弹层(新原语 openSubSearch)
+概览 ──KPI「字幕补缺」──→ 字幕下载记录
 ⌘K 全局搜索 ──→ 任意屏(可带 settings 面板深链)
 ```
 
@@ -83,6 +87,7 @@
 | logs | 日志 | 环形缓冲 2 000 条 · SSE 实时 | ⇩ 导出 → 下载 lingarr-logs.txt |
 | schedule | 定时任务 | Hangfire · 6 队列 · recurring 一览 | ＋ 新建任务 → 下拉菜单(预设 + 自定义 cron) |
 | media-detail-movie | 媒体详情 | Dune: Part Two · 电影 · EN → ZH | 翻译缺失 ▸ → toast(任务进行中) |
+| sub-history | 字幕下载记录 | 共 41 208 条 · 来源 / 途径 / 结果 / 媒体名 四维筛选 | 无 CTA(只读屏,按钮隐藏) |
 
 ## 深链格式
 

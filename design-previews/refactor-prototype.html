@@ -154,7 +154,7 @@
     content:"";position:absolute;right:0;top:-3px;
     border:4px solid transparent;border-left:5px solid var(--line);border-right:0;
   }
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:22px}
   .kpi{background:var(--secondary);border:1px solid var(--line);border-radius:6px;padding:12px 16px}
   .kpi .n{font-family:var(--font-mono);font-size:24px;font-weight:600}
   .kpi .l{font-size:12px;color:var(--secondary-content);margin-top:1px}
@@ -566,6 +566,41 @@
   body.mobile #toasts{bottom:66px;right:10px;left:10px;align-items:stretch}
   body.mobile .modal{padding-top:6vh}
 
+  /* ── 字幕搜索与下载(2026-10-15 立项增量:搜索弹层 #smodal / 候选行 / 源分组标题 / 下载历史屏) ── */
+  .grp-label{display:flex;align-items:baseline;gap:10px;margin:16px 0 10px;font-size:13px;font-weight:600}
+  .grp-label .meta{font-weight:400;font-size:12px;color:var(--secondary-content);margin-left:auto}
+  .smodal-box{width:min(780px,94vw);display:flex;flex-direction:column;max-height:76vh}
+  .sq-bar{display:flex;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .sq-bar input{flex:1;min-width:200px;background:var(--primary);border:1px solid var(--line);border-radius:4px;color:var(--primary-content);font-family:var(--font-mono);font-size:12px;padding:7px 10px;outline:none}
+  .sq-bar input:focus{border-color:var(--accent)}
+  .sq-bar .act-lang{cursor:pointer}
+  .sq-src{padding:8px 16px;border-bottom:1px solid var(--line);display:flex;gap:14px;font-family:var(--font-mono);font-size:11.5px;color:var(--secondary-content);flex-wrap:wrap}
+  .sq-src .s{display:inline-flex;gap:6px;align-items:center}
+  .sq-src .s .retry{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+  .sq-head{display:flex;gap:10px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line);font-size:12px;color:var(--secondary-content)}
+  .sq-res{flex:1;min-height:120px;overflow-y:auto;scrollbar-gutter:stable}
+  .subrow{display:grid;grid-template-columns:2px minmax(0,1fr) 168px 52px 96px 158px;gap:12px;align-items:center;padding:10px 16px 10px 14px;border-bottom:1px solid var(--line)}
+  .subrow:last-child{border-bottom:0}
+  .subrow .rail{width:2px;height:40px;border-radius:2px;background:var(--line)}
+  .subrow.zh .rail{background:var(--success)}
+  .subrow.en .rail{background:var(--track-a)}
+  .subrow .t{min-width:0}
+  .subrow .t b{display:block;font-family:var(--font-mono);font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .subrow .t span{font-size:11.5px;color:var(--secondary-content)}
+  .subrow .score{font-family:var(--font-mono);font-size:12px;text-align:right}
+  .subrow .score.low{color:var(--warning)}
+  .subrow .score.hash{color:var(--success)}
+  .subrow .ops{display:flex;gap:6px;justify-content:flex-end}
+  .subrow.exists{opacity:.55}
+  .subrow.dl .ops .btn{pointer-events:none;opacity:.5}
+  [data-screen="sub-history"] .card.tcard{flex:1;min-height:0;overflow:auto}
+  [data-screen="sub-history"] .card.tcard thead th{position:sticky;top:0;background:var(--secondary);z-index:1}
+  .subsrc-proxy{display:inline-flex;gap:8px;align-items:center;font-size:12px;color:var(--secondary-content);margin-right:auto}
+  body.mobile .smodal-box{width:100%;max-height:82vh}
+  body.mobile .subrow{grid-template-columns:2px minmax(0,1fr);row-gap:4px}
+  body.mobile .subrow .chips,body.mobile .subrow .score,body.mobile .subrow .ops{grid-column:2}
+  body.mobile .subrow>div:nth-child(5){display:none}
+
   /* ── 滚动条定制:纳入 Timeline 设计系统(细 8px / token 色 / 悬停提亮 / 双内核 / gutter 稳定) ── */
   @supports selector(::-webkit-scrollbar){
     /* WebKit/Blink:伪元素全套(含悬停提亮);标准属性不得出现在继承链上,否则伪元素被禁用 */
@@ -574,7 +609,7 @@
     ::-webkit-scrollbar-corner{background:transparent}
     ::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--secondary-content) 26%,transparent);border-radius:4px}
     ::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--secondary-content) 55%,transparent)}
-    :is(.screens,.qcol,#plines,.mres,.card,.tscroll,pre.json,[data-screen="settings"] .panel.on,textarea,.tabs):hover::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--secondary-content) 48%,transparent)}
+    :is(.screens,.qcol,#plines,.mres,.sq-res,.card,.tscroll,pre.json,[data-screen="settings"] .panel.on,textarea,.tabs):hover::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--secondary-content) 48%,transparent)}
     body.mobile .tabs::-webkit-scrollbar,body.mobile .pline .tc::-webkit-scrollbar{display:none}
   }
   @supports not selector(::-webkit-scrollbar){
@@ -587,7 +622,7 @@
 <body>
 
 <div class="proto-bar">
-  <b>重构原型</b><span>六屏 + 下钻屏 · 左侧导航或 <span class="key">1</span>–<span class="key">6</span> · 深链 <span class="key">#queue-detail</span> <span class="key">#request-template</span> <span class="key">#logs</span> <span class="key">#schedule</span> <span class="key">#media-detail-movie</span> · <span class="key">⌘K</span> 全局搜索</span>
+  <b>重构原型</b><span>六屏 + 下钻屏 · 左侧导航或 <span class="key">1</span>–<span class="key">6</span> · 深链 <span class="key">#queue-detail</span> <span class="key">#request-template</span> <span class="key">#logs</span> <span class="key">#schedule</span> <span class="key">#media-detail-movie</span> <span class="key">#sub-history</span> · <span class="key">⌘K</span> 全局搜索</span>
   <button class="key" id="mode-toggle" style="cursor:pointer" title="切换手机端展示模式">📱 手机模式</button>
   <span style="margin-left:auto">配套提案 docs/redesign-proposal.zh-CN.md · 视觉基座 docs/DESIGN.md</span>
 </div>
@@ -641,6 +676,7 @@
           <div class="kpi" title="队列：排队" onclick="location.hash='queue'"><div class="n">12</div><div class="l">排队等待</div></div>
           <div class="kpi" title="服务与费率设置" onclick="location.hash='settings'"><div class="n">$3.56</div><div class="l">本月 API 成本</div></div>
           <div class="kpi" title="队列：失败" onclick="location.hash='queue'"><div class="n">98.2%</div><div class="l">30 天任务成功率</div></div>
+          <div class="kpi" title="字幕补缺：积压与吞吐" onclick="location.hash='sub-history'"><div class="n" id="kpi-sub-backlog">12 480</div><div class="l">字幕补缺积压 · 今日下载 <span class="mono" id="kpi-sub-dl">23</span></div></div>
         </div>
 
         <div class="cols">
@@ -968,6 +1004,15 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="card" style="margin-top:12px;flex:none">
+          <div class="card-h"><h2>字幕文件</h2><span class="meta mono" id="md-sub-meta">外挂 2 · 内嵌 1</span><button class="btn sm" onclick="openSubSearch('Shōgun','S01')">🔍 搜索字幕</button></div>
+          <div class="setlist" id="md-sub-list">
+            <div class="row"><b class="mono" style="font-size:12px">Shogun.S01E01.en.srt</b><span class="hint mono">EN · 512 行 · 外挂</span></div>
+            <div class="row"><b class="mono" style="font-size:12px">Shogun.S01E01.zh.srt</b><span class="hint mono">ZH · 翻译产出</span></div>
+            <div class="row"><b class="mono" style="font-size:12px">mkv 轨 #3 · eng</b><span class="hint mono">内嵌 · 文本轨 · <button class="btn sm" style="padding:1px 7px;font-size:11px" onclick="toast('内嵌轨翻译入口 · 既有功能')">抽取翻译</button></span></div>
+          </div>
         </div>
 
         <div class="card" style="margin-top:12px">
@@ -1311,6 +1356,31 @@
               <div class="row"><span class="dot off"></span><b>Jellyfin <span class="chip dim">规划中 P3-e</span></b><span class="hint">webhook 直连，补齐 *arr 之外的媒体服务器</span><span class="end"><button class="btn sm" disabled>配置</button></span></div>
             </div>
           </div>
+
+          <div class="grp-label">字幕源<span class="meta">OpenSubtitles / assrt / shooter · 为手动搜索与自动补缺供货</span></div>
+          <div class="set-grid">
+            <div class="pcard">
+              <div class="head"><span class="dot ok"></span><b>OpenSubtitles</b><span class="st">在线</span></div>
+              <div class="model">API Key ✓ · 今日配额 <span id="q-os">187 / 1 000</span></div>
+              <div class="usage"><span>搜索 <b>41</b> 次</span><span>下载 <b>23</b> 次</span><span>延迟 <b>486 ms</b></span></div>
+              <div class="ops"><span class="subsrc-proxy" title="国内直连不可达 · 走全局 proxy_url 出站">代理<div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span><button class="btn sm" data-test="✓ 200 · 486 ms · 返回 12 条" data-ok="1">测试连接</button><button class="btn sm" data-subedit="OpenSubtitles">编辑</button></div>
+              <div class="test-res"></div>
+            </div>
+            <div class="pcard">
+              <div class="head"><span class="dot warn"></span><b>assrt</b><span class="st">冷却中</span></div>
+              <div class="model">Token ✓ · 冷却至 <span>14:32</span> · 最后错误 429</div>
+              <div class="usage"><span>搜索 <b>36</b> 次</span><span>下载 <b>18</b> 次</span><span>延迟 <b>212 ms</b></span></div>
+              <div class="ops"><span class="subsrc-proxy" title="直连可达">代理<div class="switch" role="switch" aria-checked="false" tabindex="0"></div></span><button class="btn sm" data-test="✗ 429 · 冷却至 14:32 · Retry-After 36 分钟">测试连接</button><button class="btn sm" data-subedit="assrt">编辑</button></div>
+              <div class="test-res"></div>
+            </div>
+            <div class="pcard">
+              <div class="head"><span class="dot err"></span><b>shooter</b><span class="st">错误</span></div>
+              <div class="model">无需凭据 · 最后错误 timeout · 09:15</div>
+              <div class="usage"><span>搜索 <b>12</b> 次</span><span>下载 <b>9</b> 次</span><span>延迟 <b>1.8 s</b></span></div>
+              <div class="ops"><span class="subsrc-proxy" title="直连可达">代理<div class="switch" role="switch" aria-checked="false" tabindex="0"></div></span><button class="btn sm" data-test="✗ 超时 · 10s 上限">测试连接</button><button class="btn sm" data-subedit="shooter">编辑</button></div>
+              <div class="test-res"></div>
+            </div>
+          </div>
         </div>
 
         <!-- 自动化(批次卡 = AutomatedTranslationJob 唯一驻留位:cron/启停/触发/策略;
@@ -1320,6 +1390,7 @@
             <div class="card-h"><h2>自动化批次</h2><span class="meta mono">cron</span></div>
             <div class="setlist">
               <div class="row"><b>每日补缺</b><span class="hint mono">限额 50 任务/次 · 新片延迟 电影 48h / 剧集 24h</span><span class="mono" style="font-size:11.5px;color:var(--secondary-content)">下次执行 明日 04:00 <span style="opacity:.6">UTC</span></span><span class="end"><button class="btn sm">▶ 运行</button><button class="btn sm">编辑</button><div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span></div>
+              <div class="row" data-sub="1"><b>字幕自动补缺</b><span class="hint mono" id="subfetch-hint">0 */6 * * * · 分数线 75 · 每轮 ≤200 · 自动翻译 开 · 积压 <span id="ab-backlog">12 480</span> · 下轮 200</span><span class="mono" style="font-size:11.5px;color:var(--secondary-content)">下次执行 18:00 <span style="opacity:.6">UTC</span></span><span class="end"><button class="btn sm" onclick="location.hash='sub-history'">查看记录</button><button class="btn sm">▶ 运行</button><button class="btn sm" data-subedit="字幕自动补缺">编辑</button><div class="switch on" role="switch" aria-checked="true" tabindex="0"></div></span></div>
             </div>
           </div>
           <div class="card" style="margin-top:12px">
@@ -1629,6 +1700,13 @@ Previous-line context:
             <div class="pct">38% · 剩 11:47</div>
           </div>
         </div>
+        <div class="card" style="margin-top:12px;flex:none">
+          <div class="card-h"><h2>字幕文件</h2><span class="meta mono" id="mdm-sub-meta">外挂 1 · 内嵌 1</span><button class="btn sm" onclick="openSubSearch('Dune: Part Two')">🔍 搜索字幕</button></div>
+          <div class="setlist" id="mdm-sub-list">
+            <div class="row"><b class="mono" style="font-size:12px">Dune.Part.Two.2024.mkv 轨 #2 · eng</b><span class="hint mono">内嵌 · 文本轨 · <button class="btn sm" style="padding:1px 7px;font-size:11px" onclick="toast('内嵌轨翻译入口 · 既有功能')">抽取翻译</button></span></div>
+          </div>
+        </div>
+
         <div class="card" style="margin-top:12px">
           <div class="card-h"><h2>翻译历史</h2><span class="meta mono">近期 3 / 3 个请求</span></div>
           <div class="hist-row">
@@ -1650,6 +1728,141 @@ Previous-line context:
             <button class="btn sm" onclick="location.hash='import'">导入台</button>
           </div>
         </div>
+      </section>
+
+      <!-- ═══ 13 字幕下载记录(下钻屏 · 字幕搜索立项 2026-10-15) ═══ -->
+      <section class="screen" data-screen="sub-history">
+        <div class="pb-head">
+          <button class="btn sm" onclick="location.hash='overview'">← 概览</button>
+          <div>
+            <b style="font-size:15px">字幕下载记录</b>
+            <div class="mono" style="font-size:11.5px;color:var(--secondary-content)" id="sh-sub">共 41 208 条 · 筛选后 12 条</div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button class="btn sm" id="sh-src">全部来源 ▾</button>
+          <button class="btn sm" id="sh-way">全部途径 ▾</button>
+          <button class="btn sm" id="sh-res">全部结果 ▾</button>
+          <label class="search"><input id="sh-q" placeholder="搜索媒体名…"></label>
+          <button class="btn sm" id="sh-clear">清除筛选</button>
+          <span class="mono" id="sh-count" style="margin-left:auto;font-size:12px;color:var(--secondary-content)">12 / 41 208 条</span>
+        </div>
+        <div class="card tcard">
+          <table>
+            <thead><tr><th style="width:96px">时间</th><th>媒体</th><th style="width:118px">来源</th><th style="width:76px">途径</th><th style="width:52px">分数</th><th>结果</th><th style="width:60px"></th></tr></thead>
+            <tbody id="sh-tbody">
+              <tr data-src="opensubtitles" data-way="auto" data-res="ok">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 15:41</td>
+                <td class="title"><b>Shōgun — S01E06</b></td>
+                <td><span class="chip">opensubtitles</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">100</td>
+                <td style="font-size:12.5px"><span class="state done">✓</span> 写回 <b class="mono" style="font-weight:500">Shogun.S01E06.zh.srt</b> · 免翻译</td>
+                <td></td>
+              </tr>
+              <tr data-src="opensubtitles" data-way="webhook" data-res="ok">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 15:12</td>
+                <td class="title"><b>Dune: Part Two</b></td>
+                <td><span class="chip">opensubtitles</span></td>
+                <td><span class="chip dim">webhook</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">100</td>
+                <td style="font-size:12.5px"><span class="state done">✓</span> 写回 <b class="mono" style="font-weight:500">Dune.Part.Two.2024.en.srt</b> · 已入翻译队列</td>
+                <td></td>
+              </tr>
+              <tr data-src="assrt" data-way="manual" data-res="ok">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 14:58</td>
+                <td class="title"><b>3 Body Problem — S01E03</b></td>
+                <td><span class="chip">assrt</span></td>
+                <td><span class="chip dim">手动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">92</td>
+                <td style="font-size:12.5px"><span class="state done">✓</span> 写回 <b class="mono" style="font-weight:500">3Body.Problem.S01E03.zh.srt</b> · 免翻译</td>
+                <td></td>
+              </tr>
+              <tr data-src="shooter" data-way="auto" data-res="ok">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 14:22</td>
+                <td class="title"><b>The Bear — S03E04</b></td>
+                <td><span class="chip">shooter</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">100</td>
+                <td style="font-size:12.5px"><span class="state done">✓</span> 写回 <b class="mono" style="font-weight:500">The.Bear.S03E04.en.srt</b> · GBK 已转 UTF-8</td>
+                <td></td>
+              </tr>
+              <tr data-src="assrt" data-way="auto" data-res="fail">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 13:04</td>
+                <td class="title"><b>True Detective — S04E06</b></td>
+                <td><span class="chip">assrt</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">84</td>
+                <td style="font-size:12.5px"><span class="state" style="color:var(--danger)">✗</span> 429 · 源已冷却至 14:32</td>
+                <td style="text-align:right"><button class="btn sm" onclick="retrySubFromHistory('True Detective')">重试</button></td>
+              </tr>
+              <tr data-src="opensubtitles" data-way="manual" data-res="fail">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 11:47</td>
+                <td class="title"><b>Past Lives</b></td>
+                <td><span class="chip">opensubtitles</span></td>
+                <td><span class="chip dim">手动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">76</td>
+                <td style="font-size:12.5px"><span class="state" style="color:var(--danger)">✗</span> 写盘失败 · 目标目录只读</td>
+                <td style="text-align:right"><button class="btn sm" onclick="retrySubFromHistory('Past Lives')">重试</button></td>
+              </tr>
+              <tr data-src="opensubtitles" data-way="auto" data-res="low">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 06:00</td>
+                <td class="title"><b>Severance — S02E03</b></td>
+                <td><span class="chip">opensubtitles</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">62</td>
+                <td style="font-size:12.5px"><span class="state" style="color:var(--warning)">◐</span> 低置信 62 &lt; 75 · 跳过</td>
+                <td style="text-align:right"><button class="btn sm" onclick="retrySubFromHistory('Severance')">重搜</button></td>
+              </tr>
+              <tr data-src="shooter" data-way="auto" data-res="low">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 06:00</td>
+                <td class="title"><b>Severance — S02E04</b></td>
+                <td><span class="chip">shooter</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">71</td>
+                <td style="font-size:12.5px"><span class="state" style="color:var(--warning)">◐</span> 低置信 71 &lt; 75 · 跳过</td>
+                <td style="text-align:right"><button class="btn sm" onclick="retrySubFromHistory('Severance')">重搜</button></td>
+              </tr>
+              <tr data-src="opensubtitles" data-way="auto" data-res="exists">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-15 06:00</td>
+                <td class="title"><b>The Bear — S03E01</b></td>
+                <td><span class="chip">opensubtitles</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">100</td>
+                <td style="font-size:12.5px"><span class="state none">·</span> 同语言已存在 · 跳过</td>
+                <td></td>
+              </tr>
+              <tr data-src="assrt" data-way="auto" data-res="ok">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-14 22:15</td>
+                <td class="title"><b>蜡笔小新 剧场版 · 31 部中的 4 部</b></td>
+                <td><span class="chip">assrt</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">96</td>
+                <td style="font-size:12.5px"><span class="state done">✓</span> 写回 <b class="mono" style="font-weight:500">…剧场版.zh.ass</b> · 保留 ass · 免翻译</td>
+                <td></td>
+              </tr>
+              <tr data-src="opensubtitles" data-way="auto" data-res="fail">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-14 18:00</td>
+                <td class="title"><b>Shōgun — S01E07</b></td>
+                <td><span class="chip">opensubtitles</span></td>
+                <td><span class="chip dim">自动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">88</td>
+                <td style="font-size:12.5px"><span class="state" style="color:var(--danger)">✗</span> 解压失败 · 伪 zip(魔数不符)</td>
+                <td style="text-align:right"><button class="btn sm" onclick="retrySubFromHistory('Shōgun')">重试</button></td>
+              </tr>
+              <tr data-src="opensubtitles" data-way="manual" data-res="ok">
+                <td class="mono" style="font-size:12px;color:var(--secondary-content)">10-14 16:31</td>
+                <td class="title"><b>Dune: Part Two</b></td>
+                <td><span class="chip">opensubtitles</span></td>
+                <td><span class="chip dim">手动</span></td>
+                <td class="mono" style="font-size:12px;text-align:right">100</td>
+                <td style="font-size:12.5px"><span class="state done">✓</span> 写回 <b class="mono" style="font-weight:500">Dune.Part.Two.2024.zh.forced.srt</b> · forced</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager mono"><span>第 <b id="sh-no">1</b> / 825 页</span><button id="sh-prev" aria-label="上一页">‹</button><button id="sh-next" aria-label="下一页">›</button></div>
       </section>
 
     </div>
@@ -1680,6 +1893,8 @@ Previous-line context:
       <button class="item" data-k="请求模版 prompt 模板 template" data-go-h="request-template">请求模版 · 试译预览</button>
       <button class="item" data-k="日志 logs log" data-go-h="logs">日志</button>
       <button class="item" data-k="定时任务 hangfire 调度 schedule cron" data-go-h="schedule">定时任务</button>
+      <button class="item" data-k="字幕源 opensubtitles assrt shooter 搜索 下载 supplier" data-go-h="settings" data-panel="sources">字幕源 · OpenSubtitles / assrt / shooter</button>
+      <button class="item" data-k="字幕下载记录 历史 sub history 下载" data-go-h="sub-history">字幕下载记录</button>
     </div>
   </div>
 </div>
@@ -1705,6 +1920,20 @@ Previous-line context:
   </div>
 </div>
 
+<div class="modal" id="smodal" role="dialog" aria-label="搜索字幕">
+  <div class="modal-box smodal-box">
+    <div class="mhead"><b id="sm-title" style="font-size:14px">搜索字幕</b><span class="chip dim mono" style="margin-left:auto">ESC</span></div>
+    <div class="sq-bar">
+      <input id="sm-q" aria-label="搜索关键词" spellcheck="false">
+      <span class="chips" style="gap:5px"><span class="chip ok act-lang" data-lang="zh">ZH ✓</span><span class="chip act-lang" data-lang="en">EN</span></span>
+      <button class="btn sm primary" id="sm-run">搜索 ▸</button>
+    </div>
+    <div class="sq-src" id="sm-src"></div>
+    <div class="sq-head"><span class="mono" id="sm-meta">候选 0 · 命中 0/3 源 · 耗时 0.0s</span><span class="mono" style="margin-left:auto">分数线 <span id="sm-th">75</span> · 低于线的候选仅可手动下载</span></div>
+    <div class="sq-res" id="sm-res"></div>
+  </div>
+</div>
+
 <script>
   // 屏幕切换
   const titles={
@@ -1719,7 +1948,8 @@ Previous-line context:
     'request-template':['请求模版','openai · gpt-4o-mini · prompt 编辑与试译预览'],
     logs:['日志','环形缓冲 2 000 条 · SSE 实时'],
     schedule:['定时任务','Hangfire · 6 队列 · recurring 一览'],
-    'media-detail-movie':['媒体详情','Dune: Part Two · 电影 · EN → ZH']
+    'media-detail-movie':['媒体详情','Dune: Part Two · 电影 · EN → ZH'],
+    'sub-history':['字幕下载记录','共 41 208 条 · 来源 / 途径 / 结果 / 媒体名 四维筛选']
   };
   const ctas={overview:'⇪ 导入字幕',library:'翻译所选 ▸',queue:'＋ 新建任务',import:'开始处理 ▸',proofread:'暂存 ⌘S',settings:'保存全部','media-detail':'翻译缺失 ▸','queue-detail':'⏸ 暂停','request-template':'保存模版',logs:'⇩ 导出',schedule:'＋ 新建任务','media-detail-movie':'翻译缺失 ▸'};
   const ctaGo={overview:'import'};
@@ -1922,7 +2152,7 @@ Previous-line context:
   const ctaBtn=document.getElementById('pg-cta');
   const _goBase=go;
   go=function(name){
-    _goBase(name);ctaBtn.style.display=(name==='settings')?'none':'';
+    _goBase(name);ctaBtn.style.display=(name==='settings'||name==='sub-history')?'none':'';
     document.querySelectorAll('.mnav button').forEach(b=>b.setAttribute('aria-current',b.dataset.go===name));
   };
   go(document.querySelector('.screen.on').dataset.screen||'overview');
@@ -2049,6 +2279,7 @@ Previous-line context:
       openMenu(b,[
         {label:'翻译 EN → ZH · 简体',pick:()=>{setEpQueued(tr);qCounts.wait++;qCounts.all++;qSyncCounts();toast(`已排队 · ${tr.querySelector('.ep-title b').textContent}`);location.hash='queue';}},
         {label:'翻译 EN → ZH · 繁体',pick:()=>{setEpQueued(tr);toast('已排队 · 繁体目标');location.hash='queue';}},
+        {label:'搜索字幕 · 本集',pick:()=>{openSubSearch('Shōgun',tr.querySelector('.ep-num').textContent);}},
       ]);
     }else if(t==='重试'){
       setEpQueued(tr);qCounts.wait++;qCounts.all++;qSyncCounts();toast('已重新入队 E04 · 走回退链 openai');
@@ -2368,12 +2599,13 @@ Previous-line context:
     });
   });
   // 自动化批次:每行编辑(参数与开关解耦)+ 新增批次
-  const abCard=[...document.querySelectorAll('[data-panel="sources"] .card')].find(c=>c.querySelector('h2')&&c.querySelector('h2').textContent==='自动化批次');
+  const abCard=[...document.querySelectorAll('[data-panel="automation"] .card')].find(c=>c.querySelector('h2')&&c.querySelector('h2').textContent==='自动化批次');
   function bindAbRow(row){
     const name=row.querySelector('b').textContent;
     const hint=row.querySelector('.hint');
     const isDaily=name==='每日补缺',isPatrol=name==='每周全库巡检';
-    row.querySelector('.end .btn').addEventListener('click',()=>{
+    const editBtn=[...row.querySelectorAll('.end .btn')].find(b=>b.textContent.trim()==='编辑');
+    if(editBtn)editBtn.addEventListener('click',()=>{
       const cron=hint.textContent.split(' ·')[0].trim();
       const fields=isDaily?[
         {label:'cron 表达式',value:cron,mono:1},
@@ -2395,7 +2627,7 @@ Previous-line context:
       });
     });
   }
-  abCard.querySelectorAll('.row').forEach(row=>{if(row.querySelector('.end'))bindAbRow(row);});
+  abCard.querySelectorAll('.row').forEach(row=>{if(row.dataset.sub)return;if(row.querySelector('.end'))bindAbRow(row);});
   const abAdd=abCard.querySelector('.row:last-child');
   abAdd.style.cursor='pointer';
   abAdd.addEventListener('click',()=>openForm('新增批次',[{label:'名称',value:''},{label:'cron 表达式',value:'0 6 * * *',mono:1}],v=>{
@@ -2506,6 +2738,246 @@ Previous-line context:
   const _renumBase=renum;
   renum=function(){_renumBase();syncLangCoverage();};
   syncLangCoverage();
+
+  /* ═══════════ 字幕搜索与下载(2026-10-15 立项增量) ═══════════ */
+  const smodal=document.getElementById('smodal');
+  const SUB_THRESHOLD=75;
+  const SUB_DEMO=[
+    {lang:'zh',score:100,hash:1,prov:'opensubtitles',rel:'Shogun.S01E05.1080p.WEB-DL.DDP5.1.H.264',by:'sub_duck · 10-02',fmt:'srt',size:'42 KB'},
+    {lang:'zh',score:100,hash:1,prov:'opensubtitles',rel:'Shogun.S01E05.2160p.BluRay.x265',by:'ken_lee · 09-28',fmt:'ass',size:'58 KB',forced:1},
+    {lang:'zh',score:88,prov:'opensubtitles',rel:'Shogun.S01E05.WEBDL.chs&eng',by:'fei_lee · 10-01',fmt:'srt',size:'39 KB'},
+    {lang:'en',score:100,hash:1,prov:'opensubtitles',rel:'Shogun.S01E05.1080p.WEB-DL.DDP5.1',by:'johnsub · 10-03',fmt:'srt',size:'36 KB'},
+    {lang:'en',score:84,prov:'opensubtitles',rel:'Shogun.S01E05.1080p.DSNP.WEB-DL',by:'mkv99 · 10-01',fmt:'srt',size:'35 KB',hi:1},
+    {lang:'zh',score:71,prov:'opensubtitles',rel:'Shogun.S01E05.cht',by:'tw_sub · 09-30',fmt:'srt',size:'38 KB',exists:1},
+    {lang:'en',score:62,prov:'shooter',rel:'Shogun.S01E05.720p.HDTV',by:'anon · 09-12',fmt:'srt',size:'31 KB'},
+    {lang:'en',score:55,prov:'shooter',rel:'Shogun.S01E05.HDTV.x264',by:'anon · 08-30',fmt:'srt',size:'30 KB'},
+  ];
+  let smCtx={file:'Shogun.S01E05'};
+  const fmtN=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  function subRowHTML(c){
+    const low=c.score<SUB_THRESHOLD;
+    const zh=c.lang==='zh';
+    const chips=[
+      '<span class="chip '+(zh?'ok':'')+'">'+(zh?'ZH · 免翻译':'EN')+'</span>',
+      c.hash?'<span class="chip ok">hash ✓</span>':'',
+      c.forced?'<span class="chip">forced</span>':'',
+      c.hi?'<span class="chip">HI</span>':'',
+      c.exists?'<span class="chip dim">文件已存在</span>':'',
+    ].join('');
+    const ops=c.exists
+      ?'<button class="btn sm" data-dl="1">重新下载</button>'
+      :(zh
+        ?'<button class="btn sm primary" data-dl="1">下载</button>'
+        :'<button class="btn sm" data-dl="1">仅下载</button><button class="btn sm primary" data-dl="2">下载并翻译 ▸</button>');
+    return '<div class="subrow '+(zh?'zh':'en')+(c.exists?' exists':'')+'" data-rel="'+c.rel+'">'
+      +'<div class="rail"></div>'
+      +'<div class="t"><b title="'+c.rel+'">'+c.rel+'</b><span>'+c.by+' · '+c.fmt+' · '+c.size+'</span></div>'
+      +'<div class="chips">'+chips+'</div>'
+      +'<div class="score '+(c.hash?'hash':low?'low':'')+'" title="'+(low?'低于自动下载分数线 '+SUB_THRESHOLD+' · 手动仍可下载':'匹配分')+'">'+c.score+'</div>'
+      +'<div><span class="chip">'+c.prov+'</span></div>'
+      +'<div class="ops">'+ops+'</div></div>';
+  }
+  function bindSubRows(){
+    document.querySelectorAll('#sm-res .subrow [data-dl]').forEach(function(b){
+      if(b._sb)return;b._sb=1;
+      b.addEventListener('click',function(){
+        const row=b.closest('.subrow');row.classList.add('dl');
+        const zh=row.classList.contains('zh');
+        setTimeout(function(){
+          row.classList.remove('dl');
+          b.textContent='✓ 已下载';
+          const file=smCtx.file+(zh?'.zh.srt':'.en.srt');
+          toast(zh?('已写回 '+file+' · 免翻译'):('已写回 '+file+(b.dataset.dl==='2'?' · 已加入翻译队列':'')));
+          if(b.dataset.dl==='2'){qCounts.wait++;qCounts.all++;qSyncCounts();}
+          bumpSubKpi();
+          mdSubAddRow(file,zh);
+          shPrependRow(file,zh);
+        },900);
+      });
+    });
+  }
+  function bindSubRetry(){
+    document.querySelectorAll('[data-rs]').forEach(function(r){
+      if(r._rb)return;r._rb=1;
+      r.addEventListener('click',function(){
+        const p=r.dataset.rs;
+        const el=document.getElementById('sm-src').querySelector('[data-s="'+p+'"]');
+        if(!el)return;
+        el.innerHTML=p+' 搜索中…';el.style.color='';
+        setTimeout(function(){
+          el.innerHTML=p+' ✓ 2 条';el.style.color='var(--success)';
+          SUB_DEMO.filter(function(c){return c.prov===p;}).slice(0,2).forEach(function(c){
+            document.getElementById('sm-res').insertAdjacentHTML('beforeend',subRowHTML(c));
+          });
+          bindSubRows();toast(p+' 重试成功 · 冷却已清除');
+        },700);
+      });
+    });
+  }
+  function runSubSearch(){
+    const res=document.getElementById('sm-res');res.innerHTML='';
+    document.getElementById('sm-meta').textContent='候选 0 · 命中 0/3 源 · 耗时 0.0s';
+    const provs=[['opensubtitles',0],['assrt',1],['shooter',0]];
+    document.getElementById('sm-src').innerHTML=provs.map(function(pp){
+      return '<span class="s" data-s="'+pp[0]+'">'+pp[0]+' 搜索中…</span>';
+    }).join('');
+    const t0=performance.now();let total=0,hit=0;
+    provs.forEach(function(pp,i){
+      setTimeout(function(){
+        const el=document.getElementById('sm-src').querySelector('[data-s="'+pp[0]+'"]');
+        if(!el)return;
+        if(pp[1]){
+          el.innerHTML=pp[0]+' ⏳ 冷却至 14:32 · 本轮跳过 <span class="retry" data-rs="'+pp[0]+'">重试该源</span>';
+          el.style.color='var(--warning)';bindSubRetry();return;
+        }
+        const rows=SUB_DEMO.filter(function(c){return c.prov===pp[0];});
+        el.innerHTML=pp[0]+' ✓ '+rows.length+' 条';el.style.color='var(--success)';
+        rows.forEach(function(c){res.insertAdjacentHTML('beforeend',subRowHTML(c));});
+        total+=rows.length;hit++;
+        document.getElementById('sm-meta').textContent='候选 '+total+' · 命中 '+hit+'/3 源 · 耗时 '+((performance.now()-t0)/1000).toFixed(1)+'s';
+        bindSubRows();
+      },500+i*500);
+    });
+  }
+  function openSubSearch(media,ep){
+    document.getElementById('sm-title').textContent=ep?('搜索字幕 · '+media+' '+ep):('搜索字幕 · '+media);
+    smCtx={file:media==='Dune: Part Two'?'Dune.Part.Two.2024':'Shogun.S01E05'};
+    document.getElementById('sm-q').value=smCtx.file+(media==='Dune: Part Two'?'.2160p.WEB-DL':'.1080p.WEB-DL');
+    smodal.classList.add('on');
+    runSubSearch();
+  }
+  function closeSubSearch(){smodal.classList.remove('on');}
+  smodal.addEventListener('click',function(e){if(e.target===smodal)closeSubSearch();});
+  addEventListener('keydown',function(e){if(e.key==='Escape'&&smodal.classList.contains('on'))closeSubSearch();});
+  document.getElementById('sm-run').addEventListener('click',runSubSearch);
+  document.getElementById('sm-q').addEventListener('keydown',function(e){if(e.key==='Enter')runSubSearch();});
+  document.querySelectorAll('.act-lang').forEach(function(ch){
+    ch.addEventListener('click',function(){
+      const on=ch.classList.toggle('ok');
+      ch.textContent=ch.dataset.lang.toUpperCase()+(on?' ✓':'');
+    });
+  });
+  function bumpSubKpi(){
+    const bl=document.getElementById('kpi-sub-backlog');
+    if(!bl)return;
+    const n=Math.max(0,+bl.textContent.replace(/\s/g,'')-1);
+    bl.textContent=fmtN(n);
+    const dl=document.getElementById('kpi-sub-dl');
+    if(dl)dl.textContent=+dl.textContent+1;
+    const ab=document.getElementById('ab-backlog');
+    if(ab)ab.textContent=fmtN(n);
+  }
+  function mdSubAddRow(file,zh){
+    ['md-sub-list','mdm-sub-list'].forEach(function(id){
+      const list=document.getElementById(id);if(!list)return;
+      list.insertAdjacentHTML('beforeend','<div class="row"><b class="mono" style="font-size:12px">'+file+'</b><span class="hint mono">'+(zh?'ZH · 下载 · 免翻译':'EN · 下载')+'</span></div>');
+      const meta=document.getElementById(id.replace('-list','-meta'));
+      if(meta){const m=meta.textContent.match(/外挂 (\d+)/);if(m)meta.textContent=meta.textContent.replace(/外挂 \d+/,'外挂 '+(+m[1]+1));}
+    });
+  }
+  /* 下载记录屏:四维筛选 + keyset 分页 + 失败重试 */
+  const SH_F={src:'all',way:'all',res:'all',q:''};
+  const SH_OPTS={
+    src:[['all','全部来源'],['opensubtitles','opensubtitles'],['assrt','assrt'],['shooter','shooter']],
+    way:[['all','全部途径'],['manual','手动'],['auto','自动'],['webhook','webhook']],
+    res:[['all','全部结果'],['ok','成功'],['fail','失败'],['low','低置信跳过'],['exists','已存在跳过']],
+  };
+  function shApply(){
+    let n=0;
+    document.querySelectorAll('#sh-tbody tr').forEach(function(tr){
+      const show=(SH_F.src==='all'||tr.dataset.src===SH_F.src)
+        &&(SH_F.way==='all'||tr.dataset.way===SH_F.way)
+        &&(SH_F.res==='all'||tr.dataset.res===SH_F.res)
+        &&(!SH_F.q||tr.textContent.toLowerCase().includes(SH_F.q));
+      tr.classList.toggle('hidden',!show);if(show)n++;
+    });
+    document.getElementById('sh-count').textContent=fmtN(n)+' / 41 208 条';
+    document.getElementById('sh-sub').textContent='共 41 208 条 · 筛选后 '+fmtN(n)+' 条';
+  }
+  [['sh-src','src'],['sh-way','way'],['sh-res','res']].forEach(function(pair){
+    const btn=document.getElementById(pair[0]);
+    btn.addEventListener('click',function(){
+      openMenu(btn,SH_OPTS[pair[1]].map(function(o){
+        return {label:o[1],checked:SH_F[pair[1]]===o[0],pick:function(){SH_F[pair[1]]=o[0];btn.textContent=o[1]+' ▾';shApply();}};
+      }));
+    });
+  });
+  document.getElementById('sh-q').addEventListener('input',function(e){SH_F.q=e.target.value.trim().toLowerCase();shApply();});
+  document.getElementById('sh-clear').addEventListener('click',function(){
+    SH_F.src='all';SH_F.way='all';SH_F.res='all';SH_F.q='';
+    document.getElementById('sh-q').value='';
+    document.getElementById('sh-src').textContent='全部来源 ▾';
+    document.getElementById('sh-way').textContent='全部途径 ▾';
+    document.getElementById('sh-res').textContent='全部结果 ▾';
+    shApply();toast('筛选已清除');
+  });
+  let shNo=1;
+  document.getElementById('sh-prev').addEventListener('click',function(){if(shNo>1)document.getElementById('sh-no').textContent=--shNo;});
+  document.getElementById('sh-next').addEventListener('click',function(){if(shNo<825)document.getElementById('sh-no').textContent=++shNo;});
+  function shRowHTML(o){
+    const resCell=o.res==='ok'
+      ?'<span class="state done">✓</span> 写回 <b class="mono" style="font-weight:500">'+o.file+'</b>'+(o.zh?' · 免翻译':'')
+      :'<span class="state" style="color:var(--danger)">✗</span> '+(o.err||'429 · 源已冷却 1h');
+    return '<tr data-src="'+o.prov+'" data-way="'+o.way+'" data-res="'+o.res+'">'
+      +'<td class="mono" style="font-size:12px;color:var(--secondary-content)">刚刚</td>'
+      +'<td class="title"><b>'+o.media+'</b></td>'
+      +'<td><span class="chip">'+o.prov+'</span></td>'
+      +'<td><span class="chip dim">手动</span></td>'
+      +'<td class="mono" style="font-size:12px;text-align:right">100</td>'
+      +'<td style="font-size:12.5px">'+resCell+'</td>'
+      +'<td></td></tr>';
+  }
+  function shPrependRow(file,zh){
+    const tb=document.getElementById('sh-tbody');if(!tb)return;
+    const media=smCtx.file.indexOf('Dune')===0?'Dune: Part Two':'Shōgun — S01E05';
+    tb.insertAdjacentHTML('afterbegin',shRowHTML({res:'ok',file:file,zh:zh,media:media,prov:'opensubtitles',way:'manual'}));
+    shApply();
+  }
+  function retrySubFromHistory(media){
+    openSubSearch(media==='Shōgun'?'Shōgun':media,'S01E05');
+  }
+  /* 设置:字幕源编辑 / 批次卡编辑与触发 / 代理 switch toast */
+  document.querySelectorAll('[data-subedit]').forEach(function(b){
+    b.addEventListener('click',function(){
+      const name=b.dataset.subedit;
+      if(name==='字幕自动补缺'){
+        openForm('编辑 · 字幕自动补缺',[
+          {label:'cron 表达式',value:'0 */6 * * *',mono:1},
+          {label:'自动下载分数线(0-100)',value:String(SUB_THRESHOLD),type:'number'},
+          {label:'每轮上限(项)',value:'200',type:'number'},
+          {label:'下载后自动翻译',options:['开','关']},
+        ],function(v){
+          if(!v[0].trim())return toast('cron 表达式必填');
+          if(!(+v[1]>=0&&+v[1]<=100))return toast('分数线需在 0-100');
+          if(!(+v[2]>0))return toast('每轮上限需为正整数');
+          const bl=(document.getElementById('ab-backlog')||{textContent:'12480'}).textContent;
+          document.getElementById('subfetch-hint').innerHTML=v[0].trim()+' · 分数线 '+v[1]+' · 每轮 ≤'+v[2]+' · 自动翻译 '+v[3]+' · 积压 <span id="ab-backlog">'+bl+'</span> · 下轮 '+Math.min(+v[2],+bl.replace(/\s/g,''));
+          toast('字幕自动补缺 已保存');
+        });
+      }else if(name==='OpenSubtitles'){
+        openForm('编辑 · OpenSubtitles',[
+          {label:'API Key',type:'password',value:'sk-••••••••••••4f2a'},
+          {label:'代理',options:['全局代理','直连']},
+        ],function(){toast('OpenSubtitles 配置已保存');});
+      }else if(name==='assrt'){
+        openForm('编辑 · assrt',[{label:'Token',type:'password',value:'••••••••'}],function(){toast('assrt 配置已保存');});
+      }else{
+        openForm('编辑 · shooter',[{label:'代理',options:['直连','全局代理']}],function(){toast('shooter 配置已保存');});
+      }
+    });
+  });
+  document.querySelectorAll('[data-sub="1"] .end .btn').forEach(function(b){
+    if(b.textContent.trim()==='▶ 运行')b.addEventListener('click',function(){
+      toast('字幕补缺已触发 · 本轮 200 项 · 预计 25 分钟 · 结果进下载记录');
+    });
+  });
+  document.querySelectorAll('.subsrc-proxy .switch').forEach(function(sw){
+    sw.addEventListener('click',function(){
+      const name=sw.closest('.pcard').querySelector('.head b').textContent;
+      toast(name+' 出站代理已'+(sw.classList.contains('on')?'开启 · 走全局 proxy_url':'关闭 · 直连'));
+    });
+  });
+  shApply();
 </script>
 </body>
 </html>
