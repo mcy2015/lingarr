@@ -528,19 +528,22 @@ export interface IGlossaryService {
 }
 
 // ── Subtitle search ────────────────────────────────────────────
+/// Mirrors the backend SubtitleCandidateResponse record verbatim: the
+/// release line is `releaseInfo` (nullable — the UI falls back to
+/// provider+externalId) and the size is a raw byte count the UI formats
+/// itself. There is no `sizeLabel`/`release` field on the wire.
 export interface ISubtitleCandidate {
     provider: string
     externalId: string
     language: string
     matchScore: number
+    hashMatch: boolean
     forced: boolean
     hearingImpaired: boolean
-    release: string
-    uploader: string | null
     format: string
+    releaseInfo: string | null
+    uploader: string | null
     size: number | null
-    sizeLabel?: string | null
-    hashMatch: boolean
 }
 
 export interface ISubtitleSourceOutcome {
@@ -555,10 +558,17 @@ export interface ISubtitleSearchOutcome {
     sourceOutcomes: ISubtitleSourceOutcome[]
 }
 
+/// Mirrors the backend SubtitleDownloadResponse record: filePath non-empty
+/// means the file landed; translationRequestId non-null means the download
+/// also entered the translation queue; translationDuplicate flags an already
+/// existing equivalent request.
 export interface ISubtitleDownloadResponse {
-    filePath: string | null
     historyId: number
-    needsNoSubtitles: boolean
+    filePath: string | null
+    result: string
+    error: string | null
+    translationRequestId: number | null
+    translationDuplicate: boolean
 }
 
 export interface ISubtitleBacklog {

@@ -6,11 +6,16 @@ import type {
 } from '@/types/services'
 import type { ISubtitleProviderManifest } from '@/types/plugin'
 
+/// Locked contract with the backend: `provider` is the single source key
+/// (required — the backend rejects provider-less fan-in bodies with 400),
+/// `mediaType` is the wire form "movie" | "episode", and `query` is the
+/// optional keyword override (omit when empty).
 interface SearchRequest {
+    provider: string
     mediaType: string
     mediaId: number
     languages: string[]
-    provider?: string
+    query?: string
 }
 
 interface DownloadRequest {
@@ -19,16 +24,25 @@ interface DownloadRequest {
     mediaType: string
     mediaId: number
     source: 'Manual' | 'Auto' | 'Webhook'
+    /// true = write the file only; false/omitted = let the server's
+    /// translation adjudication decide whether to queue a translation.
+    skipTranslation?: boolean
 }
 
 class SubtitleSearchService {
-    async search<T = ISubtitleSearchOutcome>(request: SearchRequest): Promise<T> {
-        const response = await axios.post<T>('/api/subtitle-search/search', request)
+    async search<T = ISubtitleSearchOutcome>(
+        request: SearchRequest,
+        signal?: AbortSignal
+    ): Promise<T> {
+        const response = await axios.post<T>('/api/subtitle-search/search', request, { signal })
         return response.data
     }
 
-    async download<T = ISubtitleDownloadResponse>(request: DownloadRequest): Promise<T> {
-        const response = await axios.post<T>('/api/subtitle-search/download', request)
+    async download<T = ISubtitleDownloadResponse>(
+        request: DownloadRequest,
+        signal?: AbortSignal
+    ): Promise<T> {
+        const response = await axios.post<T>('/api/subtitle-search/download', request, { signal })
         return response.data
     }
 

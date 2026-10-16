@@ -50,7 +50,8 @@
             "interrupted": "Interrupted"
         },
         "runNow": "Run now",
-        "etaHint": "Linear estimate from start time and progress"
+        "etaHint": "Linear estimate from start time and progress",
+        "escape": "Esc to close"
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -123,7 +124,7 @@
             "needSelection": "Select media first."
         },
         "empty": "No media matches the current filters.",
-        "nativeBadge": "Native Chinese",
+        "nativeBadge": "Native audio",
         "nativeBadgeTitle": "Container audio already covers the target language — no subtitles needed",
         "audioUnknownBadge": "Audio unknown",
         "audioUnknownBadgeTitle": "Audio languages not identified yet — subtitle need stays treated as missing; see the detail page mark entry"
@@ -1125,12 +1126,23 @@
         "noTranslate": "no translation",
         "lowConfidence": "Below the auto-download line (75) — manual download still available",
         "download": "Download",
-        "downloadOnly": "Download",
+        "downloadOnly": "Download only",
         "downloadAndTranslate": "Download & Translate ▸",
         "downloaded": "Saved {file}",
         "downloadedAndQueued": "Saved {file} · queued for translation",
         "downloadFailed": "Download failed — the file already exists or the source is unavailable",
         "failed": "Search failed — check source configuration",
-        "meta": "{count} candidates · {sources} sources · {seconds}s"
+        "meta": "{count} candidates · {sources} sources · {seconds}s",
+        "hashMatch": "Hash ✓",
+        "forced": "Forced",
+        "hearingImpaired": "HI",
+        "sourcesLabel": "Sources",
+        "sourceSearching": "searching…",
+        "sourceOk": "{count} found",
+        "sourceSkipped": "not configured",
+        "sourceError": "failed: {message}",
+        "downloadRejected": "Download failed · {result} · {error}",
+        "translationDuplicate": "A similar translation request already exists",
+        "noSources": "No subtitle source available — configure one in Settings first."
     }
 }

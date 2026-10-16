@@ -20,19 +20,16 @@
                 @click="router.push({ name: 'import' })">
                 {{ t('library.toolbar.import') }}
             </button>
+            <!-- subtitle search entry is per-media: movies open it from here,
+                 shows open it per episode row (the search API only accepts
+                 movie/episode, a show has no searchable id) -->
             <button
+                v-if="!isShow"
                 type="button"
                 class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
                 data-test="open-subtitle-search"
-                @click="showSearchModal = true">
+                @click="openMovieSearch">
                 {{ t('mediaDetail.openSubtitleSearch') }}
-            </button>
-            <button
-                v-if="false"
-                type="button"
-                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
-                @click="router.push({ name: 'import' })">
-                {{ t('library.toolbar.import') }}
             </button>
             <ContextMenu v-if="isShow" @select="translateMissing">
                 <button
@@ -153,6 +150,13 @@
                                 <td :class="tdClass">
                                     <div
                                         class="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                        <button
+                                            type="button"
+                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
+                                            data-test="episode-subtitle-search"
+                                            @click="openEpisodeSearch(ep)">
+                                            {{ t('mediaDetail.openSubtitleSearch') }}
+                                        </button>
                                         <router-link
                                             v-if="
                                                 episodeRequest(ep)?.status ===
@@ -466,13 +470,14 @@
         </div>
     </DrillDownPage>
 
-    <!-- 需求卡 A:搜索字幕弹层 -->
+    <!-- 需求卡 A:搜索字幕弹层 —— 一次只针对一个可搜索单元(电影自身 / 某一集) -->
     <SubtitleSearchModal
-        v-if="showSearchModal && item"
-        :media-type="isShow ? 'Show' : 'Movie'"
-        :media-id="item.id"
+        v-if="searchTarget && item"
+        :media-type="searchTarget.mediaType"
+        :media-id="searchTarget.mediaId"
         :title="item.title"
-        @close="showSearchModal = false"
+        :episode="searchTarget.episode"
+        @close="searchTarget = null"
         @downloaded="load" />
 </template>
 
@@ -588,20 +593,33 @@ const firstTargetLanguage = computed<ILanguage | null>(() => {
 
 /// Audio languages of the audio row: the subtitle-card payload (per-media
 /// scan, refreshed after every mark) wins; the library row backs the card
-/// up when that payload failed to load. null = unknown — the row then
-/// states so honestly instead of inventing codes.
+/// up when that payload failed to load. An empty list carries no language
+/// information either — it normalizes to null (unknown) so the row states
+/// so honestly instead of rendering an empty value span.
 const audioLanguages = computed<string[] | null>(() => {
-    if (subtitlePayload.value) return subtitlePayload.value.audioLanguages
-    return item.value?.audioLanguages ?? null
+    const fromPayload = subtitlePayload.value?.audioLanguages
+    if (fromPayload && fromPayload.length > 0) return fromPayload
+    const fromItem = item.value?.audioLanguages
+    if (fromItem && fromItem.length > 0) return fromItem
+    return null
 })
 
-/// Whether the container audio already covers the first configured target
+/// All configured target language codes (lowercased) — the audio row's
+/// exemption checks every target, not just the first: with targets
+/// [JA, ZH] an audio track in either language exempts the item.
+const targetLanguageCodes = computed<string[]>(() => {
+    const languages = (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
+    return languages.map((language) => language.code.toLowerCase())
+})
+
+/// Whether the container audio already covers ANY configured target
 /// language — the automatic「无需字幕」exemption basis of requirement card A.
 const audioContainsTarget = computed<boolean>(() => {
     const audio = audioLanguages.value
-    const target = firstTargetLanguage.value?.code?.toLowerCase()
-    if (!audio || !target) return false
-    return audio.some((code) => code.toLowerCase() === target)
+    if (!audio) return false
+    return targetLanguageCodes.value.some((target) =>
+        audio.some((code) => code.toLowerCase() === target)
+    )
 })
 
 /// The audio row's single toggle. 「标记需要字幕」(needed=true) pulls an
@@ -628,7 +646,34 @@ const subtitleNeedAction = computed<{ label: string; needed: boolean } | null>((
 })
 
 const subtitleNeedBusy = ref(false)
-const showSearchModal = ref(false)
+
+// ── 搜索字幕入口(需求卡 A)══════════════════════════════════════
+/// The modal addresses exactly one searchable unit: the movie itself
+/// (mediaType "movie") or one episode row ("episode" + that episode's
+/// id). Shows as a whole are not a searchable unit on the wire.
+interface SearchTarget {
+    mediaType: 'movie' | 'episode'
+    mediaId: number
+    episode?: string
+}
+const searchTarget = ref<SearchTarget | null>(null)
+
+function openMovieSearch(): void {
+    if (!item.value) return
+    searchTarget.value = { mediaType: 'movie', mediaId: item.value.id }
+}
+
+function openEpisodeSearch(ep: EpisodeRow): void {
+    if (!item.value) return
+    const season = activeSeason.value
+    searchTarget.value = {
+        mediaType: 'episode',
+        mediaId: ep.id,
+        episode: season
+            ? `S${String(season).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`
+            : undefined
+    }
+}
 
 const configuredSourceCodes = computed<string[]>(() => {
     const languages = (settingStore.getSetting(SETTINGS.SOURCE_LANGUAGES) ?? []) as ILanguage[]

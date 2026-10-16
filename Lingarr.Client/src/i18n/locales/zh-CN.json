@@ -50,7 +50,8 @@
             "interrupted": "已中断"
         },
         "runNow": "立即运行",
-        "etaHint": "按开始时间与进度线性外推"
+        "etaHint": "按开始时间与进度线性外推",
+        "escape": "按 Esc 关闭"
     },
     "nav": {
         "dashboard": "仪表盘",
@@ -123,7 +124,7 @@
             "needSelection": "请先选择媒体。"
         },
         "empty": "没有符合当前过滤条件的媒体。",
-        "nativeBadge": "原生中文",
+        "nativeBadge": "原生音轨",
         "nativeBadgeTitle": "容器音轨已覆盖目标语言 —— 无需字幕",
         "audioUnknownBadge": "音轨未知",
         "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理,详见详情页标记入口"
@@ -1131,6 +1132,17 @@
         "downloadedAndQueued": "已写回 {file} · 已加入翻译队列",
         "downloadFailed": "下载失败 — 文件已存在或源不可用",
         "failed": "搜索失败 — 请检查字幕源配置",
-        "meta": "{count} 候选 · {sources} 源 · {seconds}s"
+        "meta": "{count} 候选 · {sources} 源 · {seconds}s",
+        "hashMatch": "哈希 ✓",
+        "forced": "强制",
+        "hearingImpaired": "听障",
+        "sourcesLabel": "字幕源",
+        "sourceSearching": "搜索中…",
+        "sourceOk": "命中 {count}",
+        "sourceSkipped": "未配置",
+        "sourceError": "失败:{message}",
+        "downloadRejected": "下载失败 · {result} · {error}",
+        "translationDuplicate": "已存在同类翻译请求",
+        "noSources": "暂无可用字幕源 — 请先在设置中配置。"
     }
 }

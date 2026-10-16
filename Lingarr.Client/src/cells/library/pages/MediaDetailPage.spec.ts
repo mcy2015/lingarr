@@ -6,6 +6,7 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import MediaDetailPage from '@/cells/library/pages/MediaDetailPage.vue'
+import SubtitleSearchModal from '@/cells/library/components/SubtitleSearchModal.vue'
 import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
@@ -224,11 +225,15 @@ interface MountedDetail {
     router: ReturnType<typeof createRouter>
 }
 
-async function mountDetail(type: 'show' | 'movie', routePath: string): Promise<MountedDetail> {
+async function mountDetail(
+    type: 'show' | 'movie',
+    routePath: string,
+    targets: { code: string; name: string }[] = [{ code: 'ZH', name: 'Chinese' }]
+): Promise<MountedDetail> {
     const pinia = createPinia()
     const settingStore = useSettingStore(pinia)
     settingStore.storeSetting(SETTINGS.SOURCE_LANGUAGES, [{ code: 'EN', name: 'English' }])
-    settingStore.storeSetting(SETTINGS.TARGET_LANGUAGES, [{ code: 'ZH', name: 'Chinese' }])
+    settingStore.storeSetting(SETTINGS.TARGET_LANGUAGES, targets)
 
     const i18n = createI18n({
         legacy: false,
@@ -275,7 +280,9 @@ async function mountDetail(type: 'show' | 'movie', routePath: string): Promise<M
         props: { type, id: type === 'movie' ? '7' : '3' },
         global: {
             plugins: [pinia, i18n, router],
-            stubs: { ContextMenu: ContextMenuStub }
+            // the modal is stubbed so entry tests assert the page→modal
+            // contract (mediaType/mediaId props) without network fan-out
+            stubs: { ContextMenu: ContextMenuStub, SubtitleSearchModal: true }
         }
     })
     await settle()
@@ -1106,6 +1113,112 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
         // no in-place refresh on failure, label unchanged
         expect(mediaSubtitlesMock).toHaveBeenCalledTimes(1)
         expect(wrapper.find('[data-test="subtitle-need-toggle"]').text()).toBe(
+            en.mediaDetail.audio.markNeeded
+        )
+    })
+})
+
+// ═══ QA6:搜索入口(电影头部 / 剧集行内)+ 音轨判定修复 ═══════════
+describe('MediaDetailPage · 搜索字幕入口与音轨判定(QA6)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        collectMock.mockResolvedValue(seasonFiles)
+        translateSubtitleMock.mockResolvedValue({ jobId: 55 })
+        translateEmbeddedTrackMock.mockResolvedValue({ jobId: 91 })
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('opens the movie search from the header with mediaType "movie" and the movie id', async () => {
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="open-subtitle-search"]').trigger('click')
+        await settle()
+
+        const modal = wrapper.findComponent(SubtitleSearchModal)
+        expect(modal.exists()).toBe(true)
+        // the wire form "movie" is what the backend parser accepts; the old
+        // value sent from show pages ("Show") answered 400
+        expect(modal.props('mediaType')).toBe('movie')
+        expect(modal.props('mediaId')).toBe(7)
+        expect(modal.props('title')).toBe('Dune: Part Two')
+    })
+
+    it('renders exactly one import action (the v-if="false" duplicate is gone)', async () => {
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const importButtons = wrapper
+            .findAll('button')
+            .filter((b) => b.text() === en.library.toolbar.import)
+        expect(importButtons).toHaveLength(1)
+    })
+
+    it('moves the episode search entry into each episode row with that episode id', async () => {
+        libraryMock.mockResolvedValue({
+            items: [showItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('show', '/library/show/3')
+
+        // shows are not a searchable unit: no header entry on the show page
+        expect(wrapper.find('[data-test="open-subtitle-search"]').exists()).toBe(false)
+
+        // every episode row carries its own search entry
+        const buttons = wrapper.findAll('[data-test="episode-subtitle-search"]')
+        expect(buttons).toHaveLength(3)
+
+        await buttons[1].trigger('click')
+        await settle()
+
+        const modal = wrapper.findComponent(SubtitleSearchModal)
+        expect(modal.exists()).toBe(true)
+        expect(modal.props('mediaType')).toBe('episode')
+        // the second episode's own id, not the show's
+        expect(modal.props('mediaId')).toBe(22)
+        expect(modal.props('episode')).toBe('S01E02')
+        expect(modal.props('title')).toBe('Shōgun')
+    })
+
+    it('exempts audio covering ANY configured target language, not just the first', async () => {
+        // targets [JA, ZH], audio zh — the first-target-only logic would miss
+        // the coverage; the fixed any-target logic must see it
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload({ audioLanguages: ['zh'] }))
+        const { wrapper } = await mountDetail('movie', '/library/movie/7', [
+            { code: 'JA', name: 'Japanese' },
+            { code: 'ZH', name: 'Chinese' }
+        ])
+
+        const row = wrapper.find('[data-test="audio-languages-row"]')
+        expect(row.find('[data-test="audio-languages-value"]').text()).toBe('zh')
+        // known audio covering a target → the cancel-mark override entry
+        expect(row.find('[data-test="subtitle-need-toggle"]').text()).toBe(
+            en.mediaDetail.audio.cancelMark
+        )
+    })
+
+    it('treats an empty audio list as unknown instead of rendering an empty value', async () => {
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload({ audioLanguages: [] }))
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const row = wrapper.find('[data-test="audio-languages-row"]')
+        expect(row.find('[data-test="audio-languages-value"]').exists()).toBe(false)
+        expect(row.find('[data-test="audio-languages-unknown"]').exists()).toBe(true)
+        // conservative: unknown audio keeps the mark-needed entry
+        expect(row.find('[data-test="subtitle-need-toggle"]').text()).toBe(
             en.mediaDetail.audio.markNeeded
         )
     })
