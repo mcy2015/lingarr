@@ -4,6 +4,14 @@
 前置：语言标签解析、内容嗅探、内嵌轨处理、归整（均已交付）；迁移槽位 M0006。
 配套：[技术方案 v1.0](subtitle-search-tech-design.zh-CN.md) · [原型规格 screen-13](prototype-spec/screen-13-subtitle-search.zh-CN.md) · 原型 `design-previews/refactor-prototype.html`（12→13 屏）。
 
+> 现状（2026-10-16）：迁移槽位实际为 **M0008/M0009**（M0006/M0007 被 10w 审计的 S1/S4 批占用），下文所有 M0006/M0007 字样按此对应阅读。
+
+## 交付现状（2026-10-16 对照 cc656db）
+
+- **已交付**：后端主线 M1–M5+M7 半边（七源 Provider、优先级队列、下载管线、backlog/pin 端点、Radarr 侧 webhook 高优入队）与前端搜索弹层（QA P0 重写版）、源卡设置组（凭据入口）；叠加 QA 修复链的超集契约（错集封顶 70、下载 120s/100MB、缓存归属校验等，清单见技术方案⑭补录）。
+- **未交付**：下载历史第 13 屏与概览 KPI 格（后端 history/kpi 端点无——R7 批次交付中，未合入 cc656db）；自动化 tab 批次卡与 hint（US2）；Sonarr 侧 webhook 加成（R6 批次交付中）；配置面 UI 入口（分数线/每轮上限/自动翻译三键均无编辑面）；NAS 烟测与 10w 冒烟（AC26 ❌）。
+- 正文各漂移点已就地标注 `> 现状（2026-10-16）：…`，原文保留供考古。
+
 ## ① 背景与问题
 
 - 库内 234 电影/206 剧集以 WEBDL 英文发行版为主，无外挂源字幕，翻译链断在第一环——无字幕可翻。
@@ -28,8 +36,16 @@
 ## ③ 用户故事与场景
 
 - **US1 手动搜索**：译者在媒体详情页点「搜索字幕」，弹层逐源流式出结果；结果头实时显示「候选 N·命中 M 源·耗时 Xs」；ZH 结果带绿左轨标「免翻译」，EN 结果标「下载并翻译」；≤3 点击完成下载。
+
+> 现状（2026-10-16）：✅已交付（SubtitleSearchModal.vue，QA P0 重写后逐源并发+先到先显）。与 screen-13 原型的已知偏差：低置信警示线 **75 硬编码**（未读 `subtitle_search_auto_score` 设置）；关键词预填=媒体标题（剧集追加集标注）**非 release 名**（FileName）；下载结果以 toast 三态呈现（成功/拒绝原因/失败），无逐行「冷却中/已存在/成功✓」状态位。
+
 - **US2 自动补缺**：管理员在自动化 tab 开启第 7 个 job；系统按优先级队列每轮处理 ≤200 条，批次卡常显 hint：分数线/每轮上限/自动翻译开关/积压/下轮处理数。
+
+> 现状（2026-10-16）：❌批次卡未交付——自动化 tab 无第 7 个 job 卡，hint 五要素（分数线/每轮上限/自动翻译开关/积压/下轮处理数）均无 UI；数据侧 backlog 端点已就绪可支撑，移入 P1 延后清单。job 本体已交付（见 AC7 标注）。
+
 - **US3 运维监控**：概览 KPI「字幕补缺」格看积压/今日下载/配额水位；下载历史（第 13 屏）按来源/途径/结果/媒体名筛选排查。
+
+> 现状（2026-10-16）：⏸KPI 格与历史屏均未落（R7 批次交付中，未合入 cc656db）；历史数据侧（subtitle_downloads 全列含 source/result）已就绪，见 AC18/AC20 标注。
 - **双路径裁决（强制默认，原文）**：**直接命中 zh（含双语）＝终态，不翻译；仅命中源语言 → 按现有自动化翻译。** 路径判定不可配置反转。
 - **优先级语义（10w 级）**：Pinned（手动置顶）> Webhook 新入库（48h 加成，P1）> 存量（指数退避：失败后 `6h×2^n` 封顶 7d，attempt≥8 转停止态、可手动重置）。
 
@@ -47,6 +63,8 @@
 - AC7 自动补缺为自动化 tab 第 7 个 job，**默认关**，默认每日 1 次，cron 可改。
 - AC8（QA 放宽口径）混合半覆盖态测试库下，自动补缺一轮后，**本轮处理集**的目标语言差集=0。
 
+> 现状（2026-10-16）：AC4/AC5 ✅（弹层分源并发、单源 10s、搜索 2MB/下载 120s+100MB 两档预算）。AC6 🔧措辞对齐——结果头实际显示「已结算/总源数」（settled/total，逐源状态行呈现失败），非「命中 M 源」。AC7 ✅本体已交付：SubtitleSearchJob 为实际**第 7 个** recurring job（ScheduleService.cs/SubtitleSearchJob.cs 代码注释自称「8th」计数有误，未修）；默认关（subtitle_search_enabled=false）、cron 默认 `0 5 * * *` 可改；**总开关联动已修**（R6 批，已合入：job Execute 短路 + webhook 加成前检查总开关）；自动化 tab 的 job 卡 UI 未上屏（见 US2 标注）。
+
 **M3 匹配打分**
 - AC9 打分排序：hash 顶满 > 标题/年份 > 季集 > 发布组；并列按站点优先级 ×双语>单语 ×格式偏好。
 - AC10 自动下载分数线单线默认 **75**，0–100 可配，改动即时生效并反映在批次卡 hint。
@@ -54,17 +72,25 @@
 - AC12（按 API 事实修正）电影=Year+ImdbId+MovieFile.SceneName；剧集=剧集级 Year+ImdbId+EpisodeFile.SceneName——单集无 imdb 属 Sonarr API 事实，不计缺失。
 - AC12a 自动轮中 <分数线的结果**自动跳过**，历史记「低置信跳过」态；历史屏可按该态筛选后跳转媒体详情手动重搜。
 
+> 现状（2026-10-16）：AC9 🔧——打分主链已交付并加错集封顶 70 超集（技术方案⑭）；并列消解仅「分数→hashMatch→注册序（默认站点优先级）」，**双语>单语、格式偏好未实现，站点优先级不可设置**。AC10 🔧——默认值 75 已落库（subtitle_search_auto_score，改设置即生效于自动轮），但**设置 UI 入口无**；弹层警示线 75 硬编码不随设置变。AC11 ❌未实现——搜索侧不从 *arr 回补实体字段；缓解=Sync 侧（MovieSync/EpisodeSync）已写全 year/imdb_id 等列，搜索请求构建读库即得。AC12 🔧——库无 sceneName 列，releaseName 实际取 **FileName**（SubtitleSearchRequestBuilder；写入侧约定见 EpisodeSync/MovieSync）。AC12a ✅前半（低置信落「低置信跳过」历史态），⏸后半（历史屏筛选+跳转重搜）随 R7 历史屏交付。
+
 **M4 下载后处理**
 - AC13 自动解压（zip/rar）、GBK→UTF-8 转码、按命名模板落盘至媒体同目录；转码置信不足即失败，不落盘。
 - AC14 目标文件已存在时不覆盖，记「已存在」态。
+
+> 现状（2026-10-16）：AC13 🔧——解压/转码/模板落盘已交付，但「置信不足即失败，不落盘」未按原文执行：共享 SubtitleEncodingService 为 never-fail 语义，编码判定低置信时**回落 Latin-1 仍落盘**（与 ⑨ 风险表「编码误判致文件损坏」行的矛盾记录在案——与既有翻译链共服务的裁决结果，非回归）。AC14 ✅语义有字面差异——「已存在」态（AlreadyExistsSkipped）仅**自动轮**判定（Auto 源且库内已有目标语言字幕即跳过）；手动路径不判「已存在」，同名冲突以 **「(1)」后缀**落新文件（import-service UniquePath 同规则）。
 
 **M5 翻译衔接**
 - AC15 双路径裁决按 ③ 原文执行：zh（含双语）命中即终态。
 - AC16 「下载后自动翻译」总开关**默认开**。
 
+> 现状（2026-10-16）：AC15 ✅（zh 直接命中免翻译；超集：手动路径可 skipTranslation「仅下载」）。AC16 🔧——默认值 true 已落库（subtitle_search_auto_translate），**设置 UI 入口无**；弹层以「仅下载/下载并翻译」双按钮承载同语义。
+
 **M6 历史与去重**
 - AC17 同一媒体+同源已有成功下载记录的不重复下载（历史去重）。
 - AC18 下载历史为独立第 13 屏：分页+筛选（来源/途径 Manual|Auto|Webhook/结果 9 态/媒体名）。
+
+> 现状（2026-10-16）：AC17 ❌历史行去重未实现——入队去重只查 subtitle_search_state 队列行（NOT EXISTS），不查 subtitle_downloads 历史成功记录；实际防护为间接两层：needs_translation 覆盖位（SubtitleNeedRule 单一规则）+ 自动轮下载前的「已存在」核查（见 AC14 标注）。AC18 ⏸R7 批次交付中（未合入 cc656db）——后端 history 端点与前端第 13 屏均未落。
 
 **M7 呈现与规模化**
 - AC19 结果 9 状态完备：成功/免翻译/下载并翻译/冷却中/低置信跳过/已存在/部分源失败/无结果/失败。
@@ -72,11 +98,15 @@
 - AC21 优先级队列按 ③ 语义出队；每轮上限默认 200（可配 50–2000）。
 - AC22 provider 配额水位仅展示，任何情况不触发熔断或停用。
 
+> 现状（2026-10-16）：AC19 🔧——9 态在**历史数据模型**（subtitle_downloads.result 枚举）齐备，但呈现面未落（弹层为 toast 三态简化，见 US1 标注）。AC20 ⏸R7 批次交付中——KPI 格未落（无 kpi 端点）；「配额水位」元素经用户红线裁决**砍除**（配额数据仅保留 provider_quota_usage 采集，不进 KPI 呈现面）；backlog 端点已交付（积压/置顶/加成/下轮数）。AC21 🔧——队列语义（rank 固化+覆盖索引+webhook UPSERT 保退避史）已交付；每轮上限默认 200 落库，但**无 50–2000 钳制**（服务端仅解析正整数，越界值按原值生效）且设置 UI 入口无。AC22 ✅——无任何熔断/停用路径（黑名单表零读写）。
+
 **M8 质量门禁（发布前）**
 - AC23 迁移涉及的计数在全部四处（概览/详情/历史/统计）同步一致。
 - AC24 i18n 双 locale 文案对齐，无硬编码。
 - AC25 假源服务器 E2E（仿假 Radarr 先例）：注入 429/超时/慢响应，验证冷却、跳过、部分失败呈现。
 - AC26 NAS 实机烟测通过；10w 种子库性能冒烟达 ⑤ 预算表全项。
+
+> 现状（2026-10-16）：AC23 ✅口径对齐技术方案——实际迁移为 M0008_AddSubtitleSearch/M0009_AddSubtitleSearchTelemetry，MigrationTests 版本/表/列/索引四处计数门禁已同步。AC24 ✅（弹层/源卡双 locale 齐）。AC25 🔧假源为 **stub 级非服务器级**——自动化单测经 StubHttpMessageHandler 脚本化注入 429/超时/挂起；服务器级仿真脚本 `scripts/dev/fake-subtitle-sources.py`（七源前缀+`?_fault=` 注入矩阵）已随 M2 交付但属手动 dev harness，无自动化 E2E 驱动。AC26 ❌未执行——NAS 实机烟测与 10w 性能冒烟均无记录，测试规模上限为 2000 行种子（SubtitleSearchQueueServiceTests）。
 
 ## ⑤ 非功能需求（性能预算 @10w 媒体）
 
@@ -95,6 +125,8 @@
 | coverage_daily 日快照（增量 upsert） | ≤5min | 低峰执行 |
 | Webhook 入队延迟（P1） | <5s | 事件到入队 |
 
+> 现状（2026-10-16）：预算表全项**未实测**（AC26 ❌，无 10w 冒烟记录）。实现侧与预算前提的偏差：自动轮批内为**串行 foreach**（媒体间；单媒体内源间 Task.WhenAll 并行），技术方案⑨「批内并发 8」算式失效；coverage_daily 表已建（M0009）但零读写，日快照未运转；Webhook 入队延迟仅 Radarr 侧可验（Sonarr 侧 R6 批次交付中）。
+
 ## ⑥ 成功指标（DA 版）
 
 | 指标 | 口径与判读 |
@@ -110,6 +142,8 @@
 
 采集依赖（进 M0006/M0007）：`subtitle_search_sessions`（含 ResultCount=0 无结果事件）、`subtitle_downloads` 增 Source(Manual/Auto/Webhook)/RemovedAt/ReplacedBy、`provider_quota_usage`（只展示）、`coverage_daily` 日快照（增量 upsert）。
 
+> 现状（2026-10-16）：采集表实际落在 **M0009**（M0006/M0007 被审计 S1/S4 批占用）。sessions/downloads/quota_usage 三表已有读写方；`coverage_daily` 与 `removed_at`/`replaced_by` 列**零读写**（M7 水位化与替换语义未实施）。
+
 ## ⑦ 裁决记录表
 
 | # | 事项 | 裁决 | 理由 |
@@ -123,12 +157,16 @@
 | 7 | 低置信处理 | 自动跳过+历史态，历史屏筛选后手动重搜 | 10w 级人工审批队列不可扩展；重搜兜底闭环 |
 | 8 | v1 源清单 | **7 源**（2026-10-15 用户反馈"有点少"后扩充）：OpenSubtitles+SubSource+SubDL+Gestdown+Podnapisi+assrt+shooter，全部 API 型免注册 | 英文侧广覆盖直接支撑「无中文→下英文→翻译」主路径 B；v2 池=xunlei/a4k/TheSubDB/BSplayer；zimuku/subhd/addic7ed 账号源仍不做 |
 
+> 现状（2026-10-16）逐条对照：**#1 ✅**（单源 10s/逐源并发/聚合口径兑现；实现为前端分源并发，未用 SSE）。**#2 ⚠️**（默认 75 落库生效于自动轮；「0–100 可配」的 UI 入口无，弹层线硬编码）。**#3 ✅**（默认开落库+弹层双按钮语义）。**#4 ✅**（实体口径按库实现，SceneName 落为 FileName，见 AC12 标注）。**#5 ⏸**（StatisticsJob 水位化零实现：coverage_checked_at/coverage_daily 零读写，仍全量，维持 P1）。**#6 ✅**（Radarr 侧 webhook 高优入队已交付且真加成——QA 修复后；Sonarr 侧 R6 批次交付中）。**#7 ⚠️**（自动跳过+历史态已落；「历史屏筛选后手动重搜」闭环缺后半，随 R7）。**#8 ✅**（七源全交付，SubtitleSourcesCard 凭据入口已上屏）。
+
 ## ⑧ 分期
 
 **P0（MVP）**
 - 后端：M1–M6 全量；自动轮（存量指数退避+每轮 200+线 75，job 默认关/翻译默认开）；索引化分页缺口查询；M0006/M0007 采集表。
 - 前端批次：详情页搜索弹层（流式）/ 自动化批次卡（hint 常显）/ 下载历史第 13 屏（分页筛选+低置信重搜跳转）/ 概览 KPI「字幕补缺」格。
 - 质量批次：假源 E2E、i18n 双 locale、迁移计数四同步、NAS 烟测、10w 冒烟（AC23–26）。
+
+> 现状（2026-10-16）：P0 完成度——后端 M1–M5 全量+M7 webhook 半边 ✅（采集表落 M0008/M0009，非 M0006/M0007）；索引化分页缺口查询由 S4 的 needs_translation 旗标承载 ✅。前端批次仅搜索弹层 ✅，批次卡/历史屏/KPI 格均未落（R7 及后续批次）。质量批次：迁移计数/i18n ✅，假源 stub 级 🔧，NAS 烟测/10w 冒烟 ❌（见 AC23–26 标注）。**P0 尚未达到发布门禁，不可按「P0=MVP 已完成」口径对外。**
 
 **P1**
 - 功能：Webhook Download 高优入队（48h 加成）、Pinned 手动置顶、配额水位详情视图。
