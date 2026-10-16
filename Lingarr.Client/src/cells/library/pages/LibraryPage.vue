@@ -346,7 +346,24 @@ watch(type, () => {
     router.replace({ query: { ...route.query, type: type.value === 'all' ? undefined : type.value } })
 })
 
-watch([type, stateFilter, targetFilter, () => pagination.pageNumber], fetchLibrary)
+// Filter changes return to the first page: page 3 of the previous list is
+// usually past the end of the narrowed one, which used to render as an
+// empty matrix. When the reset actually changes the page number, this
+// watcher re-fires and the fetch below then runs once with page 1 — only
+// the page number changing on its own (pagination controls) fetches
+// directly.
+watch(
+    [type, stateFilter, targetFilter, () => pagination.pageNumber],
+    ([newType, newState, newTarget], [oldType, oldState, oldTarget]) => {
+        const filterChanged =
+            newType !== oldType || newState !== oldState || newTarget !== oldTarget
+        if (filterChanged && pagination.pageNumber !== 1) {
+            pagination.pageNumber = 1
+            return
+        }
+        void fetchLibrary()
+    }
+)
 
 /// v-model would reassign the whole filter object, which both warns on the
 /// const reactive binding and drops the watch's reactivity — write the page

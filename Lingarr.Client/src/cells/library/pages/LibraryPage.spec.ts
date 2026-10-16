@@ -135,7 +135,7 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
     settingStore.storeSetting(SETTINGS.SONARR_SETTINGS_COMPLETED, 'true')
     settingStore.storeSetting(SETTINGS.TARGET_LANGUAGES, [{ code: 'ZH', name: 'Chinese' }])
 
-    // messages cover only the keys the row title link and the native badge
+    // messages cover only the keys the row title link and the audio badges
     // assert; everything else renders as its key and is not asserted anywhere
     const i18n = createI18n({
         legacy: false,
@@ -145,7 +145,8 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
                 library: {
                     table: { openDetail: 'Open {type} {title} details' },
                     badge: { show: 'Show', movie: 'Movie' },
-                    nativeBadge: 'Native Chinese'
+                    nativeBadge: 'Native Chinese',
+                    audioUnknownBadge: 'Audio unknown'
                 }
             }
         },
@@ -287,6 +288,36 @@ describe('LibraryPage', () => {
         expect(libraryMock).toHaveBeenCalledTimes(2)
         expect(libraryMock).toHaveBeenLastCalledWith(
             expect.objectContaining({ pageNumber: 2 })
+        )
+    })
+
+    it('returns to the first page when a filter changes', async () => {
+        // QA6 P2-7: page 3 of the previous list is usually past the end of
+        // the narrowed one — switching a filter there used to request the
+        // stale page number and render an empty matrix.
+        libraryMock.mockResolvedValueOnce({ ...libraryPage, totalCount: 60 })
+        const { wrapper } = await mountLibraryPage()
+        expect(libraryMock).toHaveBeenCalledTimes(1)
+
+        const pagination = wrapper.findComponent(PaginationComponent)
+        pagination.vm.$emit('update:modelValue', {
+            pageNumber: 2,
+            searchQuery: '',
+            sortBy: 'Title',
+            isAscending: true
+        })
+        await settle()
+        expect(libraryMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({ pageNumber: 2 })
+        )
+
+        // second select in the toolbar is the state filter
+        await wrapper.findAll('select')[1].setValue('native')
+        await settle()
+
+        expect(libraryMock).toHaveBeenCalledTimes(3)
+        expect(libraryMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({ pageNumber: 1, state: 'native' })
         )
     })
 
@@ -471,5 +502,28 @@ describe('LibraryPage', () => {
         // unmarked rows (and absent field = legacy payload) render nothing
         const plain = await mountLibraryPage()
         expect(plain.wrapper.findAll('[data-test="native-audio-badge"]')).toHaveLength(0)
+    })
+
+    it('renders the audio-unknown badge only on rows with null audio languages', async () => {
+        libraryMock.mockResolvedValueOnce({
+            ...libraryPage,
+            items: [
+                { ...show1, audioLanguages: null },
+                { ...movie2, audioLanguages: ['en'] },
+                { ...show3, needsNoSubtitles: true }
+            ]
+        })
+        const unknown = await mountLibraryPage()
+
+        const badges = unknown.wrapper.findAll('[data-test="audio-unknown-badge"]')
+        expect(badges).toHaveLength(1)
+        expect(badges[0].text()).toBe('? Audio unknown')
+        // the weak badge trails the language chips inside the tracks cell
+        expect(unknown.wrapper.findAll('tbody tr')[0].text()).toContain('Audio unknown')
+
+        // known audio, exempt rows, and legacy payloads without the field
+        // (undefined, not null) render nothing
+        const plain = await mountLibraryPage()
+        expect(plain.wrapper.findAll('[data-test="audio-unknown-badge"]')).toHaveLength(0)
     })
 })

@@ -55,12 +55,17 @@ public class LingarrDbContext : DbContext
         });
 
         // Subtitle-search tables (M2 batch of the M0008/M0009 migrations):
-        // table names are pinned the same way so EnsureCreated-built test
-        // schemas match the FluentMigrator schema exactly. The two counter
-        // tables were created with raw DDL (composite inline PKs, SQLite)
-        // and additionally declare their key order here — multiple [Key]
-        // attributes alone leave the ordering to reflection order, which is
-        // not a contract.
+        // the FluentMigrator schema is the source of truth; this mirror pins
+        // what EnsureCreated-built schemas (test fixtures) need for parity —
+        // table names for all six tables, and the indexes raw SQL addresses
+        // by database name (the dequeue/upsert/boost trio on the queue, the
+        // three history indexes, the two session indexes). Not mirrored:
+        // column types/defaults (migrations own those; EF models them
+        // close enough for SQLite) and the partial WHERE clause of the boost
+        // index (see below). The two counter tables were created with raw
+        // DDL (composite inline PKs, SQLite) and additionally declare their
+        // key order here — multiple [Key] attributes alone leave the
+        // ordering to reflection order, which is not a contract.
         modelBuilder.Entity<SubtitleSearchState>(builder =>
         {
             builder.ToTable("subtitle_search_state");
@@ -72,10 +77,30 @@ public class LingarrDbContext : DbContext
             builder.HasIndex(state => new { state.MediaType, state.MediaId })
                 .IsUnique()
                 .HasDatabaseName("ux_subtitle_search_state_media");
+            // M0008 also creates this one as a PARTIAL index
+            // (WHERE webhook_boost_until IS NOT NULL). HasFilter takes a raw
+            // SQL string, and SQLite validates the filter's column reference
+            // at CREATE INDEX time — a fixed "webhook_boost_until" literal
+            // only resolves when the model carries the snake-case naming
+            // convention, which several EnsureCreated contexts do not. The
+            // mirror therefore declares the same key under the same name
+            // without the WHERE clause; the production database keeps the
+            // partial form from the migration.
+            builder.HasIndex(state => state.WebhookBoostUntil)
+                .HasDatabaseName("ix_subtitle_search_state_boost");
         });
         modelBuilder.Entity<SubtitleDownload>(builder =>
         {
             builder.ToTable("subtitle_downloads");
+            // M0008: subtitle-card refresh for one media item, history-screen
+            // keyset pagination (created_at > cursor), history filters
+            // (source x result).
+            builder.HasIndex(download => new { download.MediaType, download.MediaId, download.CreatedAt })
+                .HasDatabaseName("ix_subtitle_downloads_media");
+            builder.HasIndex(download => download.CreatedAt)
+                .HasDatabaseName("ix_subtitle_downloads_created");
+            builder.HasIndex(download => new { download.Source, download.Result, download.CreatedAt })
+                .HasDatabaseName("ix_subtitle_downloads_source");
         });
         modelBuilder.Entity<SubtitleSearchBlacklist>(builder =>
         {
@@ -84,6 +109,11 @@ public class LingarrDbContext : DbContext
         modelBuilder.Entity<SubtitleSearchSession>(builder =>
         {
             builder.ToTable("subtitle_search_sessions");
+            // M0009: per-media session lookup and the created-at cursor.
+            builder.HasIndex(session => new { session.MediaType, session.MediaId, session.CreatedAt })
+                .HasDatabaseName("ix_subtitle_search_sessions_media");
+            builder.HasIndex(session => session.CreatedAt)
+                .HasDatabaseName("ix_subtitle_search_sessions_created");
         });
         modelBuilder.Entity<ProviderQuotaUsage>(builder =>
         {

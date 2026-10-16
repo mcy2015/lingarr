@@ -247,8 +247,15 @@ public class MediaController : ControllerBase
             {
                 var episode = await _dbContext.Episodes.FirstOrDefaultAsync(e => e.Id == id);
                 if (episode == null) return NotFound();
+                // all three flags persist, matching the Movie branch: a stale
+                // NoSubtitleNeeded column would flip the mark right back in
+                // the library aggregate (episodes.All(NoSubtitleNeeded)) and
+                // keep the gap fill's SQL gate
+                // (needs_translation=1 AND no_subtitle_needed=0) from ever
+                // picking the episode up again
                 episode.AudioOverride = request.Needed;
                 episode.NeedsTranslation = request.Needed;
+                episode.NoSubtitleNeeded = !request.Needed;
                 await _dbContext.SaveChangesAsync();
                 return Ok(new SubtitleNeedResponse
                 {
@@ -268,8 +275,11 @@ public class MediaController : ControllerBase
                     .ToListAsync();
                 foreach (var episode in episodes)
                 {
+                    // same three-flag write as the single-episode branch, so a
+                    // show-level mark survives the aggregate recomputation too
                     episode.AudioOverride = request.Needed;
                     episode.NeedsTranslation = request.Needed;
+                    episode.NoSubtitleNeeded = !request.Needed;
                 }
                 await _dbContext.SaveChangesAsync();
                 return Ok(new SubtitleNeedResponse
@@ -370,6 +380,12 @@ public class MediaController : ControllerBase
         int pageSize = 20,
         int pageNumber = 1)
     {
+        // same host-input clamp as /library (audit P2): a huge page must not
+        // turn one request into a full-library payload, and a non-positive
+        // page number must not reach the service's Skip arithmetic
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        pageNumber = Math.Max(1, pageNumber);
+
         var value = await _mediaService.GetMovies(
             searchQuery,
             orderBy,
@@ -397,6 +413,10 @@ public class MediaController : ControllerBase
         int pageSize = 20,
         int pageNumber = 1)
     {
+        // same host-input clamp as /library (audit P2)
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        pageNumber = Math.Max(1, pageNumber);
+
         var value = await _mediaService.GetShows(
             searchQuery,
             orderBy,

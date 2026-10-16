@@ -295,6 +295,79 @@ public class MediaLibraryServiceSqliteTests : IDisposable
     }
 
     [Fact]
+    public async Task EpisodeConventionRequests_CountIntoTheShowRollup()
+    {
+        // request creation writes episode requests as MediaType.Episode
+        // (AutomatedTranslationJob → MediaSubtitleProcessor); the legacy
+        // convention is MediaType.Show. Both must roll up into the show's
+        // state column — before the fix only Show-typed rows counted.
+        var show = await SeedShowAsync("Both Conventions", [2]);
+        var episodes = EpisodesOf(show);
+        var caper = await SeedMovieAsync("Caper");
+        await SeedRequestAsync(MediaType.Episode, episodes[0].Id, TranslationStatus.Completed, DateTimeOffset.UtcNow.AddDays(-2));
+        await SeedRequestAsync(MediaType.Episode, episodes[1].Id, TranslationStatus.InProgress, DateTimeOffset.UtcNow.AddDays(-1));
+        // movie aggregation is untouched: its own convention still counts
+        await SeedRequestAsync(MediaType.Movie, caper.Id, TranslationStatus.Completed, DateTimeOffset.UtcNow);
+
+        var result = await CreateService().GetLibrary(null, null, null, null, "Title", true, 1, 20);
+
+        var showItem = result.Items.Single(i => i.Title == "Both Conventions");
+        Assert.Equal(MediaType.Show, showItem.MediaType);
+        Assert.Equal(MediaTranslationState.InProgress, showItem.State);
+        Assert.Equal(1, showItem.CompletedCount);
+        Assert.Equal(2, showItem.EpisodeCount);
+
+        var movieItem = result.Items.Single(i => i.Title == "Caper");
+        Assert.Equal(MediaTranslationState.Completed, movieItem.State);
+        Assert.Equal(1, movieItem.CompletedCount);
+
+        // the single-media direct path aggregates episode rows too
+        var detail = await CreateService().GetLibraryItem(MediaType.Show, show.Id);
+        Assert.Equal(MediaTranslationState.InProgress, detail!.State);
+        Assert.Equal(1, detail.CompletedCount);
+    }
+
+    [Fact]
+    public async Task NewestEpisodeRequestWins_AcrossBothMediaTypeConventions()
+    {
+        // one episode carries both conventions: an older Show-typed Completed
+        // row and a newer Episode-typed Failed row — the newest one wins and
+        // the older row must not double-count.
+        var show = await SeedShowAsync("Mixed", [1]);
+        var episode = EpisodesOf(show)[0];
+        await SeedRequestAsync(MediaType.Show, episode.Id, TranslationStatus.Completed, DateTimeOffset.UtcNow.AddDays(-2));
+        await SeedRequestAsync(MediaType.Episode, episode.Id, TranslationStatus.Failed, DateTimeOffset.UtcNow.AddDays(-1));
+
+        var item = (await CreateService().GetLibrary(MediaType.Show, null, null, null, "Title", true, 1, 20))
+            .Items.Single();
+
+        Assert.Equal(MediaTranslationState.Failed, item.State);
+        Assert.Equal(0, item.CompletedCount);
+        Assert.Equal(1, item.FailedCount);
+    }
+
+    [Fact]
+    public async Task NonPositivePageNumbers_ClampToTheFirstPage()
+    {
+        await SeedShowAsync("Alpha", [1]);
+        await SeedShowAsync("Beta", [1]);
+        await SeedShowAsync("Gamma", [1]);
+
+        var service = CreateService();
+
+        // pageNumber 0 and negative used to reach List.Skip with a negative
+        // count and throw — they clamp to page 1 instead of 500ing
+        var pageZero = await service.GetLibrary(null, null, null, null, "Title", true, 0, 2);
+        Assert.Equal(3, pageZero.TotalCount);
+        Assert.Equal(1, pageZero.PageNumber);
+        Assert.Equal(["Alpha", "Beta"], pageZero.Items.Select(i => i.Title).ToArray());
+
+        var pageNegative = await service.GetLibrary(null, null, null, null, "Title", true, -3, 2);
+        Assert.Equal(1, pageNegative.PageNumber);
+        Assert.Equal(["Alpha", "Beta"], pageNegative.Items.Select(i => i.Title).ToArray());
+    }
+
+    [Fact]
     public async Task StateAndTargetLanguageFiltersStayTruthful()
     {
         await SeedShowAsync("Full-zh", [2], new Dictionary<string, MediaLanguageCoverage>

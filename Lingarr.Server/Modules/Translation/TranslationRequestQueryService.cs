@@ -154,6 +154,10 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
         string? mediaIds = null,
         int? mediaParentId = null)
     {
+        // pageNumber 0/negative would make Skip() throw; clamp like the
+        // library query does (pageSize likewise).
+        pageNumber = Math.Max(1, pageNumber);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = _dbContext.TranslationRequests
             .AsSplitQuery()
             .AsQueryable();
@@ -177,10 +181,15 @@ public class TranslationRequestQueryService : ITranslationRequestQueryService
         }
 
         // legacy per-media filter, kept for callers without a parent (movie
-        // detail histories pass a single id)
+        // detail histories pass a single id). Non-numeric entries are skipped
+        // instead of throwing: the value is free-form query input, and one
+        // malformed token must not 500 the whole history. A list with no
+        // numeric entries at all applies no filter (same as an empty param).
         var mediaIdList = mediaIds?
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(int.Parse)
+            .Select(token => int.TryParse(token, out var id) ? (int?)id : null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
             .ToList();
         if (mediaIdList is { Count: > 0 })
         {

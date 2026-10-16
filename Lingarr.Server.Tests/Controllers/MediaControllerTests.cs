@@ -395,6 +395,34 @@ public class MediaControllerTests
     }
 
     [Fact]
+    public async Task GetMoviesAndGetShows_ClampPageSizeAndPageNumber()
+    {
+        // same host-input guard as /library (audit P2): a 5000-wide page
+        // must clamp to 100 and a non-positive page number must never reach
+        // the service's Skip arithmetic with a negative count.
+        var media = new Mock<IMediaService>();
+        media.Setup(s => s.GetMovies(
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(new PagedResult<MovieResponse> { TotalCount = 0, PageNumber = 1, PageSize = 1 });
+        media.Setup(s => s.GetShows(
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(new PagedResult<Show> { TotalCount = 0, PageNumber = 1, PageSize = 1 });
+        var controller = new MediaController(
+            media.Object,
+            new Mock<IMediaLibraryService>().Object,
+            _subtitleService.Object,
+            _dbContext);
+
+        await controller.GetMovies(null, null, ascending: true, pageSize: 5000, pageNumber: 0);
+        await controller.GetShows(null, null, ascending: true, pageSize: 5000, pageNumber: -2);
+
+        media.Verify(s => s.GetMovies(null, null, true, 1, 100), Times.Once);
+        media.Verify(s => s.GetShows(null, null, true, 1, 100), Times.Once);
+    }
+
+    [Fact]
     public async Task GetLibrary_WithId_UsesDirectSingleMediaPath()
     {
         var item = new MediaLibraryItem
@@ -554,6 +582,62 @@ public class MediaControllerTests
         {
             Assert.True(episode.AudioOverride);
             Assert.True(episode.NeedsTranslation);
+        });
+    }
+
+    [Fact]
+    public async Task SetSubtitleNeed_Episode_NotNeeded_PersistsAllThreeFlags()
+    {
+        // QA6 P1-1: the Episode branch used to skip NoSubtitleNeeded, so the
+        // library aggregate (episodes.All(NoSubtitleNeeded)) and the gap
+        // fill's SQL (needs_translation=1 AND no_subtitle_needed=0) flipped
+        // the manual exemption right back. Needed=false must persist the
+        // full three-column state, same as the Movie branch.
+        var (show, _, ep1, _) = NewShow(43);
+        ep1.NeedsTranslation = true; // the scan judged it a gap
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+
+        var action = await CreateController().SetSubtitleNeed(MediaType.Episode, ep1.Id, new SubtitleNeedRequest { Needed = false });
+
+        var payload = Assert.IsType<SubtitleNeedResponse>(Assert.IsType<OkObjectResult>(action.Result).Value!);
+        Assert.False(payload.NeedsTranslation);
+        Assert.True(payload.NeedsNoSubtitles); // the frontend contract field
+        Assert.False(payload.AudioOverride);
+
+        var stored = await _dbContext.Episodes.AsNoTracking().SingleAsync(e => e.Id == ep1.Id);
+        Assert.False(stored.AudioOverride);
+        Assert.False(stored.NeedsTranslation);
+        Assert.True(stored.NoSubtitleNeeded); // the previously-missing write
+    }
+
+    [Fact]
+    public async Task SetSubtitleNeed_Show_NotNeeded_CascadesAllThreeFlagsToEveryEpisode()
+    {
+        // QA6 P1-1, show cascade: marking a show as not needing subtitles
+        // must persist the exemption column on every episode too — otherwise
+        // the show-level aggregate recomputes "still needing" and the UI
+        // flips back on the next refresh.
+        var (show, _, ep1, ep2) = NewShow(44);
+        ep1.NeedsTranslation = true;
+        ep2.NeedsTranslation = true;
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+
+        var action = await CreateController().SetSubtitleNeed(MediaType.Show, 44, new SubtitleNeedRequest { Needed = false });
+
+        var payload = Assert.IsType<SubtitleNeedResponse>(Assert.IsType<OkObjectResult>(action.Result).Value!);
+        Assert.False(payload.NeedsTranslation);
+        Assert.True(payload.NeedsNoSubtitles);
+        Assert.False(payload.AudioOverride);
+
+        var stored = await _dbContext.Episodes.AsNoTracking().Where(e => e.Season.ShowId == 44).ToListAsync();
+        Assert.Equal(2, stored.Count);
+        Assert.All(stored, episode =>
+        {
+            Assert.False(episode.AudioOverride);
+            Assert.False(episode.NeedsTranslation);
+            Assert.True(episode.NoSubtitleNeeded); // the previously-missing write
         });
     }
 

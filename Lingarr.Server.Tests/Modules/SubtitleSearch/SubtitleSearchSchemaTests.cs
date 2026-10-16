@@ -16,7 +16,11 @@ namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 /// exposed on the context with their FluentMigrator table names pinned
 /// (M0008/M0009) so EnsureCreated-built schemas match the migrated schema —
 /// the same audit that pins subtitle_language_cache. The composite-PK
-/// counter tables must be insertable and deduplicating.
+/// counter tables must be insertable and deduplicating. The fixture builds
+/// with the production snake-case naming convention and asserts the
+/// migration DDL's column names per table (PRAGMA table_info) plus the
+/// mirrored index names — without the convention these assertions would
+/// compare PascalCase EF names to themselves and prove nothing.
 /// </summary>
 public class SubtitleSearchSchemaTests : IDisposable
 {
@@ -29,6 +33,9 @@ public class SubtitleSearchSchemaTests : IDisposable
         _connection.Open();
         _context = new LingarrDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
             .UseSqlite(_connection)
+            // production config (DatabaseConfiguration) applies the same
+            // convention — the migration column names are the contract
+            .UseSnakeCaseNamingConvention()
             .Options);
         _context.Database.EnsureCreated();
     }
@@ -141,6 +148,51 @@ public class SubtitleSearchSchemaTests : IDisposable
         await Assert.ThrowsAsync<DbUpdateException>(() => _context.SaveChangesAsync());
     }
 
+    [Fact]
+    public void EnsureCreated_ColumnsMatchTheMigrationDdl()
+    {
+        // every column of the six subtitle-search tables, exactly as
+        // M0008/M0009 declare them — no missing column, no extra EF-defaulted
+        // column, no PascalCase leak under the naming convention.
+        AssertColumns("subtitle_search_state",
+            "id", "media_type", "media_id", "status", "priority_rank", "pinned",
+            "webhook_boost_until", "next_attempt_at", "attempt_count",
+            "last_error", "last_searched_at", "updated_at");
+        AssertColumns("subtitle_downloads",
+            "id", "media_type", "media_id", "provider", "external_id", "language",
+            "file_path", "match_score", "hash_match", "source", "search_session_id",
+            "result", "error", "removed_at", "replaced_by_download_id", "created_at");
+        AssertColumns("subtitle_search_blacklist",
+            "id", "provider", "reason", "expires_at");
+        AssertColumns("subtitle_search_sessions",
+            "id", "media_type", "media_id", "provider", "query_language",
+            "result_count", "hit_target", "created_at");
+        // the two counter tables were raw-DDL in M0009
+        AssertColumns("provider_quota_usage",
+            "date", "provider", "searches", "downloads", "quota_limit", "quota_remaining");
+        AssertColumns("coverage_daily",
+            "date", "media_type", "language", "covered", "total");
+    }
+
+    [Fact]
+    public void EnsureCreated_CarriesTheIndexesRawSqlAddressesByName()
+    {
+        var indexes = IndexNames();
+
+        // queue trio (M0008): dequeue covering index, enqueue upsert target,
+        // webhook-boost downgrade lookup
+        Assert.Contains("ix_subtitle_search_state_dequeue", indexes);
+        Assert.Contains("ux_subtitle_search_state_media", indexes);
+        Assert.Contains("ix_subtitle_search_state_boost", indexes);
+        // download history trio (M0008)
+        Assert.Contains("ix_subtitle_downloads_media", indexes);
+        Assert.Contains("ix_subtitle_downloads_created", indexes);
+        Assert.Contains("ix_subtitle_downloads_source", indexes);
+        // session pair (M0009)
+        Assert.Contains("ix_subtitle_search_sessions_media", indexes);
+        Assert.Contains("ix_subtitle_search_sessions_created", indexes);
+    }
+
     private HashSet<string> TableNames()
     {
         var command = _context.Database.GetDbConnection().CreateCommand();
@@ -153,5 +205,37 @@ public class SubtitleSearchSchemaTests : IDisposable
         }
 
         return names;
+    }
+
+    private HashSet<string> IndexNames()
+    {
+        var command = _context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'index'";
+        using var reader = command.ExecuteReader();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (reader.Read())
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names;
+    }
+
+    private void AssertColumns(string table, params string[] migrationDdlColumns)
+    {
+        var command = _context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"PRAGMA table_info({table})";
+        using var reader = command.ExecuteReader();
+        var actual = new List<string>();
+        while (reader.Read())
+        {
+            actual.Add(reader.GetString(1));
+        }
+
+        // set equality via sorted lists: PRAGMA order is the declared order,
+        // which EF does not guarantee to match the migration's DDL order
+        Assert.Equal(
+            migrationDdlColumns.OrderBy(column => column, StringComparer.Ordinal).ToList(),
+            actual.OrderBy(column => column, StringComparer.Ordinal).ToList());
     }
 }

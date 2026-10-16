@@ -104,4 +104,53 @@ public class TranslationRequestQueryServiceTests : IDisposable
         Assert.Equal(1, counts[TranslationStatus.Failed]);
         Assert.False(counts.ContainsKey(TranslationStatus.Completed));
     }
+
+    private static TranslationRequest MediaRequest(int mediaId, TranslationStatus status) => new()
+    {
+        Title = $"Request media {mediaId}",
+        SourceLanguage = "en",
+        TargetLanguage = "nl",
+        MediaType = MediaType.Movie,
+        MediaId = mediaId,
+        Status = status
+    };
+
+    [Fact]
+    public async Task GetTranslationRequests_MediaIdsFilter_MatchesOnlyTheNumericIds()
+    {
+        await SeedAsync(
+            MediaRequest(12, TranslationStatus.Completed),
+            MediaRequest(34, TranslationStatus.Pending),
+            MediaRequest(99, TranslationStatus.Completed));
+
+        var result = await _service.GetTranslationRequests(
+            null, "CreatedAt", false, 1, 20, mediaIds: "12, 34");
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(
+            new[] { 12, 34 }.OrderBy(id => id),
+            result.Items.Select(r => r.MediaId!.Value).OrderBy(id => id));
+    }
+
+    [Fact]
+    public async Task GetTranslationRequests_MediaIdsFilter_SkipsNonNumericTokens()
+    {
+        // mediaIds is free-form query input — a malformed token must not
+        // throw (int.Parse used to 500 the whole history list).
+        await SeedAsync(
+            MediaRequest(12, TranslationStatus.Completed),
+            MediaRequest(34, TranslationStatus.Pending));
+
+        var result = await _service.GetTranslationRequests(
+            null, "CreatedAt", false, 1, 20, mediaIds: "12,abc,34");
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.DoesNotContain(result.Items, r => r.MediaId is null);
+
+        // no numeric token at all: same as an empty param — no filter
+        var unfiltered = await _service.GetTranslationRequests(
+            null, "CreatedAt", false, 1, 20, mediaIds: "abc,def");
+
+        Assert.Equal(2, unfiltered.TotalCount);
+    }
 }

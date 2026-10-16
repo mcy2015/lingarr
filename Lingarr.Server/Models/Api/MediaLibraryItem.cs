@@ -35,9 +35,12 @@ public class MediaLibraryItem
     public string[]? AudioLanguages { get; init; }
 
     /// <summary>
-    /// The subtitle-need rule judged this media as not needing subtitles
-    /// (manual override=false, target-language audio track, or full
-    /// coverage). Drives the "native" library state filter.
+    /// The subtitle-need rule judged this media as not needing subtitles:
+    /// a manual "not needed" mark, or known audio that already covers a
+    /// target language. Subtitle coverage never exempts (the rule has no
+    /// coverage branch — full coverage still surfaces as a gap until the
+    /// audio or a manual mark says otherwise). Drives the "native" library
+    /// state filter.
     /// </summary>
     public bool NeedsNoSubtitles { get; init; }
 

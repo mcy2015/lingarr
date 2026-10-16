@@ -59,6 +59,11 @@ public class MediaLibraryService : IMediaLibraryService
         int pageNumber,
         int pageSize)
     {
+        // page arithmetic guard (audit P2): pageNumber 0/negative would make
+        // Skip((pageNumber-1)*pageSize) negative and throw out of List.Skip —
+        // clamp at the service entry so every caller is covered
+        pageNumber = Math.Max(1, pageNumber);
+
         var wantShows = mediaType is null or MediaType.Show;
         var wantMovies = mediaType is null or MediaType.Movie;
         var needle = string.IsNullOrEmpty(searchQuery) ? null : searchQuery.ToLower();
@@ -320,13 +325,20 @@ public class MediaLibraryService : IMediaLibraryService
 
         var rows = await episodes
             .Join(
+                // Episode requests exist under both MediaType conventions:
+                // request creation writes MediaType.Episode
+                // (AutomatedTranslationJob → MediaSubtitleProcessor), the
+                // legacy rows carry MediaType.Show. Both belong to the show
+                // rollup — the same gate the mediaParentId filter applies
+                // (scale audit P1-6); movie rows never do.
                 _dbContext.TranslationRequests.AsNoTracking()
-                    .Where(r => r.MediaType == MediaType.Show),
+                    .Where(r => r.MediaType == MediaType.Show || r.MediaType == MediaType.Episode),
                 e => (int?)e.Id,
                 r => r.MediaId,
                 (e, r) => new { ShowId = e.Season.ShowId, RequestId = r.Id, r.MediaId, r.Status, r.UpdatedAt })
             .Where(x => !_dbContext.TranslationRequests.Any(later =>
-                later.MediaType == MediaType.Show
+                // both conventions compete for "newest request per episode"
+                (later.MediaType == MediaType.Show || later.MediaType == MediaType.Episode)
                 && later.MediaId == x.MediaId
                 && (later.UpdatedAt > x.UpdatedAt
                     || (later.UpdatedAt == x.UpdatedAt && later.Id > x.RequestId))))
@@ -696,22 +708,14 @@ public class MediaLibraryService : IMediaLibraryService
 public static class SubtitleNeedRule
 {
     /// <summary>
-    /// needs = override.HasValue ? override.Value
-    ///       : audio hits any target language ? false
-    ///       : coverage lacks any target language.
-    /// Unknown audio (null) never exempts — conservative, so "und" content
-    /// keeps surfacing as a gap (PRD card A boundary ①). With no configured
-    /// target languages nothing can be missing.
+    /// Persisted exemption: a manual mark wins (marking "not needed" exempts,
+    /// marking "needed" un-exempts); otherwise known audio covering any
+    /// target language exempts. Unknown audio (null) never exempts and with
+    /// no configured targets nothing is exempt (conservative on both).
     /// </summary>
     /// <param name="audioOverride">Manual reversible mark; null = automatic.</param>
     /// <param name="audioLanguages">Normalized audio codes; null = unknown.</param>
-    /// <param name="coveredLanguages">Subtitle languages the media already carries.</param>
     /// <param name="targetLanguages">Configured translation target codes.</param>
-    /// <summary>
-    /// Persisted exemption: manual mark wins; otherwise known audio covering
-    /// any target language exempts. Unknown audio (null) never exempts, and
-    /// with no configured targets nothing is exempt (conservative on both).
-    /// </summary>
     public static bool NoSubtitleNeeded(
         bool? audioOverride,
         string[]? audioLanguages,
@@ -725,6 +729,18 @@ public static class SubtitleNeedRule
             targetLanguages.Contains(audio, StringComparer.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// needs = override.HasValue ? override.Value
+    ///       : audio hits any target language ? false
+    ///       : coverage lacks any target language.
+    /// Unknown audio (null) never exempts — conservative, so "und" content
+    /// keeps surfacing as a gap (PRD card A boundary ①). With no configured
+    /// target languages nothing can be missing.
+    /// </summary>
+    /// <param name="audioOverride">Manual reversible mark; null = automatic.</param>
+    /// <param name="audioLanguages">Normalized audio codes; null = unknown.</param>
+    /// <param name="coveredLanguages">Subtitle languages the media already carries.</param>
+    /// <param name="targetLanguages">Configured translation target codes.</param>
     public static bool NeedsTranslation(
         bool? audioOverride,
         string[]? audioLanguages,
