@@ -1,7 +1,10 @@
+using Lingarr.Core.Data;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 using Lingarr.Server.Modules.SubtitleSearch.Telemetry;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Orchestration;
@@ -64,6 +67,8 @@ public sealed partial class SubtitleSearchOrchestrator
     private readonly IMemoryCache _cache;
     private readonly ILogger<SubtitleSearchOrchestrator> _logger;
     private readonly TimeSpan _searchTimeout;
+    private readonly LingarrDbContext? _dbContext;
+    private readonly ISettingService? _settingService;
 
     /// <summary>
     /// What the 10min cache entry holds: the candidate list plus the
@@ -78,6 +83,33 @@ public sealed partial class SubtitleSearchOrchestrator
         MediaType MediaType,
         int MediaId);
 
+    /// <summary>
+    /// Production constructor — the one DI resolves (every parameter is a
+    /// registered service, and it outranks the testing constructors on
+    /// parameter count). Adds the design-⑧-polish dependencies: the
+    /// DbContext loads the blacklist read side, the settings service reads
+    /// the per-source enable switches.
+    /// </summary>
+    public SubtitleSearchOrchestrator(
+        SubtitleProviderRegistry registry,
+        SubtitleMatchScorer scorer,
+        SubtitleSourceCooldownStore cooldowns,
+        SubtitleTelemetryService telemetry,
+        IMemoryCache cache,
+        ILogger<SubtitleSearchOrchestrator> logger,
+        LingarrDbContext dbContext,
+        ISettingService settingService)
+        : this(registry, scorer, cooldowns, telemetry, cache, logger, SourceSearchTimeout, dbContext, settingService)
+    {
+    }
+
+    /// <summary>
+    /// Legacy six-argument constructor kept source-compatible for existing
+    /// test harnesses (SubtitleDownloadPipelineTests/SubtitleSearchJobTests
+    /// build the orchestrator without the blacklist/settings wiring). Runs
+    /// with both read-side features off — production DI always prefers the
+    /// longer constructor above.
+    /// </summary>
     public SubtitleSearchOrchestrator(
         SubtitleProviderRegistry registry,
         SubtitleMatchScorer scorer,
@@ -92,7 +124,9 @@ public sealed partial class SubtitleSearchOrchestrator
     /// <summary>
     /// Testing constructor (public — no InternalsVisibleTo): same wiring
     /// with a shortened per-source budget so timeout paths assert in
-    /// milliseconds instead of wall-clock 10s.
+    /// milliseconds instead of wall-clock 10s. The blacklist DbContext and
+    /// settings service are optional trailing arguments so pre-existing
+    /// positional call sites keep compiling.
     /// </summary>
     public SubtitleSearchOrchestrator(
         SubtitleProviderRegistry registry,
@@ -101,7 +135,9 @@ public sealed partial class SubtitleSearchOrchestrator
         SubtitleTelemetryService telemetry,
         IMemoryCache cache,
         ILogger<SubtitleSearchOrchestrator> logger,
-        TimeSpan searchTimeout)
+        TimeSpan searchTimeout,
+        LingarrDbContext? dbContext = null,
+        ISettingService? settingService = null)
     {
         _registry = registry;
         _scorer = scorer;
@@ -110,12 +146,19 @@ public sealed partial class SubtitleSearchOrchestrator
         _cache = cache;
         _logger = logger;
         _searchTimeout = searchTimeout;
+        _dbContext = dbContext;
+        _settingService = settingService;
     }
 
     /// <summary>
     /// Runs one aggregate search. <paramref name="singleProvider"/> limits
     /// the round to one source (the manual per-source endpoint, design ⑥);
-    /// null queries every registered source that is not cooling down.
+    /// null queries every registered source that is not cooling down and
+    /// not disabled through its <c>subtitle_{source}_enabled</c> switch
+    /// (design ⑧ polish). A source explicitly named through
+    /// <paramref name="singleProvider"/> is queried even when its switch is
+    /// off — the user picked it by name, that outranks the switch (only the
+    /// cooldown still guards it).
     /// </summary>
     public async Task<SubtitleSearchOutcome> SearchAsync(
         SubtitleSearchRequest request,
@@ -139,8 +182,15 @@ public sealed partial class SubtitleSearchOrchestrator
             }
         }
 
+        // Enable switches (⑧ polish): one batched settings read per round;
+        // absent keys (and the unwired legacy constructors) mean enabled.
+        var disabled = single is null
+            ? await GetDisabledProvidersAsync(cancellationToken)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         var targets = (single is not null ? [single] : _registry.All)
             .Where(entry => !activeCooldowns.ContainsKey(entry.Provider.Provider))
+            .Where(entry => single is not null || !disabled.Contains(entry.Provider.Provider))
             .ToList();
         foreach (var skipped in (single is not null ? [single] : _registry.All)
                      .Where(entry => activeCooldowns.ContainsKey(entry.Provider.Provider)))
@@ -154,6 +204,13 @@ public sealed partial class SubtitleSearchOrchestrator
                 "Skipping subtitle source {Provider}: cooldown until {Until}.",
                 skipped.Provider.Provider, cooldown.Until);
         }
+
+        // Blacklist read side (locked contract with the pipeline's write
+        // side): exact (provider, external_id) pairs inside their expiry
+        // window. Loaded once per round, before the dedupe, so a banned
+        // upload never even competes. Read failure degrades to "no
+        // blacklist" — a monitoring table must not sink the search round.
+        var blacklist = await LoadBlacklistAsync(cancellationToken);
 
         var merged = new List<SubtitleCandidate>();
         var sessions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -171,7 +228,10 @@ public sealed partial class SubtitleSearchOrchestrator
             }
         }
 
-        var ordered = Order(Dedupe(merged));
+        var filtered = blacklist.Count == 0
+            ? merged
+            : merged.Where(candidate => !blacklist.Contains((candidate.Provider, candidate.ExternalId))).ToList();
+        var ordered = Order(Dedupe(filtered));
         var cacheKey = Guid.NewGuid().ToString("N");
         _cache.Set(
             CacheKeyPrefix + cacheKey,
@@ -179,6 +239,73 @@ public sealed partial class SubtitleSearchOrchestrator
             CacheTtl);
 
         return new SubtitleSearchOutcome(cacheKey, ordered, outcomes);
+    }
+
+    /// <summary>
+    /// Source keys whose enable switch reads "false" this round. A settings
+    /// read failure (or the unwired legacy constructors) yields an empty
+    /// set — the round then queries everything rather than nothing.
+    /// </summary>
+    private async Task<HashSet<string>> GetDisabledProvidersAsync(CancellationToken cancellationToken)
+    {
+        if (_settingService is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            var keys = _registry.All
+                .Select(entry => SubtitleSourceSettingKeys.EnabledKey(entry.Provider.Provider))
+                .ToList();
+            var stored = await _settingService.GetSettings(keys);
+            return _registry.All
+                .Where(entry => stored.TryGetValue(
+                    SubtitleSourceSettingKeys.EnabledKey(entry.Provider.Provider),
+                    out var value) && !SubtitleSourceSettingKeys.IsEnabled(value))
+                .Select(entry => entry.Provider.Provider)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not read the subtitle-source enable switches; querying every source.");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Active blacklist observations as an exact-match set of
+    /// (provider, external_id) — ordinal comparison on both parts, mirroring
+    /// the write side's equality predicate. LINQ over the DbSet, no raw SQL:
+    /// the read must stay translatable whatever the DbContext mirror looks
+    /// like. Operator rows without <c>expires_at</c> (null = keep showing)
+    /// are included; their empty external id never matches a real candidate.
+    /// </summary>
+    private async Task<HashSet<(string Provider, string ExternalId)>> LoadBlacklistAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_dbContext is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var entries = await _dbContext.SubtitleSearchBlacklists
+                .AsNoTracking()
+                .Where(row => row.ExpiresAt == null || row.ExpiresAt > now)
+                .Select(row => new { row.Provider, row.ExternalId })
+                .ToListAsync(cancellationToken);
+            return entries
+                .Select(row => (row.Provider, row.ExternalId))
+                .ToHashSet();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not load the subtitle search blacklist; filtering nothing this round.");
+            return [];
+        }
     }
 
     /// <summary>
@@ -391,15 +518,22 @@ public sealed partial class SubtitleSearchOrchestrator
     }
 
     /// <summary>
-    /// Final ordering: score descending, then hash hits, then registration
-    /// order (stable). Registration order equals the default site priority
-    /// of ⑩ (OpenSubtitles first … shooter last).
+    /// Final ordering: score descending, then hash hits, then the two
+    /// design-⑧-polish tiebreaks — bilingual over monolingual, then format
+    /// preference (srt &gt; ass &gt; vtt, see
+    /// <see cref="SubtitleMatchScorer.FormatPreference"/>) — and finally
+    /// registration order (stable). Registration order equals the default
+    /// site priority of ⑩ (OpenSubtitles first … shooter last). The hash
+    /// verdict stays above the bilingual/format tiebreaks: an exact-file
+    /// match outranks any language/format preference.
     /// </summary>
     private List<SubtitleCandidate> Order(List<SubtitleCandidate> deduped)
         => deduped
             .Select((candidate, index) => (candidate, index))
             .OrderByDescending(entry => entry.candidate.MatchScore)
             .ThenByDescending(entry => entry.candidate.HashMatch)
+            .ThenByDescending(entry => SubtitleMatchScorer.IsBilingual(entry.candidate))
+            .ThenBy(entry => SubtitleMatchScorer.FormatPreference(entry.candidate.Format))
             .ThenBy(entry => entry.index)
             .Select(entry => entry.candidate)
             .ToList();

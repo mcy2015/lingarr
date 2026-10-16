@@ -276,4 +276,48 @@ public class SubtitleMatchScorerTests
         Assert.Equal(string.Empty, keyword);
         Assert.Null(tag);
     }
+
+    // --- bilingual detection + format preference (design ⑧-polish
+    // tiebreaks consumed by the orchestrator's final ordering).
+
+    [Fact]
+    public void IsBilingual_LanguageFieldWithASeparatorBetweenCodes_IsBilingual()
+    {
+        // Documented rule: the Language field splits on non-alphanumeric
+        // separators into two or more short alpha tokens.
+        Assert.True(SubtitleMatchScorer.IsBilingual(Candidate("Movie.2019", language: "zh+en")));
+        Assert.True(SubtitleMatchScorer.IsBilingual(Candidate("Movie.2019", language: "zh-en")));
+        Assert.True(SubtitleMatchScorer.IsBilingual(Candidate("Movie.2019", language: "zh_CN&en")));
+
+        // Single code — monolingual regardless of the release name.
+        Assert.False(SubtitleMatchScorer.IsBilingual(Candidate("Movie.2019", language: "zh")));
+        Assert.False(SubtitleMatchScorer.IsBilingual(Candidate("Movie.2019", language: "en")));
+        // Digits/garbage tokens are not language codes.
+        Assert.False(SubtitleMatchScorer.IsBilingual(Candidate("Movie.2019", language: "2019")));
+    }
+
+    [Fact]
+    public void IsBilingual_ReleaseMarkerFallback_CatchesSourcesThatHideItInTheName()
+    {
+        // The common chs&eng naming of Chinese bilingual releases — checked
+        // on the RAW release string (normalization would erase the "&").
+        Assert.True(SubtitleMatchScorer.IsBilingual(
+            Candidate("Movie.2019.WEBDL-1080p.chs&eng.ass", language: "zh")));
+        Assert.True(SubtitleMatchScorer.IsBilingual(
+            Candidate("Movie.2019.WEBDL-1080p.CHT&ENG.srt", language: "zh")));
+        Assert.False(SubtitleMatchScorer.IsBilingual(
+            Candidate("Movie.2019.WEBDL-1080p.chs.srt", language: "zh")));
+    }
+
+    [Fact]
+    public void FormatPreference_RanksSrtBeforeAssBeforeVtt()
+    {
+        Assert.True(SubtitleMatchScorer.FormatPreference("srt") < SubtitleMatchScorer.FormatPreference("ass"));
+        Assert.True(SubtitleMatchScorer.FormatPreference("ass") < SubtitleMatchScorer.FormatPreference("vtt"));
+        // Case-insensitive; unknown formats rank last, missing too.
+        Assert.Equal(SubtitleMatchScorer.FormatPreference("SRT"), SubtitleMatchScorer.FormatPreference("srt"));
+        Assert.True(SubtitleMatchScorer.FormatPreference("vtt") < SubtitleMatchScorer.FormatPreference("sub"));
+        Assert.True(SubtitleMatchScorer.FormatPreference("vtt") < SubtitleMatchScorer.FormatPreference(null));
+        Assert.Equal(SubtitleMatchScorer.FormatPreference("zip"), SubtitleMatchScorer.FormatPreference(null));
+    }
 }

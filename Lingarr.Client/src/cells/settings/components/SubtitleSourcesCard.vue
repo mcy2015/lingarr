@@ -46,11 +46,30 @@
             v-for="row in rows"
             :key="row.provider"
             class="border-line border-b px-4 py-2.5 last:border-b-0"
+            :class="{ 'opacity-60': !row.enabled }"
             :data-test="`subtitle-source-row-${row.provider}`">
-            <!-- 紧凑头行:名称 + 配置徽章(仅含 secret 字段的源)+ 冷却警示 chip
-                 + API 描述 + 操作 -->
+            <!-- 紧凑头行:名称 + 启用开关(设计⑧打磨:subtitle_{source}_enabled,
+                 停用源退出聚合/自动轮,手动点名仍可查)+ 配置徽章(仅含 secret
+                 字段的源)+ 冷却警示 chip + API 描述 + 操作 -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
                 <b class="flex-none">{{ row.displayName }}</b>
+                <span
+                    class="flex-none"
+                    :title="t('settings.subtitleSources.enableHint')"
+                    :data-test="`subtitle-source-enabled-${row.provider}`">
+                    <ToggleButton
+                        :model-value="row.enabled ? 'true' : 'false'"
+                        size="small"
+                        @toggle:update="toggleEnabled(row)">
+                        <span class="text-primary-content text-xs font-medium">
+                            {{
+                                row.enabled
+                                    ? t('settings.subtitleSources.enabled')
+                                    : t('settings.subtitleSources.disabled')
+                            }}
+                        </span>
+                    </ToggleButton>
+                </span>
                 <span
                     v-if="row.secretFields.length > 0"
                     class="flex-none"
@@ -139,14 +158,17 @@ import {
     PLUGIN_SETTING_TYPE
 } from '@/types'
 import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
+import { settingService } from '@/cells/app/api/settingService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { formatDateTime } from '@/cells/app/utils/date'
 import DynamicPluginForm from '@/cells/settings/components/DynamicPluginForm.vue'
+import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
 
 const { t } = useI18n()
 const settingStore = useSettingStore()
 const toastStore = useToastStore()
+const settingApi = settingService(axios)
 
 // ── 数据装载(数据驱动,不硬编码源名单)──────────────────────────
 const providers = ref<ISubtitleProviderHealthState[]>([])
@@ -166,6 +188,7 @@ interface ISubtitleSourceRow {
     displayName: string
     description: string | null
     credentialsConfigured: boolean
+    enabled: boolean
     secretFields: IPluginSettingField[]
     formManifest: IPluginManifest
     cooldownUntil: string | null
@@ -182,6 +205,8 @@ const rows = computed<ISubtitleSourceRow[]>(() =>
             displayName: source.displayName,
             description: source.description,
             credentialsConfigured: source.credentialsConfigured,
+            // 启用开关(设计⑧打磨):旧载荷无此字段按启用渲染(键缺失=启用)
+            enabled: source.enabled ?? true,
             secretFields,
             // 浅拷贝 manifest:settings 只留 secret 字段;描述已在行头展示,
             // 表单内不再重复渲染。
@@ -200,6 +225,27 @@ const rows = computed<ISubtitleSourceRow[]>(() =>
     })
 )
 
+// ── 启用开关(设计⑧打磨)─────────────────────────────────────────
+/// 服务端约定键名 subtitle_{provider}_enabled(SubtitleSourceSettingKeys.
+/// EnabledKey);写成功后本地翻转,失败保持原态并提示可重试。
+const toggling = reactive<Record<string, boolean>>({})
+
+async function toggleEnabled(row: ISubtitleSourceRow): Promise<void> {
+    if (toggling[row.provider]) return
+    toggling[row.provider] = true
+    const next = !row.enabled
+    try {
+        await settingApi.setSetting(`subtitle_${row.provider}_enabled`, String(next))
+        providers.value = providers.value.map((source) =>
+            source.provider === row.provider ? { ...source, enabled: next } : source
+        )
+    } catch {
+        toastStore.push({ message: t('settings.subtitleSources.toggleFailed'), type: 'error' })
+    } finally {
+        toggling[row.provider] = false
+    }
+}
+
 // ── 冷却健康态(设计⑧)──────────────────────────────────────────
 /// 冷却原因枚举名 → 卡片文案的静态映射表(不做字符串拼键);映射外的原因
 /// 名(更新的服务端)原样回显,绝不吐键名或空白。
@@ -208,7 +254,8 @@ const COOLDOWN_REASON_LABELS: Record<string, string> = {
     Unauthorized: 'settings.subtitleSources.cooldownReason.Unauthorized',
     ServerError: 'settings.subtitleSources.cooldownReason.ServerError',
     Timeout: 'settings.subtitleSources.cooldownReason.Timeout',
-    NetworkError: 'settings.subtitleSources.cooldownReason.NetworkError'
+    NetworkError: 'settings.subtitleSources.cooldownReason.NetworkError',
+    DailyLimit: 'settings.subtitleSources.cooldownReason.DailyLimit'
 }
 
 function cooldownReasonLabel(reason: string): string {

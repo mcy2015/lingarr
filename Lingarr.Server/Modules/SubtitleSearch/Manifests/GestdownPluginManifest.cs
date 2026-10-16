@@ -11,7 +11,8 @@ public sealed class GestdownPluginManifest : ISubtitleSourceManifest
     public string DisplayName => "Gestdown";
 
     public string? Description =>
-        "Free episode-focused English source mirroring the Addic7ed catalogue through an open API — no account needed.";
+        "Free episode-focused English source mirroring the Addic7ed catalogue through an open API — no account needed. "
+        + "Optional proxy: subtitle_gestdown_proxy_url overrides the global subtitle_proxy_url for this source; proxy changes apply after a restart.";
 
     public IReadOnlyList<PluginSettingField> Settings { get; } =
     [

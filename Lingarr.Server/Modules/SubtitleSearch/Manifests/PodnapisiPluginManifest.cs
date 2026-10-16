@@ -11,7 +11,8 @@ public sealed class PodnapisiPluginManifest : ISubtitleSourceManifest
     public string DisplayName => "Podnapisi";
 
     public string? Description =>
-        "Long-standing free subtitle index with an XML search interface; movies and episodes, many languages.";
+        "Long-standing free subtitle index with an XML search interface; movies and episodes, many languages. "
+        + "Optional proxy: subtitle_podnapisi_proxy_url overrides the global subtitle_proxy_url for this source; proxy changes apply after a restart.";
 
     public IReadOnlyList<PluginSettingField> Settings { get; } =
     [

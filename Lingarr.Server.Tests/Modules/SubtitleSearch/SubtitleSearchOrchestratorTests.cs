@@ -207,7 +207,9 @@ public class SubtitleSearchOrchestratorTests : IDisposable
             _telemetry,
             _cache,
             _orchestratorLogger,
-            timeout);
+            timeout,
+            _dbContext,
+            _settings);
     }
 
     /// <summary>
@@ -373,6 +375,238 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal(0, alpha.SearchCalls);
         Assert.Equal(1, beta.SearchCalls);
         Assert.Equal("beta", outcome.Candidates.Single().Provider);
+    }
+
+    // --- blacklist read side (locked contract with the pipeline write side,
+    // key = (provider, external_id) exact match inside the 90-day window).
+
+    private static SubtitleCandidate CandidateWithId(
+        string externalId,
+        string language = "en",
+        string release = "Movie.2019.WEBDL-1080p",
+        string format = "srt",
+        long size = 1234) => new(
+        "scripted",
+        externalId,
+        language,
+        MatchScore: 0,
+        Forced: false,
+        HearingImpaired: false,
+        release,
+        Uploader: null,
+        format,
+        size,
+        HashMatch: false);
+
+    [Fact]
+    public async Task Search_BlacklistedCandidatesAreFilteredOut()
+    {
+        // The write side (SubtitleDownloadPipeline) stamps the provider of
+        // the failing candidate and the cache-opaque external id — the read
+        // side must filter on exactly that pair.
+        _dbContext.SubtitleSearchBlacklists.Add(new Lingarr.Core.Entities.SubtitleSearchBlacklist
+        {
+            Provider = "alpha",
+            ExternalId = "banned-id",
+            Reason = "unparseable archive",
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(90)
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var alpha = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+        [
+            CandidateWithId("banned-id"),
+            CandidateWithId("clean-id")
+        ])))
+        { Provider = "alpha" };
+        var orchestrator = Create(alpha);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Single(outcome.Candidates);
+        Assert.Equal("clean-id", outcome.Candidates[0].ExternalId);
+    }
+
+    [Fact]
+    public async Task Search_ExpiredBlacklistEntryDoesNotFilter()
+    {
+        _dbContext.SubtitleSearchBlacklists.Add(new Lingarr.Core.Entities.SubtitleSearchBlacklist
+        {
+            Provider = "alpha",
+            ExternalId = "banned-id",
+            Reason = "unparseable archive",
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) // outside the 90-day window
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var alpha = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("banned-id")])))
+        { Provider = "alpha" };
+        var orchestrator = Create(alpha);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Single(outcome.Candidates);
+    }
+
+    [Fact]
+    public async Task Search_BlacklistOfAnotherProviderDoesNotFilterSameExternalId()
+    {
+        // Exact pair matching: beta's row about "banned-id" must not punish
+        // alpha's candidate with the same opaque id.
+        _dbContext.SubtitleSearchBlacklists.Add(new Lingarr.Core.Entities.SubtitleSearchBlacklist
+        {
+            Provider = "beta",
+            ExternalId = "banned-id",
+            Reason = "empty payload",
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(90)
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var alpha = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("banned-id")])))
+        { Provider = "alpha" };
+        var orchestrator = Create(alpha);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Single(outcome.Candidates);
+    }
+
+    // --- per-source enable switches (design ⑧ polish: absent key = enabled,
+    // aggregate rounds skip disabled sources, an explicitly named source is
+    // always queried).
+
+    [Fact]
+    public async Task Search_DisabledSourceIsSkippedInAggregateRounds()
+    {
+        var alpha = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
+        { Provider = "alpha" };
+        var beta = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
+        { Provider = "beta" };
+        await _settings.SetSetting("subtitle_alpha_enabled", "false");
+        var orchestrator = Create(alpha, beta);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Equal(0, alpha.SearchCalls);
+        Assert.Equal(1, beta.SearchCalls);
+        Assert.Equal("beta", outcome.Candidates.Single().Provider);
+        // A disabled source is not a failure — no outcome row for it.
+        Assert.Empty(outcome.SourceOutcomes);
+    }
+
+    [Fact]
+    public async Task Search_DisabledSourceIsStillQueriedWhenNamedExplicitly()
+    {
+        var alpha = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
+        { Provider = "alpha" };
+        await _settings.SetSetting("subtitle_alpha_enabled", "false");
+        var orchestrator = Create(alpha);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, "alpha", CancellationToken.None);
+
+        Assert.Equal(1, alpha.SearchCalls);
+        Assert.Single(outcome.Candidates);
+    }
+
+    [Fact]
+    public async Task Search_EnabledDefaultsToTrueWhenTheKeyIsAbsent()
+    {
+        // No key stored at all — the source must stay in the round (the
+        // rollout needs no migration).
+        var alpha = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
+        { Provider = "alpha" };
+        var orchestrator = Create(alpha);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Equal(1, alpha.SearchCalls);
+        Assert.Single(outcome.Candidates);
+    }
+
+    // --- bilingual / format tiebreaks (design ⑧ polish, applied after
+    // score + hash, before registration order).
+
+    [Fact]
+    public async Task Search_AtEqualScoreABilingualCandidateRanksBeforeAMonolingualOne()
+    {
+        // Monolingual registers FIRST — registration order alone would keep
+        // it ahead, so the assertion proves the bilingual tiebreak moved it.
+        var mono = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("mono", language: "zh")])))
+        { Provider = "alpha" };
+        var bilingual = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("bi", language: "zh+en")])))
+        { Provider = "beta" };
+        var orchestrator = Create(mono, bilingual);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Equal(2, outcome.Candidates.Count);
+        Assert.Equal(outcome.Candidates[0].MatchScore, outcome.Candidates[1].MatchScore);
+        Assert.Equal("bi", outcome.Candidates[0].ExternalId);
+        Assert.Equal("mono", outcome.Candidates[1].ExternalId);
+    }
+
+    [Fact]
+    public async Task Search_AtEqualScoreAndBilingualSrtRanksBeforeAss()
+    {
+        // Same language and release, distinct sizes so both survive the
+        // dedupe; ass registers first so only the format tiebreak reorders.
+        var ass = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("ass", language: "zh+en", format: "ass", size: 2222)])))
+        { Provider = "alpha" };
+        var srt = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("srt", language: "zh+en", format: "srt", size: 3333)])))
+        { Provider = "beta" };
+        var orchestrator = Create(ass, srt);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Equal(2, outcome.Candidates.Count);
+        Assert.Equal(outcome.Candidates[0].MatchScore, outcome.Candidates[1].MatchScore);
+        Assert.Equal("srt", outcome.Candidates[0].ExternalId);
+        Assert.Equal("ass", outcome.Candidates[1].ExternalId);
+    }
+
+    // --- daily-limit cooldown (⑧ same-day cooldown until UTC midnight).
+
+    [Fact]
+    public async Task CooldownStore_DailyLimitCoolsDownUntilTheNextUtcMidnight()
+    {
+        var store = new SubtitleSourceCooldownStore(
+            _settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
+        var before = DateTimeOffset.UtcNow;
+
+        await store.RecordFailureAsync("opensubtitles", SubtitleProviderException.ForDailyLimit("opensubtitles"));
+
+        var active = await store.GetActiveAsync();
+        var cooldown = active["opensubtitles"];
+        Assert.Equal(SubtitleProviderFailureReason.DailyLimit.ToString(), cooldown.Reason);
+        // Naive-UTC midnight arithmetic: some instant of the next UTC day,
+        // exactly on the day boundary.
+        Assert.Equal(TimeSpan.Zero, cooldown.Until.TimeOfDay);
+        var midnight = new DateTimeOffset(cooldown.Until.UtcDateTime.Date, TimeSpan.Zero);
+        Assert.Equal(cooldown.Until, midnight);
+        Assert.InRange(cooldown.Until, before, before.AddHours(25));
+    }
+
+    [Fact]
+    public async Task Search_DailyLimitFailureBecomesAnOutcomeAndAMidnightCooldown()
+    {
+        var exhausted = new ScriptedProvider(_ => throw SubtitleProviderException.ForDailyLimit(
+            "daily", resetEpochSeconds: DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds()))
+        { Provider = "daily" };
+        var orchestrator = Create(exhausted);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        var failure = Assert.Single(outcome.SourceOutcomes);
+        Assert.Equal(SubtitleProviderFailureReason.DailyLimit.ToString(), failure.Reason);
+
+        var cooldowns = await orchestrator.GetActiveCooldownsAsync();
+        Assert.Equal(TimeSpan.Zero, cooldowns["daily"].Until.TimeOfDay);
     }
 
     /// <summary>

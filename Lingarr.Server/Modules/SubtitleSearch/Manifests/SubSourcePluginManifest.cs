@@ -11,7 +11,8 @@ public sealed class SubSourcePluginManifest : ISubtitleSourceManifest
     public string DisplayName => "SubSource";
 
     public string? Description =>
-        "Free subtitle source with no credentials. Movie and episode coverage in English plus multi-language supplements.";
+        "Free subtitle source with no credentials. Movie and episode coverage in English plus multi-language supplements. "
+        + "Optional proxy: subtitle_subsource_proxy_url overrides the global subtitle_proxy_url for this source; proxy changes apply after a restart.";
 
     public IReadOnlyList<PluginSettingField> Settings { get; } =
     [

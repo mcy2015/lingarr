@@ -16,7 +16,8 @@ public sealed class OpenSubtitlesPluginManifest : ISubtitleSourceManifest
 
     public string? Description =>
         "Official OpenSubtitles.com API. The largest catalogue and the only source with exact-file hash matches. "
-        + "Free API keys are limited to 40 downloads per day (displayed as a waterline, never enforced).";
+        + "Free API keys are limited to 40 downloads per day (displayed as a waterline, never enforced). "
+        + "Optional proxy: subtitle_opensubtitles_proxy_url overrides the global subtitle_proxy_url for this source; proxy changes apply after a restart.";
 
     public IReadOnlyList<PluginSettingField> Settings { get; } =
     [

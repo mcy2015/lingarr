@@ -618,6 +618,9 @@ export interface ISubtitleHistoryResponse {
 /// (types/plugin.ts) because the manifest type is the shared plugin-ABI
 /// shape; the cooldown fields only exist on the subtitle-sources card
 /// contract. Undefined (legacy payload without the fields) reads as null.
+/// `enabled` is the per-source switch (subtitle_{provider}_enabled, design
+/// ⑧ polish): false = aggregate/automated rounds skip the source. Optional
+/// because legacy payloads predate it — undefined reads as enabled.
 export interface ISubtitleProviderHealthState {
     provider: string
     displayName: string
@@ -627,4 +630,5 @@ export interface ISubtitleProviderHealthState {
     settings: IPluginSettingField[]
     cooldownUntil: string | null
     cooldownReason: string | null
+    enabled?: boolean
 }

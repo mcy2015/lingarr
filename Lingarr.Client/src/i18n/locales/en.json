@@ -830,6 +830,10 @@
             "notConfigured": "Not configured",
             "expand": "Credentials",
             "collapse": "Collapse",
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "enableHint": "Disabled sources sit out aggregate and automated rounds; a manual per-source search still queries them.",
+            "toggleFailed": "Could not save the source switch.",
             "cooldownUntil": "Cooldown · {time}",
             "cooldownUntilCredentials": "Cooldown · until credentials change",
             "cooldownReason": {
@@ -837,7 +841,8 @@
                 "Unauthorized": "Credentials rejected (401/403)",
                 "ServerError": "Source server error (5xx)",
                 "Timeout": "Source timed out",
-                "NetworkError": "Source unreachable"
+                "NetworkError": "Source unreachable",
+                "DailyLimit": "Daily quota exhausted (until UTC midnight)"
             }
         },
         "subtitleOutput": {

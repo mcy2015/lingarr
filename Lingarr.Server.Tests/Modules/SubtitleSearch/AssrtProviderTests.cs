@@ -213,6 +213,74 @@ public class AssrtProviderTests
         Assert.Equal(payload, download.Content);
     }
 
+    [Fact]
+    public async Task Download_CarriesTheQuotaRemainingOfTheProducingDetailRound()
+    {
+        // assrt reports the account's remaining downloads on the detail
+        // round (quota_remain — the documented assumption of the adapter):
+        // the snapshot rides the candidate context into the download result
+        // and from there into the quota telemetry.
+        var detailWithQuota = """
+        {
+          "status": 0,
+          "sub": {
+            "quota_remain": 37,
+            "subs": [
+              {
+                "id": 671234,
+                "title": "Movie 2019",
+                "native_name": "电影2019",
+                "filelist": [
+                  { "f": "Movie.2019.WEBDL-1080p.chs&eng.ass", "url": "https://api.assrt.net/sub/download/671234/quota.ass" }
+                ]
+              }
+            ]
+          }
+        }
+        """;
+        var payload = "[Script Info]"u8.ToArray();
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "search.json"))
+            .EnqueueJson(detailWithQuota)
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .Enqueue(request => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload)
+            });
+
+        var provider = Create(handler);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+
+        var download = await provider.DownloadAsync(
+            new SubtitleCandidateRef(search.Candidates[0].ExternalId), CancellationToken.None);
+
+        Assert.Equal(37, download.QuotaRemaining);
+    }
+
+    [Fact]
+    public async Task Download_WithoutQuotaFieldReportsNull()
+    {
+        var payload = "[Script Info]"u8.ToArray();
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "search.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .Enqueue(request => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload)
+            });
+
+        var provider = Create(handler);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+
+        var download = await provider.DownloadAsync(
+            new SubtitleCandidateRef(search.Candidates[0].ExternalId), CancellationToken.None);
+
+        // Absent quota field keeps null — the telemetry preserves its last
+        // recorded value instead of overwriting it with garbage.
+        Assert.Null(download.QuotaRemaining);
+    }
+
     /// <summary>
     /// A search page whose id list exceeds the fan-out cap (QA1 P1-1): the
     /// detail round stops after 20 ids regardless of the page size — one

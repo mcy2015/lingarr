@@ -15,7 +15,8 @@ public sealed class AssrtPluginManifest : ISubtitleSourceManifest
 
     public string? Description =>
         "Chinese subtitle mainstay (assrt.net). Requires a free API token from the site. "
-        + "Mind the source's usage policy — scraping-like volume gets accounts suspended.";
+        + "Mind the source's usage policy — scraping-like volume gets accounts suspended. "
+        + "Optional proxy: subtitle_assrt_proxy_url overrides the global subtitle_proxy_url for this source; proxy changes apply after a restart.";
 
     public IReadOnlyList<PluginSettingField> Settings { get; } =
     [

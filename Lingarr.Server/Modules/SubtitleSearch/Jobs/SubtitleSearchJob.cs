@@ -33,6 +33,15 @@ public class SubtitleSearchJob
     public const int DefaultBatchLimit = 200;
     public const int DefaultAutoScore = 75;
 
+    /// <summary>
+    /// Batch-limit guard rails (design ⑧ polish): a mistyped
+    /// <c>subtitle_search_batch_limit</c> (or a hand-edited settings row)
+    /// must never turn one round into an unbounded marathon — the 30min
+    /// round ceiling of the NFR assumes ≤2000 items.
+    /// </summary>
+    public const int MinBatchLimit = 50;
+    public const int MaxBatchLimit = 2000;
+
     private readonly LingarrDbContext _dbContext;
     private readonly ISettingService _settingService;
     private readonly IScheduleService _scheduleService;
@@ -91,8 +100,10 @@ public class SubtitleSearchJob
             return;
         }
 
-        var batchLimit = ParsePositive(
-            settings.GetValueOrDefault(SettingKeys.SubtitleSearch.BatchLimit), DefaultBatchLimit);
+        var batchLimit = Math.Clamp(
+            ParsePositive(settings.GetValueOrDefault(SettingKeys.SubtitleSearch.BatchLimit), DefaultBatchLimit),
+            MinBatchLimit,
+            MaxBatchLimit);
         var autoScore = ParsePositive(
             settings.GetValueOrDefault(SettingKeys.SubtitleSearch.AutoScore), DefaultAutoScore);
 

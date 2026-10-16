@@ -100,7 +100,10 @@ public sealed class SubtitleSourceCooldownStore
     /// Persists a cooldown for a failed source call. Entries without a
     /// suggested cooldown (MissingCredentials, InvalidResponse, NotFound —
     /// ⑧'s "no cooldown" buckets) are ignored; 401/403 maps onto the
-    /// credential-change horizon.
+    /// credential-change horizon; a daily-limit exhaustion (⑧ same-day
+    /// cooldown) cools down until the next UTC midnight, when the source's
+    /// daily counter resets — not a fixed span, so the source recovers the
+    /// moment the quota window rolls over.
     /// </summary>
     public Task RecordFailureAsync(
         string provider,
@@ -112,6 +115,7 @@ public sealed class SubtitleSourceCooldownStore
         var until = exception.Reason switch
         {
             SubtitleProviderFailureReason.Unauthorized => CredentialChangeHorizon,
+            SubtitleProviderFailureReason.DailyLimit => NextUtcMidnight(),
             _ when exception.Cooldown is { } span => DateTimeOffset.UtcNow + span,
             _ => (DateTimeOffset?)null
         };
@@ -121,6 +125,17 @@ public sealed class SubtitleSourceCooldownStore
         }
 
         return PersistAsync(provider, until.Value, exception.Reason.ToString(), exception.Message, cancellationToken);
+    }
+
+    /// <summary>
+    /// The next UTC midnight after now (naive UTC arithmetic — the quota
+    /// window of the sources resets on their server clock, which Lingarr
+    /// models as the UTC day boundary).
+    /// </summary>
+    private static DateTimeOffset NextUtcMidnight()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new DateTimeOffset(now.UtcDateTime.Date.AddDays(1), TimeSpan.Zero);
     }
 
     /// <summary>

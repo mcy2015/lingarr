@@ -316,4 +316,109 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
             ? _dbContext.Movies.AsNoTracking().Single().Id
             : _dbContext.Episodes.AsNoTracking().Single().Id;
     }
+
+    // --- persistent media-hash write-back (design ⑧ polish: a fresh
+    // moviehash lands in media_hash — NULL-guarded, fire-and-forget).
+
+    [Fact]
+    public async Task WriteBackVideoHash_FillsOnlyRowsWhoseColumnIsNull()
+    {
+        // Production write-side convention of this test's DbContext: the
+        // seeded ctor movie ("Film", Path=_root) keeps the C# initializer's
+        // empty string; two explicit rows pin the NULL and value cases.
+        var nullHashMovie = new Movie
+        {
+            RadarrId = 2, Title = "NullHash", Path = _root, FileName = "NullHash.2020.mkv",
+            DateAdded = DateTimeOffset.UtcNow, Year = 2020, MediaHash = null
+        };
+        var filledMovie = new Movie
+        {
+            RadarrId = 3, Title = "Filled", Path = _root, FileName = "Filled.2021.mkv",
+            DateAdded = DateTimeOffset.UtcNow, Year = 2021, MediaHash = "existing-hash"
+        };
+        var nullHashEpisode = new Episode
+        {
+            SonarrId = 11, EpisodeNumber = 6, Title = "NullHash Episode",
+            // A tracked instance keeps EF's identity map happy; the nav sets
+            // SeasonId, and setting both from different instances conflicts.
+            Season = _dbContext.Seasons.Single(),
+            Path = Path.Combine(_root, "series"), FileName = "Series.S02E06.1080p.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            MediaHash = null
+        };
+        _dbContext.Movies.AddRange(nullHashMovie, filledMovie);
+        _dbContext.Episodes.Add(nullHashEpisode);
+        await _dbContext.SaveChangesAsync();
+
+        // Path round-trip: the builder's ResolveMediaFile combines the very
+        // (Path, FileName) columns the write-back matches on.
+        var written = await LazyMediaHasher.WriteBackVideoHashAsync(
+            _dbContext, Path.Combine(_root, "NullHash.2020.mkv"), "os-moviehash");
+        Assert.Equal(1, written);
+        Assert.Equal("os-moviehash",
+            (await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 2)).MediaHash);
+
+        // Episode rows share the column: one write for its own file.
+        var episodeWrite = await LazyMediaHasher.WriteBackVideoHashAsync(
+            _dbContext, Path.Combine(_root, "series", "Series.S02E06.1080p.mkv"), "os-moviehash-ep");
+        Assert.Equal(1, episodeWrite);
+        Assert.Equal("os-moviehash-ep",
+            (await _dbContext.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 11)).MediaHash);
+
+        // An existing value (and the empty-string sentinel the sync/translation
+        // writers leave behind) is NEVER overwritten.
+        var refused = await LazyMediaHasher.WriteBackVideoHashAsync(
+            _dbContext, Path.Combine(_root, "Filled.2021.mkv"), "new-hash");
+        Assert.Equal(0, refused);
+        Assert.Equal("existing-hash",
+            (await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 3)).MediaHash);
+
+        var emptyGuarded = await LazyMediaHasher.WriteBackVideoHashAsync(
+            _dbContext, Path.Combine(_root, "Film.2019.WEBDL-1080p.mkv"), "new-hash");
+        Assert.Equal(0, emptyGuarded);
+        Assert.Equal(string.Empty,
+            (await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 1)).MediaHash);
+
+        // A path matching no library row is a no-op, not an error.
+        Assert.Equal(0, await LazyMediaHasher.WriteBackVideoHashAsync(
+            _dbContext, Path.Combine(_root, "Unknown.2022.mkv"), "os-moviehash"));
+    }
+
+    [Fact]
+    public async Task LazyMediaHasher_TriggersTheWriteBackDelegateOnFreshComputeOnly()
+    {
+        var videoFile = Path.Combine(_root, "WriteBack.2019.mkv");
+        await File.WriteAllTextAsync(videoFile, "write-back-bytes");
+        var recorded = new List<(string FilePath, string Hash)>();
+        var gate = new SemaphoreSlim(1, 1);
+        var hasher = new LazyMediaHasher(
+            videoHashComputer: _ => "computed-hash",
+            videoHashWriteBack: (filePath, hash) =>
+            {
+                gate.Wait();
+                recorded.Add((filePath, hash));
+                gate.Release();
+                return Task.CompletedTask;
+            });
+
+        var hash = hasher.VideoHash(videoFile);
+        Assert.Equal("computed-hash", hash);
+
+        // Missing file: no hash, no write-back.
+        Assert.Null(hasher.VideoHash(Path.Combine(_root, "missing.mkv")));
+        // Shooter hash computes but never persists (the column holds the
+        // OpenSubtitles moviehash only).
+        _ = hasher.ShooterHash(videoFile);
+
+        // The fire-and-forget write-back of the successful compute runs on
+        // the thread pool — give it a moment to land before asserting.
+        for (var attempt = 0; attempt < 50 && recorded.Count == 0; attempt++)
+        {
+            await Task.Delay(10);
+        }
+
+        var writeBack = Assert.Single(recorded);
+        Assert.Equal(videoFile, writeBack.FilePath);
+        Assert.Equal("computed-hash", writeBack.Hash);
+    }
 }

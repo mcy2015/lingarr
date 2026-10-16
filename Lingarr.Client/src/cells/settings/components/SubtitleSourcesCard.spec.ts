@@ -10,12 +10,14 @@ import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import SubtitleSourcesCard from '@/cells/settings/components/SubtitleSourcesCard.vue'
 import { IPluginSettingField, ISubtitleProviderHealthState } from '@/types'
+import { useToastStore } from '@/cells/app/stores/toast'
 import en from '@/i18n/locales/en.json'
 // side effect: installs String.prototype.format used by InputComponent validation
 import '@/cells/kernel/utils/string'
 
 const getProvidersMock = vi.hoisted(() => vi.fn())
 const testConnectionMock = vi.hoisted(() => vi.fn())
+const setSettingMock = vi.hoisted(() => vi.fn())
 const setEncryptedSettingMock = vi.hoisted(() => vi.fn())
 const revealEncryptedSettingMock = vi.hoisted(() => vi.fn())
 const getEncryptedSettingStatesMock = vi.hoisted(() => vi.fn())
@@ -29,7 +31,7 @@ vi.mock('@/cells/app/api/subtitleSearchService', () => ({
 
 vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({
-        setSetting: vi.fn().mockResolvedValue(undefined),
+        setSetting: setSettingMock,
         setSettings: vi.fn().mockResolvedValue(undefined),
         setEncryptedSetting: setEncryptedSettingMock,
         getSettings: vi.fn().mockResolvedValue({}),
@@ -118,6 +120,7 @@ const PROVIDERS: ISubtitleProviderHealthState[] = [
 beforeEach(() => {
     getProvidersMock.mockReset().mockResolvedValue(PROVIDERS)
     testConnectionMock.mockReset()
+    setSettingMock.mockReset().mockResolvedValue(undefined)
     setEncryptedSettingMock.mockReset().mockResolvedValue(undefined)
     revealEncryptedSettingMock.mockReset().mockResolvedValue('')
     getEncryptedSettingStatesMock.mockReset().mockResolvedValue({})
@@ -334,8 +337,7 @@ describe('SubtitleSourcesCard · 加载状态', () => {
     })
 })
 
-describe('SubtitleSourcesCard · 冷却健康态(设计⑧)', () => {
-    it('renders the cooldown chip with the until time and reason tooltip on cooled sources only', async () => {
+describe('SubtitleSourcesCard · 冷却健康态(设计⑧)', () => {    it('renders the cooldown chip with the until time and reason tooltip on cooled sources only', async () => {
         const until = '2026-10-15T18:30:00Z'
         getProvidersMock.mockReset().mockResolvedValue([
             { ...PROVIDERS[0], cooldownUntil: until, cooldownReason: 'RateLimited' },
@@ -391,5 +393,104 @@ describe('SubtitleSourcesCard · 冷却健康态(设计⑧)', () => {
 
         expect(wrapper.find('[data-test="subtitle-source-cooldown-opensubtitles"]').exists()).toBe(false)
         expect(wrapper.find('[data-test="subtitle-source-row-opensubtitles"]').exists()).toBe(true)
+    })
+
+    it('labels the DailyLimit cooldown reason (daily quota exhausted)', async () => {
+        getProvidersMock.mockReset().mockResolvedValue([
+            { ...PROVIDERS[0], cooldownUntil: '2026-10-15T23:59:00Z', cooldownReason: 'DailyLimit' },
+            PROVIDERS[1],
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        const chip = wrapper.find('[data-test="subtitle-source-cooldown-opensubtitles"]')
+        expect(chip.exists()).toBe(true)
+        // known reason names resolve through the label map — never the raw
+        // enum name on screen
+        expect(chip.attributes('title')).toBe(en.settings.subtitleSources.cooldownReason.DailyLimit)
+        expect(chip.text()).not.toContain('DailyLimit')
+    })
+})
+
+describe('SubtitleSourcesCard · 启用开关(设计⑧打磨)', () => {
+    it('renders the enable switch per row reflecting the API state', async () => {
+        getProvidersMock.mockReset().mockResolvedValue([
+            PROVIDERS[0],
+            { ...PROVIDERS[1], enabled: false },
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        const enabledSwitch = wrapper.find('[data-test="subtitle-source-enabled-opensubtitles"]')
+        expect(enabledSwitch.exists()).toBe(true)
+        expect(enabledSwitch.text()).toBe(en.settings.subtitleSources.enabled)
+        expect(enabledSwitch.find('button').attributes('aria-checked')).toBe('true')
+
+        const disabledSwitch = wrapper.find('[data-test="subtitle-source-enabled-assrt"]')
+        expect(disabledSwitch.text()).toBe(en.settings.subtitleSources.disabled)
+        expect(disabledSwitch.find('button').attributes('aria-checked')).toBe('false')
+    })
+
+    it('treats legacy payloads without the enabled field as enabled', async () => {
+        getProvidersMock.mockReset().mockResolvedValue([
+            { ...PROVIDERS[0], enabled: undefined },
+            PROVIDERS[1],
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        const legacySwitch = wrapper.find('[data-test="subtitle-source-enabled-opensubtitles"] button')
+        expect(legacySwitch.attributes('aria-checked')).toBe('true')
+        expect(wrapper.find('[data-test="subtitle-source-enabled-opensubtitles"]').text()).toBe(
+            en.settings.subtitleSources.enabled
+        )
+    })
+
+    it('writes subtitle_{provider}_enabled through the setting channel and flips the label', async () => {
+        const wrapper = await mountCard()
+        setSettingMock.mockClear()
+
+        await wrapper.find('[data-test="subtitle-source-enabled-opensubtitles"] button').trigger('click')
+        await flushPromises()
+
+        // The card writes the plain setting key with the string wire form.
+        expect(setSettingMock).toHaveBeenCalledTimes(1)
+        expect(setSettingMock).toHaveBeenCalledWith('subtitle_opensubtitles_enabled', 'false')
+        expect(wrapper.find('[data-test="subtitle-source-enabled-opensubtitles"]').text()).toBe(
+            en.settings.subtitleSources.disabled
+        )
+
+        // toggling back on writes "true" and restores the label
+        await wrapper.find('[data-test="subtitle-source-enabled-opensubtitles"] button').trigger('click')
+        await flushPromises()
+        expect(setSettingMock).toHaveBeenCalledWith('subtitle_opensubtitles_enabled', 'true')
+        expect(wrapper.find('[data-test="subtitle-source-enabled-opensubtitles"]').text()).toBe(
+            en.settings.subtitleSources.enabled
+        )
+    })
+
+    it('keeps the previous state and toasts an error when the write fails', async () => {
+        setSettingMock.mockReset().mockRejectedValueOnce(new Error('settings down'))
+        // local pinia so the toast the card pushes can be asserted
+        const pinia = createPinia()
+        const wrapper = mount(SubtitleSourcesCard, {
+            global: { plugins: [pinia, i18n] }
+        })
+        onTestFinished(() => wrapper.unmount())
+        await flushPromises()
+
+        await wrapper.find('[data-test="subtitle-source-enabled-assrt"] button').trigger('click')
+        await flushPromises()
+
+        expect(setSettingMock).toHaveBeenCalledWith('subtitle_assrt_enabled', 'false')
+        // state kept: still enabled
+        expect(wrapper.find('[data-test="subtitle-source-enabled-assrt"]').text()).toBe(
+            en.settings.subtitleSources.enabled
+        )
+        // the error surfaces through the toast store (real pinia)
+        const toastStore = useToastStore(pinia)
+        const lastToast = toastStore.toasts[toastStore.toasts.length - 1]
+        expect(lastToast?.type).toBe('error')
+        expect(lastToast?.message).toBe(en.settings.subtitleSources.toggleFailed)
     })
 })

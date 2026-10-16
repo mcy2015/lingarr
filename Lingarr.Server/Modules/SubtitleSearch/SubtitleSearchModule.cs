@@ -1,3 +1,5 @@
+using Lingarr.Core.Data;
+using Lingarr.Contracts.Settings;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Manifests;
@@ -8,7 +10,9 @@ using Lingarr.Server.Modules.SubtitleSearch.Queue;
 using Lingarr.Server.Modules.SubtitleSearch.Requests;
 using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 using Lingarr.Server.Modules.SubtitleSearch.Telemetry;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Lingarr.Server.Modules.SubtitleSearch;
 
@@ -51,7 +55,23 @@ public static class SubtitleSearchModule
     {
         services.AddSingleton<SubtitleMatchScorer>();
         services.AddSingleton<SubtitleCandidateCache>();
-        services.AddSingleton<LazyMediaHasher>();
+
+        // LazyMediaHasher keeps its compute delegates injectable (tests pass
+        // counters); the module adds the production write-back delegate that
+        // persists a fresh moviehash into media_hash (design ⑧ polish —
+        // fire-and-forget, NULL-guarded, see LazyMediaHasher). The root
+        // provider creates a scope per write so the singleton never captures
+        // a scoped DbContext.
+        services.AddSingleton(provider => new LazyMediaHasher(
+            videoHashWriteBack: async (filePath, hash) =>
+            {
+                using var scope = provider.CreateScope();
+                await LazyMediaHasher.WriteBackVideoHashAsync(
+                    scope.ServiceProvider.GetRequiredService<LingarrDbContext>(),
+                    filePath,
+                    hash);
+            },
+            logger: provider.GetRequiredService<ILogger<LazyMediaHasher>>()));
 
         // The seven v1 sources (⑩) as typed clients on their named
         // HttpClients ("subtitle-opensubtitles"…, ②). Providers are
@@ -121,14 +141,54 @@ public static class SubtitleSearchModule
             {
                 client.Timeout = SourceTimeout;
                 client.MaxResponseContentBufferSize = MaxJsonResponseBytes;
-            });
+            })
+            .ConfigurePrimaryHttpMessageHandler(sp => BuildSourceHandler(sp, name));
 
         // Dedicated download client of the same source: the long byte-fetch
         // budget. Resolved by name through SubtitleHttp.DownloadClientFactory
         // — providers hold only the search client in their typed-client ctor.
         services.AddHttpClient(
             SubtitleHttp.DownloadHttpClientName(name),
-            client => client.Timeout = DownloadTimeout);
+            client => client.Timeout = DownloadTimeout)
+            .ConfigurePrimaryHttpMessageHandler(sp => BuildSourceHandler(sp, name));
+    }
+
+    /// <summary>
+    /// Primary handler of one source's two clients with the optional proxy
+    /// applied (design ⑧ polish): the source's
+    /// <c>subtitle_{source}_proxy_url</c> override wins over the global
+    /// <c>subtitle_proxy_url</c>. Known limitation, deliberate: the named
+    /// clients' handlers are built once per handler lifetime by
+    /// IHttpClientFactory — a proxy change therefore needs a RESTART to take
+    /// effect (the manifest descriptions say so). The settings are read
+    /// synchronously at handler-build time; any read failure leaves the
+    /// client direct (no proxy) instead of failing the host.
+    /// </summary>
+    private static HttpMessageHandler BuildSourceHandler(IServiceProvider services, string source)
+    {
+        var handler = new HttpClientHandler();
+        try
+        {
+            // The handler factory hands us the ROOT provider; ISettingsAccess
+            // is scoped, so the one-time proxy read runs in its own scope
+            // (scope validation in Development would reject a root resolve).
+            using var scope = services.CreateScope();
+            var settings = scope.ServiceProvider.GetRequiredService<ISettingsAccess>();
+            var proxyUrl = settings.GetSettingAsync(SubtitleSourceSettingKeys.ProxyUrlKey(source)).GetAwaiter().GetResult()
+                           ?? settings.GetSettingAsync(SubtitleSourceSettingKeys.GlobalProxyUrl).GetAwaiter().GetResult();
+            if (!string.IsNullOrWhiteSpace(proxyUrl) && Uri.TryCreate(proxyUrl.Trim(), UriKind.Absolute, out var proxy))
+            {
+                handler.Proxy = new System.Net.WebProxy(proxy);
+                handler.UseProxy = true;
+            }
+        }
+        catch
+        {
+            // No settings row / settings store hiccup at handler-build time:
+            // a direct connection beats a dead host.
+        }
+
+        return handler;
     }
 }
 

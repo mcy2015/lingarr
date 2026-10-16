@@ -62,6 +62,18 @@ public sealed class SubtitleDownloadPipeline
     private static readonly string[] VideoExtensions =
         [".mkv", ".mp4", ".avi", ".mov", ".m4v", ".ts", ".wmv", ".flv", ".webm"];
 
+    /// <summary>
+    /// How long an automatic blacklist observation stays in effect (locked
+    /// read/write contract with the search filter side, which matches exactly
+    /// on (provider, external_id) inside this window). Long enough that a
+    /// permanently broken upload stops being re-attempted every round, short
+    /// enough that a source fixing its data recovers within a quarter.
+    /// </summary>
+    private const int BlacklistWindowDays = 90;
+
+    /// <summary>Reason summary cap — the row is an observation, not a log.</summary>
+    private const int BlacklistReasonMaxLength = 300;
+
     private readonly LingarrDbContext _dbContext;
     private readonly SubtitleProviderRegistry _registry;
     private readonly SubtitleArchiveExtractor _extractor;
@@ -180,7 +192,8 @@ public sealed class SubtitleDownloadPipeline
             try
             {
                 await _telemetry.RecordDownloadQuotaAsync(
-                    candidate.Provider, SubtitleTelemetryService.PublishedQuotaLimit(candidate.Provider));
+                    candidate.Provider, SubtitleTelemetryService.PublishedQuotaLimit(candidate.Provider),
+                    payload.QuotaRemaining);
             }
             catch (Exception telemetryError)
             {
@@ -198,6 +211,18 @@ public sealed class SubtitleDownloadPipeline
         }
         catch (SubtitleProviderException ex)
         {
+            // Content-invalid failures (unparseable archive/body — raised by
+            // the extractor or the adapter's payload checks, never carrying an
+            // HTTP status) are permanent properties of this candidate: the
+            // same external id would serve the same garbage forever.
+            // Transport/auth/limit failures are transient and never
+            // blacklist. Locked contract: key = (provider, external_id),
+            // 90-day window.
+            if (ex.Reason == SubtitleProviderFailureReason.InvalidResponse && ex.HttpStatus is null)
+            {
+                await BlacklistCandidateAsync(candidate, ex.Message, cancellationToken);
+            }
+
             return await RecordAsync(
                 candidate, mediaType, mediaId, source, searchSessionId,
                 SubtitleDownloadResult.Failed, filePath: null,
@@ -216,6 +241,19 @@ public sealed class SubtitleDownloadPipeline
                 candidate, mediaType, mediaId, source, searchSessionId,
                 SubtitleDownloadResult.Failed, filePath: null,
                 error: $"encoding conversion failed: {ex.Message}");
+        }
+
+        // A zero-byte entry or whitespace-only text is a content defect of
+        // this candidate, not a transient failure — writing an empty .srt
+        // would silently count as coverage. Failed + blacklist, same family
+        // as the unparseable-archive case above.
+        if (utf8.Length == 0 || string.IsNullOrWhiteSpace(Encoding.UTF8.GetString(utf8)))
+        {
+            await BlacklistCandidateAsync(candidate, "the downloaded subtitle is empty.", cancellationToken);
+            return await RecordAsync(
+                candidate, mediaType, mediaId, source, searchSessionId,
+                SubtitleDownloadResult.Failed, filePath: null,
+                error: "the downloaded subtitle is empty.");
         }
 
         // ③ optional SRT conversion (default on) with the existing
@@ -238,6 +276,12 @@ public sealed class SubtitleDownloadPipeline
             }
             catch (Exception ex)
             {
+                // The payload arrived intact but no parser can read it —
+                // same permanently-unusable-content family as the extractor
+                // failures; retrying this external id re-fetches the same
+                // bytes.
+                await BlacklistCandidateAsync(
+                    candidate, $"could not parse '{entry.FileName}' as a subtitle: {ex.Message}", cancellationToken);
                 return await RecordAsync(
                     candidate, mediaType, mediaId, source, searchSessionId,
                     SubtitleDownloadResult.Failed, filePath: null,
@@ -356,6 +400,54 @@ public sealed class SubtitleDownloadPipeline
         _dbContext.SubtitleDownloads.Add(row);
         await _dbContext.SaveChangesAsync();
         return new SubtitleDownloadOutcome(row.Id, filePath, result, error);
+    }
+
+    /// <summary>
+    /// Writes or refreshes the blacklist observation for a content-invalid
+    /// failure. Locked contract with the search read side (implemented in a
+    /// later batch): rows are keyed on (provider, external_id) exact match,
+    /// filtered inside a 90-day window — so every auto row carries
+    /// <c>expires_at = now + 90d</c> and a repeat failure refreshes the same
+    /// row instead of piling up duplicates. Best effort by design: a failed
+    /// blacklist write logs and moves on, never masking the history row of
+    /// the attempt itself.
+    /// </summary>
+    private async Task BlacklistCandidateAsync(
+        SubtitleCandidate candidate, string reason, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var expiresAt = DateTimeOffset.UtcNow.AddDays(BlacklistWindowDays);
+            var summary = reason.Length <= BlacklistReasonMaxLength ? reason : reason[..BlacklistReasonMaxLength];
+
+            var existing = await _dbContext.SubtitleSearchBlacklists
+                .FirstOrDefaultAsync(blacklist =>
+                    blacklist.Provider == candidate.Provider && blacklist.ExternalId == candidate.ExternalId,
+                    cancellationToken);
+            if (existing is null)
+            {
+                _dbContext.SubtitleSearchBlacklists.Add(new Lingarr.Core.Entities.SubtitleSearchBlacklist
+                {
+                    Provider = candidate.Provider,
+                    ExternalId = candidate.ExternalId,
+                    Reason = summary,
+                    ExpiresAt = expiresAt
+                });
+            }
+            else
+            {
+                existing.Reason = summary;
+                existing.ExpiresAt = expiresAt;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not blacklist {Provider}/{ExternalId} after a content-invalid failure.",
+                candidate.Provider, candidate.ExternalId);
+        }
     }
 
     /// <summary>Media facts the pipeline needs; built client-side so the EF

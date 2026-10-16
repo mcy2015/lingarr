@@ -16,7 +16,8 @@ public sealed class SubdlPluginManifest : ISubtitleSourceManifest
 
     public string? Description =>
         "Free movie-focused subtitle source. No key required; an optional API key (docs.subdl.com) raises the rate limits. "
-        + "Stored encrypted.";
+        + "Stored encrypted. Optional proxy: subtitle_subdl_proxy_url overrides the global subtitle_proxy_url for this source; "
+        + "proxy changes apply after a restart.";
 
     public IReadOnlyList<PluginSettingField> Settings { get; } =
     [

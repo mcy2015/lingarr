@@ -10,6 +10,15 @@ public enum SubtitleProviderFailureReason
     /// <summary>HTTP 429 (with optional Retry-After) — cooldown 1h or the Retry-After span, whichever is longer.</summary>
     RateLimited,
 
+    /// <summary>
+    /// The source's published daily quota is exhausted for today (design ⑧:
+    /// OpenSubtitles answers 429/406 with <c>X-RateLimit-Remaining-Requests:
+    /// 0</c>). Carries no suggested cooldown span — the cooldown store
+    /// resolves "until" as the next UTC midnight, when the daily counter
+    /// resets (same-day cooldown, ⑧).
+    /// </summary>
+    DailyLimit,
+
     /// <summary>HTTP 401/403 — credentials rejected; cooldown until the credentials change (⑧).</summary>
     Unauthorized,
 
@@ -123,6 +132,29 @@ public sealed class SubtitleProviderException : Exception
                 httpStatus: (int)code)
         };
     }
+
+    /// <summary>
+    /// Daily quota exhausted (⑧ same-day cooldown). Detected by the shared
+    /// subtitle HTTP plumbing from the source's rate-limit response (429/406
+    /// with <c>X-RateLimit-Remaining-Requests: 0</c> — the OpenSubtitles v1
+    /// shape). Deliberately carries no
+    /// <see cref="Cooldown"/> span: the cooldown store maps this reason onto
+    /// the next UTC midnight, not a fixed offset, so the source recovers the
+    /// moment its daily counter resets. <paramref name="resetEpochSeconds"/>
+    /// is the optional <c>X-RateLimit-Reset</c> epoch hint carried in the
+    /// message for diagnostics only.
+    /// </summary>
+    public static SubtitleProviderException ForDailyLimit(
+        string provider,
+        long? resetEpochSeconds = null,
+        int? httpStatus = null) => new(
+        provider,
+        SubtitleProviderFailureReason.DailyLimit,
+        resetEpochSeconds is { } reset
+            ? $"{provider} reports the daily quota exhausted (resets at {DateTimeOffset.FromUnixTimeSeconds(reset):u})."
+            : $"{provider} reports the daily quota exhausted (resets at the next UTC midnight).",
+        cooldown: null,
+        httpStatus: httpStatus);
 
     /// <summary>HttpClient timeout (TaskCanceledException without caller cancellation) — cooldown 10min per ⑧.</summary>
     public static SubtitleProviderException ForTimeout(string provider, Exception? inner = null) => new(

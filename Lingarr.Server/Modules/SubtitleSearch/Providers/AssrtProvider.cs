@@ -112,7 +112,10 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
             Http, httpRequest, ProviderKey, cancellationToken);
         var fileName = headerFileName ?? context.FileName ?? "assrt.ass";
 
-        return new SubtitleDownload(ProviderKey, fileName, FormatFromFileName(fileName), content);
+        // The quota snapshot captured by the detail round that produced this
+        // candidate rides along — the download pipeline feeds it into the
+        // provider_quota_usage telemetry (the quotaRemaining channel).
+        return new SubtitleDownload(ProviderKey, fileName, FormatFromFileName(fileName), content, context.QuotaRemaining);
     }
 
     /// <inheritdoc />
@@ -183,6 +186,12 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
         var release = !string.IsNullOrWhiteSpace(nativeName) ? nativeName : title;
         var language = request.Languages.FirstOrDefault()?.ToLowerInvariant() ?? "zh";
 
+        // Official remaining-quota field of the detail response (assrt v1
+        // reports the account's remaining downloads as sub.quota_remain;
+        // tolerated at the root too because deployments differ — absent
+        // simply keeps null, the telemetry then preserves its last value).
+        var quotaRemaining = ReadQuotaRemaining(document, sub);
+
         if (entry.TryGetProperty("filelist", out var filelist) && filelist.ValueKind == JsonValueKind.Array)
         {
             foreach (var file in filelist.EnumerateArray())
@@ -195,7 +204,7 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
                 }
 
                 var externalId = CandidateCache.Store(
-                    ProviderKey, new CandidateContext(fileUrl!, fileName, subId));
+                    ProviderKey, new CandidateContext(fileUrl!, fileName, subId, quotaRemaining));
                 candidates.Add(new SubtitleCandidate(
                     ProviderKey,
                     externalId,
@@ -217,7 +226,7 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
             if (!string.IsNullOrEmpty(fileUrl))
             {
                 var externalId = CandidateCache.Store(
-                    ProviderKey, new CandidateContext(fileUrl!, null, subId));
+                    ProviderKey, new CandidateContext(fileUrl!, null, subId, quotaRemaining));
                 candidates.Add(new SubtitleCandidate(
                     ProviderKey,
                     externalId,
@@ -234,6 +243,20 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
         }
 
         return candidates;
+    }
+
+    /// <summary>
+    /// The remaining-quota value of one detail response, null when the
+    /// response carries none. Assumption (documented in the batch report):
+    /// assrt's v1 API exposes the account's remaining download quota as
+    /// <c>sub.quota_remain</c> on the detail round; the root-object spelling
+    /// is read as a tolerated fallback.
+    /// </summary>
+    private static int? ReadQuotaRemaining(JsonDocument document, JsonElement sub)
+    {
+        var remain = SubtitleHttp.GetInt64(sub, "quota_remain")
+                     ?? SubtitleHttp.GetInt64(document.RootElement, "quota_remain");
+        return remain is >= 0 and <= int.MaxValue ? (int)remain : null;
     }
 
     /// <summary>assrt reports failures as status != 0 inside HTTP 200 bodies — turn those into exceptions.</summary>
@@ -260,5 +283,5 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
             : SubtitleMatchScorer.SplitTrailingSeasonEpisode(request.Query.Trim()).Keyword;
 
     /// <summary>Provider-side state a download needs for one assrt file entry.</summary>
-    private sealed record CandidateContext(string FileUrl, string? FileName, long SubId);
+    private sealed record CandidateContext(string FileUrl, string? FileName, long SubId, int? QuotaRemaining = null);
 }

@@ -126,6 +126,10 @@ public sealed record SubtitleBacklogResponse(
 /// <see cref="CooldownUntil"/> means the source currently sits out
 /// automated rounds (reason name in <see cref="CooldownReason"/>); expired
 /// entries are dropped by the store, so null = healthy.
+/// <see cref="Enabled"/> is the per-source switch
+/// (<c>subtitle_{source}_enabled</c>, design ⑧ polish): false means the
+/// aggregate and automated rounds skip the source — a manual per-source
+/// search still queries it by name.
 /// </summary>
 public sealed record SubtitleProviderResponse(
     string Provider,
@@ -135,7 +139,8 @@ public sealed record SubtitleProviderResponse(
     bool CredentialsConfigured,
     IReadOnlyList<PluginSettingField> Settings,
     DateTimeOffset? CooldownUntil,
-    string? CooldownReason);
+    string? CooldownReason,
+    bool Enabled);
 
 /// <summary>
 /// One row of the download history (screen 13): a subtitle_downloads row
@@ -705,9 +710,11 @@ public class SubtitleSearchController : ControllerBase
     /// SettingUpdatesHub hot reload). The cooldown pair comes from the
     /// orchestrator's active map (design ⑧ — expired entries already
     /// dropped), so a source sitting out rounds shows its until/reason
-    /// without the card polling anything else. A secret read that fails
-    /// degrades that one source to credentialsConfigured=false; the list
-    /// itself never 500s over it.
+    /// without the card polling anything else. The enabled flag reads the
+    /// per-source switch in one batched settings read (absent key =
+    /// enabled — default-true rollout without a migration). A secret read
+    /// that fails degrades that one source to credentialsConfigured=false;
+    /// the list itself never 500s over it.
     /// </summary>
     [HttpGet("providers")]
     public async Task<IActionResult> GetProviders()
@@ -717,9 +724,11 @@ public class SubtitleSearchController : ControllerBase
         // A failing read degrades to "no cooldowns" rather than sinking the
         // settings page.
         var cooldowns = await GetActiveCooldownsSafeAsync();
+        var enabledMap = await GetEnabledMapSafeAsync();
         var providers = new List<SubtitleProviderResponse>(_providerRegistry.All.Count);
         foreach (var entry in _providerRegistry.All)
         {
+            var key = SubtitleSourceSettingKeys.EnabledKey(entry.Provider.Provider);
             cooldowns.TryGetValue(entry.Provider.Provider, out var cooldown);
             providers.Add(new SubtitleProviderResponse(
                 entry.Provider.Provider,
@@ -729,10 +738,34 @@ public class SubtitleSearchController : ControllerBase
                 await IsCredentialConfigured(entry),
                 entry.Manifest?.Settings ?? [],
                 cooldown?.Until,
-                cooldown?.Reason));
+                cooldown?.Reason,
+                !enabledMap.TryGetValue(key, out var stored) || SubtitleSourceSettingKeys.IsEnabled(stored)));
         }
 
         return Ok(providers);
+    }
+
+    /// <summary>
+    /// Batched read of every source's enable switch. Any failure (or an
+    /// empty result) degrades to "everything enabled" — the settings page
+    /// must never sink over the switch display.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>> GetEnabledMapSafeAsync()
+    {
+        try
+        {
+            // Null-guarded: a stubbed/unwired settings access may answer an
+            // empty task — that reads as "every key absent" = all enabled.
+            return await _settingsAccess.GetSettingsAsync(
+                       _providerRegistry.All.Select(entry => SubtitleSourceSettingKeys.EnabledKey(entry.Provider.Provider)))
+                   ?? new Dictionary<string, string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex, "Could not read the subtitle-source enable switches; rendering every source as enabled.");
+            return new Dictionary<string, string>();
+        }
     }
 
     private async Task<IReadOnlyDictionary<string, SubtitleSourceCooldown>> GetActiveCooldownsSafeAsync()

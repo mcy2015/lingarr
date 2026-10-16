@@ -24,6 +24,14 @@ namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 /// </summary>
 public class OpenSubtitlesProviderTests
 {
+    // The request throttle (design ⑧) is process-wide static state — reset
+    // it before every test so each case starts with an immediate first
+    // request and the documented 1 req/s OpenSubtitles limit.
+    public OpenSubtitlesProviderTests()
+    {
+        SubtitleHttp.ClearRequestThrottling();
+    }
+
     private static readonly string SearchFixture =
         SubtitleFixtures.Read("opensubtitles", "search.json");
 
@@ -159,6 +167,59 @@ public class OpenSubtitlesProviderTests
             () => provider.SearchAsync(MovieRequest(), CancellationToken.None));
 
         Assert.Equal(TimeSpan.FromHours(1), exception.Cooldown);
+    }
+
+    [Fact]
+    public async Task RateLimited429WithZeroRemaining_MapsToDailyLimit()
+    {
+        // Official v1 rate-limit shape: the remaining-requests header reads
+        // zero when the daily quota is exhausted — that outranks the generic
+        // 429 mapping and cools down until UTC midnight (store-side test).
+        var handler = new StubHttpMessageHandler().Enqueue(request =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+            response.Headers.Add("X-RateLimit-Remaining-Requests", "0");
+            response.Headers.Add("X-RateLimit-Reset",
+                DateTimeOffset.UtcNow.AddHours(6).ToUnixTimeSeconds().ToString());
+            return response;
+        });
+
+        var provider = Create(handler);
+        var exception = await Assert.ThrowsAsync<SubtitleProviderException>(
+            () => provider.SearchAsync(MovieRequest(), CancellationToken.None));
+
+        Assert.Equal(SubtitleProviderFailureReason.DailyLimit, exception.Reason);
+        // The cooldown span is deliberately null — the store resolves the
+        // next UTC midnight, not a fixed offset.
+        Assert.Null(exception.Cooldown);
+        Assert.Equal(429, exception.HttpStatus);
+        Assert.Contains("daily quota", exception.Message);
+    }
+
+    [Fact]
+    public async Task Search_TwoConsecutiveRequestsWaitForTheOnePerSecondBudget()
+    {
+        // The per-source token bucket throttles by WAITING: the second
+        // request of a burst must sit out the rest of the 1s window
+        // (tolerance: the wait is at least ~90% of the interval, bounded
+        // well below two intervals).
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SearchFixture)
+            .EnqueueJson(SearchFixture);
+        var provider = Create(handler);
+
+        var firstStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        firstStopwatch.Stop();
+        var secondStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        secondStopwatch.Stop();
+
+        Assert.True(firstStopwatch.ElapsedMilliseconds < 900,
+            $"first request must leave immediately (took {firstStopwatch.ElapsedMilliseconds}ms)");
+        var minimum = (int)(SubtitleHttp.OpenSubtitlesRequestInterval.TotalMilliseconds * 0.9);
+        var maximum = (int)(SubtitleHttp.OpenSubtitlesRequestInterval.TotalMilliseconds * 2 + 300);
+        Assert.InRange((int)secondStopwatch.ElapsedMilliseconds, minimum, maximum);
     }
 
     [Fact]

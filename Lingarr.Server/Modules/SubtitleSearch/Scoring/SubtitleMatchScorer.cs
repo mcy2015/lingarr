@@ -72,6 +72,65 @@ public sealed partial class SubtitleMatchScorer
         => candidate.MatchScore >= threshold;
 
     /// <summary>
+    /// Tiebreak helper of the orchestrator's final ordering (design ⑧
+    /// polish): a bilingual candidate outranks a monolingual one when score
+    /// and hash verdict tie. Detection is deliberately simple and
+    /// documented: the <see cref="SubtitleCandidate.Language"/> field is the
+    /// authority — a value that splits on non-alphanumeric separators into
+    /// two or more short alpha tokens is a multi-language code
+    /// ("zh+en", "zh-en"…). As a fallback for sources that hide the fact
+    /// in the release name only, the raw (un-normalized) release info is
+    /// scanned for the common Chinese/English bilingual markers
+    /// ("chs&amp;eng", "cht&amp;eng" — kept raw because the scorer's
+    /// normalization folds the separator into a space and would erase
+    /// exactly the signal).
+    /// </summary>
+    public static bool IsBilingual(SubtitleCandidate candidate)
+    {
+        var language = candidate.Language?.Trim() ?? string.Empty;
+        if (language.Length > 0)
+        {
+            // Same token grammar as the release normalization, on the
+            // lowercased code: "zh+en" → ["zh","en"] (two short alpha
+            // tokens = multi-language), "zh" → one token, "zho-chs" → two.
+            var tokens = NormalizeKeepDigitsRegex()
+                .Split(language.ToLowerInvariant())
+                .Where(token => token.Length > 0)
+                .ToList();
+            if (tokens.Count >= 2
+                && tokens.All(token => token.Length is >= 2 and <= 5 && token.All(char.IsLetter)))
+            {
+                return true;
+            }
+        }
+
+        var release = candidate.ReleaseInfo;
+        if (string.IsNullOrEmpty(release))
+        {
+            return false;
+        }
+
+        return release.Contains("chs&eng", StringComparison.OrdinalIgnoreCase)
+               || release.Contains("cht&eng", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Tiebreak helper of the orchestrator's final ordering: format
+    /// preference rank, lower wins — srt before ass before vtt
+    /// (case-insensitive), everything else (sub/zip/unknown…) ranks last.
+    /// Rationale: srt is the pipeline's native output format (the
+    /// convert-to-srt default), ass is the Chinese-source mainstay that
+    /// converts losslessly, vtt is the rarest of the three.
+    /// </summary>
+    public static int FormatPreference(string? format) => (format ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "srt" => 0,
+        "ass" or "ssa" => 1,
+        "vtt" => 2,
+        _ => 3
+    };
+
+    /// <summary>
     /// Splits a search keyword that ends in an SxxEyy (or NxMM) tag into the
     /// keyword without the tag and the tag's numbers (R3b: the front end
     /// pre-fills "Show Name S01E01" as the manual-search query). Reuses the

@@ -830,6 +830,10 @@
             "notConfigured": "未配置",
             "expand": "配置凭据",
             "collapse": "收起",
+            "enabled": "已启用",
+            "disabled": "已停用",
+            "enableHint": "停用的源不参与聚合与自动搜索轮;手动指名单源搜索仍会查询。",
+            "toggleFailed": "源开关保存失败。",
             "cooldownUntil": "冷却中 · {time}",
             "cooldownUntilCredentials": "冷却中 · 凭证变更前",
             "cooldownReason": {
@@ -837,7 +841,8 @@
                 "Unauthorized": "凭证被拒绝(401/403)",
                 "ServerError": "源站故障(5xx)",
                 "Timeout": "源响应超时",
-                "NetworkError": "源不可达"
+                "NetworkError": "源不可达",
+                "DailyLimit": "每日配额耗尽(冷却至 UTC 午夜)"
             }
         },
         "subtitleOutput": {

@@ -12,7 +12,8 @@ public sealed class ShooterPluginManifest : ISubtitleSourceManifest
 
     public string? Description =>
         "Chinese subtitle fallback matching by exact file hash (segmented MD5). Best-effort service with no SLA; "
-        + "the source can be disabled independently when it misbehaves.";
+        + "the source can be disabled independently when it misbehaves. "
+        + "Optional proxy: subtitle_shooter_proxy_url overrides the global subtitle_proxy_url for this source; proxy changes apply after a restart.";
 
     public IReadOnlyList<PluginSettingField> Settings { get; } =
     [
