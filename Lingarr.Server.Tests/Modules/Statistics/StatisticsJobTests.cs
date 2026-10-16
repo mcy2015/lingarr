@@ -27,15 +27,16 @@ namespace Lingarr.Server.Tests.Modules.Statistics;
 /// <summary>
 /// Audit S3 statistics-chain coverage: the season scan runs once per season
 /// (audit issue #2), the aggregation loads projections instead of full
-/// entities (P1-11) and writes only changed coverage values in a single
-/// transaction, with result values equivalent to the tracked-entity era.
-/// Runs on a real SQLite schema because ExecuteUpdate needs a relational
-/// provider.
+/// entities (P1-11) and writes only changed coverage values, committed in
+/// chunked closing transactions (QA4 P2-2), with result values equivalent
+/// to the tracked-entity era. Runs on a real SQLite schema because
+/// ExecuteUpdate needs a relational provider.
 /// </summary>
 public class StatisticsJobTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly List<string> _sqlLog = [];
+    private readonly CommitCountingInterceptor _commitCounter = new();
     private readonly StatisticsDbContext _dbContext;
     private readonly Mock<IScheduleService> _scheduleService = new();
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lingarr-stats-" + Guid.NewGuid().ToString("N"));
@@ -47,7 +48,7 @@ public class StatisticsJobTests : IDisposable
         _connection.Open();
         _dbContext = new StatisticsDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
             .UseSqlite(_connection)
-            .AddInterceptors(new RecordingInterceptor(_sqlLog))
+            .AddInterceptors(new RecordingInterceptor(_sqlLog), _commitCounter)
             .Options);
         _dbContext.Database.EnsureCreated();
     }
@@ -61,6 +62,33 @@ public class StatisticsJobTests : IDisposable
     }
 
     private sealed class StatisticsDbContext(DbContextOptions options) : LingarrDbContext(options);
+
+    /// <summary>
+    /// QA4 P2-2: counts committed transactions — the observable proof that
+    /// the closing backfill statements are committed in chunks instead of
+    /// one giant transaction.
+    /// </summary>
+    private sealed class CommitCountingInterceptor : DbTransactionInterceptor
+    {
+        public int Commits;
+
+        public override void TransactionCommitted(
+            DbTransaction transaction,
+            TransactionEndEventData eventData)
+        {
+            Commits++;
+            base.TransactionCommitted(transaction, eventData);
+        }
+
+        public override Task TransactionCommittedAsync(
+            DbTransaction transaction,
+            TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            Commits++;
+            return base.TransactionCommittedAsync(transaction, eventData, cancellationToken);
+        }
+    }
 
     private sealed class RecordingInterceptor(List<string> log) : DbCommandInterceptor
     {
@@ -106,7 +134,10 @@ public class StatisticsJobTests : IDisposable
         }
     }
 
-    private StatisticsJob CreateJob(ISubtitleService? subtitleService = null, ISettingService? settingService = null) => new(
+    private StatisticsJob CreateJob(
+        ISubtitleService? subtitleService = null,
+        ISettingService? settingService = null,
+        int? finalizeChunkSize = null) => new(
         _dbContext,
         subtitleService ?? new SubtitleService(
             NullLogger<SubtitleService>.Instance,
@@ -114,7 +145,8 @@ public class StatisticsJobTests : IDisposable
             new Mock<ISettingService>().Object),
         _scheduleService.Object,
         settingService ?? new Mock<ISettingService>().Object,
-        NullLogger<StatisticsJob>.Instance);
+        NullLogger<StatisticsJob>.Instance,
+        finalizeChunkSize);
 
     /// <summary>
     /// Setting service whose target languages are exactly the given codes —
@@ -201,6 +233,51 @@ public class StatisticsJobTests : IDisposable
             show.Seasons.Add(season);
         }
 
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+        return show;
+    }
+
+    /// <summary>
+    /// Seeds a one-season show whose episodes carry the exact given file
+    /// names — the QA4 P3 matching tests need versioned/duplicated names the
+    /// standard seeding cannot express.
+    /// </summary>
+    private async Task<Show> SeedShowWithEpisodeFileNamesAsync(int showId, string seasonDir, params string[] fileNames)
+    {
+        var show = new Show
+        {
+            Id = showId,
+            SonarrId = showId,
+            Title = $"show {showId}",
+            Path = Path.Combine(_root, $"show{showId}"),
+            DateAdded = DateTimeOffset.UtcNow
+        };
+        var season = new Season
+        {
+            Id = showId * 10,
+            SeasonNumber = 1,
+            Path = Path.Combine(_root, seasonDir),
+            ShowId = show.Id,
+            Show = show
+        };
+        var episodeId = showId * 100;
+        foreach (var fileName in fileNames)
+        {
+            season.Episodes.Add(new Episode
+            {
+                Id = ++episodeId,
+                SonarrId = episodeId,
+                EpisodeNumber = 1,
+                Title = fileName,
+                Path = season.Path,
+                FileName = fileName,
+                SeasonId = season.Id,
+                Season = season
+            });
+        }
+
+        show.Seasons.Add(season);
         _dbContext.Shows.Add(show);
         await _dbContext.SaveChangesAsync();
         return show;
@@ -479,4 +556,154 @@ public class StatisticsJobTests : IDisposable
     private static bool IsNeedsUpdate(string sql) =>
         sql.StartsWith("UPDATE \"movies\"", StringComparison.OrdinalIgnoreCase)
         || sql.StartsWith("UPDATE \"episodes\"", StringComparison.OrdinalIgnoreCase);
+
+    // ── QA4 P1-2: top-level exception handling ─────────────────────
+
+    [Fact]
+    public async Task Execute_UnhandledScanException_MarksJobFailedWithoutThrowing()
+    {
+        // The classic failure shape: a mid-scan IO exception surfacing out of
+        // the subtitle collection. Before the guard this escaped Execute,
+        // lost the whole run and left the job state stuck in Processing.
+        var subtitleService = new Mock<ISubtitleService>();
+        subtitleService
+            .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
+            .ThrowsAsync(new IOException("NAS dropped the share mid-enumeration"));
+        await SeedMovieAsync(50);
+
+        await CreateJob(subtitleService.Object).Execute();
+
+        _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Processing"), Times.Once);
+        _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
+        _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Succeeded"), Times.Never);
+        Assert.False(await _dbContext.Statistics.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Execute_SeasonScanFailure_MarksJobFailedWithoutThrowing()
+    {
+        var subtitleService = new Mock<ISubtitleService>();
+        subtitleService
+            .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
+            .ThrowsAsync(new IOException("season directory vanished mid-scan"));
+        await SeedShowAsync(51, "show51/s01");
+
+        await CreateJob(subtitleService.Object).Execute();
+
+        _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
+        _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Succeeded"), Times.Never);
+    }
+
+    // ── QA4 P2-2: chunked finalize transactions ────────────────────
+
+    [Fact]
+    public async Task FinalizeWrites_AreCommittedInChunks_BehaviorStaysEquivalent()
+    {
+        for (var id = 60; id <= 64; id++)
+        {
+            await SeedMovieAsync(id);
+            WriteSubtitleFile($"movie{id}", $"movie{id}.zh.srt", 10 + id);
+        }
+
+        _commitCounter.Commits = 0; // seeding's implicit commits are not the job's
+        await CreateJob(finalizeChunkSize: 2).Execute();
+
+        // five backfill statements in chunks of two → three commits, not one
+        // giant transaction (the old behavior) and not one per statement.
+        Assert.Equal(3, _commitCounter.Commits);
+        _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Succeeded"), Times.Once);
+
+        // the chunked outcome equals the old single-transaction outcome
+        var stored = await _dbContext.Movies
+            .AsNoTracking()
+            .Where(movie => movie.Id >= 60 && movie.Id <= 64)
+            .ToDictionaryAsync(movie => movie.Id);
+        Assert.Equal(5, stored.Count);
+        foreach (var movie in stored.Values)
+        {
+            Assert.NotNull(movie.SubtitleCoverage);
+            Assert.Equal(1, movie.SubtitleCoverage!["zh"].Count);
+        }
+
+        var stats = await _dbContext.Statistics.AsNoTracking().SingleAsync();
+        Assert.Equal(5, stats.TotalMovies);
+        Assert.Equal(5, stats.TotalSubtitles);
+    }
+
+    [Fact]
+    public async Task FinalizeWrites_WithoutBackfill_StillCommitTheStatisticsRow()
+    {
+        await SeedMovieAsync(65);
+        await CreateJob().Execute();
+        // force the zero-backfill branch: the media side is settled, and the
+        // statistics row is the only thing left to write
+        await _dbContext.Statistics.ExecuteDeleteAsync();
+        _dbContext.ChangeTracker.Clear();
+        _commitCounter.Commits = 0;
+
+        await CreateJob().Execute();
+
+        // zero backfill statements → no chunk transactions at all, but the
+        // recreated statistics row is still persisted by the closing
+        // SaveChanges of the zero-chunk branch
+        var stats = await _dbContext.Statistics.AsNoTracking().SingleAsync();
+        Assert.Equal(1, stats.TotalMovies);
+        Assert.Equal(0, stats.TotalEpisodes);
+    }
+
+    // ── QA4 P3: episode file-name matching ─────────────────────────
+
+    [Fact]
+    public async Task MergeCoverage_VersionedEpisodeFile_AttributesToTheMostSpecificEpisode()
+    {
+        // a versioned release shares its base name with the plain episode;
+        // the old FirstOrDefault always credited the plain one
+        var show = await SeedShowWithEpisodeFileNamesAsync(
+            80, "show80/s01", "show80.s01e01.mkv", "show80.s01e01.v2.mkv");
+        WriteSubtitleFile("show80/s01", "show80.s01e01.v2.zh.srt", 25);
+
+        await CreateJob(settingService: TargetsService("zh")).Execute();
+
+        var episodes = await _dbContext.Episodes.AsNoTracking()
+            .Where(episode => episode.Season.ShowId == show.Id)
+            .OrderBy(episode => episode.Id)
+            .ToListAsync();
+        Assert.Equal(2, episodes.Count);
+        // episodes[0] is the plain release (added first, lower id), episodes[1]
+        // the versioned one: the subtitle belongs to the versioned file, so
+        // that episode is covered and needs nothing while the plain one stays
+        // uncovered — the old FirstOrDefault credited episodes[0] instead.
+        Assert.Equal("show80.s01e01.mkv", episodes[0].FileName);
+        Assert.True(episodes[0].NeedsTranslation);
+        Assert.Equal("show80.s01e01.v2.mkv", episodes[1].FileName);
+        Assert.False(episodes[1].NeedsTranslation);
+
+        // coverage itself counts the file once, in zh
+        var storedShow = await _dbContext.Shows.AsNoTracking().SingleAsync(s => s.Id == show.Id);
+        Assert.Equal(1, storedShow.SubtitleCoverage!["zh"].Count);
+        Assert.Equal(25, storedShow.SubtitleCoverage!["zh"].Bytes);
+    }
+
+    [Fact]
+    public async Task MergeCoverage_AmbiguousDuplicateFileNames_StayAttributedToTheFirstEpisode()
+    {
+        // two episode entities sharing one file name (multi-version across
+        // directories): names cannot separate them, the first stays the
+        // attributed one — pinned as the deliberate behavior.
+        var show = await SeedShowWithEpisodeFileNamesAsync(
+            81, "show81/s01", "show81.s01e01.mkv", "show81.s01e01.mkv");
+        WriteSubtitleFile("show81/s01", "show81.s01e01.zh.srt", 20);
+
+        await CreateJob(settingService: TargetsService("zh")).Execute();
+
+        var episodes = await _dbContext.Episodes.AsNoTracking()
+            .Where(episode => episode.Season.ShowId == show.Id)
+            .OrderBy(episode => episode.Id)
+            .ToListAsync();
+        Assert.False(episodes[0].NeedsTranslation); // first episode is credited
+        Assert.True(episodes[1].NeedsTranslation);  // the duplicate is not
+
+        var storedShow = await _dbContext.Shows.AsNoTracking().SingleAsync(s => s.Id == show.Id);
+        Assert.Equal(1, storedShow.SubtitleCoverage!["zh"].Count);
+    }
 }

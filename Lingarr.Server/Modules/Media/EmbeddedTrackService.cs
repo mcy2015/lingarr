@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -55,6 +56,15 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
     /// <summary>Id chunk size for batched deletes — headroom under SQLite's parameter limit.</summary>
     private const int DeleteChunkSize = 500;
+
+    /// <summary>
+    /// QA4 P1-1: consecutive probe failures after which a file is backed
+    /// off, and the number of subsequent scan rounds the skip lasts. A
+    /// broken container (ffprobe timeout, corrupt file) otherwise burned
+    /// batch budget on every run with nothing to show for it.
+    /// </summary>
+    public const int FailureBackoffThreshold = 3;
+    public const int FailureBackoffRounds = 3;
 
     private const int ProbeTimeoutMs = 10_000;
 
@@ -114,6 +124,17 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         ["chi"] = "zh",
         ["zho"] = "zh"
     };
+
+    /// <summary>
+    /// QA4 P1-1: in-process probe-failure backoff keyed by (media type, id),
+    /// carrying (consecutive failures, scan rounds left to skip). Static
+    /// because each Hangfire run resolves the service from a fresh scope —
+    /// instance state would reset every round and the backoff would never
+    /// engage. A restart resets it, which a single-container deployment can
+    /// live with: the worst case is that backed-off files are probed (and
+    /// fail) once more.
+    /// </summary>
+    private static readonly ConcurrentDictionary<(int Type, int Id), (int FailCount, int SkipRounds)> FailureBackoffs = new();
 
     private readonly LingarrDbContext _dbContext;
     private readonly ILogger<EmbeddedTrackService> _logger;
@@ -726,9 +747,12 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             cancellationToken.ThrowIfCancellationRequested();
 
             // Audit P0-6: the run stops after workLimit files that needed
-            // work (probe / missing / failed). Unchanged files cost no
-            // ffprobe and never consume budget, so the next run picks up
-            // where this one stopped without re-probing anything.
+            // work (probe / first missing observation / failed retry).
+            // Unchanged files cost no ffprobe and never consume budget, and
+            // QA4 P1-1 extended the same guarantee to repeat observations:
+            // a marker that already says "missing" and a file inside its
+            // failure-backoff rounds are skipped for free, so permanently
+            // broken queue-head files cannot starve the media behind them.
             if (workLimit is int limit && work >= limit)
             {
                 _logger.LogInformation(
@@ -806,6 +830,20 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
         if (!File.Exists(filePath))
         {
+            // QA4 P1-1 (scan budget starvation): a file whose marker already
+            // says "missing" is still missing — re-recording the identical
+            // marker would consume batch budget on every round, and with
+            // targets ordered by id a queue head of permanently missing
+            // files starves every new file behind them (including the
+            // audio-language backfill). The skip is deliberately not gated
+            // on force: a nonexistent file has no content force could
+            // re-probe, and writing the same marker again changes nothing.
+            if (Markers.TryGetValue(((int)type, id), out var storedMarker)
+                && storedMarker == MediaSubtitleTrack.MissingFileHash)
+            {
+                return ScanOutcome.Skipped;
+            }
+
             _logger.LogWarning(
                 "Embedded track scan: media file missing for {MediaType} {MediaId} at {Path}",
                 type, id, filePath);
@@ -817,6 +855,15 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         if (!force
             && Markers.TryGetValue(((int)type, id), out var storedKey)
             && storedKey == key)
+        {
+            return ScanOutcome.Skipped;
+        }
+
+        // QA4 P1-1: files whose probe failed repeatedly (timeout, corrupt
+        // container) sit out a few rounds instead of burning budget every
+        // run. The skip is free, so it cannot starve anything. A manual
+        // force run bypasses the backoff — the user asked for a retry.
+        if (!force && TryConsumeBackoffRound(type, id))
         {
             return ScanOutcome.Skipped;
         }
@@ -835,6 +882,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             _logger.LogWarning(ex,
                 "Embedded track scan: ffprobe failed for {MediaType} {MediaId} at {Path} — continuing with the next file",
                 type, id, filePath);
+            RecordProbeFailure(type, id);
             return ScanOutcome.Failed;
         }
 
@@ -850,9 +898,11 @@ public class EmbeddedTrackService : IEmbeddedTrackService
             _logger.LogWarning(ex,
                 "Embedded track scan: unparsable ffprobe output for {MediaType} {MediaId} at {Path} — continuing with the next file",
                 type, id, filePath);
+            RecordProbeFailure(type, id);
             return ScanOutcome.Failed;
         }
 
+        RecordProbeSuccess(type, id);
         QueueReplace(type, id, filePath, tracks, key);
         QueueAudioLanguageUpdate(target, audioLanguages);
         if (tracks.Count > 0)
@@ -864,6 +914,58 @@ public class EmbeddedTrackService : IEmbeddedTrackService
 
         return ScanOutcome.Probed;
     }
+
+    // ── probe-failure backoff (QA4 P1-1) ──────────────────────────
+
+    /// <summary>Clears the in-process failure backoff — test isolation hook.</summary>
+    public static void ResetScanFailureBackoff() => FailureBackoffs.Clear();
+
+    /// <summary>
+    /// Consumes one backoff round for the media item. Returns true when the
+    /// item is still backed off and this round must skip it without probing.
+    /// </summary>
+    private static bool TryConsumeBackoffRound(MediaType type, int id)
+    {
+        var key = ((int)type, id);
+        while (FailureBackoffs.TryGetValue(key, out var state))
+        {
+            if (state.SkipRounds <= 0)
+            {
+                return false;
+            }
+
+            // TryUpdate instead of an indexer write: the scan pipeline is
+            // single-threaded in practice, this is just defensive against a
+            // concurrent manual scan of the same media item.
+            if (FailureBackoffs.TryUpdate(key, (state.FailCount, state.SkipRounds - 1), state))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Records one probe failure. Reaching
+    /// <see cref="FailureBackoffThreshold"/> consecutive failures arms
+    /// <see cref="FailureBackoffRounds"/> skip rounds; a failure after a
+    /// backed-off retry failed re-arms them (the count is only cleared by a
+    /// success or a restart).
+    /// </summary>
+    private static void RecordProbeFailure(MediaType type, int id)
+    {
+        FailureBackoffs.AddOrUpdate(
+            ((int)type, id),
+            _ => (1, 0),
+            (_, current) => current.FailCount + 1 >= FailureBackoffThreshold
+                ? (current.FailCount + 1, FailureBackoffRounds)
+                : (current.FailCount + 1, current.SkipRounds));
+    }
+
+    /// <summary>A successful probe resets the failure bookkeeping entirely.</summary>
+    private static void RecordProbeSuccess(MediaType type, int id) =>
+        FailureBackoffs.TryRemove(((int)type, id), out _);
 
     /// <summary>
     /// Container file path from the entity's directory + file name. Movie and

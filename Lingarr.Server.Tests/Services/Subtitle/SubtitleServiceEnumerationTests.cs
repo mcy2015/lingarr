@@ -136,4 +136,51 @@ public class SubtitleServiceEnumerationTests : IDisposable
 
         Assert.Empty(subtitles);
     }
+
+    // ── QA4 P1-2: unreadable subdirectories ────────────────────────
+
+    [Fact]
+    public async Task UnreadableSubdirectory_IsSkipped_RemainingFilesStillCollected()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // A permission-denied directory cannot be created through the BCL
+            // on Windows; the skip path is exercised on Linux/macOS (CI),
+            // which is where the NAS permission layouts occur anyway.
+            return;
+        }
+
+        var readable = WriteFile("movie.zh.srt");
+        var nested = WriteFile(Path.Combine("sub", "show.s01e01.en.ass"));
+        var locked = Path.Combine(_root, "private");
+        Directory.CreateDirectory(locked);
+        File.WriteAllBytes(Path.Combine(locked, "hidden.zh.srt"), new byte[8]);
+        // Drop every permission bit: listing the directory now throws
+        // UnauthorizedAccessException for the (non-root) test user — the old
+        // AllDirectories enumeration aborted the whole scan on this.
+        File.SetUnixFileMode(locked, UnixFileMode.None);
+        try
+        {
+            _ = Directory.EnumerateFileSystemEntries(locked).First();
+            // chmod 000 cannot stop root (local container gates run as root);
+            // the permission-denied path needs a non-root runner to exercise.
+            Assert.Skip("running as root: permission bits are not enforced");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // the intended pre-state for this test
+        }
+
+        var subtitles = await CreateService().GetAllSubtitles(_root);
+
+        // restore permissions so the temp cleanup can delete the tree
+        File.SetUnixFileMode(locked,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+        var paths = subtitles.Select(s => s.Path).ToList();
+        Assert.Contains(readable, paths);
+        Assert.Contains(nested, paths);
+        Assert.DoesNotContain(Path.Combine(locked, "hidden.zh.srt"), paths);
+        Assert.Equal(2, subtitles.Count);
+    }
 }

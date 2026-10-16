@@ -43,6 +43,10 @@ public class EmbeddedTrackScanPipelineTests : IDisposable
             .UseSqlite(_connection)
             .Options);
         _dbContext.Database.EnsureCreated();
+        // QA4 P1-1: the probe-failure backoff is process-static (it must
+        // survive the fresh scope of every scheduled round); each test starts
+        // from a clean table so runs cannot leak into each other.
+        EmbeddedTrackService.ResetScanFailureBackoff();
     }
 
     public void Dispose()
@@ -110,6 +114,30 @@ public class EmbeddedTrackScanPipelineTests : IDisposable
     private async Task<int> CountMarkerRowsAsync() =>
         await _dbContext.MediaSubtitleTracks
             .CountAsync(track => track.StreamIndex == MediaSubtitleTrack.ScanMarkerStreamIndex);
+
+    /// <summary>
+    /// Seeds one movie with a chosen id — the QA4 P1-1 tests use ids no other
+    /// scan test class seeds, because the failure backoff table is static for
+    /// the whole test process and parallel classes probe their own ids.
+    /// </summary>
+    private async Task SeedMovieAsync(int id, string fileName, bool writeBytes = true)
+    {
+        if (writeBytes)
+        {
+            File.WriteAllBytes(Path.Combine(_root, fileName), new byte[16]);
+        }
+
+        _dbContext.Movies.Add(new Movie
+        {
+            Id = id,
+            RadarrId = id,
+            Title = $"movie {id}",
+            Path = _root,
+            FileName = fileName,
+            DateAdded = DateTimeOffset.UtcNow
+        });
+        await _dbContext.SaveChangesAsync();
+    }
 
     // ── batch limit + resume ────────────────────────────────────────
 
@@ -231,5 +259,121 @@ public class EmbeddedTrackScanPipelineTests : IDisposable
         var marker = await _dbContext.MediaSubtitleTracks.SingleAsync();
         Assert.Equal(MediaSubtitleTrack.ScanMarkerStreamIndex, marker.StreamIndex);
         Assert.Equal(MediaSubtitleTrack.MissingFileHash, marker.MediaHash);
+    }
+
+    // ── QA4 P1-1: scan budget starvation ───────────────────────────
+
+    [Fact]
+    public async Task KnownMissingFile_SecondRoundCostsNoBudget_NewMediaIsStillProbed()
+    {
+        await SeedMovieAsync(71, "gone71.mkv", writeBytes: false); // never on disk
+        await SeedMovieAsync(72, "movie72.mkv");
+        SetBatchLimit("1");
+
+        var first = await CreateService().ScanAll();
+
+        // round 1: the first missing observation writes the marker and
+        // consumes the entire budget — movie 72 is deferred behind it.
+        Assert.Equal(1, first.Missing);
+        Assert.Equal(0, first.Probed);
+        Assert.Empty(_probedPaths);
+
+        var second = await CreateService().ScanAll();
+
+        // round 2: the marker already says "missing", so the file is free —
+        // the freed budget reaches the new media instead of being burned on
+        // the permanently gone one every round (the starvation scenario).
+        Assert.Equal(0, second.Missing);
+        Assert.Equal(1, second.Skipped);
+        Assert.Equal(1, second.Probed);
+        Assert.Equal([Path.Combine(_root, "movie72.mkv")], _probedPaths);
+
+        // and the missing marker survived untouched
+        var marker = await _dbContext.MediaSubtitleTracks.SingleAsync(track => track.MediaId == 71);
+        Assert.Equal(MediaSubtitleTrack.MissingFileHash, marker.MediaHash);
+    }
+
+    [Fact]
+    public async Task FailedProbes_BackOffAfterThreeConsecutiveRounds_AndRetryAfterwards()
+    {
+        await SeedMovieAsync(73, "broken73.mkv");
+        var attempts = 0;
+
+        EmbeddedTrackService CreateFailingService() => new(
+            _dbContext,
+            NullLogger<EmbeddedTrackService>.Instance,
+            settingService: _settings.Object,
+            ffprobeRunner: (_, _) =>
+            {
+                attempts++;
+                throw new TimeoutException("ffprobe exceeded the timeout");
+            });
+
+        // three consecutive failures arm the backoff — each round still probes
+        for (var round = 1; round <= EmbeddedTrackService.FailureBackoffThreshold; round++)
+        {
+            var summary = await CreateFailingService().ScanAll();
+            Assert.Equal(1, summary.Failed);
+        }
+
+        Assert.Equal(EmbeddedTrackService.FailureBackoffThreshold, attempts);
+
+        // the next rounds sit the file out — no probe attempt at all
+        for (var round = 1; round <= EmbeddedTrackService.FailureBackoffRounds; round++)
+        {
+            var summary = await CreateFailingService().ScanAll();
+            Assert.Equal(0, summary.Failed);
+            Assert.Equal(1, summary.Skipped);
+        }
+
+        Assert.Equal(EmbeddedTrackService.FailureBackoffThreshold, attempts);
+
+        // after the backoff expires the probe is retried (and failing again
+        // re-arms the backoff — the count is never reset without a success)
+        var retry = await CreateFailingService().ScanAll();
+        Assert.Equal(1, retry.Failed);
+        Assert.Equal(EmbeddedTrackService.FailureBackoffThreshold + 1, attempts);
+    }
+
+    [Fact]
+    public async Task FailedProbe_SuccessResetsTheConsecutiveCount()
+    {
+        await SeedMovieAsync(74, "flaky74.mkv");
+        var failProbes = true;
+
+        EmbeddedTrackService CreateFlakyService() => new(
+            _dbContext,
+            NullLogger<EmbeddedTrackService>.Instance,
+            settingService: _settings.Object,
+            ffprobeRunner: (_, _) =>
+            {
+                if (failProbes)
+                {
+                    throw new TimeoutException("ffprobe exceeded the timeout");
+                }
+
+                return Task.FromResult("""{ "streams": [] }""");
+            });
+
+        await CreateFlakyService().ScanAll(); // failure 1
+        failProbes = false;
+        await CreateFlakyService().ScanAll(); // success — clears the counter and writes the scan marker
+        failProbes = true;
+        // bump the mtime so the later rounds re-probe instead of skipping
+        // on the marker the success just wrote
+        File.SetLastWriteTimeUtc(
+            Path.Combine(_root, "flaky74.mkv"),
+            DateTime.UtcNow.AddSeconds(1));
+        await CreateFlakyService().ScanAll(); // failure 1 (fresh count)
+        await CreateFlakyService().ScanAll(); // failure 2
+
+        var fifth = await CreateFlakyService().ScanAll();
+
+        // two consecutive failures since the success stay below the
+        // threshold, so this round still attempts the probe instead of
+        // skipping — without the reset the count would stand at 4 and the
+        // file would be backed off here.
+        Assert.Equal(1, fifth.Failed);
+        Assert.Equal(0, fifth.Skipped);
     }
 }

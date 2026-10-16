@@ -16,13 +16,39 @@ public class SonarrService : ISonarrService
     /// <inheritdoc />
     public async Task<List<SonarrShow>?> GetShows()
     {
-        return await _integrationService.GetApiResponse<List<SonarrShow>>(
-            "/api/v3/series/",
-            new IntegrationSettingKeys
+        // QA4 P2-1: the series payload is consumed through the streaming
+        // endpoint (ResponseHeadersRead + incremental top-level array
+        // deserialization — the Radarr precedent), so the full JSON document
+        // is never buffered by HttpClient alongside the materialized list.
+        // A 20k-series library (~60-160MB) keeps one residency instead of
+        // two. The elements are buffered into the returned list here because
+        // the current callers need the full set (count + orphan diff); the
+        // seam to switch them to a pure IAsyncEnumerable is
+        // ISonarrService.GetShows + ShowSyncService.SyncShows.
+        var shows = new List<SonarrShow>();
+        try
+        {
+            await foreach (var show in _integrationService.StreamApiResponse<SonarrShow>(
+                               "/api/v3/series/",
+                               new IntegrationSettingKeys
+                               {
+                                   Url = "sonarr_url",
+                                   ApiKey = "sonarr_api_key"
+                               }))
             {
-                Url = "sonarr_url",
-                ApiKey = "sonarr_api_key"
-            });
+                shows.Add(show);
+            }
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not configured", StringComparison.Ordinal))
+        {
+            // StreamApiResponse signals "integration not configured" by
+            // throwing (an async stream cannot yield null the way
+            // GetApiResponse returned default). The historical GetShows
+            // contract — null, caller skips the run — is preserved.
+            return null;
+        }
+
+        return shows;
     }
     
     /// <inheritdoc />

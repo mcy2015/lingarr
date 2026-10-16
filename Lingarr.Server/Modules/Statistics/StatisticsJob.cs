@@ -19,24 +19,36 @@ namespace Lingarr.Server.Modules.Statistics;
 
 public class StatisticsJob
 {
+    /// <summary>
+    /// QA4 P2-2: number of closing coverage/need UPDATE statements per
+    /// commit. The old single closing transaction could hold ~140k
+    /// statements in one WAL commit; chunks of this size keep every commit
+    /// bounded while the run stays "a handful of commits", not one per
+    /// media item.
+    /// </summary>
+    public const int FinalizeChunkSize = 5000;
+
     private readonly LingarrDbContext _dbContext;
     private readonly ISubtitleService _subtitleService;
     private readonly IScheduleService _scheduleService;
     private readonly ISettingService _settingService;
     private readonly ILogger<StatisticsJob> _logger;
+    private readonly int _finalizeChunkSize;
 
     public StatisticsJob(
         LingarrDbContext dbContext,
         ISubtitleService subtitleService,
         IScheduleService scheduleService,
         ISettingService settingService,
-        ILogger<StatisticsJob> logger)
+        ILogger<StatisticsJob> logger,
+        int? finalizeChunkSize = null)
     {
         _dbContext = dbContext;
         _subtitleService = subtitleService;
         _scheduleService = scheduleService;
         _settingService = settingService;
         _logger = logger;
+        _finalizeChunkSize = finalizeChunkSize ?? FinalizeChunkSize;
     }
 
     /// <summary>Season columns the aggregation reads (audit P1-11 projection).</summary>
@@ -59,12 +71,33 @@ public class StatisticsJob
     public async Task Execute()
     {
         var jobName = JobContextFilter.GetCurrentJobTypeName();
+        try
+        {
+            await RunAsync(jobName);
+        }
+        catch (Exception ex)
+        {
+            // QA4 P1-2: the whole run is guarded the SyncShowJob way — an
+            // exception anywhere below (mid-scan IO on the media tree, a
+            // database failure) fails the job state instead of leaving it
+            // stuck in Processing while hours of scan results are lost.
+            // AutomaticRetry(Attempts = 0) means the next scheduled run
+            // starts over; everything committed in earlier finalize chunks
+            // stays, like the sync jobs' partial batches.
+            await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
+            _logger.LogError(ex,
+                "An error occurred while computing statistics. Exception details: {ExceptionMessage}, Stack Trace: {StackTrace}",
+                ex.Message, ex.StackTrace);
+        }
+    }
+
+    private async Task RunAsync(string jobName)
+    {
         var movieSubtitles = 0;
         var episodeSubtitles = 0;
         var byLanguage = new Dictionary<string, int>();
-        var processedPaths = new HashSet<string>();
         // (id, json) pairs whose stored coverage differs from the freshly
-        // computed one — written in one transaction at the end.
+        // computed one — written in chunked transactions at the end.
         var movieCoverageUpdates = new List<(int Id, string? Json, bool Needs, bool Native)>();
         var showCoverageUpdates = new List<(int Id, string Json)>();
         // episodes whose stored needs_translation flag flips this run
@@ -100,56 +133,53 @@ public class StatisticsJob
 
         foreach (var movie in movies)
         {
-            try
+            if (movie.Path == null)
             {
-                if (movie.Path == null)
-                {
-                    // no files to scan: coverage clears and the need rule
-                    // runs on audio/override alone (nothing is covered)
-                    var needsWithoutPath = SubtitleNeedRule.NeedsTranslation(
-                        movie.AudioOverride, movie.AudioLanguages, null, targetLanguages);
-                    var nativeWithoutPath = SubtitleNeedRule.NoSubtitleNeeded(
-                        movie.AudioOverride, movie.AudioLanguages, targetLanguages);
-                    if (movie.SubtitleCoverageJson != null
-                        || needsWithoutPath != movie.NeedsTranslation
-                        || nativeWithoutPath != movie.NoSubtitleNeeded)
-                    {
-                        movieCoverageUpdates.Add((movie.Id, null, needsWithoutPath, nativeWithoutPath));
-                    }
-                    continue;
-                }
-
-                var subtitles = await _subtitleService.GetAllSubtitles(movie.Path);
-                movieSubtitles += subtitles.Count;
-                var coverage = CoverageFromFiles(subtitles);
-                var json = SerializeCoverage(coverage);
-                var needs = SubtitleNeedRule.NeedsTranslation(
-                    movie.AudioOverride, movie.AudioLanguages, coverage.Keys, targetLanguages);
-                var native = SubtitleNeedRule.NoSubtitleNeeded(
+                // no files to scan: coverage clears and the need rule
+                // runs on audio/override alone (nothing is covered)
+                var needsWithoutPath = SubtitleNeedRule.NeedsTranslation(
+                    movie.AudioOverride, movie.AudioLanguages, null, targetLanguages);
+                var nativeWithoutPath = SubtitleNeedRule.NoSubtitleNeeded(
                     movie.AudioOverride, movie.AudioLanguages, targetLanguages);
-
-                // Unchanged rows are not rewritten — matches the old change
-                // tracker, which produced no UPDATE for untouched coverage.
-                if (!string.Equals(json, movie.SubtitleCoverageJson, StringComparison.Ordinal)
-                    || needs != movie.NeedsTranslation
-                    || native != movie.NoSubtitleNeeded)
+                if (movie.SubtitleCoverageJson != null
+                    || needsWithoutPath != movie.NeedsTranslation
+                    || nativeWithoutPath != movie.NoSubtitleNeeded)
                 {
-                    movieCoverageUpdates.Add((movie.Id, json, needs, native));
+                    movieCoverageUpdates.Add((movie.Id, null, needsWithoutPath, nativeWithoutPath));
                 }
-
-                // Group by language for language counts — dual-language files
-                // (scjp/简日…) count once per language they carry.
-                foreach (var language in subtitles.SelectMany(LanguagesOf))
-                {
-                    byLanguage.TryAdd(language, 0);
-                    byLanguage[language]++;
-                }
+                continue;
             }
-            catch (DirectoryNotFoundException)
+
+            // QA4 P1-2: the unreachable catch(DirectoryNotFoundException) is
+            // gone — GetAllSubtitles returns an empty list for a missing
+            // directory (pinned by its tests) and its hardened traversal
+            // skips unreadable subdirectories instead of throwing, so the
+            // per-item guard had nothing left to catch. Anything else
+            // bubbles to the top-level handler and fails the job.
+            var subtitles = await _subtitleService.GetAllSubtitles(movie.Path);
+            movieSubtitles += subtitles.Count;
+            var coverage = CoverageFromFiles(subtitles);
+            var json = SerializeCoverage(coverage);
+            var needs = SubtitleNeedRule.NeedsTranslation(
+                movie.AudioOverride, movie.AudioLanguages, coverage.Keys, targetLanguages);
+            var native = SubtitleNeedRule.NoSubtitleNeeded(
+                movie.AudioOverride, movie.AudioLanguages, targetLanguages);
+
+            // Unchanged rows are not rewritten — matches the old change
+            // tracker, which produced no UPDATE for untouched coverage.
+            if (!string.Equals(json, movie.SubtitleCoverageJson, StringComparison.Ordinal)
+                || needs != movie.NeedsTranslation
+                || native != movie.NoSubtitleNeeded)
             {
-                await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
-                _logger.LogWarning("Directory not found for movie {MovieId} at path: {Path}",
-                    movie.Id, movie.Path);
+                movieCoverageUpdates.Add((movie.Id, json, needs, native));
+            }
+
+            // Group by language for language counts — dual-language files
+            // (scjp/简日…) count once per language they carry.
+            foreach (var language in subtitles.SelectMany(LanguagesOf))
+            {
+                byLanguage.TryAdd(language, 0);
+                byLanguage[language]++;
             }
         }
 
@@ -186,42 +216,38 @@ public class StatisticsJob
             // Per-episode subtitle languages accumulated by the season scans
             // — the coverage input of each episode's need rule.
             var episodeLanguages = new Dictionary<int, HashSet<string>>();
+            // QA4 P3: the nested-path guard only ever needs this show's own
+            // already-counted season paths — a single global set made the
+            // check O(total seasons) per season across the whole library.
+            var processedSeasonPaths = new HashSet<string>();
 
             // Audit issue #2: ONE scan per season, shared by the coverage
             // merge and the episode/language counting. The old code scanned
             // every season twice (once per loop); with the single-pass
             // GetAllSubtitles this is now one traversal per season instead
-            // of eight. The nested-path skip only guards the global totals
-            // (files under an already-counted season path must not count
-            // twice) — every season still merges its own coverage.
+            // of eight. The nested-path skip only guards the episode/subtitle
+            // totals (files under an already-counted season path must not
+            // count twice) — every season still merges its own coverage.
             foreach (var season in show.Seasons)
             {
                 if (string.IsNullOrEmpty(season.Path)) continue;
 
-                try
+                var subtitles = await _subtitleService.GetAllSubtitles(season.Path);
+                scannedAnySeason = true;
+                MergeCoverage(coverage, season.Episodes, subtitles, episodeLanguages);
+
+                if (processedSeasonPaths.Any(p => season.Path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
                 {
-                    var subtitles = await _subtitleService.GetAllSubtitles(season.Path);
-                    scannedAnySeason = true;
-                    MergeCoverage(coverage, season.Episodes, subtitles, episodeLanguages);
-
-                    if (processedPaths.Any(p => season.Path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        continue;
-                    }
-
-                    episodeSubtitles += subtitles.Count;
-                    processedPaths.Add(season.Path);
-
-                    foreach (var subtitle in subtitles)
-                    {
-                        byLanguage.TryAdd(subtitle.Language, 0);
-                        byLanguage[subtitle.Language]++;
-                    }
+                    continue;
                 }
-                catch (DirectoryNotFoundException)
+
+                episodeSubtitles += subtitles.Count;
+                processedSeasonPaths.Add(season.Path);
+
+                foreach (var subtitle in subtitles)
                 {
-                    await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
-                    _logger.LogWarning("Directory not found for season at path: {Path}", season.Path);
+                    byLanguage.TryAdd(subtitle.Language, 0);
+                    byLanguage[subtitle.Language]++;
                 }
             }
 
@@ -263,40 +289,61 @@ public class StatisticsJob
         stats.TotalSubtitles = movieSubtitles + episodeSubtitles;
         stats.SubtitlesByLanguage = byLanguage;
 
-        // Audit P0-6-adjacent: one transaction covers the statistics row and
-        // every changed coverage/need value — a save per entity would mean
-        // one WAL commit per media item at 100k scale.
-        await using (var transaction = await _dbContext.Database.BeginTransactionAsync())
+        // QA4 P2-2: the closing backfills are committed in chunks of
+        // _finalizeChunkSize statements instead of one giant transaction —
+        // a first full run at 100k scale could hold ~140k UPDATE statements
+        // in a single WAL commit. The tracked statistics row commits with
+        // the first chunk and is a no-op for the rest (its values are final
+        // before the loop); a mid-way failure keeps earlier chunks, and the
+        // next run recomputes idempotently.
+        var finalizeStatements = new List<Func<Task>>(
+            movieCoverageUpdates.Count + showCoverageUpdates.Count + episodeNeedsUpdates.Count);
+        foreach (var (id, json, needs, native) in movieCoverageUpdates)
         {
-            foreach (var (id, json, needs, native) in movieCoverageUpdates)
-            {
-                await _dbContext.Movies
-                    .Where(movie => movie.Id == id)
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(movie => movie.SubtitleCoverageJson, json)
-                        .SetProperty(movie => movie.NeedsTranslation, needs)
-                        .SetProperty(movie => movie.NoSubtitleNeeded, native));
-            }
+            finalizeStatements.Add(() => _dbContext.Movies
+                .Where(movie => movie.Id == id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(movie => movie.SubtitleCoverageJson, json)
+                    .SetProperty(movie => movie.NeedsTranslation, needs)
+                    .SetProperty(movie => movie.NoSubtitleNeeded, native)));
+        }
 
-            foreach (var (id, json) in showCoverageUpdates)
-            {
-                await _dbContext.Shows
-                    .Where(show => show.Id == id)
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(show => show.SubtitleCoverageJson, json));
-            }
+        foreach (var (id, json) in showCoverageUpdates)
+        {
+            finalizeStatements.Add(() => _dbContext.Shows
+                .Where(show => show.Id == id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(show => show.SubtitleCoverageJson, json)));
+        }
 
-            foreach (var (id, needs, native) in episodeNeedsUpdates)
-            {
-                await _dbContext.Episodes
-                    .Where(episode => episode.Id == id)
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(episode => episode.NeedsTranslation, needs)
-                        .SetProperty(episode => episode.NoSubtitleNeeded, native));
-            }
+        foreach (var (id, needs, native) in episodeNeedsUpdates)
+        {
+            finalizeStatements.Add(() => _dbContext.Episodes
+                .Where(episode => episode.Id == id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(episode => episode.NeedsTranslation, needs)
+                    .SetProperty(episode => episode.NoSubtitleNeeded, native)));
+        }
 
+        var chunks = finalizeStatements.Chunk(_finalizeChunkSize).ToList();
+        if (chunks.Count == 0)
+        {
+            // nothing to backfill — only the statistics row changed
             await _dbContext.SaveChangesAsync();
-            await transaction.CommitAsync();
+        }
+        else
+        {
+            foreach (var chunk in chunks)
+            {
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+                foreach (var statement in chunk)
+                {
+                    await statement();
+                }
+
+                await _dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
         }
 
         await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
@@ -343,13 +390,45 @@ public class StatisticsJob
         List<Subtitles> subtitles,
         Dictionary<int, HashSet<string>> episodeLanguages)
     {
-        var coveredEpisodes = new HashSet<int>();
+        // QA4 P3: matchable episodes with extension-safe base names,
+        // computed once per season. Entity file names carry no (or a known
+        // video) extension while release base names contain dots
+        // ("Show.S01E01"), so Path.GetFileNameWithoutExtension would eat
+        // ".S01E01"-style segments — only a known video extension is ever
+        // stripped (EmbeddedTrackService precedent).
+        var matchable = new List<(EpisodeProjection Episode, string BaseName)>();
+        foreach (var episode in episodes)
+        {
+            if (string.IsNullOrEmpty(episode.FileName)) continue;
+            matchable.Add((episode, EpisodeBaseName(episode.FileName!)));
+        }
+
+        // QA4 P3: the composite int hash key ("id * 31 + language hash") is
+        // replaced by a value-tuple key — the hash of a string is randomized
+        // per process, so distinct (episode, language) pairs could collide
+        // and silently drop coverage counts.
+        var coveredEpisodes = new HashSet<(int EpisodeId, string Language)>();
         foreach (var subtitle in subtitles)
         {
             var size = BytesOf(subtitle);
-            var episode = episodes.FirstOrDefault(ep =>
-                !string.IsNullOrEmpty(ep.FileName)
-                && SubtitleMatchesEpisode(subtitle.FileName, ep.FileName));
+            // QA4 P3: the most specific (longest) matching base name wins, so
+            // a subtitle of a versioned release ("…e01.v2.zh.srt") is
+            // attributed to the versioned episode instead of the plain one
+            // the old FirstOrDefault picked. Genuinely ambiguous duplicates —
+            // two episode entities sharing one file name across version
+            // directories — cannot be separated by name and stay attributed
+            // to the first, as before.
+            (EpisodeProjection Episode, string BaseName)? match = null;
+            foreach (var candidate in matchable)
+            {
+                if (!SubtitleMatchesEpisode(subtitle.FileName, candidate.BaseName)) continue;
+                if (match == null || candidate.BaseName.Length > match.Value.BaseName.Length)
+                {
+                    match = candidate;
+                }
+            }
+
+            var episode = match?.Episode;
             HashSet<string>? episodeSet = null;
             if (episode != null && !episodeLanguages.TryGetValue(episode.Id, out episodeSet))
             {
@@ -361,13 +440,36 @@ public class StatisticsJob
                 episodeSet?.Add(language);
                 var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
                 slot.Bytes += size;
-                if (episode != null && coveredEpisodes.Add(episode.Id * 31 + language.GetHashCode()))
+                if (episode != null && coveredEpisodes.Add((episode.Id, language)))
                 {
                     slot.Count++;
                 }
                 coverage[language] = slot;
             }
         }
+    }
+
+    /// <summary>
+    /// Known video container extensions — the only suffixes ever stripped
+    /// from an episode file name. Anything after the last dot of a release
+    /// base name ("Show.S01E01.WEBDL-1080p") must never be treated as an
+    /// extension.
+    /// </summary>
+    private static readonly string[] VideoNameExtensions =
+        [".mkv", ".mp4", ".m4v", ".avi", ".mov", ".wmv", ".mpg", ".mpeg", ".ts", ".m2ts"];
+
+    /// <summary>The episode file name without its known video extension.</summary>
+    private static string EpisodeBaseName(string fileName)
+    {
+        foreach (var extension in VideoNameExtensions)
+        {
+            if (fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                return fileName[..^extension.Length];
+            }
+        }
+
+        return fileName;
     }
 
     /// <summary>The language codes a subtitle file carries ("unknown" when untagged).</summary>
@@ -388,10 +490,7 @@ public class StatisticsJob
             ? null
             : JsonSerializer.Deserialize<Dictionary<string, MediaLanguageCoverage>>(json);
 
-    private static bool SubtitleMatchesEpisode(string subtitleFileName, string episodeFileName)
-    {
-        var baseName = Path.GetFileNameWithoutExtension(episodeFileName);
-        return subtitleFileName.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(subtitleFileName, baseName, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool SubtitleMatchesEpisode(string subtitleFileName, string episodeBaseName) =>
+        subtitleFileName.StartsWith(episodeBaseName + ".", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(subtitleFileName, episodeBaseName, StringComparison.OrdinalIgnoreCase);
 }

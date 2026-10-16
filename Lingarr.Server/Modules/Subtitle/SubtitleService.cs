@@ -52,8 +52,7 @@ public class SubtitleService : ISubtitleService
         _readSubtitleHead = subtitleHeadReader ?? ReadSubtitleHead;
         // Audit P0-4: one recursive traversal per directory instead of one
         // per supported extension.
-        _enumerateFiles = directoryEnumerator
-            ?? (path => Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories));
+        _enumerateFiles = directoryEnumerator ?? EnumerateFilesResiliently;
         // Audit P1-7: the sniff results are additionally persisted in
         // subtitle_language_cache — the 500-entry in-memory cap is useless on
         // a 100k library, and every scan of an untagged file would re-read
@@ -63,6 +62,50 @@ public class SubtitleService : ISubtitleService
     }
 
     private readonly record struct SniffCacheKey(string Path, long LastWriteUtcTicks, long Length);
+
+    /// <summary>
+    /// QA4 P1-2: production directory traversal. The old
+    /// Directory.EnumerateFiles(AllDirectories) was a lazy enumeration that
+    /// threw UnauthorizedAccessException (or an IOException) mid-iteration
+    /// as soon as the walk hit an unreadable subdirectory — on a NAS that
+    /// killed the whole statistics scan hours in. This explicit stack walk
+    /// isolates every directory: one that cannot be listed is logged and
+    /// skipped, and the rest of the tree still enumerates.
+    /// </summary>
+    private IEnumerable<string> EnumerateFilesResiliently(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(directory);
+                foreach (var subdirectory in Directory.EnumerateDirectories(directory))
+                {
+                    pending.Push(subdirectory);
+                }
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException
+                or IOException
+                or DirectoryNotFoundException)
+            {
+                _logger.LogWarning(ex,
+                    "Skipping unreadable directory {Directory} while collecting subtitles — the rest of the tree is still scanned",
+                    directory);
+                continue;
+            }
+
+            // Yields must stay outside the try — iterator blocks cannot
+            // yield inside a try that has a catch.
+            foreach (var file in files)
+            {
+                yield return file;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public async Task<List<Subtitles>> GetAllSubtitles(string path)
