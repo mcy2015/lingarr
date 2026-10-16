@@ -11,6 +11,18 @@ public class Movie : BaseEntity, IMedia
     public required string? FileName { get; set; }
     public required string? Path { get; set; }
     public string? MediaHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// OpenSubtitles moviehash of the video file (M0011): lazily computed by
+    /// the subtitle-search request builder and written back by
+    /// <c>LazyMediaHasher.WriteBackVideoHashAsync</c> — the column's single
+    /// writer. Deliberately separate from <see cref="MediaHash"/>, which the
+    /// translation pipeline owns (subtitle-set hash with clear-on-change
+    /// events); the split keeps the two writers from ever contending. Null
+    /// means "not computed yet" — there is no empty-string sentinel here.
+    /// </summary>
+    public string? VideoHash { get; set; }
+
     public required DateTimeOffset? DateAdded { get; set; }
     public List<Image> Images { get; set; } = new();
     public bool IncludeInTranslation { get; set; } = true;

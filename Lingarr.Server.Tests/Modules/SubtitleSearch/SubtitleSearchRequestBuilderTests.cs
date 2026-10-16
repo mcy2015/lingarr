@@ -317,24 +317,28 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
             : _dbContext.Episodes.AsNoTracking().Single().Id;
     }
 
-    // --- persistent media-hash write-back (design ⑧ polish: a fresh
-    // moviehash lands in media_hash — NULL-guarded, fire-and-forget).
+    // --- persistent video-hash write-back (design ⑧ polish + M0011: a fresh
+    // moviehash lands in the dedicated video_hash column — NULL-guarded,
+    // fire-and-forget. media_hash is fully owned by the translation pipeline
+    // and never touched here).
 
     [Fact]
-    public async Task WriteBackVideoHash_FillsOnlyRowsWhoseColumnIsNull()
+    public async Task WriteBackVideoHash_FillsOnlyRowsWhoseVideoHashIsNull()
     {
-        // Production write-side convention of this test's DbContext: the
-        // seeded ctor movie ("Film", Path=_root) keeps the C# initializer's
-        // empty string; two explicit rows pin the NULL and value cases.
+        // Production write-side conventions of this test's DbContext: the
+        // seeded ctor movie ("Film", Path=_root) carries the empty-string
+        // media_hash sentinel the sync/translation writers leave behind;
+        // three explicit rows pin the video_hash NULL/value cases.
         var nullHashMovie = new Movie
         {
             RadarrId = 2, Title = "NullHash", Path = _root, FileName = "NullHash.2020.mkv",
-            DateAdded = DateTimeOffset.UtcNow, Year = 2020, MediaHash = null
+            DateAdded = DateTimeOffset.UtcNow, Year = 2020, MediaHash = null, VideoHash = null
         };
         var filledMovie = new Movie
         {
             RadarrId = 3, Title = "Filled", Path = _root, FileName = "Filled.2021.mkv",
-            DateAdded = DateTimeOffset.UtcNow, Year = 2021, MediaHash = "existing-hash"
+            DateAdded = DateTimeOffset.UtcNow, Year = 2021,
+            MediaHash = "translation-pipeline-hash", VideoHash = "existing-video-hash"
         };
         var nullHashEpisode = new Episode
         {
@@ -344,7 +348,7 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
             Season = _dbContext.Seasons.Single(),
             Path = Path.Combine(_root, "series"), FileName = "Series.S02E06.1080p.mkv",
             DateAdded = DateTimeOffset.UtcNow,
-            MediaHash = null
+            MediaHash = null, VideoHash = null
         };
         _dbContext.Movies.AddRange(nullHashMovie, filledMovie);
         _dbContext.Episodes.Add(nullHashEpisode);
@@ -355,29 +359,37 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
         var written = await LazyMediaHasher.WriteBackVideoHashAsync(
             _dbContext, Path.Combine(_root, "NullHash.2020.mkv"), "os-moviehash");
         Assert.Equal(1, written);
-        Assert.Equal("os-moviehash",
-            (await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 2)).MediaHash);
+        var writtenMovie = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 2);
+        Assert.Equal("os-moviehash", writtenMovie.VideoHash);
+        Assert.Null(writtenMovie.MediaHash); // ownership: the translation pipeline's column is untouched
 
         // Episode rows share the column: one write for its own file.
         var episodeWrite = await LazyMediaHasher.WriteBackVideoHashAsync(
             _dbContext, Path.Combine(_root, "series", "Series.S02E06.1080p.mkv"), "os-moviehash-ep");
         Assert.Equal(1, episodeWrite);
-        Assert.Equal("os-moviehash-ep",
-            (await _dbContext.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 11)).MediaHash);
+        var writtenEpisode = await _dbContext.Episodes.AsNoTracking().SingleAsync(e => e.SonarrId == 11);
+        Assert.Equal("os-moviehash-ep", writtenEpisode.VideoHash);
+        Assert.Null(writtenEpisode.MediaHash);
 
-        // An existing value (and the empty-string sentinel the sync/translation
-        // writers leave behind) is NEVER overwritten.
+        // An existing video_hash is NEVER overwritten (the guard now only
+        // keeps duplicate lazy computes from racing each other).
         var refused = await LazyMediaHasher.WriteBackVideoHashAsync(
             _dbContext, Path.Combine(_root, "Filled.2021.mkv"), "new-hash");
         Assert.Equal(0, refused);
-        Assert.Equal("existing-hash",
-            (await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 3)).MediaHash);
+        var refusedMovie = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 3);
+        Assert.Equal("existing-video-hash", refusedMovie.VideoHash);
+        Assert.Equal("translation-pipeline-hash", refusedMovie.MediaHash);
 
-        var emptyGuarded = await LazyMediaHasher.WriteBackVideoHashAsync(
+        // The media_hash empty-string sentinel no longer guards anything —
+        // video_hash has no sentinel, so the ctor movie's NULL column is a
+        // legitimate write target while its media_hash stays exactly as the
+        // translation pipeline left it.
+        var sentinelBypassed = await LazyMediaHasher.WriteBackVideoHashAsync(
             _dbContext, Path.Combine(_root, "Film.2019.WEBDL-1080p.mkv"), "new-hash");
-        Assert.Equal(0, emptyGuarded);
-        Assert.Equal(string.Empty,
-            (await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 1)).MediaHash);
+        Assert.Equal(1, sentinelBypassed);
+        var sentinelMovie = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.RadarrId == 1);
+        Assert.Equal("new-hash", sentinelMovie.VideoHash);
+        Assert.Equal(string.Empty, sentinelMovie.MediaHash);
 
         // A path matching no library row is a no-op, not an error.
         Assert.Equal(0, await LazyMediaHasher.WriteBackVideoHashAsync(

@@ -113,7 +113,7 @@ ORDER BY priority_rank, next_attempt_at LIMIT @batchLimit;  -- 命中 ix_subtitl
 
 `SubtitleDownloadPipeline`：① SharpCompress 魔数探测压缩包，条目选择=文件名语言标签优先否则最大 srt/ass ② `SubtitleEncodingService`+CodePages（GBK）检测转码 ③ `convert_to_srt` 默认 true（`SrtWriter` 复用） ④ `SubtitleService.CreateFilePath`（SubtitleService.cs L298）同命名模板落盘——落盘即普通外挂字幕 ⑤ 写 `subtitle_downloads` + `subtitle_search_sessions` 命中 ⑥ 旧字幕标记 `removed_at/replaced_by`（文件保留由用户清理策略管） ⑦ `auto_translate` 开（默认开）则入翻译队列 ⑧ `SubtitleCoverage` 就地刷新该媒体 + `JobProgressHub` 广播字幕卡更新（前端不刷页）。
 
-> 现状（2026-10-16）：✅①–⑤/⑦/⑧ 已交付（⑦以 needs_translation 旗标刷新承载）。**步骤⑥ `removed_at`/`replaced_by` 零写方**——列已建（M0008）但无任何代码写入，替换语义未实现（与 PRD 非目标「升级替换 P2 复评」一致，当前为死列）；自动轮另有「已存在跳过」前置核查（Auto 源+库内已有目标语言→AlreadyExistsSkipped，不进①）。手动路径同名冲突走「(1)」后缀（⑭）。
+> 现状（2026-10-16）：✅①–⑤/⑦/⑧ 已交付（⑦以 needs_translation 旗标刷新承载）。**步骤⑥ 替换标记出局**——`removed_at`/`replaced_by` 两列已由 M0010 删除，「升级替换」裁为**有意不做**（⑮-1，与「永不覆盖」同源）；自动轮另有「已存在跳过」前置核查（Auto 源+库内已有目标语言→AlreadyExistsSkipped，不进①）。手动路径同名冲突走「(1)」后缀（⑭）。
 
 ## ⑧ 反爬与稳健性
 
@@ -193,6 +193,13 @@ subliminal(MIT)/CSF(MIT) 可移植代码注明版权+许可；bazarr(GPL) 只借
 6. **Succeeded 复活**：入队 pass 重排「状态=Succeeded 但目标语言仍缺且无在途翻译」的队列行——修复 NOT EXISTS 守卫把已成功媒体永久跳过的断裂（QA3 P1-1）。
 7. **Query 拆分**：search 请求接受可选 `query` 关键词覆写（预填标题、尾部 SxxEyy 标签拆离后并入季集匹配，R3b）。
 8. **自动轮「已存在」前置核查**：Auto 源在进入①前核验库内目标语言字幕，已有即 AlreadyExistsSkipped 落历史；手动路径不受此门（同名走「(1)」后缀）。
+
+## ⑮ 补录（2026-10-16 P2 打磨波次）：裁决与形态变更
+
+1. **「字幕升级」= 有意不做**（显式裁决，替代 PRD「P2 复评」悬置）：库内已有目标语言字幕即视为完成（AlreadyExistsSkipped），不寻找"更好版本"、不重下载替换——与"永不覆盖用户文件"的既有裁决同源。bazarr 的 upgrade 机制不纳入。若未来需求翻案，须先推翻「(1) 后缀永不覆盖」语义。
+2. **M0010 已删⑦的死列**：`removed_at`/`replaced_by_download_id` 不再存在（替换语义随上文裁决出局）；blacklist 表补 `external_id` 键列+索引——写侧（内容无效类下载失败，90 天窗口）与读侧（Dedupe 前精确过滤）均已启用。
+3. **M0011 新列与新索引**：`video_hash`（movies/episodes 专用，视频哈希写回归宿——`media_hash` 完全归属翻译管线的字幕哈希）；`media_title_fts`（FTS5 虚表，**ASCII 搜索语义从任意子串改为词前缀匹配**，非 ASCII 查询回退 LIKE；维护=DbContext save hook+搜索时计数漂移重建）。
+4. **设计⑧四件已落地**：每源 `subtitle_{source}_enabled` 停用开关（缺键=启用）、OpenSubtitles 1 req/s 令牌桶+日限额当日 UTC 午夜冷却、每源/全局代理（重启生效）；批上限 50–2000 钳制、assrt quota_remaining 采集、双语>单语与 srt>ass>vtt 并列裁决同步交付。
 
 ---
 

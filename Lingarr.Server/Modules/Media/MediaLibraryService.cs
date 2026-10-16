@@ -68,6 +68,26 @@ public class MediaLibraryService : IMediaLibraryService
         var wantMovies = mediaType is null or MediaType.Movie;
         var needle = string.IsNullOrEmpty(searchQuery) ? null : searchQuery.ToLower();
 
+        // Audit P1-4: ASCII search terms resolve through the FTS5 title index
+        // (media_title_fts) — lower(title) LIKE '%…%' can use no B-tree and
+        // scans the whole table per search at the 100k-rows scale. The FTS
+        // semantics are word-prefix ("star" matches "Star Trek" and
+        // "Starship Troopers", not a title merely containing "star"
+        // mid-word). Non-ASCII (CJK) terms keep the LIKE path below: the
+        // unicode61 tokenizer does not segment hanzi runs — a whole run
+        // folds into one token — so prefix matching would silently miss
+        // most real queries. TrySearchAsync also returns null (→ LIKE) when
+        // the index is unavailable (non-SQLite provider, table absent,
+        // SQLite error), keeping the predicate as the safety net.
+        Dictionary<MediaType, List<int>>? ftsIds = null;
+        if (needle is not null && needle.All(c => c <= '\u007F'))
+        {
+            ftsIds = await TitleFts.TrySearchAsync(_dbContext, needle);
+        }
+
+        var ftsShowIds = ftsIds?.GetValueOrDefault(MediaType.Show);
+        var ftsMovieIds = ftsIds?.GetValueOrDefault(MediaType.Movie);
+
         var targetLanguages = await _settingService.GetSettingAsJson<TargetLanguage>(
             SettingKeys.Translation.TargetLanguages) ?? new List<TargetLanguage>();
 
@@ -92,7 +112,7 @@ public class MediaLibraryService : IMediaLibraryService
             && !string.Equals(orderBy, "LastActivity", StringComparison.OrdinalIgnoreCase))
         {
             return await GetLibraryPagedAsync(
-                wantShows, wantMovies, needle, wantNative, wantAudioUnknown,
+                wantShows, wantMovies, needle, ftsShowIds, ftsMovieIds, wantNative, wantAudioUnknown,
                 orderBy, ascending, pageNumber, pageSize, targetLanguages);
         }
 
@@ -103,7 +123,7 @@ public class MediaLibraryService : IMediaLibraryService
         if (wantShows)
         {
             var showQuery = ApplyShowFilters(
-                _dbContext.Shows.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
+                _dbContext.Shows.AsNoTracking().AsQueryable(), needle, ftsShowIds, wantNative, wantAudioUnknown);
 
             var showRows = await showQuery.Select(s => new
             {
@@ -144,7 +164,7 @@ public class MediaLibraryService : IMediaLibraryService
         if (wantMovies)
         {
             var movieQuery = ApplyMovieFilters(
-                _dbContext.Movies.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
+                _dbContext.Movies.AsNoTracking().AsQueryable(), needle, ftsMovieIds, wantNative, wantAudioUnknown);
 
             var movieRows = await movieQuery.Select(m => new
             {
@@ -249,6 +269,8 @@ public class MediaLibraryService : IMediaLibraryService
         bool wantShows,
         bool wantMovies,
         string? needle,
+        List<int>? ftsShowIds,
+        List<int>? ftsMovieIds,
         bool wantNative,
         bool wantAudioUnknown,
         string? orderBy,
@@ -265,7 +287,7 @@ public class MediaLibraryService : IMediaLibraryService
         if (wantShows)
         {
             var showQuery = ApplyShowFilters(
-                _dbContext.Shows.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
+                _dbContext.Shows.AsNoTracking().AsQueryable(), needle, ftsShowIds, wantNative, wantAudioUnknown);
             var scan = showQuery.Select(s => new ShowScanRow
             {
                 Id = s.Id,
@@ -303,7 +325,7 @@ public class MediaLibraryService : IMediaLibraryService
         if (wantMovies)
         {
             var movieQuery = ApplyMovieFilters(
-                _dbContext.Movies.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
+                _dbContext.Movies.AsNoTracking().AsQueryable(), needle, ftsMovieIds, wantNative, wantAudioUnknown);
             var scan = movieQuery.Select(m => new MovieScanRow
             {
                 Id = m.Id,
@@ -436,14 +458,24 @@ public class MediaLibraryService : IMediaLibraryService
         && !string.Equals(state, NativeState, StringComparison.OrdinalIgnoreCase)
         && !string.Equals(state, AudioUnknownState, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Shared show predicates of both paths: search, native, audio-unknown.</summary>
+    /// <summary>Shared show predicates of both paths: search, native, audio-unknown.
+    /// Search arrives either as the FTS-resolved id set (ASCII queries — the
+    /// index already decided the word-prefix matches, so the id membership
+    /// replaces the title predicate entirely: no LIKE, no lower() over the
+    /// table) or as the LIKE substring fallback (non-ASCII queries or an
+    /// unavailable index).</summary>
     private static IQueryable<Show> ApplyShowFilters(
         IQueryable<Show> query,
         string? needle,
+        List<int>? ftsShowIds,
         bool wantNative,
         bool wantAudioUnknown)
     {
-        if (needle is not null)
+        if (ftsShowIds is not null)
+        {
+            query = query.Where(s => ftsShowIds.Contains(s.Id));
+        }
+        else if (needle is not null)
         {
             query = query.Where(s => s.Title.ToLower().Contains(needle));
         }
@@ -463,14 +495,21 @@ public class MediaLibraryService : IMediaLibraryService
         return query;
     }
 
-    /// <summary>Shared movie predicates of both paths: search, native, audio-unknown.</summary>
+    /// <summary>Shared movie predicates of both paths: search, native,
+    /// audio-unknown. See <see cref="ApplyShowFilters"/> for the FTS/LIKE
+    /// split of the search predicate.</summary>
     private static IQueryable<Movie> ApplyMovieFilters(
         IQueryable<Movie> query,
         string? needle,
+        List<int>? ftsMovieIds,
         bool wantNative,
         bool wantAudioUnknown)
     {
-        if (needle is not null)
+        if (ftsMovieIds is not null)
+        {
+            query = query.Where(m => ftsMovieIds.Contains(m.Id));
+        }
+        else if (needle is not null)
         {
             query = query.Where(m => m.Title.ToLower().Contains(needle));
         }

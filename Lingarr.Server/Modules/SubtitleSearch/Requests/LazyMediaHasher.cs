@@ -21,11 +21,11 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Requests;
 /// <para>
 /// Persistent-cache write-back (design ⑧ polish): a freshly computed
 /// OpenSubtitles moviehash is also written into the owning library row's
-/// <c>media_hash</c> column through the injectable <c>videoHashWriteBack</c>
-/// delegate — fire-and-forget, failures only log, and never overwriting an
-/// existing value (<c>media_hash IS NULL</c> guard, see
-/// <see cref="WriteBackVideoHashAsync"/>). The module wires the delegate to a
-/// scoped DbContext; this class itself stays IO-pure so tests inject a
+/// dedicated <c>video_hash</c> column (M0011) through the injectable
+/// <c>videoHashWriteBack</c> delegate — fire-and-forget, failures only log,
+/// and never overwriting an existing value (<c>video_hash IS NULL</c> guard,
+/// see <see cref="WriteBackVideoHashAsync"/>). The module wires the delegate
+/// to a scoped DbContext; this class itself stays IO-pure so tests inject a
 /// recorder.
 /// </para>
 /// </summary>
@@ -125,21 +125,23 @@ public sealed class LazyMediaHasher
     public int CachedEntryCount => _videoHashes.Count + _shooterHashes.Count;
 
     /// <summary>
-    /// Persists a computed moviehash into the owning movie/episode row
-    /// (<c>media_hash</c>) — only where the column is still NULL, never
-    /// overwriting an existing value. The row is matched on the library's
-    /// stored (Path, FileName) pair, which is exactly the pair the request
-    /// builder combined into the hashed file path (EpisodeSync/MovieSync
-    /// write-side contract). Pure LINQ ExecuteUpdate — no raw SQL, no
-    /// DbContext mirror assumptions.
+    /// Persists a computed moviehash into the owning movie/episode row's
+    /// dedicated <c>video_hash</c> column (M0011) — only where the column is
+    /// still NULL, never overwriting an existing value. The row is matched on
+    /// the library's stored (Path, FileName) pair, which is exactly the pair
+    /// the request builder combined into the hashed file path
+    /// (EpisodeSync/MovieSync write-side contract). Pure LINQ ExecuteUpdate —
+    /// no raw SQL, no DbContext mirror assumptions.
     /// <para>
-    /// Deliberately strict about NULL (not empty-string): the translation
-    /// pipeline's media-scan also writes this column (its subtitle-set hash)
-    /// and clears it to <c>''</c> — a NULL-guard means the two writers can
-    /// never clobber each other's values. Fresh EF-inserted rows carry
-    /// <c>''</c> (the entity initializer), so in practice the write-back only
-    /// fills rows whose column is genuinely NULL; see the batch report for the
-    /// convention discussion.
+    /// The column has exactly one writer (this write-back) — the ownership
+    /// conflict that used to pit it against the translation pipeline on
+    /// <c>media_hash</c> (subtitle-set hash + clear-on-change events) is what
+    /// the dedicated column resolves; <c>media_hash</c> is fully returned to
+    /// the translation pipeline and is never touched here. The IS NULL guard
+    /// survives for one reason only: two lazy computes racing on the same
+    /// file must not double-write (both compute the same value, so the guard
+    /// is just idempotence insurance). There is no empty-string sentinel on
+    /// this column — NULL is the only "not computed yet" state.
     /// </para>
     /// </summary>
     /// <returns>Number of rows the hash was written into (0 or 1 per table).</returns>
@@ -163,14 +165,14 @@ public sealed class LazyMediaHasher
         }
 
         var movies = await dbContext.Movies
-            .Where(movie => movie.MediaHash == null && movie.Path == directory && movie.FileName == fileName)
+            .Where(movie => movie.VideoHash == null && movie.Path == directory && movie.FileName == fileName)
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(movie => movie.MediaHash, hash),
+                setters => setters.SetProperty(movie => movie.VideoHash, hash),
                 cancellationToken);
         var episodes = await dbContext.Episodes
-            .Where(episode => episode.MediaHash == null && episode.Path == directory && episode.FileName == fileName)
+            .Where(episode => episode.VideoHash == null && episode.Path == directory && episode.FileName == fileName)
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(episode => episode.MediaHash, hash),
+                setters => setters.SetProperty(episode => episode.VideoHash, hash),
                 cancellationToken);
         return movies + episodes;
     }

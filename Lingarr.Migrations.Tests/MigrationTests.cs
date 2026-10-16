@@ -30,11 +30,12 @@ public class MigrationTests
 
             // The baseline plus the auth-sessions, schedule-cron,
             // embedded-track, consume-embedded, performance-index,
-            // audio-and-language-cache, subtitle-search and
-            // subtitle-search-telemetry migrations are applied.
-            Assert.Equal(9L, await ExecuteScalarAsync(connection,
+            // audio-and-language-cache, subtitle-search,
+            // subtitle-search-telemetry, subtitle-search-schema-cleanup and
+            // video-hash-and-title-fts migrations are applied.
+            Assert.Equal(11L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(9L, await ExecuteScalarAsync(connection,
+            Assert.Equal(11L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
@@ -127,8 +128,13 @@ public class MigrationTests
                 // (subtitle_search_state, subtitle_downloads,
                 // subtitle_search_blacklist) and +3 telemetry tables in
                 // M0009 (subtitle_search_sessions, provider_quota_usage,
-                // coverage_daily).
-                Assert.Equal(24L, await ExecuteScalarAsync(connection,
+                // coverage_daily). M0010 only alters existing tables (drops
+                // the dead download columns, adds the blacklist external_id)
+                // and M0011 adds video_hash columns plus the FTS5 virtual
+                // table — which enters sqlite_master alongside its five
+                // shadow tables (media_title_fts plus _data/_idx/_content/
+                // _docsize/_config), so the count goes 24 → 30.
+                Assert.Equal(30L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
                 Assert.Equal(1L, await ExecuteScalarAsync(connection,
                     "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request'"));
@@ -433,6 +439,63 @@ public class MigrationTests
     }
 
     /// <summary>
+    /// M0010 drops the never-written replacement-chain columns from
+    /// subtitle_downloads and adds the blacklist external_id key with its
+    /// lookup index, so rolling it back must return exactly the M0009 state:
+    /// version back to 9, both dead columns restored (nullable, no data —
+    /// nothing ever wrote them), external_id and its index gone.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_SubtitleSearchSchemaCleanupMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(9);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(9L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+
+            // The dead columns are back on subtitle_downloads, nullable and
+            // data-free, while the columns M0008 created around them survive.
+            var downloadColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"subtitle_downloads\")", columnIndex: 1);
+            Assert.Contains("removed_at", downloadColumns);
+            Assert.Contains("replaced_by_download_id", downloadColumns);
+            Assert.Contains("search_session_id", downloadColumns);
+            Assert.Contains("created_at", downloadColumns);
+
+            // The blacklist key column and its lookup index are gone; the
+            // M0008 columns survive.
+            var blacklistColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"subtitle_search_blacklist\")", columnIndex: 1);
+            Assert.DoesNotContain("external_id", blacklistColumns);
+            Assert.Equal(["id", "provider", "reason", "expires_at"], blacklistColumns);
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'ix_subtitle_search_blacklist_provider'"));
+
+            // The download-history indexes survive the rollback untouched.
+            Assert.Equal(3L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'ix_subtitle_downloads_%'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
     /// Locks in the schema shape the squash verified against the old
     /// 29-migration chain: tables, column names in order, foreign keys and
     /// explicit indexes. Fails when the baseline drifts from the contract the
@@ -457,7 +520,10 @@ public class MigrationTests
                     "translation_age_threshold", "created_at", "updated_at", "include_in_translation",
                     "subtitle_coverage_json", "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed",
                     // M0008 search-request keys + B2 metadata, M0009 watermark.
-                    "year", "imdb_id", "quality", "size_bytes", "imdb_rating", "coverage_checked_at"],
+                    "year", "imdb_id", "quality", "size_bytes", "imdb_rating", "coverage_checked_at",
+                    // M0011: dedicated OpenSubtitles-moviehash column (media_hash
+                    // stays owned by the translation pipeline).
+                    "video_hash"],
                 ["shows"] = ["id", "sonarr_id", "title", "path", "date_added", "translation_age_threshold",
                     "created_at", "updated_at", "include_in_translation", "subtitle_coverage_json",
                     // M0008: series-level year/imdb (design point 1) + B2 rating.
@@ -468,7 +534,9 @@ public class MigrationTests
                     "season_id", "date_added", "created_at", "updated_at", "include_in_translation",
                     "audio_languages", "audio_override", "needs_translation", "no_subtitle_needed",
                     // M0009 coverage watermark (consumed by the M7 batch).
-                    "coverage_checked_at"],
+                    "coverage_checked_at",
+                    // M0011: dedicated OpenSubtitles-moviehash column.
+                    "video_hash"],
                 ["images"] = ["id", "type", "path", "show_id", "movie_id"],
                 ["path_mappings"] = ["id", "source_path", "destination_path", "media_type", "created_at", "updated_at"],
                 ["translation_requests"] = ["id", "job_id", "media_id", "title", "source_language", "target_language",
@@ -498,14 +566,22 @@ public class MigrationTests
                     "last_searched_at", "updated_at"],
                 ["subtitle_downloads"] = ["id", "media_type", "media_id", "provider", "external_id",
                     "language", "file_path", "match_score", "hash_match", "source", "search_session_id",
-                    "result", "error", "removed_at", "replaced_by_download_id", "created_at"],
-                ["subtitle_search_blacklist"] = ["id", "provider", "reason", "expires_at"],
+                    // M0010 dropped the never-written replacement-chain columns
+                    // (removed_at, replaced_by_download_id).
+                    "result", "error", "created_at"],
+                // M0010 appended external_id (write side of the locked
+                // (provider, external_id) blacklist contract).
+                ["subtitle_search_blacklist"] = ["id", "provider", "reason", "expires_at", "external_id"],
                 // M0009 telemetry tables.
                 ["subtitle_search_sessions"] = ["id", "media_type", "media_id", "provider",
                     "query_language", "result_count", "hit_target", "created_at"],
                 ["provider_quota_usage"] = ["date", "provider", "searches", "downloads",
                     "quota_limit", "quota_remaining"],
                 ["coverage_daily"] = ["date", "media_type", "language", "covered", "total"],
+                // M0011: the FTS5 title index. Rowids encode the media type
+                // (movie = 1e12 + id, show = 2e12 + id, episode = 3e12 + id);
+                // media_type is stored UNINDEXED for operator inspection.
+                ["media_title_fts"] = ["title", "media_type"],
                 ["version_info"] = ["version", "applied_on", "description"],
             };
 
@@ -551,14 +627,16 @@ public class MigrationTests
                 // auth_sessions.
                 ["subtitle_language_cache"] = ["sqlite_autoindex_subtitle_language_cache_1"],
                 // M0008: dequeue covering index, enqueue-dedup UNIQUE and
-                // the webhook-boost partial index on subtitle_search_state;
-                // subtitle_search_blacklist is id-only (rowid PK, no index).
+                // the webhook-boost partial index on subtitle_search_state.
+                // M0010: the blacklist gains the (provider, external_id)
+                // exact-match lookup index the filter side reads.
                 ["subtitle_search_state"] =
                 [
                     "ix_subtitle_search_state_boost",
                     "ix_subtitle_search_state_dequeue",
                     "ux_subtitle_search_state_media"
                 ],
+                ["subtitle_search_blacklist"] = ["ix_subtitle_search_blacklist_provider"],
                 ["subtitle_downloads"] =
                 [
                     "ix_subtitle_downloads_created",
@@ -582,7 +660,20 @@ public class MigrationTests
 
             var tables = await ReadColumnAsync(connection,
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", columnIndex: 0);
-            Assert.Equal(expectedColumns.Keys.Order().ToArray(), tables);
+            // The FTS5 shadow tables (media_title_fts_data/_idx/_content/
+            // _docsize/_config) carry SQLite-internal column names (the
+            // content mirror is c0/c1, not the declared column names) that
+            // are not contract — only their existence is pinned; the exact
+            // shape stays asserted on the virtual table itself.
+            var expectedNonShadow = expectedColumns.Keys.Order().ToArray();
+            Assert.Equal(expectedNonShadow, tables
+                .Where(name => !name.StartsWith("media_title_fts_", StringComparison.Ordinal))
+                .Order().ToArray());
+            Assert.Contains("media_title_fts_data", tables);
+            Assert.Contains("media_title_fts_idx", tables);
+            Assert.Contains("media_title_fts_content", tables);
+            Assert.Contains("media_title_fts_docsize", tables);
+            Assert.Contains("media_title_fts_config", tables);
 
             foreach (var (table, columns) in expectedColumns)
             {
@@ -612,6 +703,125 @@ public class MigrationTests
         }
     }
 
+    /// <summary>
+    /// M0011 adds video_hash to both media tables and creates the FTS5 title
+    /// index, so rolling it back must return exactly the M0010 state: version
+    /// back to 10, the column gone from movies/episodes while media_hash
+    /// survives untouched, and the virtual table plus all five shadow tables
+    /// gone from sqlite_master (DROP TABLE on the vtab cascades).
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_VideoHashAndTitleFtsMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(10);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(10L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+
+            // video_hash is gone from both media tables; media_hash (the
+            // translation pipeline's column) survives the rollback.
+            var movieColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"movies\")", columnIndex: 1);
+            Assert.DoesNotContain("video_hash", movieColumns);
+            Assert.Contains("media_hash", movieColumns);
+            var episodeColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"episodes\")", columnIndex: 1);
+            Assert.DoesNotContain("video_hash", episodeColumns);
+            Assert.Contains("media_hash", episodeColumns);
+
+            // The virtual table and every shadow table are gone entirely.
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'media_title_fts%'"));
+
+            // M0010's artifacts survive the rollback.
+            var blacklistColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"subtitle_search_blacklist\")", columnIndex: 1);
+            Assert.Contains("external_id", blacklistColumns);
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'ix_subtitle_search_blacklist_provider'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// The FTS5 engine gate (audit P1-4): SQLitePCLraw's bundled e_sqlite3
+    /// has FTS5 compiled in (FTS5 ships enabled in every e_sqlite3 build
+    /// since 3.9; bundle 2.1.x carries 3.44+), and the migration creating
+    /// the virtual table already fails the suite outright if it were not.
+    /// This test pins the query semantics the library search builds on:
+    /// quoted word-prefix phrases, unicode61 case folding, mid-word
+    /// non-matching, and the rowid type ranges.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_TitleSearchFts_MatchesWordPrefixes()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            MigrationConfiguration.RunMigrations(BuildRunner(connectionString));
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            await ExecuteAsync(connection,
+                "INSERT INTO media_title_fts(rowid, title, media_type) VALUES " +
+                "(1000000000001, 'The Matrix Reloaded', 'movie'), " +
+                "(1000000000002, 'Matrix Revolutions', 'movie'), " +
+                "(2000000000001, 'Foundation', 'show')");
+
+            // Word prefix, either case — unicode61 folds case on both sides.
+            Assert.Equal(2L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM media_title_fts WHERE media_title_fts MATCH '\"mat\"*'"));
+            Assert.Equal(2L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM media_title_fts WHERE media_title_fts MATCH '\"MAT\"*'"));
+
+            // A prefix matches any token of the title, not only the first word.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM media_title_fts WHERE media_title_fts MATCH '\"relo\"*'"));
+
+            // Mid-word fragments do not match — the locked prefix semantics
+            // that replace the old substring LIKE.
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM media_title_fts WHERE media_title_fts MATCH '\"trix\"*'"));
+
+            // Multi-token queries AND their prefix phrases.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM media_title_fts WHERE media_title_fts MATCH '\"matrix\" AND \"revo\"*'"));
+
+            // The rowid type range narrows a match to one media type
+            // (movie range: both Matrix rows; show range: none).
+            Assert.Equal(2L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM media_title_fts WHERE media_title_fts MATCH '\"mat\"*' " +
+                "AND rowid >= 1000000000000 AND rowid < 1214748364800"));
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM media_title_fts WHERE media_title_fts MATCH '\"mat\"*' " +
+                "AND rowid >= 2000000000000 AND rowid < 2214748364800"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
     private static IServiceProvider BuildRunner(string connectionString)
     {
         var services = new ServiceCollection();
@@ -624,6 +834,13 @@ public class MigrationTests
         await using var command = connection.CreateCommand();
         command.CommandText = commandText;
         return await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static async Task ExecuteAsync(SqliteConnection connection, string commandText)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
     private static async Task<long> ReadPragmaRowCountAsync(SqliteConnection connection, string pragma, string table)

@@ -58,10 +58,11 @@ public static class SubtitleSearchModule
 
         // LazyMediaHasher keeps its compute delegates injectable (tests pass
         // counters); the module adds the production write-back delegate that
-        // persists a fresh moviehash into media_hash (design ⑧ polish —
-        // fire-and-forget, NULL-guarded, see LazyMediaHasher). The root
-        // provider creates a scope per write so the singleton never captures
-        // a scoped DbContext.
+        // persists a fresh moviehash into video_hash (design ⑧ polish —
+        // M0011's dedicated column; media_hash belongs to the translation
+        // pipeline. Fire-and-forget, NULL-guarded, see LazyMediaHasher). The
+        // root provider creates a scope per write so the singleton never
+        // captures a scoped DbContext.
         services.AddSingleton(provider => new LazyMediaHasher(
             videoHashWriteBack: async (filePath, hash) =>
             {

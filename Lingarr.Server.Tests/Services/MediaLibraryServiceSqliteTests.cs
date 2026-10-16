@@ -51,6 +51,11 @@ public class MediaLibraryServiceSqliteTests : IDisposable
             .AddInterceptors(new RecordingInterceptor(_sqlLog))
             .Options);
         _dbContext.Database.EnsureCreated();
+        // M0011's FTS5 virtual table is not part of the EF model (virtual
+        // tables cannot be), so test schemas build it explicitly — from then
+        // on the context's save hook maintains it exactly like production
+        // and the search-side drift self-heal has the real shape to work on.
+        ExecuteRaw("CREATE VIRTUAL TABLE media_title_fts USING fts5(title, media_type UNINDEXED)");
 
         _settingService
             .Setup(s => s.GetSettingAsJson<TargetLanguage>(It.IsAny<string>()))
@@ -209,6 +214,24 @@ public class MediaLibraryServiceSqliteTests : IDisposable
     private static List<Episode> EpisodesOf(Show show) =>
         show.Seasons.SelectMany(season => season.Episodes).ToList();
 
+    private object? ExecuteScalarRaw(string sql)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar();
+    }
+
+    private long Scalar(string sql) => Convert.ToInt64(ExecuteScalarRaw(sql));
+
+    private string? ScalarString(string sql) => Convert.ToString(ExecuteScalarRaw(sql));
+
+    private void ExecuteRaw(string sql)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
     [Fact]
     public async Task AggregatesAcrossSeasonsAndMedia_OrdersAndPagesInSql()
     {
@@ -283,6 +306,192 @@ public class MediaLibraryServiceSqliteTests : IDisposable
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(["Apple", "Apricot"], result.Items.Select(i => i.Title).ToArray());
+    }
+
+    // ── FTS5 title search (audit P1-4): prefix semantics, id-set pushdown,
+    //    LIKE fallbacks and the drift self-heal ──────────────────────────
+
+    [Fact]
+    public async Task FtsSearch_MatchesWordPrefixesNotInfixes()
+    {
+        await SeedShowAsync("Star Trek", [1]);
+        await SeedMovieAsync("Starship Troopers");
+        await SeedMovieAsync("Startled Muse");
+        await SeedMovieAsync("Pineapple");
+
+        var service = CreateService();
+
+        // "star" prefixes the first word of three titles across both types
+        var star = await service.GetLibrary(null, "star", null, null, "Title", true, 1, 20);
+        Assert.Equal(3, star.TotalCount);
+        Assert.Equal(
+            ["Star Trek", "Starship Troopers", "Startled Muse"],
+            star.Items.Select(i => i.Title).ToArray());
+
+        // Word boundary (the locked semantics change): a mid-word fragment
+        // matches nothing under prefix matching, where the old substring
+        // LIKE would have found Pineapple via "apple".
+        Assert.Equal(0, (await service.GetLibrary(null, "apple", null, null, "Title", true, 1, 20)).TotalCount);
+        Assert.Equal(1, (await service.GetLibrary(null, "pine", null, null, "Title", true, 1, 20)).TotalCount);
+
+        // A prefix matches any token of the title, not only the first word
+        Assert.Equal(1, (await service.GetLibrary(null, "trek", null, null, "Title", true, 1, 20)).TotalCount);
+        Assert.Equal(0, (await service.GetLibrary(null, "rek", null, null, "Title", true, 1, 20)).TotalCount);
+
+        // Multi-word queries AND their prefix phrases
+        Assert.Equal(1, (await service.GetLibrary(null, "star mus", null, null, "Title", true, 1, 20)).TotalCount);
+        Assert.Equal("Startled Muse",
+            (await service.GetLibrary(null, "star mus", null, null, "Title", true, 1, 20)).Items.Single().Title);
+    }
+
+    [Fact]
+    public async Task FtsSearch_FiltersByIdSetNotTitleScan()
+    {
+        await SeedShowAsync("Apple Orchard", [1]);
+        await SeedShowAsync("Apricot Tree", [1]);
+        await SeedMovieAsync("Apricot Lane");
+        await SeedMovieAsync("Pineapple Express");
+
+        _sqlLog.Clear();
+        var result = await CreateService().GetLibrary(null, "ap", null, null, "Title", true, 1, 20);
+
+        Assert.Equal(
+            ["Apple Orchard", "Apricot Lane", "Apricot Tree"],
+            result.Items.Select(i => i.Title).ToArray());
+
+        // The media scans consumed the FTS-resolved id set: membership over
+        // ids, no lower(title) LIKE predicate left — the audit P1-4
+        // full-table scan is gone from the media queries of both types. (The
+        // show side carries two matched ids so the IN form is unambiguous;
+        // EF may render a single-id membership as an equality.)
+        var mediaQueries = _sqlLog.Where(sql =>
+                sql.Contains("FROM \"Shows\"", StringComparison.OrdinalIgnoreCase)
+                || sql.Contains("FROM \"Movies\"", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.True(mediaQueries.Count >= 2,
+            $"expected the show and movie scans, got: {string.Join(Environment.NewLine, _sqlLog)}");
+        Assert.All(mediaQueries, sql =>
+            Assert.DoesNotContain("LIKE", sql.ToUpperInvariant()));
+        Assert.Contains(mediaQueries, sql => sql.ToUpperInvariant().Contains("IN ("));
+    }
+
+    [Fact]
+    public async Task NonAsciiSearch_FallsBackToTheLikePath()
+    {
+        await SeedShowAsync("星际穿越", [1]);
+        await SeedMovieAsync("流浪地球");
+
+        _sqlLog.Clear();
+        var result = await CreateService().GetLibrary(null, "穿越", null, null, "Title", true, 1, 20);
+
+        // Substring semantics survive for CJK: "穿越" is a suffix of the
+        // title — a word-prefix FTS match would miss it (unicode61 does not
+        // segment hanzi runs), so the LIKE path serves it.
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("星际穿越", result.Items.Single().Title);
+
+        var mediaQueries = _sqlLog.Where(sql =>
+                sql.Contains("FROM \"Shows\"", StringComparison.OrdinalIgnoreCase)
+                || sql.Contains("FROM \"Movies\"", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.NotEmpty(mediaQueries);
+        // The fallback predicate ran inside the media scans — EF translates
+        // Contains on SQLite to instr() in current versions (older: LIKE),
+        // so accept either shape; what must NOT appear is an FTS MATCH.
+        Assert.Contains(mediaQueries, sql =>
+            sql.Contains("LIKE", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("instr(", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(mediaQueries, sql =>
+            sql.Contains("MATCH", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task FtsIndex_RebuildsItselfWhenDrifted()
+    {
+        await SeedShowAsync("Healed Show", [1]);
+        await SeedMovieAsync("Healed Movie");
+
+        // Seeding ran through the save hook: every media row (show, its
+        // episode, the movie) carries an index row.
+        Assert.Equal(3L, Scalar("SELECT COUNT(*) FROM media_title_fts"));
+
+        // Simulate drift — a write lost mid-save, or the orphan left behind
+        // by a set-based ExecuteDelete removal that bypasses the tracker.
+        ExecuteRaw("DELETE FROM media_title_fts WHERE media_type = 'movie'");
+
+        var result = await CreateService().GetLibrary(null, "healed", null, null, "Title", true, 1, 20);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(["Healed Movie", "Healed Show"], result.Items.Select(i => i.Title).ToArray());
+        Assert.Equal(3L, Scalar("SELECT COUNT(*) FROM media_title_fts"));
+    }
+
+    [Fact]
+    public async Task SearchWithoutTheFtsTable_FallsBackToLike()
+    {
+        // Schemas built by EnsureCreated (fixtures predating M0011) carry no
+        // virtual table: the search must degrade to the LIKE predicate and
+        // the save hook must quietly skip the missing table.
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = new LingarrDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
+            .UseSqlite(connection)
+            .Options);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Movies.Add(new Movie
+        {
+            RadarrId = 500,
+            Title = "Fallback Film",
+            FileName = "Fallback.2020.mkv",
+            Path = "/movies/fallback",
+            DateAdded = DateTimeOffset.UtcNow
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = new MediaLibraryService(
+            dbContext, _settingService.Object, _costService.Object,
+            NullLogger<MediaLibraryService>.Instance);
+        var result = await service.GetLibrary(null, "fall", null, null, "Title", true, 1, 20);
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Fallback Film", result.Items.Single().Title);
+    }
+
+    [Fact]
+    public async Task TitleWritesMaintainTheFtsIndex()
+    {
+        var show = await SeedShowAsync("Old Title", [1]);
+        var movie = await SeedMovieAsync("Caper");
+
+        // Seeding ran through the save hook — the movie, the show and the
+        // episode each carry an index row under their type-encoded rowid.
+        Assert.Equal(3L, Scalar("SELECT COUNT(*) FROM media_title_fts"));
+        Assert.Equal("Old Title",
+            ScalarString($"SELECT title FROM media_title_fts WHERE media_type = 'show' AND rowid = 2000000000000 + {show.Id}"));
+
+        // A rename through a tracked save re-indexes the row (upsert).
+        movie.Title = "New Title";
+        await _dbContext.SaveChangesAsync();
+        Assert.Equal("New Title",
+            ScalarString($"SELECT title FROM media_title_fts WHERE media_type = 'movie' AND rowid = 1000000000000 + {movie.Id}"));
+        Assert.Equal(3L, Scalar("SELECT COUNT(*) FROM media_title_fts"));
+
+        // A flag-only update (the statistics scan's writes look exactly like
+        // this) never re-indexes.
+        movie.NeedsTranslation = true;
+        await _dbContext.SaveChangesAsync();
+        Assert.Equal(3L, Scalar("SELECT COUNT(*) FROM media_title_fts"));
+        Assert.Equal("New Title",
+            ScalarString($"SELECT title FROM media_title_fts WHERE media_type = 'movie' AND rowid = 1000000000000 + {movie.Id}"));
+
+        // Deleting a tracked entity removes its index row; set-based
+        // ExecuteDelete removals leave orphans that the drift self-heal
+        // cleans on the next search instead.
+        _dbContext.Movies.Remove(movie);
+        await _dbContext.SaveChangesAsync();
+        Assert.Equal(0L,
+            Scalar($"SELECT COUNT(*) FROM media_title_fts WHERE media_type = 'movie' AND rowid = 1000000000000 + {movie.Id}"));
+        Assert.Equal(2L, Scalar("SELECT COUNT(*) FROM media_title_fts"));
     }
 
     [Fact]
