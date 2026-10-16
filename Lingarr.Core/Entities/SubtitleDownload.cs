@@ -7,10 +7,10 @@ namespace Lingarr.Core.Entities;
 /// One persisted download attempt in the subtitle-search history (M0008).
 /// Rows are appended by the download pipeline (⑦) for every outcome —
 /// successes, failures, low-confidence skips and already-exists skips — so
-/// the history screen and the KPIs count from real attempts only. The
-/// replacement chain (<see cref="RemovedAt"/>/<see cref="ReplacedByDownloadId"/>)
-/// marks superseded files; the files themselves stay on disk for the user's
-/// cleanup policy.
+/// the history screen and the KPIs count from real attempts only. A
+/// re-download simply lands a new file and a new row: the never-implemented
+/// replacement-chain columns were dropped in M0010 (dead schema misleads),
+/// and the files themselves stay on disk for the user's cleanup policy.
 /// <para>
 /// Not to be confused with the ABI record of the same name
 /// (Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload),
@@ -57,12 +57,6 @@ public class SubtitleDownload
 
     /// <summary>Failure reason when <see cref="Result"/> is Failed.</summary>
     public string? Error { get; set; }
-
-    /// <summary>When this file was superseded (replacement chain); null while active.</summary>
-    public DateTimeOffset? RemovedAt { get; set; }
-
-    /// <summary>Id of the download that replaced this one; plain int, deliberately no self-FK.</summary>
-    public int? ReplacedByDownloadId { get; set; }
 
     /// <summary>Attempt timestamp — the table deliberately has no updated_at.</summary>
     public required DateTimeOffset CreatedAt { get; set; }
