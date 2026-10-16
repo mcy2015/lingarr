@@ -38,6 +38,18 @@ public class PathConversionService
     public static string MappingCacheKey(MediaType mediaType) => $"path-mappings:{mediaType}";
 
     /// <summary>
+    /// Cache key under which the resolved media roots are memoized. Nothing
+    /// invalidates this entry when libraries are synced or mappings edited
+    /// (those channels have no change event wired here), so a root change —
+    /// a newly synced library, a rewritten mapping destination — takes
+    /// effect at most <see cref="MappingCacheSeconds"/> seconds (30s) late.
+    /// That bound is accepted because computing the roots fans out over the
+    /// Path columns of movies, shows and episodes (library-scale row counts)
+    /// and used to run on every whitelist validation (audit QA5 P2-4).
+    /// </summary>
+    public static string MediaRootsCacheKey => "path-media-roots";
+
+    /// <summary>
     /// Converts and maps a source path based on the specified media type, applying configured path mappings
     /// and normalizing directory separators.
     /// </summary>
@@ -76,6 +88,12 @@ public class PathConversionService
     /// </summary>
     /// <param name="path">The path to normalize. Can be either Windows or Linux style path.</param>
     public string NormalizePath(string path)
+    {
+        return NormalizePathCore(path);
+    }
+
+    /// <summary>Pure form of <see cref="NormalizePath"/> usable from static contexts.</summary>
+    private static string NormalizePathCore(string path)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -157,9 +175,35 @@ public class PathConversionService
     /// per-path parents are one directory level and cover every root layout
     /// (movie dirs sit under the movies root, show dirs under the shows root,
     /// season dirs under their show). Filesystem roots are never returned so a
-    /// pathological library at "/" cannot re-open the whole disk.
+    /// pathological library at "/" cannot re-open the whole disk. Roots come
+    /// back in resolved canonical form (see the whitelist validator) and are
+    /// memoized for a short TTL — see <see cref="MediaRootsCacheKey"/>.
     /// </summary>
     public async Task<List<string>> GetMediaRootsAsync(CancellationToken cancellationToken = default)
+    {
+        // QA5 P2-4: the roots used to be recomputed (three library-wide Path
+        // queries) on every whitelist validation. Memoize the resolved list
+        // for the same short TTL as the mapping cache; root changes apply at
+        // most 30s late — see <see cref="MediaRootsCacheKey"/>.
+        if (_cache is not null
+            && _cache.TryGetValue(MediaRootsCacheKey, out List<string>? cached)
+            && cached is not null)
+        {
+            return cached;
+        }
+
+        var roots = await ComputeMediaRootsAsync(cancellationToken);
+
+        if (_cache is not null)
+        {
+            _cache.Set(MediaRootsCacheKey, roots, _mappingCacheDuration);
+        }
+
+        return roots;
+    }
+
+    /// <summary>Uncached roots computation; the callers see the cached form.</summary>
+    private async Task<List<string>> ComputeMediaRootsAsync(CancellationToken cancellationToken)
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var mappingRoots = await _context.PathMappings
@@ -217,8 +261,26 @@ public class PathConversionService
             return "No media roots are configured. Sync a library or set up path mappings before scanning server paths.";
         }
 
-        var normalized = NormalizeRoot(path);
-        if (roots.Any(root => IsSameOrUnder(normalized, root)))
+        // P0 fix (path traversal): the old check compared the raw string
+        // against the roots, so "/root/../.." passed the prefix test and the
+        // OS then resolved the ".." during enumeration, escaping the
+        // whitelist. Resolving via GetFullPath first folds ".", ".." and
+        // duplicate separators exactly the way the filesystem would, and the
+        // comparison runs on that resolved form (the roots are cached
+        // resolved too). Paths GetFullPath rejects — invalid characters,
+        // malformed input — are treated as outside so they never reach the
+        // filesystem.
+        string resolved;
+        try
+        {
+            resolved = ResolveFullPath(NormalizeRoot(path));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return $"Path '{path}' is not a valid path.";
+        }
+
+        if (roots.Any(root => IsSameOrUnder(resolved, root)))
         {
             return null;
         }
@@ -230,22 +292,55 @@ public class PathConversionService
 
     private void AddRoot(HashSet<string> roots, string? root)
     {
-        var normalized = NormalizeRoot(root);
-        if (normalized.Length > 0)
+        // Roots are stored resolved: candidates are only ever compared in
+        // resolved form (see ValidatePathInsideMediaRootsAsync), so a root
+        // kept lexical would never match its own resolved candidates.
+        try
         {
-            roots.Add(normalized);
+            var resolved = ResolveFullPath(NormalizeRoot(root));
+            if (resolved.Length > 0)
+            {
+                roots.Add(resolved);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // A stored path GetFullPath cannot resolve can never match a
+            // resolvable candidate; dropping the root fails closed.
         }
     }
 
+    /// <summary>
+    /// The canonical form used for whitelist comparisons:
+    /// <see cref="Path.GetFullPath"/> folds ".", ".." and duplicate
+    /// separators the way the OS later would when the path is enumerated,
+    /// and <see cref="NormalizeRoot"/> maps the platform-specific result
+    /// (drive letters, backslashes) back to the drive-less "/"-separated
+    /// shape shared by candidates and roots on every OS. Throws whatever
+    /// GetFullPath throws for unusable input.
+    /// </summary>
+    private static string ResolveFullPath(string path)
+    {
+        // NUL can never appear in a real path component; reject it here so
+        // the verdict never depends on runtime-specific GetFullPath
+        // validation having (or lacking) the same check.
+        if (path.Contains('\0'))
+        {
+            throw new ArgumentException("Path contains a NUL character.", nameof(path));
+        }
+
+        return NormalizeRoot(Path.GetFullPath(path));
+    }
+
     /// <summary>NormalizePath + trailing-slash trim; "/" and "" yield "" (not a usable root).</summary>
-    private string NormalizeRoot(string? path)
+    private static string NormalizeRoot(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
             return string.Empty;
         }
 
-        return NormalizePath(path).TrimEnd('/');
+        return NormalizePathCore(path).TrimEnd('/');
     }
 
     /// <summary>True when <paramref name="path"/> equals or lies under <paramref name="root"/>, segment-aware.</summary>

@@ -114,7 +114,9 @@ public class SubtitleController : ControllerBase
     /// <summary>
     /// Imports subtitle files already on the server (paths from scan-path):
     /// same storage, binding, dedup and translation semantics as the upload
-    /// import.
+    /// import. Every submitted path must lie inside a library media root
+    /// (same whitelist as scan-path); anything outside is rejected with 400
+    /// before the filesystem is touched.
     /// </summary>
     [HttpPost("import-paths")]
     public async Task<ActionResult<ImportSubtitlesResponse>> ImportPaths(
@@ -123,6 +125,21 @@ public class SubtitleController : ControllerBase
         if (request.Paths.Count == 0)
         {
             return BadRequest(new { message = "No paths provided." });
+        }
+
+        // P1 bypass fix: scan-path validates its directory, but import-paths
+        // used to read the submitted paths directly (File.Exists + content
+        // read), so a client could import any server-readable file by naming
+        // it. Every path gets the same media-root whitelist as scan-path; the
+        // first offender aborts the batch with 400 and the violating path
+        // echoed in the message, before the filesystem is touched.
+        foreach (var importPath in request.Paths)
+        {
+            var rejection = await _pathConversionService.ValidatePathInsideMediaRootsAsync(importPath);
+            if (rejection is not null)
+            {
+                return BadRequest(new { message = rejection });
+            }
         }
 
         var results = await _subtitleImportService.ImportPaths(

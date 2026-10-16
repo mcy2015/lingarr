@@ -22,7 +22,8 @@ namespace Lingarr.Server.Tests.Controllers;
 /// Audit S6/P1-12: the recursive subtitle endpoints (/subtitle/all and
 /// scan-path) only accept paths at or inside a library media root. Outside
 /// paths get a readable 400 before the filesystem is touched; library paths
-/// pass through unchanged.
+/// pass through unchanged. import-paths runs every submitted file through
+/// the same whitelist (P1 bypass: it used to read any named server file).
 /// </summary>
 public class SubtitleControllerPathValidationTests : IDisposable
 {
@@ -153,4 +154,86 @@ public class SubtitleControllerPathValidationTests : IDisposable
         Assert.Contains("No media roots", MessageOf(result));
         _importService.Verify(s => s.ScanPath(It.IsAny<string>()), Times.Never);
     }
+
+    // ── import-paths (P1 bypass) ──────────────────────────────────
+
+    [Fact]
+    public async Task ImportPaths_AnyPathOutsideMediaRoots_Returns400WithoutImporting()
+    {
+        // One legit path is not enough: a single offender in the batch must
+        // abort the whole request before any file is read.
+        var request = new ImportPathsRequest
+        {
+            Paths = new List<string> { "/media/movies/Dune/Dune.zh.srt", "/etc/passwd" }
+        };
+
+        var response = await CreateController().ImportPaths(request);
+
+        var result = Assert.IsType<BadRequestObjectResult>(response.Result);
+        Assert.Contains("outside", MessageOf(result));
+        Assert.Contains("/etc/passwd", MessageOf(result)); // offending path echoed
+        VerifyImportPathsNeverCalled();
+    }
+
+    [Fact]
+    public async Task ImportPaths_DotDotEscapeInWhitelistedPrefix_Returns400()
+    {
+        // P0 + P1 combined: the path textually starts inside a whitelisted
+        // root, but resolves outside it — the pre-fix lexical check let this
+        // through and the endpoint would have read /etc/passwd.
+        var request = new ImportPathsRequest
+        {
+            Paths = new List<string> { "/media/movies/../../etc/passwd" }
+        };
+
+        var response = await CreateController().ImportPaths(request);
+
+        Assert.IsType<BadRequestObjectResult>(response.Result);
+        VerifyImportPathsNeverCalled();
+    }
+
+    [Fact]
+    public async Task ImportPaths_AllPathsInsideMediaRoots_Imports()
+    {
+        var request = new ImportPathsRequest
+        {
+            Paths = new List<string>
+            {
+                "/media/movies/Dune/Dune.zh.srt",
+                "/media/tv/Show/Season 1/Show.S01E01.zh.srt"
+            }
+        };
+        _importService
+            .Setup(s => s.ImportPaths(
+                request.Paths, request.SourceLanguage, request.TargetLanguage,
+                request.Translate, request.MediaType, request.MediaId, request.Season,
+                request.ChineseConvert, request.IsBilingual))
+            .ReturnsAsync(new List<ImportedSubtitleResult>());
+
+        var response = await CreateController().ImportPaths(request);
+
+        var result = Assert.IsType<OkObjectResult>(response.Result);
+        var value = Assert.IsType<ImportSubtitlesResponse>(result.Value);
+        Assert.Empty(value.Results);
+        _importService.Verify(s => s.ImportPaths(
+            request.Paths, request.SourceLanguage, request.TargetLanguage,
+            request.Translate, request.MediaType, request.MediaId, request.Season,
+            request.ChineseConvert, request.IsBilingual), Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportPaths_EmptyPathList_Returns400WithoutImporting()
+    {
+        var request = new ImportPathsRequest { Paths = new List<string>() };
+
+        var response = await CreateController().ImportPaths(request);
+
+        Assert.IsType<BadRequestObjectResult>(response.Result);
+        VerifyImportPathsNeverCalled();
+    }
+
+    private void VerifyImportPathsNeverCalled() => _importService.Verify(s => s.ImportPaths(
+        It.IsAny<List<string>>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+        It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<string?>(),
+        It.IsAny<bool>()), Times.Never);
 }

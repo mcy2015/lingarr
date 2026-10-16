@@ -223,20 +223,156 @@ public class PathConversionServiceTests : IDisposable
         Assert.Contains("No media roots", rejection!);
     }
 
+    // ── traversal (P0): resolved vs lexical comparison ────────────
+
+    [Fact]
+    public async Task ValidatePathInsideMediaRoots_DotDotTraversal_IsRejectedAfterResolution()
+    {
+        await SeedMappingAsync("/data/torrents/movies", "/media/movies", MediaType.Movie);
+        var service = CreateService();
+
+        // Every vector below starts with the whitelisted prefix "/media/movies",
+        // so the old lexical prefix check waved each one through — the OS then
+        // resolved the ".." during enumeration and escaped the whitelist.
+        // Resolved, none of them lands at/inside the root.
+        Assert.NotNull(await service.ValidatePathInsideMediaRootsAsync("/media/movies/../../etc"));
+        Assert.NotNull(await service.ValidatePathInsideMediaRootsAsync("/media/movies/.."));
+        Assert.NotNull(await service.ValidatePathInsideMediaRootsAsync("/media/movies/sub/../../.."));
+        Assert.NotNull(await service.ValidatePathInsideMediaRootsAsync("/media/movies//../.."));
+        Assert.NotNull(await service.ValidatePathInsideMediaRootsAsync("/media/movies/Dune/../../../srv"));
+    }
+
+    [Fact]
+    public async Task ValidatePathInsideMediaRoots_RedundantSegments_ResolveInsideAndPass()
+    {
+        await SeedMappingAsync("/data/torrents/movies", "/media/movies", MediaType.Movie);
+        var service = CreateService();
+
+        // ".", duplicate separators, trailing "/." and a trailing slash are
+        // not traversal — resolved they stay at/inside the root and must keep
+        // working (the fix must not over-reject harmless spellings).
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/media/movies"));
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/media/movies/"));
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/media/movies/."));
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/media/movies/./Dune"));
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/media/movies//Dune"));
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/media/movies/Dune/."));
+    }
+
+    [Fact]
+    public async Task ValidatePathInsideMediaRoots_InputGetFullPathRejects_ReturnsInvalidPathError()
+    {
+        await SeedMappingAsync("/data/torrents/movies", "/media/movies", MediaType.Movie);
+        var service = CreateService();
+
+        // A NUL byte can never be a real path component; it must be rejected
+        // as invalid rather than passed on to the filesystem layer.
+        var rejection = await service.ValidatePathInsideMediaRootsAsync("/media/movies/Du\0ne");
+
+        Assert.NotNull(rejection);
+        Assert.Contains("not a valid path", rejection!);
+    }
+
+    // ── media roots cache (QA5 P2-4) ──────────────────────────────
+
+    [Fact]
+    public async Task MediaRootsCache_RepeatedValidations_QueryLibraryTablesOnce()
+    {
+        _context.Movies.Add(new Movie
+        {
+            RadarrId = 1, Title = "Dune", Path = "/data/media/movies/Dune", FileName = "Dune",
+            DateAdded = DateTimeOffset.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        var service = CreateService();
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/data/media/movies"));
+        var queriesAfterFirst = _counter.MediaRootQueries;
+
+        // The first validation really hit the library tables (movies + shows
+        // + episodes), not an empty pass.
+        Assert.True(queriesAfterFirst > 0);
+
+        // Any number of further validations — pass or reject — is served
+        // from the cache: no additional library queries.
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/data/media/movies/Dune"));
+        Assert.NotNull(await service.ValidatePathInsideMediaRootsAsync("/etc"));
+
+        Assert.Equal(queriesAfterFirst, _counter.MediaRootQueries);
+        Assert.True(_cache.TryGetValue(PathConversionService.MediaRootsCacheKey, out _));
+    }
+
+    [Fact]
+    public async Task MediaRootsCache_WithoutCache_RequeriesLibraryTables()
+    {
+        // A null cache (optional dependency) must degrade to the old behaviour.
+        _context.Movies.Add(new Movie
+        {
+            RadarrId = 1, Title = "Dune", Path = "/data/media/movies/Dune", FileName = "Dune",
+            DateAdded = DateTimeOffset.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        var service = new PathConversionService(_context);
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/data/media/movies"));
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/data/media/movies/Dune"));
+
+        // Two validations × three library tables, no caching.
+        Assert.Equal(6, _counter.MediaRootQueries);
+    }
+
+    [Fact]
+    public async Task MediaRootsCache_MissAfterRemoval_ServesFreshRoots()
+    {
+        _context.Movies.Add(new Movie
+        {
+            RadarrId = 1, Title = "Dune", Path = "/data/media/movies/Dune", FileName = "Dune",
+            DateAdded = DateTimeOffset.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        var service = CreateService();
+        Assert.NotNull(await service.ValidatePathInsideMediaRootsAsync("/srv/other"));
+
+        // Simulate the TTL expiring while a second library got synced: the
+        // fresh computation must pick the new root up.
+        _context.Movies.Add(new Movie
+        {
+            RadarrId = 2, Title = "Blade", Path = "/srv/other/Blade", FileName = "Blade",
+            DateAdded = DateTimeOffset.UtcNow
+        });
+        await _context.SaveChangesAsync();
+        _cache.Remove(PathConversionService.MediaRootsCacheKey);
+
+        Assert.Null(await service.ValidatePathInsideMediaRootsAsync("/srv/other/Blade"));
+    }
+
     /// <summary>
-    /// Counts SELECT statements against the mapping table. Gated on the SELECT
-    /// prefix so EnsureCreated DDL and seed INSERTs are not miscounted.
+    /// Counts SELECT statements against the mapping and library tables.
+    /// Gated on the SELECT prefix so EnsureCreated DDL and seed INSERTs are
+    /// not miscounted.
     /// </summary>
     private sealed class QueryCounter : DbCommandInterceptor
     {
         public int MappingQueries;
+        public int MediaRootQueries;
 
         private void Count(DbCommand command)
         {
-            if (command.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
-                && command.CommandText.Contains("PathMappings", StringComparison.OrdinalIgnoreCase))
+            if (!command.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (command.CommandText.Contains("PathMappings", StringComparison.OrdinalIgnoreCase))
             {
                 MappingQueries++;
+            }
+            else if (command.CommandText.Contains("Movies", StringComparison.OrdinalIgnoreCase)
+                || command.CommandText.Contains("Shows", StringComparison.OrdinalIgnoreCase)
+                || command.CommandText.Contains("Episodes", StringComparison.OrdinalIgnoreCase))
+            {
+                MediaRootQueries++;
             }
         }
 
