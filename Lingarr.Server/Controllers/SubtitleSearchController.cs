@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Lingarr.Contracts.Plugins;
+using Lingarr.Contracts.Settings;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Modules.SubtitleSearch;
@@ -98,6 +100,23 @@ public sealed record SubtitleBacklogResponse(
     int NextRoundCount);
 
 /// <summary>
+/// One source card of the providers list (settings page): the manifest
+/// shape the card renders — display name, description, settings form —
+/// plus the two auth flags. <see cref="RequiresAuth"/> comes from the
+/// registry attribute; <see cref="CredentialsConfigured"/> is true when
+/// any Secret field of the manifest has a stored non-blank value. Entries
+/// without a manifest (test doubles) degrade to the provider key, a null
+/// description and an empty settings list instead of failing the list.
+/// </summary>
+public sealed record SubtitleProviderResponse(
+    string Provider,
+    string DisplayName,
+    string? Description,
+    bool RequiresAuth,
+    bool CredentialsConfigured,
+    IReadOnlyList<PluginSettingField> Settings);
+
+/// <summary>
 /// Manual surface of the subtitle search (tech design ⑥). M2 filled the
 /// provider test endpoint; M3/M4 add search (per-source, front end fans
 /// out), download (cacheKey + index through the pipeline), pin and backlog.
@@ -109,6 +128,7 @@ public sealed record SubtitleBacklogResponse(
 public class SubtitleSearchController : ControllerBase
 {
     private readonly SubtitleProviderRegistry _providerRegistry;
+    private readonly ISettingsAccess _settingsAccess;
     private readonly SubtitleSearchOrchestrator _orchestrator;
     private readonly SubtitleSearchQueueService _queueService;
     private readonly SubtitlePinService _pinService;
@@ -118,6 +138,7 @@ public class SubtitleSearchController : ControllerBase
 
     public SubtitleSearchController(
         SubtitleProviderRegistry providerRegistry,
+        ISettingsAccess settingsAccess,
         SubtitleSearchOrchestrator orchestrator,
         SubtitleSearchQueueService queueService,
         SubtitlePinService pinService,
@@ -126,6 +147,7 @@ public class SubtitleSearchController : ControllerBase
         ILogger<SubtitleSearchController> logger)
     {
         _providerRegistry = providerRegistry;
+        _settingsAccess = settingsAccess;
         _orchestrator = orchestrator;
         _queueService = queueService;
         _pinService = pinService;
@@ -347,18 +369,70 @@ public class SubtitleSearchController : ControllerBase
     }
 
     /// <summary>
-    /// Per-source cards: enabled, cooldown state, last error and the daily
-    /// quota row. Answers 501 until the M5/M6 batch lands the quota-row
-    /// join; the provider keys in the body are the real registry contents.
+    /// Per-source cards for the settings page: one entry per registered
+    /// source in registry order — manifest form fields plus the auth flags,
+    /// with credentialsConfigured read live from the encrypted settings
+    /// store (any stored Secret field counts, so the badge updates on the
+    /// SettingUpdatesHub hot reload). A secret read that fails degrades
+    /// that one source to credentialsConfigured=false; the list itself
+    /// never 500s over it.
     /// </summary>
     [HttpGet("providers")]
-    public IActionResult GetProviders()
+    public async Task<IActionResult> GetProviders()
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, new
+        var providers = new List<SubtitleProviderResponse>(_providerRegistry.All.Count);
+        foreach (var entry in _providerRegistry.All)
         {
-            message = "The subtitle source list with health and quota state lands with the M3 automation batch.",
-            providers = _providerRegistry.All.Select(entry => entry.Provider.Provider).ToArray()
-        });
+            providers.Add(new SubtitleProviderResponse(
+                entry.Provider.Provider,
+                entry.Manifest?.DisplayName ?? entry.Provider.Provider,
+                entry.Manifest?.Description,
+                entry.RequiresAuth,
+                await IsCredentialConfigured(entry),
+                entry.Manifest?.Settings ?? []));
+        }
+
+        return Ok(providers);
+    }
+
+    /// <summary>
+    /// Whether any Secret field of the source manifest has a stored
+    /// non-blank value. Sources without secrets (and manifest-less test
+    /// doubles) are never configured; a failing read degrades to false
+    /// with a log line instead of failing the endpoint.
+    /// </summary>
+    private async Task<bool> IsCredentialConfigured(RegisteredSubtitleProvider entry)
+    {
+        if (entry.Manifest is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var field in entry.Manifest.Settings)
+            {
+                if (field.Type != PluginSettingType.Secret)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(await _settingsAccess.GetEncryptedSettingAsync(field.Key)))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not read credentials of subtitle source {Provider}; rendering it as unconfigured.",
+                entry.Provider.Provider);
+            return false;
+        }
+
+        return false;
     }
 
     private static bool TryParseMediaType(string? value, out MediaType mediaType)
