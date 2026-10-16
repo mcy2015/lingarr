@@ -248,7 +248,15 @@ export const authGuard = async (to: RouteLocationNormalized): Promise<boolean | 
 
 const router = createRouter({
     history: createWebHistory(baseUrl()),
-    routes
+    routes,
+    // Back/forward navigations restore the previous window scroll position
+    // (list screens pair this with their own inner-container persistence,
+    // e.g. LibraryPage's sessionStorage scroll top). Every other navigation
+    // keeps vue-router's default of not scrolling at all — screens own their
+    // inner scroll containers.
+    scrollBehavior(_to, _from, savedPosition) {
+        return savedPosition ?? false
+    }
 })
 
 router.beforeEach(authGuard)

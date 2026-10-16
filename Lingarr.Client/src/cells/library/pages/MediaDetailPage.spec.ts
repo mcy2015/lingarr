@@ -1223,3 +1223,171 @@ describe('MediaDetailPage · 搜索字幕入口与音轨判定(QA6)', () => {
         )
     })
 })
+
+// ═══ P2 批:缺口数扣豁免 · IMDb 外链 · 搜索弹层的新 props ═══════════
+describe('MediaDetailPage · P2 打磨(缺口豁免/IMDb/弹层 props)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        translateSubtitleMock.mockResolvedValue({ jobId: 55 })
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+        collectMock.mockResolvedValue(seasonFiles)
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    const showWithEpisodeFlags = (
+        noSubtitleNeeded: Record<number, boolean>
+    ): IMediaLibraryItem =>
+        ({
+            ...showItem,
+            show: {
+                ...showItem.show!,
+                seasons: [
+                    {
+                        ...showItem.show!.seasons[0],
+                        episodes: showItem.show!.seasons[0].episodes.map((episode) => ({
+                            ...episode,
+                            noSubtitleNeeded: noSubtitleNeeded[episode.id] ?? false
+                        }))
+                    }
+                ]
+            }
+        }) as unknown as IMediaLibraryItem
+
+    it('subtracts exempt episodes from the missing-episode count', async () => {
+        // 3 episodes, 1 ZH track, ep02+ep03 exempt → nothing missing
+        libraryMock.mockResolvedValue({
+            items: [showWithEpisodeFlags({ 22: true, 23: true })],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const none = await mountDetail('show', '/library/show/3')
+        expect(none.wrapper.find('div.mono').text()).not.toContain('missing ZH subtitles')
+
+        // only ep03 exempt → 3 - 1 exempt - 1 have = 1 still missing
+        libraryMock.mockResolvedValue({
+            items: [showWithEpisodeFlags({ 23: true })],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const partial = await mountDetail('show', '/library/show/3')
+        const sub = partial.wrapper.find('div.mono').text()
+        expect(sub).toContain(
+            en.mediaDetail.missingEpisodes.replace('{count}', '1').replace('{lang}', 'ZH')
+        )
+    })
+
+    it('links out to IMDb only when the payload carries an id', async () => {
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem, imdbId: 'tt15239678' }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const linked = await mountDetail('movie', '/library/movie/7')
+
+        const imdb = linked.wrapper.find('[data-test="imdb-link"]')
+        expect(imdb.exists()).toBe(true)
+        expect(imdb.attributes('href')).toBe('https://www.imdb.com/title/tt15239678/')
+        expect(imdb.attributes('target')).toBe('_blank')
+        expect(imdb.attributes('aria-label')).toBe(en.mediaDetail.openImdb)
+
+        // legacy rows without the column render no dead link
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const bare = await mountDetail('movie', '/library/movie/7')
+        expect(bare.wrapper.find('[data-test="imdb-link"]').exists()).toBe(false)
+    })
+
+    it('passes the movie audio and existing subtitle languages to the search modal', async () => {
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                audioLanguages: ['zh'],
+                files: [
+                    {
+                        fileName: 'dune.en.srt',
+                        directory: '/movies/dune',
+                        languages: ['en'],
+                        format: 'srt',
+                        bytes: 512
+                    }
+                ],
+                embedded: [
+                    {
+                        mediaId: 7,
+                        streamIndex: 2,
+                        language: 'ja',
+                        rawLanguage: 'jpn',
+                        title: null,
+                        codec: 'srt',
+                        isTextBased: true
+                    }
+                ],
+                embeddedScanned: true
+            })
+        )
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="open-subtitle-search"]').trigger('click')
+        await settle()
+
+        const modal = wrapper.findComponent(SubtitleSearchModal)
+        expect(modal.exists()).toBe(true)
+        // audio row passthrough drives the modal's native-audio hint
+        expect(modal.props('audioLanguages')).toEqual(['zh'])
+        // existing = external files + embedded tracks of the searched unit
+        expect([...(modal.props('existingLanguages') ?? [])].sort()).toEqual(['en', 'ja'])
+    })
+
+    it('scopes the episode search existing languages to that episode', async () => {
+        libraryMock.mockResolvedValue({
+            items: [showItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        // ep01 has a zh file, ep02 has none — the modal of ep02 must not
+        // inherit ep01's languages
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                files: [
+                    {
+                        fileName: 'shogun.s01e01.zh.srt',
+                        directory: '/shows/shogun/s01',
+                        languages: ['zh'],
+                        format: 'srt',
+                        bytes: 256
+                    }
+                ],
+                embeddedScanned: true
+            })
+        )
+        const { wrapper } = await mountDetail('show', '/library/show/3')
+
+        const buttons = wrapper.findAll('[data-test="episode-subtitle-search"]')
+        await buttons[1].trigger('click')
+        await settle()
+
+        const modal = wrapper.findComponent(SubtitleSearchModal)
+        expect(modal.exists()).toBe(true)
+        expect(modal.props('mediaId')).toBe(22)
+        expect(modal.props('existingLanguages')).toEqual([])
+    })
+})

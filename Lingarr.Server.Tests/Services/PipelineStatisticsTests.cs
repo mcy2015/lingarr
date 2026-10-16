@@ -119,6 +119,55 @@ public class PipelineStatisticsTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPipelineStatistics_MissingSubtitles_ExcludesNoSubtitleNeededMedia()
+    {
+        // 10 episodes + 2 movies with 4 nl files on disk; 3 episodes and 1
+        // movie carry the persisted exemption flag — they owe nothing and
+        // must not count into the per-language gap
+        await SeedStatisticsAsync(episodes: 10, movies: 2, new Dictionary<string, int> { ["nl"] = 4 });
+        var show = new Show { SonarrId = 1, Title = "S", Path = "/tv/s", DateAdded = null };
+        var season = new Season { SeasonNumber = 1, Show = show };
+        for (var i = 1; i <= 10; i++)
+        {
+            season.Episodes.Add(new Episode
+            {
+                SonarrId = i,
+                EpisodeNumber = i,
+                Title = $"E{i}",
+                Season = season,
+                NoSubtitleNeeded = i <= 3
+            });
+        }
+        show.Seasons.Add(season);
+        _dbContext.Shows.Add(show);
+        _dbContext.Movies.Add(new Movie
+        {
+            RadarrId = 1,
+            Title = "Exempt",
+            FileName = "exempt.mkv",
+            Path = "/movies/exempt",
+            DateAdded = null,
+            NoSubtitleNeeded = true
+        });
+        _dbContext.Movies.Add(new Movie
+        {
+            RadarrId = 2,
+            Title = "Owed",
+            FileName = "owed.mkv",
+            Path = "/movies/owed",
+            DateAdded = null
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var pipeline = await CreateService().GetPipelineStatistics();
+
+        // the headline media count stays the whole library (12)…
+        Assert.Equal(12, pipeline.MediaCount);
+        // …while the gap drops the 4 exempt items: 12 - 4 exempt - 4 files
+        Assert.Equal(4, pipeline.MissingSubtitles);
+    }
+
+    [Fact]
     public async Task GetPipelineStatistics_SuccessRate_OverLast30DaysOnly()
     {
         await SeedStatisticsAsync(0, 0, new Dictionary<string, int>());

@@ -90,7 +90,10 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         string title,
         int[] episodesPerSeason,
         Dictionary<string, MediaLanguageCoverage>? coverage = null,
-        int? explicitId = null)
+        int? explicitId = null,
+        int? year = null,
+        string? imdbId = null,
+        double? imdbRating = null)
     {
         var show = new Show
         {
@@ -98,7 +101,10 @@ public class MediaLibraryServiceSqliteTests : IDisposable
             Title = title,
             Path = "/tv/" + title,
             DateAdded = DateTimeOffset.UtcNow,
-            SubtitleCoverage = coverage
+            SubtitleCoverage = coverage,
+            Year = year,
+            ImdbId = imdbId,
+            ImdbRating = imdbRating
         };
         if (explicitId is not null)
         {
@@ -137,7 +143,12 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         string[]? audioLanguages = null,
         bool? audioOverride = null,
         bool needsTranslation = false,
-        bool noSubtitleNeeded = false)
+        bool noSubtitleNeeded = false,
+        int? year = null,
+        string? imdbId = null,
+        string? quality = null,
+        long? sizeBytes = null,
+        double? imdbRating = null)
     {
         var movie = new Movie
         {
@@ -150,7 +161,12 @@ public class MediaLibraryServiceSqliteTests : IDisposable
             AudioLanguages = audioLanguages,
             AudioOverride = audioOverride,
             NeedsTranslation = needsTranslation,
-            NoSubtitleNeeded = noSubtitleNeeded
+            NoSubtitleNeeded = noSubtitleNeeded,
+            Year = year,
+            ImdbId = imdbId,
+            Quality = quality,
+            SizeBytes = sizeBytes,
+            ImdbRating = imdbRating
         };
         if (explicitId is not null)
         {
@@ -538,5 +554,163 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         var showDetail = await CreateService().GetLibraryItem(MediaType.Show, show.Id);
         Assert.Equal(["en", "zh"], showDetail!.AudioLanguages);
         Assert.False(showDetail.NeedsNoSubtitles);
+    }
+
+    // ── library B2: *arr metadata columns on the projection ──────────
+
+    [Fact]
+    public async Task ItemsCarryB2Columns_MoviesFullShowsYearAndRatingOnly()
+    {
+        // movie with the full set from Radarr's movieFile/telemetry payload
+        await SeedMovieAsync(
+            "Dune",
+            year: 2024,
+            imdbId: "tt15239678",
+            quality: "WEBDL-1080p",
+            sizeBytes: 4_500_000_000,
+            imdbRating: 8.5);
+        // show: quality/size are movie-file concepts, its projection carries
+        // only the series-level year/imdb/rating
+        await SeedShowAsync("Foundation", [2], year: 2021, imdbId: "tt2397406", imdbRating: 7.7);
+        // legacy rows without the columns stay null, never fabricated
+        await SeedMovieAsync("Bare");
+
+        var result = await CreateService().GetLibrary(null, null, null, null, "Title", true, 1, 20);
+
+        var movie = result.Items.Single(i => i.Title == "Dune");
+        Assert.Equal(2024, movie.Year);
+        Assert.Equal("tt15239678", movie.ImdbId);
+        Assert.Equal("WEBDL-1080p", movie.Quality);
+        Assert.Equal(4_500_000_000, movie.SizeBytes);
+        Assert.Equal(8.5, movie.ImdbRating);
+
+        var show = result.Items.Single(i => i.Title == "Foundation");
+        Assert.Equal(2021, show.Year);
+        Assert.Equal("tt2397406", show.ImdbId);
+        Assert.Equal(7.7, show.ImdbRating);
+        Assert.Null(show.Quality);
+        Assert.Null(show.SizeBytes);
+
+        var bare = result.Items.Single(i => i.Title == "Bare");
+        Assert.Null(bare.Year);
+        Assert.Null(bare.ImdbId);
+        Assert.Null(bare.Quality);
+        Assert.Null(bare.SizeBytes);
+        Assert.Null(bare.ImdbRating);
+
+        // the single-media direct path carries the same columns
+        var movieDetail = await CreateService().GetLibraryItem(MediaType.Movie, movie.Id);
+        Assert.Equal("tt15239678", movieDetail!.ImdbId);
+        Assert.Equal("WEBDL-1080p", movieDetail.Quality);
+        var showDetail = await CreateService().GetLibraryItem(MediaType.Show, show.Id);
+        Assert.Equal(2021, showDetail!.Year);
+        Assert.Null(showDetail.Quality);
+    }
+
+    // ── P0-7 closeout: two-phase default path (SQL paging + page-only
+    //    coverage hydration), behaviour-equal to the full aggregation ──
+
+    [Fact]
+    public async Task DefaultPathPagesInSql_EquivalentToTheFullAggregationPath()
+    {
+        // mixed library where every item lacks zh coverage, so the
+        // target-language filter of the legacy path keeps everything and the
+        // two paths page over the very same set
+        await SeedShowAsync("Alpha Show", [2, 1], new Dictionary<string, MediaLanguageCoverage>
+        {
+            ["en"] = new() { Count = 3, Bytes = 900 }
+        });
+        await SeedShowAsync("Beta Show", [1]);
+        var blown = await SeedMovieAsync("Caper Movie");
+        await SeedRequestAsync(MediaType.Movie, blown.Id, TranslationStatus.Failed);
+        var partial = await SeedShowAsync("Delta Show", [2], new Dictionary<string, MediaLanguageCoverage>
+        {
+            ["en"] = new() { Count = 1, Bytes = 100 }
+        });
+        await SeedRequestAsync(
+            MediaType.Show, EpisodesOf(partial)[0].Id, TranslationStatus.Completed, DateTimeOffset.UtcNow.AddDays(-2));
+        await SeedMovieAsync("Echo Movie", audioLanguages: ["en"]);
+        var native = await SeedShowAsync("Foxtrot Show", [2]);
+        foreach (var episode in EpisodesOf(native))
+        {
+            episode.NoSubtitleNeeded = true;
+        }
+        await _dbContext.SaveChangesAsync();
+
+        var service = CreateService();
+        for (var page = 1; page <= 4; page++)
+        {
+            // default browsing shape → two-phase SQL path
+            var paged = await service.GetLibrary(null, null, null, null, "Title", true, page, 2);
+            // target-language filter forces the full in-memory aggregation
+            var aggregated = await service.GetLibrary(null, null, null, "zh", "Title", true, page, 2);
+
+            Assert.Equal(aggregated.TotalCount, paged.TotalCount);
+            Assert.Equal(aggregated.PageNumber, paged.PageNumber);
+            Assert.Equal(aggregated.PageSize, paged.PageSize);
+            Assert.Equal(
+                aggregated.Items.Select(i => (i.MediaType, i.Id, i.Title)).ToList(),
+                paged.Items.Select(i => (i.MediaType, i.Id, i.Title)).ToList());
+
+            foreach (var expected in aggregated.Items)
+            {
+                var actual = paged.Items.Single(i => i.Id == expected.Id && i.MediaType == expected.MediaType);
+                Assert.Equal(expected.SeasonCount, actual.SeasonCount);
+                Assert.Equal(expected.EpisodeCount, actual.EpisodeCount);
+                Assert.Equal(expected.State, actual.State);
+                Assert.Equal(expected.CompletedCount, actual.CompletedCount);
+                Assert.Equal(expected.FailedCount, actual.FailedCount);
+                Assert.Equal(expected.NeedsNoSubtitles, actual.NeedsNoSubtitles);
+                Assert.Equal(expected.LastActivityAt, actual.LastActivityAt);
+                Assert.Equal(
+                    expected.Tracks.Select(t => (t.Language, t.Have, t.Total, t.State)).ToList(),
+                    actual.Tracks.Select(t => (t.Language, t.Have, t.Total, t.State)).ToList());
+                // inline show graphs hydrate on the paged path too
+                if (expected.MediaType == MediaType.Show)
+                {
+                    Assert.NotNull(actual.Show);
+                    Assert.Equal(expected.Show!.Seasons.Count, actual.Show!.Seasons.Count);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task DefaultPathHydratesCoverageForThePageRowsOnly()
+    {
+        // a library bigger than the page: six movies, each with a coverage
+        // snapshot — the default path must never pull the JSON for all of
+        // them, only for the page's two rows
+        for (var i = 1; i <= 6; i++)
+        {
+            await SeedMovieAsync($"Movie {i}", new Dictionary<string, MediaLanguageCoverage>
+            {
+                ["en"] = new() { Count = 1, Bytes = 10 * i }
+            });
+        }
+
+        _sqlLog.Clear();
+        var page = await CreateService().GetLibrary(null, null, null, null, "Title", true, 1, 2);
+
+        Assert.Equal(6, page.TotalCount);
+        Assert.Equal(2, page.Items.Count());
+        // the hydrated coverage actually built the page rows' tracks
+        Assert.All(page.Items, item =>
+            Assert.Equal(1, item.Tracks.Single(t => t.Language == "en").Have));
+
+        // every SQL statement touching the coverage column is a page-scoped
+        // hydration (IN-list over the page ids): the phase-1 scan leaves the
+        // column out entirely, so no statement selects it for the whole
+        // library. At most one hydration query per media type.
+        var coverageQueries = _sqlLog
+            .Where(sql => sql.Replace("_", "").Contains("SubtitleCoverageJson", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.NotEmpty(coverageQueries);
+        Assert.True(coverageQueries.Count <= 2,
+            $"expected at most one coverage hydration per media type, got {coverageQueries.Count}");
+        Assert.All(coverageQueries, sql =>
+            Assert.True(
+                sql.Contains("IN", StringComparison.OrdinalIgnoreCase),
+                $"coverage hydration must be page-scoped (IN over page ids), got: {sql}"));
     }
 }

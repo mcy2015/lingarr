@@ -3,10 +3,16 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { useToastStore } from '@/cells/app/stores/toast'
+import { settingService } from '@/cells/app/api/settingService'
 import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import type { ISubtitleCandidate } from '@/types/services'
 import type { ISubtitleProviderManifest } from '@/types/plugin'
+
+/// The auto-download threshold setting key (SettingKeys.SubtitleSearch.AutoScore
+/// on the server); seeded "75" by M0008.
+const AUTO_SCORE_SETTING = 'subtitle_search_auto_score'
+const AUTO_SCORE_DEFAULT = 75
 
 /// mediaType is the wire form the backend accepts ("movie" | "episode") —
 /// anything else (e.g. "Show") is rejected with 400.
@@ -15,6 +21,15 @@ const props = defineProps<{
     mediaId: number
     title: string
     episode?: string
+    /// Normalized audio languages of the media's container (null = unknown).
+    /// When the audio already covers one of the searched target languages a
+    /// one-time info row points that out (the search stays available).
+    audioLanguages?: string[] | null
+    /// Languages the media already carries subtitles in (external files +
+    /// embedded tracks, scoped to the searched unit). Candidates in those
+    /// languages render weakened with an「已存在」badge — manual re-download
+    /// stays legal, so the buttons remain enabled.
+    existingLanguages?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +39,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToastStore()
+const settingApi = settingService(axios)
 
 // ── search state ─────────────────────────────────────────────
 const query = ref('')
@@ -32,6 +48,20 @@ const searching = ref(false)
 const providersLoading = ref(true)
 const providersFailed = ref(false)
 const downloadBusy = ref<Set<string>>(new Set())
+
+/// Auto-download threshold read from subtitle_search_auto_score on open
+/// (default 75 when the setting is absent or unparsable). Drives the
+/// low-confidence warning colour/text so the modal's score line always
+/// mirrors the configured line, never a hardcoded one.
+const autoScore = ref(AUTO_SCORE_DEFAULT)
+
+/// Rows whose download already landed in this modal session: the buttons
+/// disable and flip to「✓ 已下载」 until the next search round resets them.
+const downloadedKeys = ref<Set<string>>(new Set())
+
+/// One-time native-audio hint: closed once, stays closed for this modal
+/// session (component lifetime); a fresh open of the modal shows it again.
+const nativeAudioHintDismissed = ref(false)
 
 /// One merged list across sources. Each row keeps the cacheKey of the
 /// search round's response it came from and its index within THAT
@@ -54,6 +84,10 @@ interface SourceStatus {
 const sourceStatuses = ref<Map<string, SourceStatus>>(new Map())
 const sourceList = computed<SourceStatus[]>(() => [...sourceStatuses.value.values()])
 
+/// Manifests of the current round, keyed by provider — the per-source retry
+/// re-fires with the same request shape the round used.
+const providerByKey = new Map<string, ISubtitleProviderManifest>()
+
 const sourcesTotal = ref(0)
 const settledCount = ref(0)
 const searchElapsed = ref(0)
@@ -66,6 +100,29 @@ const metaSources = computed(() => `${settledCount.value}/${sourcesTotal.value}`
 const targetLang = computed(() =>
     languages.value.find(l => l === 'zh') ? 'zh' : languages.value[0] ?? 'en'
 )
+
+/// Audio hint condition — the backend's「任一目标」exemption semantics: known
+/// audio covering ANY of the currently searched target languages means the
+/// media usually needs no subtitles (manual search stays available anyway).
+const audioCoversTarget = computed<boolean>(() => {
+    const audio = props.audioLanguages
+    if (!audio || audio.length === 0) return false
+    const targets = languages.value.map((lang) => lang.toLowerCase())
+    return audio.some((code) => targets.includes(code.toLowerCase()))
+})
+const showNativeAudioHint = computed(
+    () => audioCoversTarget.value && !nativeAudioHintDismissed.value
+)
+
+function isExistingLanguage(candidate: ISubtitleCandidate): boolean {
+    return (props.existingLanguages ?? []).some(
+        (lang) => lang.toLowerCase() === candidate.language.toLowerCase()
+    )
+}
+
+function isDownloaded(candidate: ISubtitleCandidate): boolean {
+    return downloadedKeys.value.has(candidate.provider + ':' + candidate.externalId)
+}
 
 // ── request lifecycle ────────────────────────────────────────
 /// One controller per search round backs every per-source request; each
@@ -121,6 +178,8 @@ async function runSearch(): Promise<void> {
 
     candidates.value = []
     sourceStatuses.value = new Map()
+    providerByKey.clear()
+    downloadedKeys.value = new Set()
     settledCount.value = 0
     sourcesTotal.value = 0
     searchElapsed.value = 0
@@ -145,6 +204,7 @@ async function runSearch(): Promise<void> {
     const unconfigured = (p: ISubtitleProviderManifest) => p.requiresAuth && !p.credentialsConfigured
     const searchable = providers.filter((p) => !unconfigured(p))
     for (const provider of providers) {
+        providerByKey.set(provider.provider, provider)
         setStatus(provider, unconfigured(provider) ? 'skipped' : 'searching')
     }
     sourcesTotal.value = searchable.length
@@ -206,6 +266,58 @@ async function runSearch(): Promise<void> {
     )
 }
 
+/// Per-source retry for failed (or cooled-down — those answer with an error
+/// too) sources: one provider-scoped search re-fire into the CURRENT round.
+/// Results merge through the ordinary merge rule, so retried candidates
+/// carry their own response's cacheKey and index; the source strip and the
+/// settled counter track the re-fire honestly.
+async function retrySource(providerKey: string): Promise<void> {
+    if (disposed) return
+    const provider = providerByKey.get(providerKey)
+    if (!provider) return
+    const status = sourceStatuses.value.get(providerKey)
+    if (!status || status.status !== 'error') return
+    const signal = searchController?.signal
+    if (!signal) return
+
+    setStatus(provider, 'searching')
+    settledCount.value = Math.max(0, settledCount.value - 1)
+    const start = performance.now()
+    try {
+        const keyword = query.value.trim()
+        const result = await subtitleSearchService.search(
+            {
+                provider: provider.provider,
+                mediaType: props.mediaType,
+                mediaId: props.mediaId,
+                languages: languages.value,
+                ...(keyword ? { query: keyword } : {})
+            },
+            signal
+        )
+        if (disposed || signal.aborted) return
+        setStatus(provider, 'ok', { count: result.candidates.length })
+        mergeCandidates(
+            result.candidates.map((candidate, index) => ({
+                candidate,
+                cacheKey: result.cacheKey,
+                index
+            }))
+        )
+    } catch (error) {
+        // the captured signal aborts when a new round starts or the modal
+        // closes, so a stale retry never writes into the newer round's state
+        if (disposed || signal.aborted || axios.isCancel(error)) return
+        const message = serverMessage(error)
+        setStatus(provider, 'error', { message: message ?? '' })
+    } finally {
+        if (!disposed) {
+            settledCount.value += 1
+            searchElapsed.value = (performance.now() - start) / 1000
+        }
+    }
+}
+
 // ── download ────────────────────────────────────────────────
 /// skipTranslation carries the button's real semantics: true = only write
 /// the file ("仅下载" / target-language rows), false = let the server's
@@ -231,6 +343,9 @@ async function download(row: CandidateRow, skipTranslation: boolean): Promise<vo
         )
         if (disposed) return
         if (result.filePath) {
+            // row-level ✓ state: the file landed, this row's buttons lock
+            // into「已下载」until the next search round clears the set
+            downloadedKeys.value.add(key)
             if (result.translationDuplicate) {
                 toast.push({ message: t('subSearch.translationDuplicate'), type: 'info' })
             }
@@ -341,7 +456,22 @@ onMounted(() => {
     window.addEventListener('keydown', onWindowKeydown)
     dialogRef.value?.focus()
     void runSearch()
+    void loadAutoScore()
 })
+
+/// Reads subtitle_search_auto_score so the low-confidence warning mirrors
+/// the configured auto-download line. Absent setting (400) or an unparsable
+/// / out-of-range value falls back to the default 75.
+async function loadAutoScore(): Promise<void> {
+    try {
+        const raw = await settingApi.getSetting<string>(AUTO_SCORE_SETTING)
+        const parsed = Number.parseInt(String(raw), 10)
+        autoScore.value =
+            Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : AUTO_SCORE_DEFAULT
+    } catch {
+        autoScore.value = AUTO_SCORE_DEFAULT
+    }
+}
 
 onBeforeUnmount(teardown)
 </script>
@@ -367,6 +497,27 @@ onBeforeUnmount(teardown)
                     <span class="text-secondary-content mono ml-auto text-[11px]">
                         {{ t('common.escape') }}
                     </span>
+                </div>
+
+                <!-- native-audio hint (requirement card A surfacing): shown
+                     once per modal session when the container audio already
+                     covers a searched target language; the search itself
+                     stays fully available -->
+                <div
+                    v-if="showNativeAudioHint"
+                    class="border-info/40 bg-info/10 flex items-start gap-2 border-b px-4 py-2 text-xs"
+                    data-test="native-audio-hint">
+                    <span class="text-info flex-1">
+                        {{ t('subSearch.nativeAudioHint') }}
+                    </span>
+                    <button
+                        type="button"
+                        class="text-secondary-content hover:text-primary-content cursor-pointer rounded px-1 text-xs"
+                        :aria-label="t('common.close')"
+                        data-test="native-audio-hint-close"
+                        @click="nativeAudioHintDismissed = true">
+                        ×
+                    </button>
                 </div>
 
                 <!-- query bar -->
@@ -427,6 +578,17 @@ onBeforeUnmount(teardown)
                               : source.status === 'skipped'
                                 ? t('subSearch.sourceSkipped')
                                 : t('subSearch.sourceError', { message: source.message ?? '' }) }}
+                        <!-- failed (or cooled-down — those answer with an
+                             error) sources re-fire individually into the
+                             current round -->
+                        <button
+                            v-if="source.status === 'error'"
+                            type="button"
+                            class="border-line text-secondary-content hover:border-accent hover:text-primary-content ml-1 cursor-pointer rounded border px-1 py-px text-[10px] leading-none"
+                            :data-test="'source-retry-' + source.key"
+                            @click="retrySource(source.key)">
+                            {{ t('subSearch.retrySource') }}
+                        </button>
                     </span>
                 </div>
 
@@ -436,6 +598,7 @@ onBeforeUnmount(teardown)
                         v-for="row in sortedCandidates"
                         :key="row.candidate.provider + ':' + row.candidate.externalId"
                         class="border-line hover:bg-tertiary/50 flex items-center gap-3 border-b px-4 py-2.5 transition-colors"
+                        :class="isExistingLanguage(row.candidate) ? 'opacity-60' : ''"
                         data-test="candidate-row">
                         <span
                             class="w-0.5 shrink-0 self-stretch rounded"
@@ -461,6 +624,14 @@ onBeforeUnmount(teardown)
                             <span v-if="row.candidate.hashMatch" class="mono border-success/40 text-success rounded border px-1.5 py-px text-[10px]">
                                 {{ t('subSearch.hashMatch') }}
                             </span>
+                            <!-- the media already carries this language — weak
+                                 row + badge; manual re-download stays legal -->
+                            <span
+                                v-if="isExistingLanguage(row.candidate)"
+                                class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]"
+                                data-test="existing-badge">
+                                {{ t('subSearch.existing') }}
+                            </span>
                             <span v-if="row.candidate.forced" class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]">
                                 {{ t('subSearch.forced') }}
                             </span>
@@ -470,8 +641,10 @@ onBeforeUnmount(teardown)
                         </span>
                         <span
                             class="mono w-8 text-right text-xs"
-                            :class="row.candidate.matchScore < 75 ? 'text-warning' : row.candidate.hashMatch ? 'text-success' : ''"
-                            :title="row.candidate.matchScore < 75 ? t('subSearch.lowConfidence') : ''">
+                            :class="row.candidate.matchScore < autoScore ? 'text-warning' : row.candidate.hashMatch ? 'text-success' : ''"
+                            :title="row.candidate.matchScore < autoScore
+                                ? t('subSearch.lowConfidence', { score: autoScore })
+                                : ''">
                             {{ row.candidate.matchScore }}
                         </span>
                         <span class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[11px]">
@@ -482,24 +655,32 @@ onBeforeUnmount(teardown)
                                 v-if="isTargetLang(row.candidate)"
                                 variant="primary"
                                 size="sm"
-                                :disabled="isBusy(row.candidate)"
+                                :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
                                 @click="download(row, true)">
-                                {{ isBusy(row.candidate) ? '…' : t('subSearch.download') }}
+                                {{ isBusy(row.candidate)
+                                    ? '…'
+                                    : isDownloaded(row.candidate)
+                                      ? '✓ ' + t('subSearch.downloadedMark')
+                                      : t('subSearch.download') }}
                             </ButtonComponent>
                             <template v-else>
                                 <ButtonComponent
                                     variant="secondary"
                                     size="sm"
-                                    :disabled="isBusy(row.candidate)"
+                                    :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
                                     @click="download(row, true)">
-                                    {{ t('subSearch.downloadOnly') }}
+                                    {{ isDownloaded(row.candidate)
+                                        ? '✓ ' + t('subSearch.downloadedMark')
+                                        : t('subSearch.downloadOnly') }}
                                 </ButtonComponent>
                                 <ButtonComponent
                                     variant="primary"
                                     size="sm"
-                                    :disabled="isBusy(row.candidate)"
+                                    :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
                                     @click="download(row, false)">
-                                    {{ t('subSearch.downloadAndTranslate') }}
+                                    {{ isDownloaded(row.candidate)
+                                        ? '✓ ' + t('subSearch.downloadedMark')
+                                        : t('subSearch.downloadAndTranslate') }}
                                 </ButtonComponent>
                             </template>
                         </span>

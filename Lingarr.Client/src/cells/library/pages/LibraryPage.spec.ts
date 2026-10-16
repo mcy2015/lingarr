@@ -526,4 +526,97 @@ describe('LibraryPage', () => {
         const plain = await mountLibraryPage()
         expect(plain.wrapper.findAll('[data-test="audio-unknown-badge"]')).toHaveLength(0)
     })
+
+    // ── library B2: metadata chips (year · rating · quality · size) ───
+    it('renders the B2 metadata chips only from real field values', async () => {
+        libraryMock.mockResolvedValueOnce({
+            ...libraryPage,
+            items: [
+                {
+                    ...show1,
+                    year: 2021,
+                    imdbRating: 7.7
+                },
+                {
+                    ...movie2,
+                    year: 2023,
+                    imdbRating: 8.1,
+                    quality: 'WEBDL-1080p',
+                    sizeBytes: 4_509_715_660
+                },
+                { ...show3 }
+            ] as IMediaLibraryItem[]
+        })
+        const { wrapper } = await mountLibraryPage()
+
+        const chips = wrapper.findAll('[data-test="media-meta-chips"]')
+        expect(chips).toHaveLength(2)
+        // shows carry year/rating only — quality/size are movie-file concepts
+        expect(chips[0].text()).toBe('2021 · ★7.7')
+        expect(chips[1].text()).toBe('2023 · ★8.1 · WEBDL-1080p · 4.2 GB')
+
+        // rows without any B2 field render no chip span at all
+        const plain = await mountLibraryPage()
+        expect(plain.wrapper.findAll('[data-test="media-meta-chips"]')).toHaveLength(0)
+    })
+
+    // ── filter/query sync (type is the precedent) ─────────────────────
+    it('writes state, target and search filters into the route query', async () => {
+        const { wrapper, router } = await mountLibraryPage()
+        expect(router.currentRoute.value.query).toEqual({})
+
+        // [target language, state] selects in toolbar order
+        await wrapper.findAll('select')[0].setValue('ZH')
+        await wrapper.findAll('select')[1].setValue('Failed')
+        await settle()
+        expect(router.currentRoute.value.query.state).toBe('Failed')
+        expect(router.currentRoute.value.query.target).toBe('ZH')
+
+        // the debounced search keyword lands in the query too
+        await wrapper.find('input[type="search"]').setValue('dune')
+        await vi.advanceTimersByTimeAsync(300)
+        expect(router.currentRoute.value.query.q).toBe('dune')
+
+        // resetting a filter drops its key from the query, like `type`
+        await wrapper.findAll('select')[1].setValue('')
+        await settle()
+        expect(router.currentRoute.value.query.state).toBeUndefined()
+        expect(router.currentRoute.value.query.q).toBe('dune')
+    })
+
+    it('restores every filter from the route query on mount', async () => {
+        await mountLibraryPage('/library?type=movie&state=native&target=ZH&q=dune')
+
+        expect(libraryMock).toHaveBeenCalledTimes(1)
+        expect(libraryMock).toHaveBeenCalledWith({
+            pageNumber: 1,
+            searchQuery: 'dune',
+            sortBy: 'Title',
+            ascending: true,
+            mediaType: 'Movie',
+            state: 'native',
+            targetLanguage: 'ZH'
+        })
+    })
+
+    // ── list scroll persistence (route-leave save, mount restore) ─────
+    it('persists the list scroll offset and restores it on the next mount', async () => {
+        sessionStorage.clear()
+        const first = await mountLibraryPage()
+
+        const container = first.wrapper.find('.shell-scroll')
+        expect(container.exists()).toBe(true)
+        container.element.scrollTop = 120
+        await container.trigger('scroll')
+        expect(sessionStorage.getItem('library-list-scroll-top')).toBe('120')
+
+        // leaving the list (unmount) saves the trailing offset again
+        first.wrapper.unmount()
+
+        const second = await mountLibraryPage()
+        await settle()
+        expect(second.wrapper.find('.shell-scroll').element.scrollTop).toBe(120)
+
+        sessionStorage.clear()
+    })
 })

@@ -179,6 +179,10 @@ export interface IEpisode extends IBaseEntity {
     seasonId: number
     season: ISeason
     includeInTranslation: boolean
+    /// Persisted exemption flag (requirement card A / B2 gap counts): the
+    /// subtitle-need rule judged this episode as not needing subtitles.
+    /// Absent on legacy payloads reads as false.
+    noSubtitleNeeded?: boolean
 }
 
 export interface IPagedResult<T> {
@@ -278,6 +282,17 @@ export interface IMediaLibraryItem {
     /// already covers the target language or the user marked it so. Absent
     /// (undefined) reads as false: no exemption.
     needsNoSubtitles?: boolean
+    /// Library B2: release year from *arr. Shows carry the series year.
+    year?: number | null
+    /// Library B2: IMDb id ("tt…"); null when the payload had none.
+    imdbId?: string | null
+    /// Library B2: release quality label ("WEBDL-1080p"). Movie rows only —
+    /// show projections leave it null (a series has no single file).
+    quality?: string | null
+    /// Library B2: file size in bytes. Movie rows only.
+    sizeBytes?: number | null
+    /// Library B2: IMDb user rating; null when *arr has no real score.
+    imdbRating?: number | null
 }
 
 export interface ITranslationEstimate {

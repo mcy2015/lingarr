@@ -6,6 +6,18 @@
         :title="item?.title ?? t('common.loading')"
         :sub="headerMeta">
         <template #actions>
+            <!-- library B2: IMDb deep link, only when the payload really
+                 carries an id (no static decoration) -->
+            <a
+                v-if="item?.imdbId"
+                :href="`https://www.imdb.com/title/${item.imdbId}/`"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="border-line text-secondary-content hover:bg-tertiary hover:text-primary-content mono inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs transition-colors"
+                :aria-label="t('mediaDetail.openImdb')"
+                data-test="imdb-link">
+                IMDb ↗
+            </a>
             <button
                 v-if="isShow"
                 type="button"
@@ -470,13 +482,16 @@
         </div>
     </DrillDownPage>
 
-    <!-- 需求卡 A:搜索字幕弹层 —— 一次只针对一个可搜索单元(电影自身 / 某一集) -->
+    <!-- 需求卡 A:搜索字幕弹层 —— 一次只针对一个可搜索单元(电影自身 / 某一集);
+         audioLanguages 驱动「音轨已覆盖目标」提示,existingLanguages 驱动「已存在」预标 -->
     <SubtitleSearchModal
         v-if="searchTarget && item"
         :media-type="searchTarget.mediaType"
         :media-id="searchTarget.mediaId"
         :title="item.title"
         :episode="searchTarget.episode"
+        :audio-languages="audioLanguages"
+        :existing-languages="searchExistingLanguages"
         @close="searchTarget = null"
         @downloaded="load" />
 </template>
@@ -658,6 +673,14 @@ interface SearchTarget {
 }
 const searchTarget = ref<SearchTarget | null>(null)
 
+/// Languages the searched unit already carries subtitles in (external files
+/// + embedded tracks, scoped by coveredLanguagesFor to the movie or the one
+/// episode) — feeds the modal's「已存在」pre-marks.
+const searchExistingLanguages = computed<string[]>(() => {
+    if (!item.value || !searchTarget.value) return []
+    return [...coveredLanguagesFor(searchTarget.value.mediaId)]
+})
+
 function openMovieSearch(): void {
     if (!item.value) return
     searchTarget.value = { mediaType: 'movie', mediaId: item.value.id }
@@ -695,14 +718,21 @@ const movieLanguagePair = computed<string | null>(() => {
 })
 
 /// Episodes still missing the primary target's subtitles — client-side from
-/// the coverage scan the library item already carries.
+/// the coverage scan the library item already carries. Episodes carrying the
+/// persisted no_subtitle_needed exemption owe nothing and are subtracted
+/// (gap counts never bill exempt media, matching the pipeline KPI).
 const missingTargetEpisodes = computed<number | null>(() => {
     const target = firstTargetLanguage.value?.code
     if (!target || !item.value || !isShow.value) return null
     const track = item.value.tracks.find(
         (candidate) => candidate.language.toLowerCase() === target.toLowerCase()
     )
-    return Math.max(0, item.value.episodeCount - (track?.have ?? 0))
+    const exemptEpisodes = seasons.value.reduce(
+        (count, season) =>
+            count + season.episodes.filter((episode) => episode.noSubtitleNeeded).length,
+        0
+    )
+    return Math.max(0, item.value.episodeCount - exemptEpisodes - (track?.have ?? 0))
 })
 
 const headerMeta = computed(() => {

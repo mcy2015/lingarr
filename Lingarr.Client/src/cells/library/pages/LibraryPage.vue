@@ -57,9 +57,13 @@
             </span>
         </div>
 
-        <!-- ═══ 矩阵表（弹性行，表体卡内滚动） ═══ -->
+        <!-- ═══ 矩阵表（弹性行，表体卡内滚动；列表容器滚动位置在离开时
+             持久化，返回列表时恢复——配合 router 的 savedPosition） ═══ -->
         <div class="border-line bg-secondary flex min-h-0 flex-1 flex-col rounded-md border">
-            <div class="shell-scroll min-h-0 flex-1 overflow-auto">
+            <div
+                ref="listScrollRef"
+                class="shell-scroll min-h-0 flex-1 overflow-auto"
+                @scroll="onListScroll">
             <table class="w-full text-[13px]">
                 <thead>
                     <tr>
@@ -110,6 +114,16 @@
                                     </a>
                                     <span v-if="item.mediaType === 'Show'" class="text-secondary-content hidden shrink-0 text-[11.5px] sm:inline">
                                         {{ t('library.meta.show', { seasons: item.seasonCount, episodes: item.episodeCount }) }}
+                                    </span>
+                                    <!-- library B2 metadata chips: year · rating ·
+                                         quality · size, only values that really
+                                         exist render (no static decoration) -->
+                                    <span
+                                        v-if="metaChips(item)"
+                                        class="text-secondary-content hidden shrink-0 text-[11.5px] sm:inline"
+                                        :title="metaChips(item)"
+                                        data-test="media-meta-chips">
+                                        {{ metaChips(item) }}
                                     </span>
                                 </div>
                             </td>
@@ -219,7 +233,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
@@ -273,10 +287,16 @@ const configured = computed(() => {
 })
 
 type LibraryType = 'all' | 'show' | 'movie'
+// Filter/query sync (type is the precedent): every filter lives in the
+// route query so a detail drill-down and back restores the exact view, and
+// a shared URL carries the filter set. Defaults drop out of the query the
+// same way `type` does (undefined removes the key).
+const queryString = (value: unknown): string =>
+    typeof value === 'string' ? value : ''
 const type = ref<LibraryType>(normalizeType(route.query.type))
-const search = ref('')
-const stateFilter = ref('')
-const targetFilter = ref('')
+const search = ref(queryString(route.query.q))
+const stateFilter = ref(queryString(route.query.state))
+const targetFilter = ref(queryString(route.query.target))
 const pagination = reactive({
     pageNumber: 1,
     searchQuery: '',
@@ -290,6 +310,28 @@ const totalCount = ref(0)
 const loading = ref(false)
 const missingCount = ref(0)
 const inProgressCount = ref(0)
+
+// ── list scroll persistence ───────────────────────────────────
+// The matrix scrolls inside its card container (the window itself never
+// scrolls on this screen), so router-level savedPosition alone cannot
+// restore it: the container's scrollTop persists in sessionStorage on every
+// scroll (thus also on route leave) and re-applies once, after the first
+// fetch renders the rows again.
+const LIST_SCROLL_KEY = 'library-list-scroll-top'
+const listScrollRef = ref<HTMLElement | null>(null)
+let scrollRestorePending = true
+
+function onListScroll(): void {
+    const container = listScrollRef.value
+    if (!container) return
+    sessionStorage.setItem(LIST_SCROLL_KEY, String(container.scrollTop))
+}
+
+function restoreListScroll(): void {
+    const saved = sessionStorage.getItem(LIST_SCROLL_KEY)
+    if (saved === null || !listScrollRef.value) return
+    listScrollRef.value.scrollTop = Number(saved) || 0
+}
 
 const selection = reactive(new Map<string, IMediaLibraryItem>())
 const estimate = ref<ITranslationEstimate | null>(null)
@@ -341,9 +383,29 @@ function normalizeType(value: unknown): LibraryType {
     return value === 'show' || value === 'movie' ? value : 'all'
 }
 
+/// Query writes serialize through one chain: two filters changing in the
+/// same tick would otherwise each spread a stale route.query and drop the
+/// other's key. Reading route.query at execution time (after the previous
+/// replace settled) keeps every key.
+let queryWrite: Promise<unknown> = Promise.resolve()
+function syncQuery(patch: Record<string, string | undefined>): void {
+    queryWrite = queryWrite.then(() =>
+        router.replace({ query: { ...route.query, ...patch } })
+    ).catch(() => undefined)
+}
+
 watch(type, () => {
     pagination.pageNumber = 1
-    router.replace({ query: { ...route.query, type: type.value === 'all' ? undefined : type.value } })
+    syncQuery({ type: type.value === 'all' ? undefined : type.value })
+})
+
+// state/target filters follow the type precedent: written into the query on
+// change (router.replace keeps history clean), dropped when back to default
+watch(stateFilter, () => {
+    syncQuery({ state: stateFilter.value || undefined })
+})
+watch(targetFilter, () => {
+    syncQuery({ target: targetFilter.value || undefined })
 })
 
 // Filter changes return to the first page: page 3 of the previous list is
@@ -377,6 +439,9 @@ watch(search, () => {
     clearTimeout(searchTimer)
     searchTimer = setTimeout(() => {
         pagination.pageNumber = 1
+        // the debounced input also lands in the query, so a back-and-forth
+        // restores the typed keyword together with the other filters
+        syncQuery({ q: search.value || undefined })
         void fetchLibrary()
     }, 300)
 })
@@ -399,6 +464,14 @@ async function fetchLibrary(): Promise<void> {
         pruneSelection()
     } finally {
         loading.value = false
+        // restore the persisted scroll offset once, after the initial page
+        // of rows rendered — later fetches (paging/filtering) must not yank
+        // the user's scroll position back
+        if (scrollRestorePending) {
+            scrollRestorePending = false
+            await nextTick()
+            restoreListScroll()
+        }
     }
 }
 
@@ -417,6 +490,11 @@ onMounted(() => {
 onUnmounted(() => {
     uiStore.clearCta()
     uiStore.setSubOverride('')
+    // final save on route leave (every scroll already saved; this covers a
+    // leave without a trailing scroll event)
+    if (listScrollRef.value) {
+        sessionStorage.setItem(LIST_SCROLL_KEY, String(listScrollRef.value.scrollTop))
+    }
 })
 
 // ⌘K from anywhere: focus this screen's search box
@@ -629,6 +707,26 @@ function goImport(item: IMediaLibraryItem): void {
 
 
 // ── formatting ─────────────────────────────────────────────────
+/// Library B2 metadata chips: year · ★rating · quality · size — every
+/// fragment is bound to a real field, absent fields contribute nothing,
+/// and the whole chip stays hidden when the row carries none of them.
+function metaChips(item: IMediaLibraryItem): string {
+    const parts: string[] = []
+    if (item.year != null) parts.push(String(item.year))
+    if (item.imdbRating != null) parts.push(`★${Number(item.imdbRating.toFixed(1))}`)
+    if (item.quality) parts.push(item.quality)
+    if (item.sizeBytes != null && item.sizeBytes > 0) parts.push(formatSize(item.sizeBytes))
+    return parts.join(' · ')
+}
+
+/// Byte ladder with a GB tier — the matrix chips quote movie files in GB.
+function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
 /// prototype shows activity times as HH:MM in the matrix column
 function formatTime(value: string): string {
     return new Date(value).toLocaleTimeString(locale.value, {

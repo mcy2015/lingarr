@@ -77,32 +77,33 @@ public class MediaLibraryService : IMediaLibraryService
         var wantNative = string.Equals(state, NativeState, StringComparison.OrdinalIgnoreCase);
         var wantAudioUnknown = string.Equals(state, AudioUnknownState, StringComparison.OrdinalIgnoreCase);
 
+        // Two-phase default path (P0-7 closeout): without a target-language
+        // filter the browsing shapes — no request-state filter, column-backed
+        // ordering — page inside SQL (filter/sort/Skip/Take over id+scalar
+        // columns) and the coverage JSON deserializes for the page's rows
+        // only, instead of parsing every media row of the library. The other
+        // shapes keep the full in-memory aggregation below: a target-language
+        // filter ranks membership on per-language tracks that live inside the
+        // coverage JSON (no SQL representation), and request-state filters /
+        // LastActivity ordering need the newest-request rollup per media,
+        // which likewise has no pushable form.
+        if (string.IsNullOrEmpty(targetLanguage)
+            && !IsRequestStateFilter(state)
+            && !string.Equals(orderBy, "LastActivity", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GetLibraryPagedAsync(
+                wantShows, wantMovies, needle, wantNative, wantAudioUnknown,
+                orderBy, ascending, pageNumber, pageSize, targetLanguages);
+        }
+
         // Phase 1 — aggregate rows straight from SQL: scalars, coverage read
         // directly off the JSON column and season/episode counts from grouped
         // subqueries. One small row per media item, no entity graphs.
         var rows = new List<MediaRow>();
         if (wantShows)
         {
-            var showQuery = _dbContext.Shows
-                .AsNoTracking()
-                .AsQueryable();
-            if (needle is not null)
-            {
-                showQuery = showQuery.Where(s => s.Title.ToLower().Contains(needle));
-            }
-            if (wantNative)
-            {
-                // a show counts as native when it has episodes and every one
-                // carries the persisted exemption flag (scan-maintained)
-                showQuery = showQuery.Where(s =>
-                    s.Seasons.SelectMany(season => season.Episodes).Any()
-                    && s.Seasons.SelectMany(season => season.Episodes).All(e => e.NoSubtitleNeeded));
-            }
-            if (wantAudioUnknown)
-            {
-                showQuery = showQuery.Where(s =>
-                    s.Seasons.SelectMany(season => season.Episodes).Any(e => e.AudioLanguages == null));
-            }
+            var showQuery = ApplyShowFilters(
+                _dbContext.Shows.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
 
             var showRows = await showQuery.Select(s => new
             {
@@ -112,6 +113,9 @@ public class MediaLibraryService : IMediaLibraryService
                 s.IncludeInTranslation,
                 s.TranslationAgeThreshold,
                 s.SubtitleCoverageJson,
+                s.Year,
+                s.ImdbId,
+                s.ImdbRating,
                 SeasonCount = s.Seasons.Count(),
                 EpisodeCount = s.Seasons.SelectMany(season => season.Episodes).Count(),
                 HasEpisodes = s.Seasons.SelectMany(season => season.Episodes).Any(),
@@ -128,6 +132,9 @@ public class MediaLibraryService : IMediaLibraryService
                 IncludeInTranslation = r.IncludeInTranslation,
                 TranslationAgeThreshold = r.TranslationAgeThreshold,
                 SubtitleCoverageJson = r.SubtitleCoverageJson,
+                Year = r.Year,
+                ImdbId = r.ImdbId,
+                ImdbRating = r.ImdbRating,
                 SeasonCount = r.SeasonCount,
                 EpisodeCount = r.EpisodeCount,
                 NeedsNoSubtitles = r.HasEpisodes && r.AllEpisodesNative,
@@ -136,21 +143,8 @@ public class MediaLibraryService : IMediaLibraryService
         }
         if (wantMovies)
         {
-            var movieQuery = _dbContext.Movies
-                .AsNoTracking()
-                .AsQueryable();
-            if (needle is not null)
-            {
-                movieQuery = movieQuery.Where(m => m.Title.ToLower().Contains(needle));
-            }
-            if (wantNative)
-            {
-                movieQuery = movieQuery.Where(m => m.NoSubtitleNeeded);
-            }
-            if (wantAudioUnknown)
-            {
-                movieQuery = movieQuery.Where(m => m.AudioLanguages == null);
-            }
+            var movieQuery = ApplyMovieFilters(
+                _dbContext.Movies.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
 
             var movieRows = await movieQuery.Select(m => new
             {
@@ -162,7 +156,12 @@ public class MediaLibraryService : IMediaLibraryService
                 m.SubtitleCoverageJson,
                 m.AudioLanguages,
                 m.NeedsTranslation,
-                m.NoSubtitleNeeded
+                m.NoSubtitleNeeded,
+                m.Year,
+                m.ImdbId,
+                m.Quality,
+                m.SizeBytes,
+                m.ImdbRating
             }).ToListAsync();
 
             var statusById = await MovieStatusCountsAsync();
@@ -175,9 +174,14 @@ public class MediaLibraryService : IMediaLibraryService
                 IncludeInTranslation = r.IncludeInTranslation,
                 TranslationAgeThreshold = r.TranslationAgeThreshold,
                 SubtitleCoverageJson = r.SubtitleCoverageJson,
+                AudioLanguages = r.AudioLanguages,
+                Year = r.Year,
+                ImdbId = r.ImdbId,
+                Quality = r.Quality,
+                SizeBytes = r.SizeBytes,
+                ImdbRating = r.ImdbRating,
                 SeasonCount = 0,
                 EpisodeCount = 1,
-                AudioLanguages = r.AudioLanguages,
                 NeedsNoSubtitles = r.NoSubtitleNeeded,
                 Status = statusById.GetValueOrDefault(r.Id)
             }));
@@ -227,6 +231,302 @@ public class MediaLibraryService : IMediaLibraryService
         };
     }
 
+    /// <summary>
+    /// Two-phase default path (P0-7 closeout): filtering, ordering and the
+    /// paging window happen in SQL over id+scalar columns (phase 1), and the
+    /// coverage JSON plus request rollups hydrate for the page's rows only
+    /// (phase 2). The default browsing flow therefore parses at most a page
+    /// worth of coverage snapshots per request instead of the whole
+    /// library's.
+    /// Mixed-type listings cannot Skip in SQL (how many shows precede a
+    /// movie globally is unknown upfront), so each type fetches its first
+    /// skip+take window — a union page element is preceded by fewer than
+    /// skip+take rows of either type, so the windows provably contain the
+    /// page — and the windows merge in memory under the same comparator
+    /// <see cref="Order"/> uses before the final Skip/Take.
+    /// </summary>
+    private async Task<PagedResult<MediaLibraryItem>> GetLibraryPagedAsync(
+        bool wantShows,
+        bool wantMovies,
+        string? needle,
+        bool wantNative,
+        bool wantAudioUnknown,
+        string? orderBy,
+        bool ascending,
+        int pageNumber,
+        int pageSize,
+        IReadOnlyList<TargetLanguage> targetLanguages)
+    {
+        var skip = (pageNumber - 1) * pageSize;
+        var take = skip + pageSize;
+        var rows = new List<MediaRow>();
+        var totalCount = 0;
+
+        if (wantShows)
+        {
+            var showQuery = ApplyShowFilters(
+                _dbContext.Shows.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
+            var scan = showQuery.Select(s => new ShowScanRow
+            {
+                Id = s.Id,
+                Title = s.Title,
+                DateAdded = s.DateAdded,
+                IncludeInTranslation = s.IncludeInTranslation,
+                TranslationAgeThreshold = s.TranslationAgeThreshold,
+                Year = s.Year,
+                ImdbId = s.ImdbId,
+                ImdbRating = s.ImdbRating,
+                SeasonCount = s.Seasons.Count(),
+                EpisodeCount = s.Seasons.SelectMany(season => season.Episodes).Count(),
+                HasEpisodes = s.Seasons.SelectMany(season => season.Episodes).Any(),
+                AllEpisodesNative = s.Seasons.SelectMany(season => season.Episodes).All(e => e.NoSubtitleNeeded)
+            });
+            scan = OrderScan(scan, orderBy, ascending);
+            var slice = await scan.Take(take).ToListAsync();
+            totalCount += await showQuery.CountAsync();
+            rows.AddRange(slice.Select(r => new MediaRow
+            {
+                Id = r.Id,
+                MediaType = MediaType.Show,
+                Title = r.Title,
+                DateAdded = r.DateAdded,
+                IncludeInTranslation = r.IncludeInTranslation,
+                TranslationAgeThreshold = r.TranslationAgeThreshold,
+                Year = r.Year,
+                ImdbId = r.ImdbId,
+                ImdbRating = r.ImdbRating,
+                SeasonCount = r.SeasonCount,
+                EpisodeCount = r.EpisodeCount,
+                NeedsNoSubtitles = r.HasEpisodes && r.AllEpisodesNative
+            }));
+        }
+        if (wantMovies)
+        {
+            var movieQuery = ApplyMovieFilters(
+                _dbContext.Movies.AsNoTracking().AsQueryable(), needle, wantNative, wantAudioUnknown);
+            var scan = movieQuery.Select(m => new MovieScanRow
+            {
+                Id = m.Id,
+                Title = m.Title,
+                DateAdded = m.DateAdded,
+                IncludeInTranslation = m.IncludeInTranslation,
+                TranslationAgeThreshold = m.TranslationAgeThreshold,
+                AudioLanguages = m.AudioLanguages,
+                NoSubtitleNeeded = m.NoSubtitleNeeded,
+                Year = m.Year,
+                ImdbId = m.ImdbId,
+                Quality = m.Quality,
+                SizeBytes = m.SizeBytes,
+                ImdbRating = m.ImdbRating
+            });
+            scan = OrderScan(scan, orderBy, ascending);
+            var slice = await scan.Take(take).ToListAsync();
+            totalCount += await movieQuery.CountAsync();
+            rows.AddRange(slice.Select(r => new MediaRow
+            {
+                Id = r.Id,
+                MediaType = MediaType.Movie,
+                Title = r.Title,
+                DateAdded = r.DateAdded,
+                IncludeInTranslation = r.IncludeInTranslation,
+                TranslationAgeThreshold = r.TranslationAgeThreshold,
+                AudioLanguages = r.AudioLanguages,
+                Year = r.Year,
+                ImdbId = r.ImdbId,
+                Quality = r.Quality,
+                SizeBytes = r.SizeBytes,
+                ImdbRating = r.ImdbRating,
+                SeasonCount = 0,
+                EpisodeCount = 1,
+                NeedsNoSubtitles = r.NoSubtitleNeeded
+            }));
+        }
+
+        // merge the typed windows with the legacy comparator (stable shows-
+        // before-movies tie order, matching the legacy insertion order), then
+        // slice the page out of the merged window
+        var page = Order(rows, orderBy, ascending)
+            .Skip(skip)
+            .Take(pageSize)
+            .ToList();
+
+        // Phase 2 — coverage JSON hydrates for the page's rows only. This is
+        // the whole point of the two-phase split: the coverage column is
+        // never part of the phase-1 scan, so paging never deserializes the
+        // full library's snapshots.
+        var pageShowIds = page.Where(r => r.MediaType == MediaType.Show).Select(r => r.Id).ToList();
+        var pageMovieIds = page.Where(r => r.MediaType == MediaType.Movie).Select(r => r.Id).ToList();
+        var coverageByMediaId = new Dictionary<(MediaType Type, int Id), string?>();
+        if (pageShowIds.Count > 0)
+        {
+            var coverageRows = await _dbContext.Shows
+                .AsNoTracking()
+                .Where(s => pageShowIds.Contains(s.Id))
+                .Select(s => new { s.Id, s.SubtitleCoverageJson })
+                .ToListAsync();
+            foreach (var row in coverageRows)
+            {
+                coverageByMediaId[(MediaType.Show, row.Id)] = row.SubtitleCoverageJson;
+            }
+        }
+        if (pageMovieIds.Count > 0)
+        {
+            var coverageRows = await _dbContext.Movies
+                .AsNoTracking()
+                .Where(m => pageMovieIds.Contains(m.Id))
+                .Select(m => new { m.Id, m.SubtitleCoverageJson })
+                .ToListAsync();
+            foreach (var row in coverageRows)
+            {
+                coverageByMediaId[(MediaType.Movie, row.Id)] = row.SubtitleCoverageJson;
+            }
+        }
+        foreach (var row in page)
+        {
+            row.Tracks = BuildTracks(
+                DeserializeCoverage(coverageByMediaId.GetValueOrDefault((row.MediaType, row.Id)))
+                    ?? new Dictionary<string, MediaLanguageCoverage>(),
+                row.EpisodeCount,
+                targetLanguages);
+        }
+
+        // request rollups narrow to the page's ids as well
+        Dictionary<int, MediaStatusSummary>? showStatus = null;
+        Dictionary<int, MediaStatusSummary>? movieStatus = null;
+        if (pageShowIds.Count > 0)
+        {
+            showStatus = await ShowStatusCountsAsync(pageShowIds);
+        }
+        if (pageMovieIds.Count > 0)
+        {
+            movieStatus = await MovieStatusCountsAsync(pageMovieIds);
+        }
+        foreach (var row in page)
+        {
+            row.Status = row.MediaType == MediaType.Show
+                ? showStatus?.GetValueOrDefault(row.Id)
+                : movieStatus?.GetValueOrDefault(row.Id);
+        }
+
+        // Phase 3 — the full show graph hydrates for the page's rows only
+        // (inline season detail), exactly like the legacy path.
+        Dictionary<int, Show>? showsById = null;
+        if (pageShowIds.Count > 0)
+        {
+            showsById = await _dbContext.Shows
+                .Include(s => s.Seasons)
+                .ThenInclude(season => season.Episodes)
+                .Where(s => pageShowIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id);
+        }
+
+        return new PagedResult<MediaLibraryItem>
+        {
+            Items = page.Select(row => BuildItem(row, showsById)).ToList(),
+            TotalCount = totalCount,
+            PageNumber = pageNumber,
+            PageSize = pageSize
+        };
+    }
+
+    /// <summary>Request-derived state filter (queued/in-progress/…): cannot
+    /// push into the media queries, it ranks on the newest-request rollup.</summary>
+    private static bool IsRequestStateFilter(string? state) =>
+        !string.IsNullOrEmpty(state)
+        && !string.Equals(state, NativeState, StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(state, AudioUnknownState, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Shared show predicates of both paths: search, native, audio-unknown.</summary>
+    private static IQueryable<Show> ApplyShowFilters(
+        IQueryable<Show> query,
+        string? needle,
+        bool wantNative,
+        bool wantAudioUnknown)
+    {
+        if (needle is not null)
+        {
+            query = query.Where(s => s.Title.ToLower().Contains(needle));
+        }
+        if (wantNative)
+        {
+            // a show counts as native when it has episodes and every one
+            // carries the persisted exemption flag (scan-maintained)
+            query = query.Where(s =>
+                s.Seasons.SelectMany(season => season.Episodes).Any()
+                && s.Seasons.SelectMany(season => season.Episodes).All(e => e.NoSubtitleNeeded));
+        }
+        if (wantAudioUnknown)
+        {
+            query = query.Where(s =>
+                s.Seasons.SelectMany(season => season.Episodes).Any(e => e.AudioLanguages == null));
+        }
+        return query;
+    }
+
+    /// <summary>Shared movie predicates of both paths: search, native, audio-unknown.</summary>
+    private static IQueryable<Movie> ApplyMovieFilters(
+        IQueryable<Movie> query,
+        string? needle,
+        bool wantNative,
+        bool wantAudioUnknown)
+    {
+        if (needle is not null)
+        {
+            query = query.Where(m => m.Title.ToLower().Contains(needle));
+        }
+        if (wantNative)
+        {
+            query = query.Where(m => m.NoSubtitleNeeded);
+        }
+        if (wantAudioUnknown)
+        {
+            query = query.Where(m => m.AudioLanguages == null);
+        }
+        return query;
+    }
+
+    /// <summary>
+    /// Phase-1 ordering, pushed into SQL. Title (the default) orders on
+    /// lower(Title), which folds ASCII case the same way the legacy
+    /// in-memory OrdinalIgnoreCase comparator does; DateAdded keeps nulls
+    /// last in both directions exactly like the legacy ?? MaxValue/MinValue
+    /// fallbacks; Id is the deterministic tie-break the legacy stable sort
+    /// got from insertion order. LastActivity never reaches here — it needs
+    /// the request rollup and stays on the legacy path.
+    /// </summary>
+    private static IQueryable<ShowScanRow> OrderScan(
+        IQueryable<ShowScanRow> scan, string? orderBy, bool ascending)
+    {
+        if (string.Equals(orderBy, "DateAdded", StringComparison.OrdinalIgnoreCase))
+        {
+            return ascending
+                ? scan.OrderBy(r => r.DateAdded == null ? 1 : 0)
+                    .ThenBy(r => r.DateAdded).ThenBy(r => r.Id)
+                : scan.OrderBy(r => r.DateAdded == null ? 1 : 0)
+                    .ThenByDescending(r => r.DateAdded).ThenBy(r => r.Id);
+        }
+        return ascending
+            ? scan.OrderBy(r => r.Title.ToLower()).ThenBy(r => r.Id)
+            : scan.OrderByDescending(r => r.Title.ToLower()).ThenBy(r => r.Id);
+    }
+
+    /// <summary>Movie counterpart of <see cref="OrderScan"/> (same semantics).</summary>
+    private static IQueryable<MovieScanRow> OrderScan(
+        IQueryable<MovieScanRow> scan, string? orderBy, bool ascending)
+    {
+        if (string.Equals(orderBy, "DateAdded", StringComparison.OrdinalIgnoreCase))
+        {
+            return ascending
+                ? scan.OrderBy(r => r.DateAdded == null ? 1 : 0)
+                    .ThenBy(r => r.DateAdded).ThenBy(r => r.Id)
+                : scan.OrderBy(r => r.DateAdded == null ? 1 : 0)
+                    .ThenByDescending(r => r.DateAdded).ThenBy(r => r.Id);
+        }
+        return ascending
+            ? scan.OrderBy(r => r.Title.ToLower()).ThenBy(r => r.Id)
+            : scan.OrderByDescending(r => r.Title.ToLower()).ThenBy(r => r.Id);
+    }
+
     /// <inheritdoc />
     public async Task<MediaLibraryItem?> GetLibraryItem(MediaType? mediaType, int id)
     {
@@ -241,7 +541,7 @@ public class MediaLibraryService : IMediaLibraryService
                 .FirstOrDefaultAsync(s => s.Id == id);
             if (show is not null)
             {
-                var summary = (await ShowStatusCountsAsync(show.Id)).GetValueOrDefault(show.Id);
+                var summary = (await ShowStatusCountsAsync([show.Id])).GetValueOrDefault(show.Id);
                 var episodes = show.Seasons.SelectMany(season => season.Episodes).ToList();
                 var episodeCount = episodes.Count;
                 return new MediaLibraryItem
@@ -250,6 +550,9 @@ public class MediaLibraryService : IMediaLibraryService
                     MediaType = MediaType.Show,
                     Title = show.Title,
                     DateAdded = show.DateAdded,
+                    Year = show.Year,
+                    ImdbId = show.ImdbId,
+                    ImdbRating = show.ImdbRating,
                     SeasonCount = show.Seasons.Count,
                     EpisodeCount = episodeCount,
                     Tracks = BuildTracks(
@@ -270,21 +573,26 @@ public class MediaLibraryService : IMediaLibraryService
         }
 
         if (mediaType is null or MediaType.Movie)
-        {
-            var movie = await _dbContext.Movies
-                .AsNoTracking()
-                .FirstOrDefaultAsync(m => m.Id == id);
-            if (movie is not null)
             {
-                var summary = (await MovieStatusCountsAsync(movie.Id)).GetValueOrDefault(movie.Id);
-                return new MediaLibraryItem
+                var movie = await _dbContext.Movies
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.Id == id);
+                if (movie is not null)
                 {
-                    Id = movie.Id,
-                    MediaType = MediaType.Movie,
-                    Title = movie.Title,
-                    DateAdded = movie.DateAdded,
-                    SeasonCount = 0,
-                    EpisodeCount = 1,
+                    var summary = (await MovieStatusCountsAsync([movie.Id])).GetValueOrDefault(movie.Id);
+                    return new MediaLibraryItem
+                    {
+                        Id = movie.Id,
+                        MediaType = MediaType.Movie,
+                        Title = movie.Title,
+                        DateAdded = movie.DateAdded,
+                        Year = movie.Year,
+                        ImdbId = movie.ImdbId,
+                        Quality = movie.Quality,
+                        SizeBytes = movie.SizeBytes,
+                        ImdbRating = movie.ImdbRating,
+                        SeasonCount = 0,
+                        EpisodeCount = 1,
                     Tracks = BuildTracks(
                         movie.SubtitleCoverage ?? new Dictionary<string, MediaLanguageCoverage>(),
                         1,
@@ -309,18 +617,19 @@ public class MediaLibraryService : IMediaLibraryService
     /// P0-8). A NOT EXISTS anti-join keeps only the newest row per media (Id
     /// breaks UpdatedAt ties deterministically) and the grouping stays in
     /// SQL, so neither request payloads nor episode entities enter memory.
-    /// When <paramref name="showId"/> is given the aggregation narrows to a
-    /// single show (media detail page direct path).
+    /// When <paramref name="showIds"/> is given the aggregation narrows to
+    /// those shows (media detail direct path / two-phase page hydration);
+    /// null aggregates the whole library (legacy full-aggregation path).
     /// </summary>
-    private async Task<Dictionary<int, MediaStatusSummary>> ShowStatusCountsAsync(int? showId = null)
+    private async Task<Dictionary<int, MediaStatusSummary>> ShowStatusCountsAsync(
+        IReadOnlyCollection<int>? showIds = null)
     {
         var episodes = _dbContext.Episodes
             .AsNoTracking()
             .AsQueryable();
-        if (showId is not null)
+        if (showIds is not null)
         {
-            var id = showId.Value;
-            episodes = episodes.Where(e => e.Season.ShowId == id);
+            episodes = episodes.Where(e => showIds.Contains(e.Season.ShowId));
         }
 
         var rows = await episodes
@@ -371,18 +680,19 @@ public class MediaLibraryService : IMediaLibraryService
     /// <summary>
     /// Newest request per movie rolled up to counts (movie MediaId is the
     /// movie id, no join needed). Same anti-join shape as
-    /// <see cref="ShowStatusCountsAsync"/>; <paramref name="movieId"/> narrows
-    /// the aggregation to one movie for the detail-page direct path.
+    /// <see cref="ShowStatusCountsAsync"/>; <paramref name="movieIds"/> narrows
+    /// the aggregation to those movies (detail direct path / two-phase page
+    /// hydration), null aggregates the whole library.
     /// </summary>
-    private async Task<Dictionary<int, MediaStatusSummary>> MovieStatusCountsAsync(int? movieId = null)
+    private async Task<Dictionary<int, MediaStatusSummary>> MovieStatusCountsAsync(
+        IReadOnlyCollection<int>? movieIds = null)
     {
         var query = _dbContext.TranslationRequests
             .AsNoTracking()
             .Where(r => r.MediaType == MediaType.Movie && r.MediaId != null);
-        if (movieId is not null)
+        if (movieIds is not null)
         {
-            var id = movieId.Value;
-            query = query.Where(r => r.MediaId == id);
+            query = query.Where(r => movieIds.Contains(r.MediaId!.Value));
         }
 
         var rows = await query
@@ -461,6 +771,13 @@ public class MediaLibraryService : IMediaLibraryService
             LastActivityAt = row.Status?.LastActivity,
             IncludeInTranslation = row.IncludeInTranslation,
             TranslationAgeThreshold = row.TranslationAgeThreshold,
+            Year = row.Year,
+            ImdbId = row.ImdbId,
+            // quality/size are movie-file concepts: show rows never carry
+            // them, so their projections surface null by construction
+            Quality = row.Quality,
+            SizeBytes = row.SizeBytes,
+            ImdbRating = row.ImdbRating,
             // shows union their episodes' audio (null when any episode is
             // unknown); movies take the column value straight from the row
             AudioLanguages = show is not null
@@ -664,6 +981,8 @@ public class MediaLibraryService : IMediaLibraryService
     /// <summary>
     /// Per-media aggregate row: scalar columns plus the grouped request
     /// counts — one small row per media item instead of full entity graphs.
+    /// Coverage JSON is deliberately absent on the two-phase path's rows:
+    /// it hydrates for the page only.
     /// </summary>
     private sealed class MediaRow
     {
@@ -674,6 +993,11 @@ public class MediaLibraryService : IMediaLibraryService
         public bool IncludeInTranslation { get; init; }
         public int? TranslationAgeThreshold { get; init; }
         public string? SubtitleCoverageJson { get; init; }
+        public int? Year { get; init; }
+        public string? ImdbId { get; init; }
+        public string? Quality { get; init; }
+        public long? SizeBytes { get; init; }
+        public double? ImdbRating { get; init; }
         public int SeasonCount { get; init; }
         public int EpisodeCount { get; init; }
         public string[]? AudioLanguages { get; init; }
@@ -681,6 +1005,44 @@ public class MediaLibraryService : IMediaLibraryService
         public MediaStatusSummary? Status { get; set; }
         public List<SubtitleTrackSummary> Tracks { get; set; } = [];
         public DateTimeOffset? LastActivityAt => Status?.LastActivity;
+    }
+
+    /// <summary>
+    /// Phase-1 scan row of the two-phase default path: id + scalar columns +
+    /// grouped season/episode counts. Never carries the coverage JSON — that
+    /// is exactly what keeps default paging off the whole-library parse.
+    /// </summary>
+    private sealed class ShowScanRow
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public DateTimeOffset? DateAdded { get; set; }
+        public bool IncludeInTranslation { get; set; }
+        public int? TranslationAgeThreshold { get; set; }
+        public int? Year { get; set; }
+        public string? ImdbId { get; set; }
+        public double? ImdbRating { get; set; }
+        public int SeasonCount { get; set; }
+        public int EpisodeCount { get; set; }
+        public bool HasEpisodes { get; set; }
+        public bool AllEpisodesNative { get; set; }
+    }
+
+    /// <summary>Movie counterpart of <see cref="ShowScanRow"/>.</summary>
+    private sealed class MovieScanRow
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public DateTimeOffset? DateAdded { get; set; }
+        public bool IncludeInTranslation { get; set; }
+        public int? TranslationAgeThreshold { get; set; }
+        public string[]? AudioLanguages { get; set; }
+        public bool NoSubtitleNeeded { get; set; }
+        public int? Year { get; set; }
+        public string? ImdbId { get; set; }
+        public string? Quality { get; set; }
+        public long? SizeBytes { get; set; }
+        public double? ImdbRating { get; set; }
     }
 
     /// <summary>

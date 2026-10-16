@@ -44,6 +44,35 @@ public class MediaLibraryItem
     /// </summary>
     public bool NeedsNoSubtitles { get; init; }
 
+    /// <summary>
+    /// Release year from *arr (library B2/M0008). Shows carry the series
+    /// year; movies the release year. Null when the payload had none.
+    /// </summary>
+    public int? Year { get; init; }
+
+    /// <summary>
+    /// IMDb id ("tt…") from *arr (B2). Null when the payload had none.
+    /// </summary>
+    public string? ImdbId { get; init; }
+
+    /// <summary>
+    /// Release quality label ("WEBDL-1080p", B2). A movie-file concept:
+    /// show projections leave it null (episodes are not per-file scored).
+    /// </summary>
+    public string? Quality { get; init; }
+
+    /// <summary>
+    /// File size in bytes (B2). Movie files only: show projections leave
+    /// it null — a series has no single file size.
+    /// </summary>
+    public long? SizeBytes { get; init; }
+
+    /// <summary>
+    /// IMDb user rating (B2); null when *arr has no real score yet
+    /// (the column never stores a fake 0).
+    /// </summary>
+    public double? ImdbRating { get; init; }
+
     /// <summary>Populated for shows: seasons with episodes for the inline detail.</summary>
     public Show? Show { get; init; }
 

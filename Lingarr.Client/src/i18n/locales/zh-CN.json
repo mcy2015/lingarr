@@ -1082,7 +1082,8 @@
             "unmarkedToast": "已取消标记",
             "failedToast": "更新字幕需求失败：{message}"
         },
-        "openSubtitleSearch": "🔍 搜索字幕"
+        "openSubtitleSearch": "🔍 搜索字幕",
+        "openImdb": "打开 IMDb 页面"
     },
     "cmdk": {
         "ariaLabel": "全局搜索",
@@ -1135,7 +1136,11 @@
         "searching": "正在搜索字幕源…",
         "noResults": "未找到候选字幕，可调整关键词或语言后重试。",
         "noTranslate": "免翻译",
-        "lowConfidence": "低于自动下载分数线(75) — 仍可手动下载",
+        "lowConfidence": "低于自动下载分数线({score}) — 仍可手动下载",
+        "nativeAudioHint": "容器音轨已覆盖所搜语言之一——该媒体通常无需字幕，仍可继续搜索下载。",
+        "retrySource": "重试",
+        "existing": "已存在",
+        "downloadedMark": "已下载",
         "download": "下载",
         "downloadOnly": "仅下载",
         "downloadAndTranslate": "下载并翻译 ▸",

@@ -156,8 +156,20 @@ public class StatisticsService : IStatisticsService
         var targetLanguages = await _settingService.GetSettingAsJson<TargetLanguage>(
             SettingKeys.Translation.TargetLanguages);
         var byLanguage = stats.SubtitlesByLanguage;
+
+        // Exempt media (no_subtitle_needed = 1: audio already covers a
+        // target language, or a manual mark) are not "missing" anything —
+        // subtract them from the per-language gap so the KPI matches what
+        // the library actually owes. The flags are scan-maintained just like
+        // the totals above, so the two counts stay consistent.
+        var exemptEpisodes = await _dbContext.Episodes
+            .CountAsync(e => e.NoSubtitleNeeded);
+        var exemptMovies = await _dbContext.Movies
+            .CountAsync(m => m.NoSubtitleNeeded);
+        var owedMediaCount = Math.Max(0, mediaCount - exemptEpisodes - exemptMovies);
+
         var missingSubtitles = targetLanguages
-            .Sum(language => Math.Max(0, mediaCount - byLanguage.GetValueOrDefault(language.Code)));
+            .Sum(language => Math.Max(0, owedMediaCount - byLanguage.GetValueOrDefault(language.Code)));
 
         var monthStartLocal = Today.AddDays(1 - Today.Day).ToDateTime(TimeOnly.MinValue);
         var monthStart = new DateTimeOffset(
