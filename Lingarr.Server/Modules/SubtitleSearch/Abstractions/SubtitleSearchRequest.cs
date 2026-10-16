@@ -19,6 +19,12 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 /// Optional because only the shooter source consumes it; sources that cannot
 /// use it simply ignore it.
 /// </param>
+/// <param name="Query">
+/// Keyword override (locked API contract): when non-blank it replaces the
+/// derived title/keyword term of the query. Null keeps the library-derived
+/// query. Populated by the manual search endpoint's passthrough; sources
+/// that cannot search by free keyword ignore it.
+/// </param>
 public sealed record SubtitleSearchRequest(
     string Title,
     int? Year,
@@ -28,4 +34,5 @@ public sealed record SubtitleSearchRequest(
     string? VideoHash,
     string[] Languages,
     string? ImdbId,
-    string? ShooterFileHash = null);
+    string? ShooterFileHash = null,
+    string? Query = null);

@@ -32,6 +32,21 @@ public sealed record ExtractedSubtitle(string FileName, byte[] Content);
 /// </summary>
 public sealed class SubtitleArchiveExtractor
 {
+    /// <summary>
+    /// Hard cap of entries opened from one archive (QA2 P2-5): a subtitle
+    /// pack carries a handful of files; thousands of entries is a zip bomb
+    /// and the archive is rejected before any entry streams.
+    /// </summary>
+    public const int MaxArchiveEntries = 64;
+
+    /// <summary>
+    /// Hard cap of one extracted entry (QA2 P2-5): subtitle texts are
+    /// kilobytes-to-megabytes; a single entry past 50MB is a decompression
+    /// bomb and fails as InvalidResponse mid-copy, before the MemoryStream
+    /// grows unbounded.
+    /// </summary>
+    public const long MaxEntryBytes = 50L * 1024 * 1024;
+
     private static readonly string[] SubtitleExtensions =
         [".srt", ".ass", ".ssa", ".vtt"];
 
@@ -119,10 +134,21 @@ public sealed class SubtitleArchiveExtractor
             };
             using var archive = ArchiveFactory.Open(stream, options);
 
+            // Entry-count budget first (QA2 P2-5): counting materializes the
+            // central directory once and rejects bomb archives before any
+            // entry payload streams.
+            var entries = archive.Entries.ToList();
+            if (entries.Count > MaxArchiveEntries)
+            {
+                throw SubtitleProviderException.ForInvalidResponse(
+                    provider,
+                    $"the archive carries {entries.Count} entries, over the {MaxArchiveEntries}-entry budget.");
+            }
+
             IEntry? best = null;
             var bestRank = -1;
             var bestSize = -1L;
-            foreach (var entry in archive.Entries)
+            foreach (var entry in entries)
             {
                 if (entry.IsDirectory || string.IsNullOrEmpty(entry.Key))
                 {
@@ -151,7 +177,24 @@ public sealed class SubtitleArchiveExtractor
 
             using var entryStream = ((SharpCompress.Archives.IArchiveEntry)best).OpenEntryStream();
             using var copied = new MemoryStream();
-            entryStream.CopyTo(copied);
+            // Bounded copy (QA2 P2-5): entry.Size is the *declared* size and
+            // cannot be trusted — the cap is enforced on the bytes actually read.
+            var chunk = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = entryStream.Read(chunk, 0, chunk.Length)) > 0)
+            {
+                total += read;
+                if (total > MaxEntryBytes)
+                {
+                    throw SubtitleProviderException.ForInvalidResponse(
+                        provider,
+                        $"archive entry '{best.Key}' decompressed past the {MaxEntryBytes / (1024 * 1024)}MB budget.");
+                }
+
+                copied.Write(chunk, 0, read);
+            }
+
             return new ExtractedSubtitle(
                 Path.GetFileName(best.Key!),
                 copied.ToArray());

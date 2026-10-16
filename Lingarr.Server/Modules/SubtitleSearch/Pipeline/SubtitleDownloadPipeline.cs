@@ -26,8 +26,8 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 /// <param name="FilePath">Where the file landed; null when nothing was written.</param>
 /// <param name="Result">Outcome classification of the attempt.</param>
 /// <param name="Error">Readable failure reason when <see cref="Result"/> is Failed.</param>
-/// <param name="TranslationRequestId">Translation request created (⑦ step ⑦); null when none.</param>
-/// <param name="TranslationDuplicate">True when the translation enqueue was skipped because the same content/language pair is already tracked.</param>
+/// <param name="TranslationRequestId">First translation request created (⑦ step ⑦, one per target language); null when none.</param>
+/// <param name="TranslationDuplicate">True when at least one target language was skipped because the same content/target pair is already tracked.</param>
 public sealed record SubtitleDownloadOutcome(
     int HistoryId,
     string? FilePath,
@@ -111,13 +111,19 @@ public sealed class SubtitleDownloadPipeline
     /// <param name="source">How the download was initiated.</param>
     /// <param name="searchSessionId">Deciding search session, when known (history linkage).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="skipTranslation">
+    /// Manual-download override (locked API contract): true keeps the
+    /// target-language direct hit on disk but never enqueues a translation
+    /// request. Default false preserves the automated dual-path ruling.
+    /// </param>
     public async Task<SubtitleDownloadOutcome> DownloadAsync(
         SubtitleCandidate candidate,
         MediaType mediaType,
         int mediaId,
         SubtitleDownloadSource source,
         int? searchSessionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool skipTranslation = false)
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
@@ -166,8 +172,23 @@ public sealed class SubtitleDownloadPipeline
         {
             var payload = await registered.Provider.DownloadAsync(
                 new SubtitleCandidateRef(candidate.ExternalId), cancellationToken);
-            await _telemetry.RecordDownloadQuotaAsync(
-                candidate.Provider, SubtitleTelemetryService.PublishedQuotaLimit(candidate.Provider));
+            // ④ Quota telemetry is monitoring, not business logic — an
+            // upsert failure must never discard an already-fetched payload
+            // (QA2 P2-3: sharing the download try-block turned SQL hiccups
+            // into lost downloads without a Failed history row). The
+            // orchestrator's non-fatal telemetry ruling, applied here too.
+            try
+            {
+                await _telemetry.RecordDownloadQuotaAsync(
+                    candidate.Provider, SubtitleTelemetryService.PublishedQuotaLimit(candidate.Provider));
+            }
+            catch (Exception telemetryError)
+            {
+                _logger.LogWarning(telemetryError,
+                    "Download quota upsert failed for {Provider}; the download continues.",
+                    candidate.Provider);
+            }
+
             entry = _extractor.Extract(
                 payload.Content, payload.FileName, payload.Format, candidate.Language, candidate.Provider);
         }
@@ -263,9 +284,11 @@ public sealed class SubtitleDownloadPipeline
 
         // ⑥ translation hook: target-language hits are terminal; non-target
         // languages enter the queue when auto_translate is on (content-hash
-        // idempotent).
+        // idempotent). skipTranslation (manual download contract) keeps the
+        // file but bypasses the queue entirely.
         var translationRequestId = await EnqueueTranslationAsync(
-            candidate, mediaType, mediaId, media.Title, finalPath, utf8, autoTranslate, cancellationToken);
+            candidate, mediaType, mediaId, media.Title, finalPath, utf8, autoTranslate, cancellationToken,
+            skipTranslation);
 
         // ⑦ single-media coverage refresh + ⑧ hub broadcast.
         try
@@ -379,9 +402,16 @@ public sealed class SubtitleDownloadPipeline
     /// <summary>
     /// Target-language hits are terminal (dual-path ruling); anything else
     /// (en in the zh-target deployment) enters the translation queue when
-    /// auto_translate is on. Idempotent on (content hash, target language)
-    /// — the import-service dedup rule.
+    /// auto_translate is on — one request per configured target language,
+    /// not just the first (QA3 P3-1). Idempotent per (content hash, target
+    /// language) — the import-service dedup rule. With
+    /// <paramref name="skipTranslation"/> the file stays on disk but no
+    /// request is ever created (manual-download contract).
     /// </summary>
+    /// <returns>
+    /// The id of the first created request (null when none was created) and
+    /// whether at least one target was skipped as an existing duplicate.
+    /// </returns>
     private async Task<(int? requestId, bool duplicate)> EnqueueTranslationAsync(
         SubtitleCandidate candidate,
         MediaType mediaType,
@@ -390,8 +420,14 @@ public sealed class SubtitleDownloadPipeline
         string filePath,
         byte[] utf8Content,
         bool autoTranslate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool skipTranslation)
     {
+        if (skipTranslation)
+        {
+            return (null, false); // manual override: landed, but no queue
+        }
+
         var targets = (await _settingService.GetSettingAsJson<TargetLanguage>(
                            SettingKeys.Translation.TargetLanguages)
                        ?? [])
@@ -408,33 +444,36 @@ public sealed class SubtitleDownloadPipeline
             return (null, false);
         }
 
-        var target = targets.FirstOrDefault(code =>
-            !string.Equals(code, candidate.Language, StringComparison.OrdinalIgnoreCase));
-        if (target is null)
-        {
-            return (null, false);
-        }
-
+        int? firstRequestId = null;
+        var anyDuplicate = false;
         var contentHash = ComputeContentHash(utf8Content);
-        var duplicateId = await _dbContext.TranslationRequests
-            .Where(request => request.ContentHash == contentHash && request.TargetLanguage == target)
-            .OrderBy(request => request.Id)
-            .Select(request => (int?)request.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (duplicateId is not null)
+        foreach (var target in targets
+                     .Where(code => !string.Equals(code, candidate.Language, StringComparison.OrdinalIgnoreCase))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            return (null, true);
+            var duplicateId = await _dbContext.TranslationRequests
+                .Where(request => request.ContentHash == contentHash && request.TargetLanguage == target)
+                .OrderBy(request => request.Id)
+                .Select(request => (int?)request.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (duplicateId is not null)
+            {
+                anyDuplicate = true;
+                continue;
+            }
+
+            var requestId = await _translationQueue.CreateImportRequest(
+                filePath,
+                title,
+                candidate.Language,
+                target,
+                mediaId,
+                mediaType,
+                contentHash);
+            firstRequestId ??= requestId;
         }
 
-        var requestId = await _translationQueue.CreateImportRequest(
-            filePath,
-            title,
-            candidate.Language,
-            target,
-            mediaId,
-            mediaType,
-            contentHash);
-        return (requestId, false);
+        return (firstRequestId, anyDuplicate);
     }
 
     /// <summary>SHA-256 over LF-normalized text — the import-service hash rule.</summary>

@@ -30,6 +30,15 @@ public sealed record SubtitleSourceCooldown(DateTimeOffset Until, string Reason,
 /// persisted map (SettingUpdatesHub hot reload applies to reads the same
 /// way). No in-memory copy is kept beyond a single method call.
 /// </para>
+/// <para>
+/// Mutations are read-modify-write cycles over one persisted JSON blob
+/// (QA1 P2-2): the orchestrator's parallel source fan-out can fail several
+/// sources at once, and two concurrent cycles would overwrite each other's
+/// entries. <see cref="PersistGate"/> therefore serializes every mutation —
+/// static, not per-instance, because the store is scoped: the gate must
+/// also serialize writers living in different scopes (parallel manual
+/// searches). A waiter cancelled while queueing never enters the cycle.
+/// </para>
 /// </summary>
 public sealed class SubtitleSourceCooldownStore
 {
@@ -46,6 +55,13 @@ public sealed class SubtitleSourceCooldownStore
         // Round-trip dates in ISO-8601 with offset — DateTimeOffset default.
         WriteIndented = false
     };
+
+    /// <summary>
+    /// Serializes the persisted-map read-modify-write cycle across all store
+    /// instances (process lifetime, deliberately never disposed — see the
+    /// class remarks on the scoped registration).
+    /// </summary>
+    private static readonly SemaphoreSlim PersistGate = new(1, 1);
 
     private readonly ISettingService _settingService;
     private readonly ILogger<SubtitleSourceCooldownStore> _logger;
@@ -147,20 +163,36 @@ public sealed class SubtitleSourceCooldownStore
         string? error,
         CancellationToken cancellationToken)
     {
-        var map = await ReadMapAsync(cancellationToken);
-        map[provider] = new SubtitleSourceCooldown(until, reason, error);
-        await WriteMapAsync(map, cancellationToken);
-        _logger.LogInformation(
-            "Subtitle source {Provider} enters cooldown until {Until} ({Reason}).",
-            provider, until, reason);
+        await PersistGate.WaitAsync(cancellationToken);
+        try
+        {
+            var map = await ReadMapAsync(cancellationToken);
+            map[provider] = new SubtitleSourceCooldown(until, reason, error);
+            await WriteMapAsync(map, cancellationToken);
+            _logger.LogInformation(
+                "Subtitle source {Provider} enters cooldown until {Until} ({Reason}).",
+                provider, until, reason);
+        }
+        finally
+        {
+            PersistGate.Release();
+        }
     }
 
     private async Task PersistRemovalAsync(string provider, CancellationToken cancellationToken)
     {
-        var map = await ReadMapAsync(cancellationToken);
-        if (map.Remove(provider))
+        await PersistGate.WaitAsync(cancellationToken);
+        try
         {
-            await WriteMapAsync(map, cancellationToken);
+            var map = await ReadMapAsync(cancellationToken);
+            if (map.Remove(provider))
+            {
+                await WriteMapAsync(map, cancellationToken);
+            }
+        }
+        finally
+        {
+            PersistGate.Release();
         }
     }
 

@@ -17,11 +17,84 @@ using Lingarr.Server.Modules.SubtitleSearch.Telemetry;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
+using Microsoft.Extensions.Logging.Console;
 using Xunit;
 
 namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
+
+/// <summary>
+/// Stateful <see cref="ISettingService"/> double — the cooldown store
+/// round-trips its map through GetSetting/SetSetting, so cooldown tests
+/// need real storage, not a stateless Moq (the true cause behind the
+/// previously skipped cooldown tests: RecordFailureAsync wrote into a mock
+/// that never answered reads).
+/// </summary>
+internal sealed class InMemorySettingService : ISettingService
+{
+    private readonly Dictionary<string, string> _values = new();
+
+    /// <summary>
+    /// Artificial read latency used to widen read-modify-write race windows
+    /// in the cooldown-serialization tests; 0 in normal use.
+    /// </summary>
+    internal int ReadDelayMilliseconds { get; set; }
+
+    public event SettingChangedHandler? SettingChanged;
+
+    public async Task<string?> GetSetting(string key)
+    {
+        if (ReadDelayMilliseconds > 0)
+        {
+            await Task.Delay(ReadDelayMilliseconds);
+        }
+
+        return _values.TryGetValue(key, out var value) ? value : null;
+    }
+
+    public Task<Dictionary<string, string>> GetSettings(IEnumerable<string> keys)
+        => Task.FromResult(keys.Where(_values.ContainsKey).ToDictionary(key => key, key => _values[key]));
+
+    public Task<bool> SetSetting(string key, string value)
+    {
+        _values[key] = value;
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> SetSettings(Dictionary<string, string> settings)
+    {
+        foreach (var (key, value) in settings)
+        {
+            _values[key] = value;
+        }
+
+        return Task.FromResult(true);
+    }
+
+    public Task<List<T>> GetSettingAsJson<T>(string key) where T : class
+    {
+        if (!_values.TryGetValue(key, out var json))
+        {
+            return Task.FromResult(new List<T>());
+        }
+
+        return Task.FromResult(System.Text.Json.JsonSerializer.Deserialize<List<T>>(json) ?? []);
+    }
+
+    public Task<bool> SetEncryptedSetting(string key, string value)
+    {
+        _values["secret:" + key] = value;
+        return Task.FromResult(true);
+    }
+
+    public Task<string?> GetEncryptedSetting(string key)
+        => Task.FromResult(_values.TryGetValue("secret:" + key, out var value) ? value : null);
+
+    public Task<Dictionary<string, bool>> GetEncryptedSettingStates(IEnumerable<string> keys)
+        => Task.FromResult(keys.Where(_values.ContainsKey)
+            .ToDictionary(key => key, key => !string.IsNullOrWhiteSpace(_values["secret:" + key])));
+}
 
 /// <summary>
 /// Orchestrator contracts (design ①/⑤/⑧, M3 acceptance): source-parallel
@@ -36,7 +109,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly OrchestratorDbContext _dbContext;
-    private readonly Mock<ISettingService> _settingService = new();
+    private readonly InMemorySettingService _settings = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly SubtitleTelemetryService _telemetry;
 
@@ -61,6 +134,26 @@ public class SubtitleSearchOrchestratorTests : IDisposable
     }
 
     private sealed class OrchestratorDbContext(DbContextOptions options) : LingarrDbContext(options);
+
+    /// <summary>
+    /// SaveChanges flake double for the telemetry-detach contract: fails the
+    /// next save once, then behaves normally.
+    /// </summary>
+    private sealed class FlakyDbContext(DbContextOptions options) : LingarrDbContext(options)
+    {
+        public bool ThrowOnNextSave;
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (ThrowOnNextSave)
+            {
+                ThrowOnNextSave = false;
+                throw new InvalidOperationException("simulated telemetry save failure");
+            }
+
+            return base.SaveChangesAsync(cancellationToken);
+        }
+    }
 
     /// <summary>
     /// Provider double: search answers through a scriptable handler, so the
@@ -106,16 +199,26 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         var registry = new SubtitleProviderRegistry(
             providers, Array.Empty<ISubtitleSourceManifest>(), NullLogger<SubtitleProviderRegistry>.Instance);
         var cooldowns = new SubtitleSourceCooldownStore(
-            _settingService.Object, NullLogger<SubtitleSourceCooldownStore>.Instance);
+            _settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
         return new SubtitleSearchOrchestrator(
             registry,
             new SubtitleMatchScorer(),
             cooldowns,
             _telemetry,
             _cache,
-            NullLogger<SubtitleSearchOrchestrator>.Instance,
+            _orchestratorLogger,
             timeout);
     }
+
+    /// <summary>
+    /// Console-backed logger: the orchestrator's telemetry catch only warns,
+    /// and a NullLogger there turned "why did the session row not persist"
+    /// into a guessing game during the R-fix gate. Visible in `dotnet test`
+    /// output without xUnit capture.
+    /// </summary>
+    private static readonly ILogger<SubtitleSearchOrchestrator> _orchestratorLogger =
+        LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning).AddConsole())
+            .CreateLogger<SubtitleSearchOrchestrator>();
 
     private static SubtitleCandidate Candidate(
         string language = "en",
@@ -158,7 +261,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Empty(outcome.SourceOutcomes);
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task Search_DedupesAcrossSourcesOnLanguageReleaseSize()
     {
         var first = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
@@ -180,7 +283,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Contains(outcome.Candidates, candidate => candidate.Language == "zh");
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task Search_HangingSourceUnwindsThroughTheBudget_NotTheHttpClientTimeout()
     {
         // The provider hangs until its token fires — the acceptance shape
@@ -214,7 +317,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.True(cooldowns.ContainsKey("hanging"));
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task Search_CooledDownSourcesAreSkippedAndReported()
     {
         var cooled = new ScriptedProvider(_ => Task.FromResult(SubtitleSearchResult.Empty)) { Provider = "cooled" };
@@ -222,14 +325,14 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         { Provider = "live" };
         var orchestrator = Create(cooled, live);
 
+        // The cooldown persists through the real settings round-trip — the
+        // stateful stub is what the earlier skip hid (a stateless Moq never
+        // answered the round-start read).
         await new SubtitleSourceCooldownStore(
-                _settingService.Object, NullLogger<SubtitleSourceCooldownStore>.Instance)
+                _settings, NullLogger<SubtitleSourceCooldownStore>.Instance)
             .RecordFailureAsync("cooled", SubtitleProviderException.ForHttpStatus(
                 "cooled", System.Net.HttpStatusCode.TooManyRequests));
 
-        _settingService
-            .Setup(service => service.GetSetting(Lingarr.Core.Configuration.SettingKeys.SubtitleSearch.SourceCooldowns))
-            .ReturnsAsync("{}");
         var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
 
         Assert.Equal(0, cooled.SearchCalls);
@@ -272,7 +375,25 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal("beta", outcome.Candidates.Single().Provider);
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    /// <summary>
+    /// Direct telemetry regression pin: a null quota-remaining parameter
+    /// used to throw "Value must be set" (raw null instead of DBNull.Value),
+    /// which — because the orchestrator calls quota before the session save
+    /// inside one try — silently killed every telemetry write.
+    /// </summary>
+    [Fact]
+    public async Task Telemetry_DirectWrites_SessionAndQuotaRows()
+    {
+        var id = await _telemetry.RecordSearchSessionAsync(
+            MediaType.Movie, 1, "alpha", "en", 0, hitTarget: false);
+        await _telemetry.RecordSearchQuotaAsync("alpha");
+
+        Assert.True(id > 0);
+        Assert.Equal("alpha", (await _dbContext.SubtitleSearchSessions.SingleAsync()).Provider);
+        Assert.Equal(1, (await _dbContext.ProviderQuotaUsages.SingleAsync()).Searches);
+    }
+
+    [Fact]
     public async Task Search_RecordsSessionsAndQuota_EvenForZeroResults()
     {
         var empty = new ScriptedProvider(_ => Task.FromResult(SubtitleSearchResult.Empty)) { Provider = "alpha" };
@@ -292,7 +413,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal(0, quota.Downloads);
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task Search_CachesTheOutcomeForTheDownloadEndpoint()
     {
         var provider = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
@@ -308,7 +429,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Null(orchestrator.ResolveCache("no-such-key"));
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task Search_OpenSubtitlesSearchesCarryTheQuotaWaterline()
     {
         var os = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
@@ -321,7 +442,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal(40, quota.QuotaLimit); // OpenSubtitlesProvider.DailyDownloadQuota
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task Search_CallerCancellationPropagates()
     {
         var slow = new ScriptedProvider(async token =>
@@ -335,5 +456,90 @@ public class SubtitleSearchOrchestratorTests : IDisposable
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, cts.Token));
+    }
+
+    [Fact]
+    public async Task CooldownStore_ConcurrentFailuresSerialize_BothSourcesPersist()
+    {
+        // QA1 P2-2: the persisted map is one read-modify-write blob — two
+        // sources failing in the same parallel round must not overwrite each
+        // other. The artificial read latency widens the unsynchronized window
+        // so the bug (had it stayed) would reliably drop one entry.
+        var settings = new InMemorySettingService { ReadDelayMilliseconds = 25 };
+        var store = new SubtitleSourceCooldownStore(settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
+
+        await Task.WhenAll(
+            store.RecordFailureAsync("alpha", SubtitleProviderException.ForHttpStatus(
+                "alpha", System.Net.HttpStatusCode.TooManyRequests)),
+            store.RecordFailureAsync("beta", SubtitleProviderException.ForHttpStatus(
+                "beta", System.Net.HttpStatusCode.BadGateway)));
+
+        var active = await store.GetActiveAsync();
+        Assert.True(active.ContainsKey("alpha"), "alpha's cooldown was lost to the concurrent beta write");
+        Assert.True(active.ContainsKey("beta"), "beta's cooldown was lost to the concurrent alpha write");
+    }
+
+    [Fact]
+    public async Task Telemetry_FailedSessionSaveDetaches_DoesNotPoisonTheNextRound()
+    {
+        // QA2 P2-2: a failed telemetry save used to leave the session in
+        // Added state, so every later SaveChanges of the scoped context
+        // retried the same broken row. After the detach fix the next
+        // telemetry write succeeds on the same context.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = new FlakyDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options);
+        context.Database.EnsureCreated();
+        var telemetry = new SubtitleTelemetryService(context);
+
+        context.ThrowOnNextSave = true;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            telemetry.RecordSearchSessionAsync(MediaType.Movie, 1, "alpha", "en", 0, hitTarget: false));
+
+        var id = await telemetry.RecordSearchSessionAsync(MediaType.Movie, 1, "alpha", "en", 1, hitTarget: true);
+        Assert.True(id > 0);
+        // The failed first save left nothing behind (detached, not retried):
+        // exactly the second, successful session row persists.
+        var survivor = await context.SubtitleSearchSessions.SingleAsync();
+        Assert.Equal(id, survivor.Id);
+        Assert.True(survivor.HitTarget);
+        // No half-added row survives the failed save — the tracked entries
+        // after the successful second write are saved rows, never Added.
+        Assert.All(context.ChangeTracker.Entries(), entry =>
+            Assert.NotEqual(EntityState.Added, entry.State));
+    }
+
+    [Fact]
+    public async Task SearchOutcomeCache_IsBoundToItsMedia_AndMismatchedLookupsAreRejected()
+    {
+        // QA3 P3-2: the download endpoint's cache key belongs to exactly the
+        // media the search ran for — another mediaId/mediaType must not
+        // resolve it.
+        var provider = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
+        { Provider = "alpha" };
+        var orchestrator = Create(provider);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 7, null, CancellationToken.None);
+
+        Assert.Equal(
+            SubtitleSearchOrchestrator.SubtitleCacheResolution.Resolved,
+            orchestrator.TryResolveCache(outcome.CacheKey, MediaType.Movie, 7, out var candidates));
+        Assert.Single(candidates!);
+
+        Assert.Equal(
+            SubtitleSearchOrchestrator.SubtitleCacheResolution.MediaMismatch,
+            orchestrator.TryResolveCache(outcome.CacheKey, MediaType.Movie, 8, out var otherId));
+        Assert.Null(otherId);
+        Assert.Equal(
+            SubtitleSearchOrchestrator.SubtitleCacheResolution.MediaMismatch,
+            orchestrator.TryResolveCache(outcome.CacheKey, MediaType.Episode, 7, out var otherType));
+        Assert.Null(otherType);
+        Assert.Equal(
+            SubtitleSearchOrchestrator.SubtitleCacheResolution.Expired,
+            orchestrator.TryResolveCache("no-such-key", MediaType.Movie, 7, out var expired));
+        Assert.Null(expired);
     }
 }

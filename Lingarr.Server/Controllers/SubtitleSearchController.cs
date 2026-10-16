@@ -34,11 +34,17 @@ public sealed record SubtitleSourceTestResult(bool Ok, double LatencyMs, string 
 /// <param name="MediaType">"Movie" or "Episode".</param>
 /// <param name="Languages">Language codes to search for.</param>
 /// <param name="Provider">Source key to query (required per design ⑥).</param>
+/// <param name="Query">
+/// Optional keyword override (locked API contract): when set it replaces
+/// the built title/keywords as the search term. Null keeps the
+/// library-derived query.
+/// </param>
 public sealed record SubtitleSearchRequestBody(
     int MediaId,
     string MediaType,
     string[] Languages,
-    string Provider);
+    string Provider,
+    string? Query = null);
 
 /// <summary>One scored candidate as the front end renders it (cache-opaque external id kept).</summary>
 public sealed record SubtitleCandidateResponse(
@@ -67,15 +73,20 @@ public sealed record SubtitleSearchResponse(
 /// </summary>
 /// <param name="CacheKey">CacheKey of the preceding search.</param>
 /// <param name="CandidateIndex">Index into that search's candidate list.</param>
-/// <param name="MediaId">Library id of the movie/episode.</param>
-/// <param name="MediaType">"Movie" or "Episode".</param>
+/// <param name="MediaId">Library id of the movie/episode; must match the media the search ran for (QA3 P3-2).</param>
+/// <param name="MediaType">"Movie" or "Episode"; must match the search's media (QA3 P3-2).</param>
 /// <param name="Source">"Manual" (default), "Auto" or "Webhook".</param>
+/// <param name="SkipTranslation">
+/// Locked API contract: true keeps a target-language direct hit on disk but
+/// never enqueues a translation request. Default false.
+/// </param>
 public sealed record SubtitleDownloadRequestBody(
     string CacheKey,
     int CandidateIndex,
     int MediaId,
     string MediaType,
-    string? Source);
+    string? Source,
+    bool SkipTranslation = false);
 
 /// <summary>Download response: the landing path plus the history row id.</summary>
 public sealed record SubtitleDownloadResponse(
@@ -245,9 +256,12 @@ public class SubtitleSearchController : ControllerBase
 
         // Library facts (year/imdb/release name, lazy hashes when the picked
         // source consumes one) resolved server-side; the requested languages
-        // override the target∪source default.
+        // override the target∪source default. A keyword override (locked
+        // contract, R3b) flows through the builder, which derives the
+        // effective search term from it (trailing SxxEyy tags split off).
         var built = await _requestBuilder.BuildAsync(
-            mediaType, body.MediaId, [body.Provider], body.Languages, cancellationToken);
+            mediaType, body.MediaId, [body.Provider], body.Languages, cancellationToken,
+            string.IsNullOrWhiteSpace(body.Query) ? null : body.Query.Trim());
         if (built is null)
         {
             return NotFound(new
@@ -279,15 +293,31 @@ public class SubtitleSearchController : ControllerBase
     /// <summary>
     /// Downloads the picked candidate through the full pipeline (⑦) and
     /// answers with the landing path plus the history row id. Expired cache
-    /// keys answer 410 (run a new search, ②).
+    /// keys answer 410 (run a new search, ②); a live key whose media does
+    /// not match the requested media answers 400 (ownership binding,
+    /// QA3 P3-2 — the search outcome belongs to exactly one library row).
     /// </summary>
     [HttpPost("download")]
     public async Task<IActionResult> Download(
         [FromBody] SubtitleDownloadRequestBody body,
         CancellationToken cancellationToken)
     {
-        var candidates = _orchestrator.ResolveCache(body.CacheKey);
-        if (candidates is null)
+        if (!TryParseMediaType(body.MediaType, out var mediaType))
+        {
+            return BadRequest(new { message = "mediaType must be 'Movie' or 'Episode'." });
+        }
+
+        var resolution = _orchestrator.TryResolveCache(body.CacheKey, mediaType, body.MediaId, out var candidates);
+        if (resolution == SubtitleSearchOrchestrator.SubtitleCacheResolution.MediaMismatch)
+        {
+            return BadRequest(new
+            {
+                message = "The search result belongs to a different media item; run a new search for this one.",
+                cacheKey = body.CacheKey
+            });
+        }
+
+        if (resolution != SubtitleSearchOrchestrator.SubtitleCacheResolution.Resolved || candidates is null)
         {
             return StatusCode(StatusCodes.Status410Gone, new
             {
@@ -304,16 +334,12 @@ public class SubtitleSearchController : ControllerBase
             });
         }
 
-        if (!TryParseMediaType(body.MediaType, out var mediaType))
-        {
-            return BadRequest(new { message = "mediaType must be 'Movie' or 'Episode'." });
-        }
-
         var candidate = candidates[body.CandidateIndex];
         var source = ParseSource(body.Source);
         var sessionId = _orchestrator.SessionIdOf(body.CacheKey, candidate);
         var outcome = await _pipeline.DownloadAsync(
-            candidate, mediaType, body.MediaId, source, sessionId, cancellationToken);
+            candidate, mediaType, body.MediaId, source, sessionId, cancellationToken,
+            body.SkipTranslation);
 
         return Ok(new SubtitleDownloadResponse(
             outcome.HistoryId,

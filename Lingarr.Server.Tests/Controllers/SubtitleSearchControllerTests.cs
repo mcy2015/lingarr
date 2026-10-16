@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Lingarr.Contracts.Settings;
+using Lingarr.Core.Entities;
+using Lingarr.Core.Enum;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
@@ -27,6 +31,10 @@ namespace Lingarr.Server.Tests.Controllers;
 /// providers endpoint serves the real settings-card shape: manifest
 /// fields passed through plus requiresAuth/credentialsConfigured, with
 /// per-source degradation when the secret store cannot be read.
+/// The M3/M4 endpoints (search/download/pin/backlog) run against the real
+/// orchestrator/queue/pipeline stack on SQLite through
+/// <see cref="SubtitleEndpointFixture"/> — validation codes, cache
+/// ownership, and the locked Query/SkipTranslation contract.
 /// </summary>
 public class SubtitleSearchControllerTests
 {
@@ -35,11 +43,53 @@ public class SubtitleSearchControllerTests
     {
         public virtual string Provider => "fakesubs";
 
-        public Task<SubtitleSearchResult> SearchAsync(SubtitleSearchRequest request, CancellationToken cancellationToken)
+        public virtual Task<SubtitleSearchResult> SearchAsync(SubtitleSearchRequest request, CancellationToken cancellationToken)
             => Task.FromResult(SubtitleSearchResult.Empty);
 
-        public Task<SubtitleDownload> DownloadAsync(SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
+        public virtual Task<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload> DownloadAsync(SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
             => throw new NotSupportedException("Test double; M2 fills real downloads.");
+    }
+
+    /// <summary>
+    /// Scriptable search/download double for the endpoint tests: remembers
+    /// the request it saw (Query passthrough) and answers one candidate
+    /// plus a minimal SRT download payload.
+    /// </summary>
+    [SubtitleProvider("scripted")]
+    private sealed class ScriptedSearchProvider(string language = "zh") : FakeProvider
+    {
+        public SubtitleSearchRequest? SeenRequest { get; private set; }
+
+        public override string Provider => "scripted";
+
+        public override Task<SubtitleSearchResult> SearchAsync(
+            SubtitleSearchRequest request, CancellationToken cancellationToken)
+        {
+            SeenRequest = request;
+            return Task.FromResult(new SubtitleSearchResult(
+            [
+                new SubtitleCandidate(
+                    "scripted",
+                    ExternalId: "ext-1",
+                    language,
+                    MatchScore: 0,
+                    Forced: false,
+                    HearingImpaired: false,
+                    ReleaseInfo: "Movie.2019.WEBDL-1080p",
+                    Uploader: null,
+                    Format: "srt",
+                    Size: 1234,
+                    HashMatch: false)
+            ]));
+        }
+
+        public override Task<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload> DownloadAsync(
+            SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
+            => Task.FromResult(new Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload(
+                "scripted",
+                "Movie.2019.WEBDL-1080p.srt",
+                "srt",
+                Encoding.UTF8.GetBytes("1\r\n00:00:01,000 --> 00:00:02,000\r\nHello world\r\n")));
     }
 
     [SubtitleProvider("probing")]
@@ -139,6 +189,21 @@ public class SubtitleSearchControllerTests
             pinService: null!,
             pipeline: null!,
             requestBuilder: null!,
+            NullLogger<SubtitleSearchController>.Instance);
+
+    /// <summary>
+    /// Full-stack controller over the shared SQLite fixture — the M3/M4
+    /// endpoints run the real orchestrator/queue/pipeline wiring.
+    /// </summary>
+    private static SubtitleSearchController CreateFullController(SubtitleEndpointFixture fixture)
+        => new(
+            fixture.Registry,
+            SubtitleSettingsDouble.Create().Object,
+            fixture.Orchestrator,
+            fixture.QueueService,
+            fixture.PinService,
+            fixture.Pipeline,
+            fixture.RequestBuilder,
             NullLogger<SubtitleSearchController>.Instance);
 
     // Mirrors the production MVC options (InfrastructureModule): camelCase,
@@ -354,4 +419,251 @@ public class SubtitleSearchControllerTests
         Assert.Equal(JsonValueKind.Array, body.RootElement.ValueKind);
         Assert.Equal(0, body.RootElement.GetArrayLength());
     }
+
+    // --- search (⑥): validation codes, response shape, Query contract.
+
+    [Fact]
+    public async Task Search_WithoutProvider_Answers400()
+    {
+        var controller = CreateController([new FakeProvider()]);
+
+        var result = Assert.IsType<BadRequestObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(1, "Movie", ["en"], ""), CancellationToken.None));
+
+        using var body = Body(result);
+        Assert.NotNull(body.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Search_WithInvalidMediaType_Answers400()
+    {
+        var controller = CreateController([new FakeProvider()]);
+
+        Assert.IsType<BadRequestObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(1, "Season", ["en"], "fakesubs"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Search_ReturnsScoredCandidatesWithTheDownloadCacheKey()
+    {
+        var provider = new ScriptedSearchProvider();
+        using var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["zh"], "scripted"),
+            CancellationToken.None));
+        using var body = Body(result);
+
+        Assert.NotEmpty(body.RootElement.GetProperty("cacheKey").GetString());
+        var candidates = body.RootElement.GetProperty("candidates");
+        Assert.Equal(1, candidates.GetArrayLength());
+        Assert.Equal("scripted", candidates[0].GetProperty("provider").GetString());
+        Assert.Equal("ext-1", candidates[0].GetProperty("externalId").GetString());
+        Assert.Equal("zh", candidates[0].GetProperty("language").GetString());
+        Assert.True(candidates[0].GetProperty("matchScore").GetInt32() >= 0);
+        Assert.Equal(JsonValueKind.Array, body.RootElement.GetProperty("sourceOutcomes").ValueKind);
+
+        // No keyword override in the body → the library-derived query runs.
+        Assert.Null(provider.SeenRequest?.Query);
+    }
+
+    [Fact]
+    public async Task Search_KeywordOverride_ReachesTheOrchestratorRequest()
+    {
+        // Locked API contract: Query replaces the derived search term; the
+        // controller→orchestrator passthrough must carry it verbatim.
+        var provider = new ScriptedSearchProvider();
+        using var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+
+        await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["zh"], "scripted", Query: "custom keywords"),
+            CancellationToken.None);
+
+        Assert.Equal("custom keywords", provider.SeenRequest?.Query);
+    }
+
+    // --- download (⑦): expired cache 410, ownership mismatch 400, success
+    // shape, SkipTranslation contract.
+
+    [Fact]
+    public async Task Download_UnknownOrExpiredCacheKey_Answers410()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var controller = CreateFullController(fixture);
+
+        var result = Assert.IsType<ObjectResult>(await controller.Download(
+            new SubtitleDownloadRequestBody("no-such-key", 0, fixture.MovieId, "Movie", null),
+            CancellationToken.None));
+
+        Assert.Equal(410, result.StatusCode);
+        using var body = Body(result);
+        Assert.Equal("no-such-key", body.RootElement.GetProperty("cacheKey").GetString());
+        Assert.NotNull(body.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Download_ForAnotherMediaItem_Answers400()
+    {
+        // QA3 P3-2: the cache key belongs to exactly the media the search
+        // ran for — replaying it against another library row is rejected.
+        var provider = new ScriptedSearchProvider();
+        using var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+        var search = Assert.IsType<OkObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["zh"], "scripted"),
+            CancellationToken.None));
+        var searchResponse = (SubtitleSearchResponse)search.Value!;
+
+        var result = Assert.IsType<BadRequestObjectResult>(await controller.Download(
+            new SubtitleDownloadRequestBody(searchResponse.CacheKey, 0, fixture.MovieId + 1, "Movie", null),
+            CancellationToken.None));
+
+        using var body = Body(result);
+        Assert.NotNull(body.RootElement.GetProperty("message").GetString());
+        Assert.Equal(searchResponse.CacheKey, body.RootElement.GetProperty("cacheKey").GetString());
+    }
+
+    [Fact]
+    public async Task Download_Success_AnswersTheLandingPathAndHistoryRow()
+    {
+        var provider = new ScriptedSearchProvider();
+        using var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+        var search = Assert.IsType<OkObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["zh"], "scripted"),
+            CancellationToken.None));
+        var searchResponse = (SubtitleSearchResponse)search.Value!;
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Download(
+            new SubtitleDownloadRequestBody(searchResponse.CacheKey, 0, fixture.MovieId, "Movie", "Manual"),
+            CancellationToken.None));
+        using var body = Body(result);
+
+        Assert.True(body.RootElement.GetProperty("historyId").GetInt32() > 0);
+        Assert.True(File.Exists(body.RootElement.GetProperty("filePath").GetString()));
+        Assert.Equal("Succeeded", body.RootElement.GetProperty("result").GetString());
+        Assert.False(body.RootElement.GetProperty("translationDuplicate").GetBoolean());
+        // zh is a target language → terminal, no translation request
+        // (nulls are dropped by the response serializer).
+        Assert.False(body.RootElement.TryGetProperty("translationRequestId", out _));
+    }
+
+    [Fact]
+    public async Task Download_WithSkipTranslation_LandsTheFileWithoutEnqueue()
+    {
+        // Locked API contract passthrough: a non-target-language download
+        // with skipTranslation=true lands on disk and never touches the
+        // translation queue.
+        var provider = new ScriptedSearchProvider(language: "en");
+        using var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+        var search = Assert.IsType<OkObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["en"], "scripted"),
+            CancellationToken.None));
+        var searchResponse = (SubtitleSearchResponse)search.Value!;
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Download(
+            new SubtitleDownloadRequestBody(
+                searchResponse.CacheKey, 0, fixture.MovieId, "Movie", "Manual", SkipTranslation: true),
+            CancellationToken.None));
+        using var body = Body(result);
+
+        Assert.Equal("Succeeded", body.RootElement.GetProperty("result").GetString());
+        Assert.True(File.Exists(body.RootElement.GetProperty("filePath").GetString()));
+        Assert.False(body.RootElement.TryGetProperty("translationRequestId", out _));
+        fixture.TranslationQueue.Verify(
+            queue => queue.CreateImportRequest(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<int?>(), It.IsAny<MediaType>(), It.IsAny<string?>(), It.IsAny<bool>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Download_WithoutSkipTranslation_EnqueuesTheNonTargetLanguage()
+    {
+        // The contrast case of the contract: same en download, default
+        // flag → the translation queue is used.
+        var provider = new ScriptedSearchProvider(language: "en");
+        using var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+        var search = Assert.IsType<OkObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["en"], "scripted"),
+            CancellationToken.None));
+        var searchResponse = (SubtitleSearchResponse)search.Value!;
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Download(
+            new SubtitleDownloadRequestBody(searchResponse.CacheKey, 0, fixture.MovieId, "Movie", "Manual"),
+            CancellationToken.None));
+        using var body = Body(result);
+
+        Assert.Equal(41, body.RootElement.GetProperty("translationRequestId").GetInt32());
+    }
+
+    // --- pin (⑤/⑥): response shape of the effective row.
+
+    [Fact]
+    public async Task Pin_CreatesAndPinsTheRow_AndAnswersTheEffectiveState()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var controller = CreateFullController(fixture);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Pin(
+            new SubtitlePinRequestBody(fixture.MovieId, "Movie", Pinned: true), CancellationToken.None));
+        using var body = Body(result);
+
+        Assert.Equal("Movie", body.RootElement.GetProperty("mediaType").GetString());
+        Assert.Equal(fixture.MovieId, body.RootElement.GetProperty("mediaId").GetInt32());
+        Assert.True(body.RootElement.GetProperty("pinned").GetBoolean());
+        Assert.Equal("Pinned", body.RootElement.GetProperty("priorityRank").GetString());
+        Assert.Equal("Pending", body.RootElement.GetProperty("status").GetString());
+    }
+
+    // --- backlog (⑥): the aggregate answers real counts.
+
+    [Fact]
+    public async Task Backlog_AggregatesTheQueueIntoRealCounts()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var now = DateTimeOffset.UtcNow;
+        fixture.DbContext.SubtitleSearchStates.AddRange(
+            QueueRow(MediaType.Movie, 1, nextAttemptAt: now.AddHours(-1)),
+            QueueRow(MediaType.Movie, 2, pinned: true),
+            QueueRow(MediaType.Movie, 3,
+                rank: SubtitlePriorityRank.WebhookBoost, boostUntil: now.AddHours(6)),
+            QueueRow(MediaType.Movie, 4, nextAttemptAt: now.AddHours(6)),
+            QueueRow(MediaType.Movie, 5, status: SubtitleSearchStatus.Succeeded));
+        await fixture.DbContext.SaveChangesAsync();
+        var controller = CreateFullController(fixture);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Backlog(CancellationToken.None));
+        using var body = Body(result);
+
+        // 4 non-terminal rows (3 due + 1 backing off); 1 pinned; 1 live
+        // boost; 3 due right now; the Succeeded row counts nowhere.
+        Assert.Equal(4, body.RootElement.GetProperty("backlog").GetInt32());
+        Assert.Equal(1, body.RootElement.GetProperty("pinnedCount").GetInt32());
+        Assert.Equal(1, body.RootElement.GetProperty("webhookBoostedCount").GetInt32());
+        Assert.Equal(3, body.RootElement.GetProperty("nextRoundCount").GetInt32());
+    }
+
+    private static SubtitleSearchState QueueRow(
+        MediaType mediaType,
+        int mediaId,
+        SubtitlePriorityRank rank = SubtitlePriorityRank.Normal,
+        SubtitleSearchStatus status = SubtitleSearchStatus.Pending,
+        bool pinned = false,
+        DateTimeOffset? nextAttemptAt = null,
+        DateTimeOffset? boostUntil = null) => new()
+    {
+        MediaType = mediaType,
+        MediaId = mediaId,
+        Status = status,
+        PriorityRank = rank,
+        Pinned = pinned,
+        WebhookBoostUntil = boostUntil,
+        NextAttemptAt = nextAttemptAt ?? DateTimeOffset.UtcNow.AddHours(-1),
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
 }

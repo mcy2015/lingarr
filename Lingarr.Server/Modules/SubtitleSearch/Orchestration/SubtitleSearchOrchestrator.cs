@@ -67,13 +67,16 @@ public sealed partial class SubtitleSearchOrchestrator
 
     /// <summary>
     /// What the 10min cache entry holds: the candidate list plus the
-    /// per-candidate deciding search-session id — the download endpoint runs
-    /// in a different scope than the search, so the linkage must live in the
-    /// singleton cache, not orchestrator instance state.
+    /// per-candidate deciding search-session id and the media the round
+    /// searched — the download endpoint runs in a different scope than the
+    /// search, so the linkage must live in the singleton cache, not
+    /// orchestrator instance state.
     /// </summary>
     private sealed record CachedOutcome(
         IReadOnlyList<SubtitleCandidate> Candidates,
-        IReadOnlyDictionary<string, int> SessionByExternalId);
+        IReadOnlyDictionary<string, int> SessionByExternalId,
+        MediaType MediaType,
+        int MediaId);
 
     public SubtitleSearchOrchestrator(
         SubtitleProviderRegistry registry,
@@ -172,7 +175,7 @@ public sealed partial class SubtitleSearchOrchestrator
         var cacheKey = Guid.NewGuid().ToString("N");
         _cache.Set(
             CacheKeyPrefix + cacheKey,
-            new CachedOutcome(ordered, sessions),
+            new CachedOutcome(ordered, sessions, mediaType, mediaId),
             CacheTtl);
 
         return new SubtitleSearchOutcome(cacheKey, ordered, outcomes);
@@ -181,11 +184,57 @@ public sealed partial class SubtitleSearchOrchestrator
     /// <summary>
     /// Resolves the download endpoint's cache key back to the candidate
     /// list; expired/unknown keys return null (the caller answers 404/410).
+    /// Ownership-blind — prefer <see cref="TryResolveCache"/>.
     /// </summary>
     public IReadOnlyList<SubtitleCandidate>? ResolveCache(string cacheKey)
         => _cache.TryGetValue(CacheKeyPrefix + cacheKey, out CachedOutcome? outcome)
             ? outcome.Candidates
             : null;
+
+    /// <summary>
+    /// Verdict of a download-endpoint cache lookup (QA3 P3-2): the media
+    /// binding of the search outcome decides what a replayed cache key may
+    /// download — a key searched for one media item must not fetch into
+    /// another (stale dialog against a different library row).
+    /// </summary>
+    public enum SubtitleCacheResolution
+    {
+        /// <summary>Key live and bound to the requested media.</summary>
+        Resolved,
+
+        /// <summary>Key unknown or past its TTL — the caller answers 410.</summary>
+        Expired,
+
+        /// <summary>Key live but bound to a different mediaType/mediaId — the caller answers 400.</summary>
+        MediaMismatch
+    }
+
+    /// <summary>
+    /// Ownership-checked variant of <see cref="ResolveCache"/> for the
+    /// download endpoint: resolves the key AND verifies the requested
+    /// (mediaType, mediaId) matches the media the search round queried.
+    /// </summary>
+    public SubtitleCacheResolution TryResolveCache(
+        string cacheKey,
+        MediaType mediaType,
+        int mediaId,
+        out IReadOnlyList<SubtitleCandidate>? candidates)
+    {
+        if (!_cache.TryGetValue(CacheKeyPrefix + cacheKey, out CachedOutcome? outcome))
+        {
+            candidates = null;
+            return SubtitleCacheResolution.Expired;
+        }
+
+        if (outcome.MediaType != mediaType || outcome.MediaId != mediaId)
+        {
+            candidates = null;
+            return SubtitleCacheResolution.MediaMismatch;
+        }
+
+        candidates = outcome.Candidates;
+        return SubtitleCacheResolution.Resolved;
+    }
 
     /// <summary>
     /// The deciding search-session id of one cached candidate — the session
@@ -271,7 +320,8 @@ public sealed partial class SubtitleSearchOrchestrator
         }
         catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
         {
-            // The 10s budget fired (caller cancellation rethrows below).
+            // The 10s budget fired; caller cancellation is distinguished by
+            // the filter and lands in the rethrow-only catch below.
             var error = $"{provider.Provider} exceeded the {_searchTimeout.TotalSeconds:0.#}s search budget.";
             outcomes.Add(new SubtitleSourceOutcome(provider.Provider, SubtitleProviderFailureReason.Timeout.ToString(), error));
             await RecordCooldownSafeAsync(provider.Provider,
@@ -283,6 +333,13 @@ public sealed partial class SubtitleSearchOrchestrator
             outcomes.Add(new SubtitleSourceOutcome(provider.Provider, ex.Reason.ToString(), ex.Message));
             await RecordCooldownSafeAsync(provider.Provider, ex);
             return [];
+        }
+        catch (OperationCanceledException)
+        {
+            // The caller gave up: propagate untouched — never an outcome
+            // row, never a cooldown, never "Unexpected" (the pipeline's
+            // DownloadAsync precedent; QA2 P2-1 found this missing).
+            throw;
         }
         catch (Exception ex)
         {
@@ -347,12 +404,17 @@ public sealed partial class SubtitleSearchOrchestrator
             .Select(entry => entry.candidate)
             .ToList();
 
+    /// <summary>
+    /// Release normalization for the dedupe key. Must fold punctuation
+    /// separators the same way the scorer does — "Movie.2019.WEBDL-1080p"
+    /// and "movie 2019 webdl 1080p" are the same subtitle (⑩). An earlier
+    /// version only lowercased and collapsed whitespace, so dotted and
+    /// spaced variants of one release survived dedup as duplicates; the
+    /// scorer's Normalize is the single normalization authority.
+    /// </summary>
     private static string NormalizeRelease(string? release)
     {
-        var value = (release ?? string.Empty).Trim().ToLowerInvariant();
-        return value.Length == 0 ? string.Empty : WhitespaceRunRegex().Replace(value, " ");
+        var value = (release ?? string.Empty).Trim();
+        return value.Length == 0 ? string.Empty : SubtitleMatchScorer.Normalize(value);
     }
-
-    [System.Text.RegularExpressions.GeneratedRegex("\\s+")]
-    private static partial System.Text.RegularExpressions.Regex WhitespaceRunRegex();
 }

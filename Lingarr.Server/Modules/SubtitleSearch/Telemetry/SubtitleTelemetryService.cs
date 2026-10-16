@@ -51,7 +51,23 @@ public sealed class SubtitleTelemetryService
             CreatedAt = DateTimeOffset.UtcNow
         };
         _dbContext.SubtitleSearchSessions.Add(session);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        catch
+        {
+            // A failed save leaves the session tracked in Added state and
+            // every later SaveChanges on this scoped context would retry
+            // (and fail with) the same row — poisoning the whole job round
+            // (QA2 P2-2). Detach so one telemetry hiccup stays contained;
+            // the caller keeps the "telemetry is monitoring, not business
+            // logic" ruling and logs. The quota upsert needs no such guard:
+            // raw SQL tracks nothing.
+            _dbContext.Entry(session).State = EntityState.Detached;
+            throw;
+        }
+
         return session.Id;
     }
 
@@ -102,7 +118,12 @@ public sealed class SubtitleTelemetryService
             new Microsoft.Data.Sqlite.SqliteParameter("@searches", searches),
             new Microsoft.Data.Sqlite.SqliteParameter("@downloads", downloads),
             new Microsoft.Data.Sqlite.SqliteParameter("@quotaLimit", quotaLimit),
-            new Microsoft.Data.Sqlite.SqliteParameter("@quotaRemaining", (object?)quotaRemaining)
+            // Microsoft.Data.Sqlite refuses to bind a raw null — an unboxed
+            // null here throws "Value must be set", which (before this fix)
+            // silently killed every quota upsert AND, because the orchestrator
+            // calls quota before the session save inside one try, every
+            // session row too. DBNull.Value is the required spelling.
+            new Microsoft.Data.Sqlite.SqliteParameter("@quotaRemaining", (object?)quotaRemaining ?? DBNull.Value)
         };
         await _dbContext.Database.ExecuteSqlRawAsync(
             """
