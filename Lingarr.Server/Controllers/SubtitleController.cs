@@ -13,21 +13,34 @@ namespace Lingarr.Server.Controllers;
 [Route("api/[controller]")]
 public class SubtitleController : ControllerBase
 {
+    /// <summary>
+    /// Hard cap on one /subtitle/all enumeration. A legitimately huge
+    /// library directory (or a pathological one) must not serialize an
+    /// unbounded payload into one HTTP response; past the cap the list is
+    /// truncated and the full count logged. Response shape stays
+    /// <c>List&lt;Subtitles&gt;</c> — existing consumers just see at most this
+    /// many entries.
+    /// </summary>
+    private const int MaxSubtitlesPerEnumeration = 5000;
+
     private readonly ISubtitleService _subtitleService;
     private readonly ISubtitleImportService _subtitleImportService;
     private readonly ISubtitleNormalizeService _subtitleNormalizeService;
     private readonly PathConversionService _pathConversionService;
+    private readonly ILogger<SubtitleController> _logger;
 
     public SubtitleController(
         ISubtitleService subtitleService,
         ISubtitleImportService subtitleImportService,
         ISubtitleNormalizeService subtitleNormalizeService,
-        PathConversionService pathConversionService)
+        PathConversionService pathConversionService,
+        ILogger<SubtitleController> logger)
     {
         _subtitleService = subtitleService;
         _subtitleImportService = subtitleImportService;
         _subtitleNormalizeService = subtitleNormalizeService;
         _pathConversionService = pathConversionService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -51,6 +64,19 @@ public class SubtitleController : ControllerBase
         }
 
         var value = await _subtitleService.GetAllSubtitles(subtitlePath!.Path);
+
+        // Enumeration cap: over the limit the response is truncated (shape
+        // unchanged) and the totals logged — silent truncation would hide a
+        // pathological directory, a hard error would break consumers that
+        // merely asked for a big-but-real library.
+        if (value.Count > MaxSubtitlesPerEnumeration)
+        {
+            _logger.LogWarning(
+                "Subtitle enumeration for {Path} returned {Total} entries; truncating the response to {Cap}.",
+                subtitlePath.Path, value.Count, MaxSubtitlesPerEnumeration);
+            value = value.Take(MaxSubtitlesPerEnumeration).ToList();
+        }
+
         return Ok(value);
     }
 

@@ -232,13 +232,27 @@ public class AutomatedTranslationJob
     {
         _logger.LogInformation("Show Translation job initiated");
 
+        // Audit P2-6: shows/seasons serve exactly two purposes here — the
+        // episode query's id filter and a per-episode owner lookup. Loading
+        // them as tracked entities cost an O(E×S) FirstOrDefault scan per
+        // episode plus full-row materialization; anonymous AsNoTracking
+        // projections of only the needed fields plus dictionary lookups make
+        // the per-episode work O(1) with no tracking overhead. Episodes stay
+        // full entities (the media processor consumes them).
         var shows = await _dbContext.Shows
             .Where(show => show.IncludeInTranslation)
+            .Select(show => new { show.Id, show.TranslationAgeThreshold })
+            .AsNoTracking()
             .ToListAsync();
 
         var seasons = await _dbContext.Seasons
             .Where(season => shows.Select(s => s.Id).Contains(season.ShowId) && season.IncludeInTranslation)
+            .Select(season => new { season.Id, season.ShowId })
+            .AsNoTracking()
             .ToListAsync();
+
+        var showById = shows.ToDictionary(show => show.Id);
+        var seasonById = seasons.ToDictionary(season => season.Id);
 
         var episodes = await _dbContext.Episodes
             .Where(episode =>
@@ -281,8 +295,13 @@ public class AutomatedTranslationJob
 
             try
             {
-                var season = seasons.FirstOrDefault(s => s.Id == episode.SeasonId);
-                var show = shows.FirstOrDefault(s => s.Id == season?.ShowId);
+                // O(1) owner resolution (audit P2-6): a missing season/show
+                // entry keeps the null-threshold fallback of the old
+                // FirstOrDefault chain.
+                seasonById.TryGetValue(episode.SeasonId, out var season);
+                var show = season is not null && showById.TryGetValue(season.ShowId, out var owner)
+                    ? owner
+                    : null;
 
                 TimeSpan? threshold = null;
                 if (show != null && show.TranslationAgeThreshold.HasValue)

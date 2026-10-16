@@ -1,8 +1,10 @@
 using System;
+using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
@@ -10,6 +12,7 @@ using Lingarr.Core.Enum;
 using Lingarr.Server.Modules.Infrastructure;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -23,13 +26,16 @@ namespace Lingarr.Server.Tests.Services;
 /// naming, outlives the 7-day retention window and its scan key no longer
 /// matches any current scan-marker row — referenced extractions are kept for
 /// ExtractTrack reuse, fresh files get a grace window, foreign files are not
-/// ours to delete.
+/// ours to delete. The translation-request cleanup and the 180-day
+/// download-history retention run set-based (constant DELETE count —
+/// MovieSyncServiceExecuteDeleteTests precedent).
 /// </summary>
 public class CleanupJobTests : IDisposable
 {
     private readonly string _root;
     private readonly string _embeddedDirectory;
     private readonly SqliteConnection _connection;
+    private readonly DeleteCounter _counter;
     private readonly LingarrDbContext _dbContext;
     private readonly Mock<IScheduleService> _scheduleService = new();
     private readonly Mock<IHostEnvironment> _environment = new();
@@ -43,11 +49,15 @@ public class CleanupJobTests : IDisposable
 
         _environment.SetupGet(e => e.ContentRootPath).Returns(_root);
         // SQLite (not InMemory): the seeded CreatedAt values are applied with
-        // ExecuteUpdate, which the InMemory provider cannot translate.
+        // ExecuteUpdate/ExecuteDelete, which the InMemory provider cannot
+        // translate.
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
+        _counter = new DeleteCounter();
         _dbContext = new LingarrDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
-            .UseSqlite(_connection).Options);
+            .UseSqlite(_connection)
+            .AddInterceptors(_counter)
+            .Options);
         _dbContext.Database.EnsureCreated();
         _job = new CleanupJob(
             _dbContext,
@@ -180,5 +190,150 @@ public class CleanupJobTests : IDisposable
         Assert.Equal("recent", Assert.Single(remaining).Title);
         _scheduleService.Verify(
             s => s.UpdateJobState(It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Execute_RemovesSubtitleDownloadsPastRetention_KeepsRecent()
+    {
+        // 180-day retention: 181 days old is past the cutoff and goes,
+        // 179 days stays, and a same-week row of course stays.
+        var ancient = await SeedDownloadAsync(DateTimeOffset.UtcNow.AddDays(-181));
+        var recent = await SeedDownloadAsync(DateTimeOffset.UtcNow.AddDays(-179));
+        var fresh = await SeedDownloadAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        await _job.Execute();
+
+        var survivors = await _dbContext.SubtitleDownloads.Select(download => download.Id).ToListAsync();
+        Assert.Equal([recent, fresh], survivors.OrderBy(id => id).ToList());
+    }
+
+    [Fact]
+    public async Task Execute_RequestCleanup_IsSetBased_IssuesConstantDeleteStatementCount()
+    {
+        // Five expired requests (each with one event and one line) plus one
+        // recent request: the old tracked removal issued one DELETE per
+        // materialized row; the set-based cleanup must issue exactly one
+        // DELETE per table — events, lines, requests — plus the single
+        // download-history retention DELETE, independent of the row count.
+        for (var i = 0; i < 5; i++)
+        {
+            var expired = await SeedRequestAsync($"expired {i}");
+            await BackdateAsync(expired.Id, DateTimeOffset.UtcNow.AddDays(-8));
+            SeedRequestChildren(expired.Id);
+        }
+
+        var fresh = await SeedRequestAsync("recent");
+        SeedRequestChildren(fresh.Id);
+        await _dbContext.SaveChangesAsync();
+
+        _counter.Reset();
+        await _job.Execute();
+
+        // events + lines + requests + subtitle_downloads = constant 4.
+        Assert.Equal(4, _counter.DeleteCommands);
+
+        // Semantics survive the collection-ization: the expired family is
+        // gone with its children, the recent family stays intact.
+        var remainingRequests = await _dbContext.TranslationRequests.ToListAsync();
+        Assert.Equal("recent", Assert.Single(remainingRequests).Title);
+        Assert.Equal(1, await _dbContext.TranslationRequestEvents.CountAsync());
+        Assert.Equal(1, await _dbContext.TranslationRequestLines.CountAsync());
+    }
+
+    private async Task<TranslationRequest> SeedRequestAsync(string title)
+    {
+        var request = new TranslationRequest
+        {
+            Title = title, SourceLanguage = "en", TargetLanguage = "zh",
+            SubtitleToTranslate = $"/{title}.srt", MediaType = MediaType.Movie,
+            Status = TranslationStatus.Completed, Source = TranslationRequestSource.Import
+        };
+        _dbContext.TranslationRequests.Add(request);
+        await _dbContext.SaveChangesAsync();
+        return request;
+    }
+
+    private void SeedRequestChildren(int requestId)
+    {
+        _dbContext.TranslationRequestEvents.Add(new TranslationRequestEvent
+        {
+            TranslationRequestId = requestId,
+            Status = TranslationStatus.Completed,
+            Message = "done"
+        });
+        _dbContext.TranslationRequestLines.Add(new TranslationRequestLine
+        {
+            TranslationRequestId = requestId,
+            Position = 1,
+            Source = "hello",
+            Target = "你好"
+        });
+    }
+
+    private async Task BackdateAsync(int requestId, DateTimeOffset createdAt)
+    {
+        // SaveChanges' UpdateTimestamps overwrites CreatedAt on Added rows;
+        // set-based writes bypass the change tracker.
+        await _dbContext.TranslationRequests.Where(request => request.Id == requestId)
+            .ExecuteUpdateAsync(properties => properties
+                .SetProperty(request => request.CreatedAt, createdAt));
+    }
+
+    private async Task<int> SeedDownloadAsync(DateTimeOffset createdAt)
+    {
+        var download = new SubtitleDownload
+        {
+            MediaType = MediaType.Movie,
+            MediaId = 1,
+            Provider = "opensubtitles",
+            ExternalId = "ext",
+            Language = "en",
+            FilePath = "/movies/Movie/Movie.en.srt",
+            MatchScore = 80,
+            HashMatch = false,
+            Source = SubtitleDownloadSource.Auto,
+            Result = SubtitleDownloadResult.Succeeded,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _dbContext.SubtitleDownloads.Add(download);
+        await _dbContext.SaveChangesAsync();
+        await _dbContext.SubtitleDownloads.Where(row => row.Id == download.Id)
+            .ExecuteUpdateAsync(properties => properties
+                .SetProperty(row => row.CreatedAt, createdAt));
+        return download.Id;
+    }
+
+    /// <summary>Counts DELETE statements issued after <see cref="DeleteCounter.Reset"/>
+    /// (MovieSyncServiceExecuteDeleteTests precedent).</summary>
+    private sealed class DeleteCounter : DbCommandInterceptor
+    {
+        public int DeleteCommands;
+
+        public void Reset() => DeleteCommands = 0;
+
+        private void Count(DbCommand command)
+        {
+            if (command.CommandText.StartsWith("DELETE", StringComparison.OrdinalIgnoreCase))
+            {
+                DeleteCommands++;
+            }
+        }
+
+        public override InterceptionResult<int> NonQueryExecuting(
+            DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result)
+        {
+            Count(command);
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Count(command);
+            return ValueTask.FromResult(result);
+        }
     }
 }

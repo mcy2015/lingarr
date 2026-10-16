@@ -157,6 +157,26 @@ public class SeasonSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncSeason_FirstHasFileEpisodeWithoutAPath_SkipsToTheEpisodeWithAPath()
+    {
+        // Audit P2-9: hasFile=true with an empty episodeFile.path is a real
+        // Sonarr shape. The season directory must come from the first episode
+        // that actually owns a usable file path — its own directory — instead
+        // of the plain first hasFile episode (which used to fold the season
+        // onto the "/Season N" placeholder while a real path sat unused).
+        var show = await SeedShowAsync();
+        var pathless = EpisodeWithFile(10, string.Empty);
+        var withPath = EpisodeWithFile(11, "/tv/Show/Season 2/Show.S02E11.mkv");
+
+        await _seasonSync.SyncSeason(
+            show, new SonarrSeason { SeasonNumber = 2 }, new List<SonarrEpisode> { pathless, withPath });
+        await _context.SaveChangesAsync();
+
+        var stored = await _context.Seasons.AsNoTracking().SingleAsync();
+        Assert.Equal("/tv/Show/Season 2", stored.Path);
+    }
+
+    [Fact]
     public async Task SyncSeason_NewSeason_HonorsDefaultInclude()
     {
         var show = await SeedShowAsync();

@@ -18,6 +18,16 @@ public class CleanupJob
     /// </summary>
     private const int RetentionDays = 7;
 
+    /// <summary>
+    /// Download-history retention in days. A judgment call, deliberately not
+    /// a setting: the history feeds the per-media subtitle cards and the
+    /// search KPIs, where anything past half a year is noise, while nightly
+    /// search rounds would otherwise grow <c>subtitle_downloads</c> without
+    /// bound. Failed attempts included — the blacklist (not the history) is
+    /// what stops repeated retries.
+    /// </summary>
+    private const int SubtitleDownloadRetentionDays = 180;
+
     private readonly LingarrDbContext _dbContext;
     private readonly ILogger<CleanupJob> _logger;
     private readonly IScheduleService _scheduleService;
@@ -45,27 +55,52 @@ public class CleanupJob
         var cutoff = DateTimeOffset.UtcNow.AddDays(-RetentionDays);
         var removedRequests = await RemoveExpiredTranslationRequests(cutoff);
         var removedExtractions = await RemoveOrphanedEmbeddedExtractions(cutoff);
+        var removedDownloads = await RemoveExpiredSubtitleDownloads();
 
         await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
         _logger.LogInformation(
-            "Cleanup removed {RequestCount} translation requests and {ExtractionCount} orphaned embedded track extractions older than {Days} days.",
-            removedRequests, removedExtractions, RetentionDays);
+            "Cleanup removed {RequestCount} translation requests and {ExtractionCount} orphaned embedded track extractions older than {Days} days, plus {DownloadCount} download history rows older than {DownloadDays} days.",
+            removedRequests, removedExtractions, RetentionDays, removedDownloads, SubtitleDownloadRetentionDays);
     }
 
-    /// <summary>Translation request rows that outlived the retention window.</summary>
+    /// <summary>
+    /// Translation request rows that outlived the retention window, removed
+    /// set-based (audit S6/S2 precedent): children first, then the requests —
+    /// three ExecuteDeletes, a constant statement count that does not scale
+    /// with the expired-row volume (bounded by retention anyway, so no
+    /// chunking is needed), zero rows materialized into the change tracker.
+    /// </summary>
     private async Task<int> RemoveExpiredTranslationRequests(DateTimeOffset cutoff)
     {
-        var oldJobs = await _dbContext.TranslationRequests
-            .Where(pg => pg.CreatedAt < cutoff)
-            .ToListAsync();
+        await _dbContext.TranslationRequestEvents
+            .Where(requestEvent => _dbContext.TranslationRequests
+                .Any(request => request.CreatedAt < cutoff
+                                && request.Id == requestEvent.TranslationRequestId))
+            .ExecuteDeleteAsync();
 
-        foreach (var job in oldJobs)
-        {
-            _dbContext.TranslationRequests.Remove(job);
-        }
+        await _dbContext.TranslationRequestLines
+            .Where(line => _dbContext.TranslationRequests
+                .Any(request => request.CreatedAt < cutoff
+                                && request.Id == line.TranslationRequestId))
+            .ExecuteDeleteAsync();
 
-        await _dbContext.SaveChangesAsync();
-        return oldJobs.Count;
+        return await _dbContext.TranslationRequests
+            .Where(request => request.CreatedAt < cutoff)
+            .ExecuteDeleteAsync();
+    }
+
+    /// <summary>
+    /// Download-history rows (subtitle_downloads) past their retention
+    /// window — every outcome lands a row per attempt, so nightly rounds
+    /// would grow the table without bound. Set-based like the request
+    /// cleanup above.
+    /// </summary>
+    private async Task<int> RemoveExpiredSubtitleDownloads()
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-SubtitleDownloadRetentionDays);
+        return await _dbContext.SubtitleDownloads
+            .Where(download => download.CreatedAt < cutoff)
+            .ExecuteDeleteAsync();
     }
 
     /// <summary>

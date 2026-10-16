@@ -58,16 +58,27 @@ public class SeasonSync : ISeasonSync
     }
 
     /// <summary>
-    /// Derives the season path from the first episode of the season that has a file,
-    /// using the <c>episodeFile</c> object embedded in the pre-fetched episode list
+    /// Derives the season path from the season's episodes, using the
+    /// <c>episodeFile</c> object embedded in the pre-fetched episode list
     /// (no per-episode HTTP lookups).
+    /// <para>
+    /// Audit P2-9: the first episode with <c>hasFile</c> is not guaranteed to
+    /// carry a usable <c>episodeFile.path</c> (Sonarr occasionally serves
+    /// hasFile=true with an empty file resource). The first episode whose own
+    /// file path is non-empty wins — its directory is the season directory;
+    /// only when no episode has one does the selection fall back to the plain
+    /// first hasFile episode, which then folds to the "/Season N" placeholder
+    /// below exactly as before.
+    /// </para>
     /// </summary>
     /// <param name="season">The Sonarr season to get the path for</param>
     /// <param name="episodes">The already-fetched Sonarr episodes of this season</param>
     /// <returns>The converted and mapped path for the season, or an empty string if no path could be determined</returns>
     private string GetSeasonPath(SonarrSeason season, IReadOnlyList<SonarrEpisode>? episodes)
     {
-        var episode = episodes?.Where(episode => episode.HasFile).FirstOrDefault();
+        var episode = episodes?.FirstOrDefault(episode =>
+                          episode.HasFile && !string.IsNullOrWhiteSpace(episode.EpisodeFile?.Path))
+                      ?? episodes?.Where(episode => episode.HasFile).FirstOrDefault();
         if (episode == null)
         {
             return string.Empty;
