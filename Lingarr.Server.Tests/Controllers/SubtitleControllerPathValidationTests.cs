@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
@@ -13,6 +14,7 @@ using Lingarr.Server.Modules.Sync;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 
@@ -68,7 +70,8 @@ public class SubtitleControllerPathValidationTests : IDisposable
         _subtitleService.Object,
         _importService.Object,
         new Mock<ISubtitleNormalizeService>().Object,
-        new PathConversionService(_context));
+        new PathConversionService(_context),
+        NullLogger<SubtitleController>.Instance);
 
     /// <summary>Reads properties off anonymous response objects in assertions.</summary>
     private static string? MessageOf(BadRequestObjectResult result) =>
@@ -111,6 +114,31 @@ public class SubtitleControllerPathValidationTests : IDisposable
 
         Assert.IsType<BadRequestObjectResult>(response.Result);
         _subtitleService.Verify(s => s.GetAllSubtitles(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAllSubtitles_OverTheEnumerationCap_TruncatesToTheCap()
+    {
+        // 6000 discovered subtitles must come back as 5000 — the response
+        // shape (a plain list of Subtitles) is unchanged, so existing
+        // consumers see at most the cap instead of an unbounded payload.
+        var entries = Enumerable.Range(0, 6000)
+            .Select(index => new Subtitles
+            {
+                Path = $"/media/movies/Dune/Dune.{index}.srt",
+                FileName = $"Dune.{index}.srt"
+            })
+            .ToList();
+        _subtitleService
+            .Setup(s => s.GetAllSubtitles("/media/movies/Dune"))
+            .ReturnsAsync(entries);
+
+        var response = await CreateController().GetAllSubtitles(
+            new SubtitlePath { Path = "/media/movies/Dune" });
+
+        var result = Assert.IsType<OkObjectResult>(response.Result);
+        var value = Assert.IsType<List<Subtitles>>(result.Value);
+        Assert.Equal(5000, value.Count);
     }
 
     [Fact]

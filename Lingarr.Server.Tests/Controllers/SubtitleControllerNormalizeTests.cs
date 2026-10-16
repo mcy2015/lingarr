@@ -5,6 +5,7 @@ using Lingarr.Server.Models.Api;
 using Lingarr.Server.Modules.Sync;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 using Lingarr.Server.Modules.Subtitle;
@@ -25,7 +26,8 @@ public class SubtitleControllerNormalizeTests
             new LingarrDbContext(
                 new DbContextOptionsBuilder<LingarrDbContext>()
                     .UseInMemoryDatabase(Guid.NewGuid().ToString())
-                    .Options)));
+                    .Options)),
+        NullLogger<SubtitleController>.Instance);
 
     [Fact]
     public async Task NormalizePreview_InvalidMediaType_ReturnsBadRequest()

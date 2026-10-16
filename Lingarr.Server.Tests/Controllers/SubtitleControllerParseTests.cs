@@ -6,6 +6,7 @@ using Lingarr.Server.Models.Api;
 using Lingarr.Server.Modules.Sync;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 using Lingarr.Server.Modules.Subtitle;
@@ -69,5 +70,6 @@ public class SubtitleControllerParseTests
             new LingarrDbContext(
                 new DbContextOptionsBuilder<LingarrDbContext>()
                     .UseInMemoryDatabase(Guid.NewGuid().ToString())
-                    .Options)));
+                    .Options)),
+        NullLogger<SubtitleController>.Instance);
 }
