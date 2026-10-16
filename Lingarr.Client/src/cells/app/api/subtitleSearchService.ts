@@ -1,5 +1,10 @@
 import axios from 'axios'
-import type { ISubtitleSearchOutcome, ISubtitleDownloadResponse, ISubtitleBacklog } from '@/types/services'
+import type {
+    ISubtitleSearchOutcome,
+    ISubtitleDownloadResponse,
+    ISubtitleBacklog
+} from '@/types/services'
+import type { ISubtitleProviderManifest } from '@/types/plugin'
 
 interface SearchRequest {
     mediaType: string
@@ -36,6 +41,14 @@ class SubtitleSearchService {
 
     async backlog<T = ISubtitleBacklog>(): Promise<T> {
         const response = await axios.get<T>('/api/subtitle-search/backlog')
+        return response.data
+    }
+
+    /// All registered subtitle sources in registration order, with their
+    /// setting field manifests (secret fields carry the API keys/tokens the
+    /// settings card edits through the encrypted setting channel).
+    async getProviders<T = ISubtitleProviderManifest[]>(): Promise<T> {
+        const response = await axios.get<T>('/api/subtitle-search/providers')
         return response.data
     }
 

@@ -812,6 +812,22 @@
             "edit": "编辑",
             "mappingUnreachable": "{count} 个媒体路径不可达"
         },
+        "subtitleSources": {
+            "title": "字幕源",
+            "meta": "{count} 个字幕源",
+            "loading": "字幕源加载中…",
+            "loadFailed": "字幕源加载失败。",
+            "retry": "重试",
+            "empty": "未注册任何字幕源。",
+            "testConnection": "测试连接",
+            "testing": "◐ 测试中…",
+            "testOk": "✓ 可用",
+            "testFailed": "✗ 不可用",
+            "configured": "已配置",
+            "notConfigured": "未配置",
+            "expand": "配置凭据",
+            "collapse": "收起"
+        },
         "subtitleOutput": {
             "title": "字幕输出",
             "naming": "文件命名",

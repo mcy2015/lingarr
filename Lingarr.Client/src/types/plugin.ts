@@ -34,6 +34,20 @@ export interface IPluginManifest extends IPluginSummary {
     settings: IPluginSettingField[]
 }
 
+/// GET /api/subtitle-search/providers row (locked contract): one subtitle
+/// source's display metadata, credential readiness and its setting fields.
+/// settings reuses IPluginSettingField so DynamicPluginForm/PluginField can
+/// render secret fields unchanged (only secret fields enter the settings
+/// card's UI; url fields stay out of this round's scope).
+export interface ISubtitleProviderManifest {
+    provider: string
+    displayName: string
+    description: string | null
+    requiresAuth: boolean
+    credentialsConfigured: boolean
+    settings: IPluginSettingField[]
+}
+
 export interface IPluginStatus {
     provider: string
     configured: boolean

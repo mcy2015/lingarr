@@ -812,6 +812,22 @@
             "edit": "Edit",
             "mappingUnreachable": "{count} media paths unreachable"
         },
+        "subtitleSources": {
+            "title": "Subtitle sources",
+            "meta": "{count} subtitle source | {count} subtitle sources",
+            "loading": "Loading subtitle sources…",
+            "loadFailed": "Failed to load subtitle sources.",
+            "retry": "Retry",
+            "empty": "No subtitle sources registered.",
+            "testConnection": "Test connection",
+            "testing": "◐ Testing…",
+            "testOk": "✓ Reachable",
+            "testFailed": "✗ Unreachable",
+            "configured": "Configured",
+            "notConfigured": "Not configured",
+            "expand": "Credentials",
+            "collapse": "Collapse"
+        },
         "subtitleOutput": {
             "title": "Subtitle output",
             "naming": "File naming",
