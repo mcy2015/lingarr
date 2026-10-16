@@ -1,6 +1,9 @@
 <template>
     <div
-        :class="[`${instanceStore.getTheme}`, 'bg-primary text-primary-content flex h-dvh overflow-hidden']">
+        :class="[
+            `${instanceStore.getTheme}`,
+            'bg-primary text-primary-content flex h-dvh overflow-hidden'
+        ]">
         <a
             href="#main-content"
             class="bg-secondary text-primary-content sr-only fixed top-2 left-2 z-[70] rounded-md px-4 py-2 text-sm font-semibold focus:not-sr-only">
@@ -11,7 +14,8 @@
         <div class="flex h-full w-full min-w-0 flex-col">
             <!-- Header (prototype .topbar): h1 + sub on one baseline,
                  ⌘K search and the screen's own CTA on the right. -->
-            <header class="border-line bg-secondary flex flex-none items-baseline gap-3.5 px-5 pt-4 pb-3 sm:px-6 lg:px-[26px]">
+            <header
+                class="border-line bg-secondary flex flex-none items-baseline gap-3.5 px-5 pt-4 pb-3 sm:px-6 lg:px-[26px]">
                 <button
                     type="button"
                     class="focus-visible:ring-accent mr-1 cursor-pointer self-center rounded-md focus-visible:ring-2 focus-visible:outline-none md:hidden"
@@ -37,12 +41,15 @@
                     <button
                         v-if="uiStore.cta"
                         type="button"
-                        class="bg-accent text-accent-content hover:brightness-106 cursor-pointer rounded border border-accent px-2.5 py-1 text-[12.5px] font-semibold whitespace-nowrap transition-colors"
+                        class="bg-accent text-accent-content border-accent cursor-pointer rounded border px-2.5 py-1 text-[12.5px] font-semibold whitespace-nowrap transition-colors hover:brightness-106"
                         @click="uiStore.cta.handler?.()">
                         {{ uiStore.cta.label }}
                     </button>
                     <LanguageDropdown />
-                    <DropdownComponent ref="themeDropdownEl" width="medium" :label="t('common.theme')">
+                    <DropdownComponent
+                        ref="themeDropdownEl"
+                        width="medium"
+                        :label="t('common.theme')">
                         <template #button>
                             <Icon name="theme" class="h-4 w-4" />
                         </template>
@@ -146,9 +153,7 @@ const currentMeta = computed(() => {
     const name = String(route.name ?? '')
     return (
         pageMeta[name] ??
-        (name.startsWith('settings-')
-            ? pageMeta.settings
-            : { title: 'Lingarr', sub: '' })
+        (name.startsWith('settings-') ? pageMeta.settings : { title: 'Lingarr', sub: '' })
     )
 })
 const pageTitle = computed(() => currentMeta.value.title)
@@ -191,6 +196,11 @@ onMounted(async () => {
     await settingHubConnection.value.joinGroup({ group: 'SettingUpdates' })
     settingHubConnection.value.on('SettingUpdate', onSettingUpdate)
 
+    // The global TranslationRequests group carries ONLY the low-frequency
+    // ActiveTranslations summary (one broadcast per job lifecycle change —
+    // the topbar badge feed). Per-request progress/line traffic goes to the
+    // per-request groups the queue/dashboard/detail screens join, so this
+    // layout no longer receives the per-message firehose.
     requestHubConnection.value = await signalR.connect(
         'TranslationRequests',
         '/signalr/TranslationRequests'

@@ -1,37 +1,43 @@
 <template>
     <!-- Viewport-fit layout: pipeline/KPI rows keep fixed height, the two
          content rows split the remaining space and scroll inside their cards. -->
-    <div class="w-full flex h-full min-h-0 flex-col gap-5 overflow-hidden p-4 lg:p-6">
+    <div class="flex h-full min-h-0 w-full flex-col gap-5 overflow-hidden p-4 lg:p-6">
         <!-- ═══ 管线条带：媒体库 → 缺字幕 → 队列(hot) → 服务 → 写回 ═══ -->
-        <div class="flex flex-wrap items-stretch gap-2 shrink-0">
+        <div class="flex shrink-0 flex-wrap items-stretch gap-2">
             <template v-for="(node, index) in pipelineNodes" :key="node.key">
                 <div v-if="index > 0" class="link hidden self-center md:block"></div>
                 <button
                     type="button"
-                    class="border-line hover:border-accent/60 min-w-[150px] flex-1 cursor-pointer rounded-md border bg-secondary px-3.5 py-3 text-left transition-colors"
+                    class="border-line hover:border-accent/60 bg-secondary min-w-[150px] flex-1 cursor-pointer rounded-md border px-3.5 py-3 text-left transition-colors"
                     :class="node.hot ? 'border-accent/55' : 'border-line'"
                     :title="node.label"
                     @click="router.push({ name: node.route, query: node.query })">
                     <div class="text-secondary-content text-[11.5px]">{{ node.label }}</div>
-                    <div class="mono text-[22px] font-semibold leading-tight" :class="node.hot ? 'text-accent' : ''">
-                        {{ node.value
-                        }}<small class="text-secondary-content ml-1 text-xs font-normal">{{ node.small }}</small>
+                    <div
+                        class="mono text-[22px] leading-tight font-semibold"
+                        :class="node.hot ? 'text-accent' : ''">
+                        {{ node.value }}
+                        <small class="text-secondary-content ml-1 text-xs font-normal">
+                            {{ node.small }}
+                        </small>
                     </div>
                 </button>
             </template>
         </div>
 
         <!-- ═══ KPI 条(第 5 格:字幕补缺——积压主数 + 置顶/提升/下轮副行,无配额)═══ -->
-        <div class="grid grid-cols-2 gap-2.5 shrink-0 lg:grid-cols-5">
+        <div class="grid shrink-0 grid-cols-2 gap-2.5 lg:grid-cols-5">
             <button
                 v-for="(kpi, index) in kpis"
                 :key="kpi.label"
                 type="button"
-                class="border-line hover:border-accent/60 cursor-pointer rounded-md border bg-secondary px-4 py-3 text-left transition-colors"
+                class="border-line hover:border-accent/60 bg-secondary cursor-pointer rounded-md border px-4 py-3 text-left transition-colors"
                 :title="kpi.label"
                 :data-test="`kpi-cell-${index}`"
                 @click="router.push({ name: kpi.route, query: kpi.query })">
-                <div class="mono text-2xl font-semibold" :class="kpi.cls ?? ''">{{ kpi.value }}</div>
+                <div class="mono text-2xl font-semibold" :class="kpi.cls ?? ''">
+                    {{ kpi.value }}
+                </div>
                 <div class="text-secondary-content mt-0.5 text-xs">{{ kpi.label }}</div>
                 <div v-if="kpi.sub" class="text-secondary-content/70 mt-0.5 text-[10.5px]">
                     {{ kpi.sub }}
@@ -41,8 +47,8 @@
 
         <!-- ═══ 活跃任务 + 服务健康（弹性行，卡内滚动） ═══ -->
         <div class="grid min-h-[170px] flex-[1.4] gap-3.5 lg:grid-cols-[1.6fr_1fr]">
-            <div class="rounded-md border border-line bg-secondary flex min-h-0 flex-col">
-                <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+            <div class="border-line bg-secondary flex min-h-0 flex-col rounded-md border">
+                <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                     <h2 class="text-[13px] font-semibold">{{ t('overview.active.title') }}</h2>
                     <span class="mono text-secondary-content ml-auto text-xs">
                         {{ t('overview.active.live') }}
@@ -58,8 +64,8 @@
                 </div>
             </div>
 
-            <div class="rounded-md border border-line bg-secondary flex min-h-0 flex-col">
-                <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+            <div class="border-line bg-secondary flex min-h-0 flex-col rounded-md border">
+                <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                     <h2 class="text-[13px] font-semibold">{{ t('overview.health.title') }}</h2>
                     <span class="mono text-secondary-content ml-auto text-xs">
                         {{ t('overview.health.configuredCount', { count: configuredCount }) }}
@@ -78,8 +84,10 @@
                         v-for="provider in health"
                         :key="provider.provider"
                         :to="{ name: 'settings-providers' }"
-                        class="hover:bg-tertiary/50 flex items-center gap-2.5 border-b border-line px-4 py-2.5 text-[13px] last:border-b-0">
-                        <span class="h-[7px] w-[7px] shrink-0 rounded-full" :class="healthDot(provider).cls"></span>
+                        class="hover:bg-tertiary/50 border-line flex items-center gap-2.5 border-b px-4 py-2.5 text-[13px] last:border-b-0">
+                        <span
+                            class="h-[7px] w-[7px] shrink-0 rounded-full"
+                            :class="healthDot(provider).cls"></span>
                         <span>{{ provider.displayName }}</span>
                         <span
                             class="mono text-secondary-content ml-auto max-w-[45%] truncate text-[11.5px]"
@@ -92,8 +100,8 @@
         </div>
 
         <!-- ═══ 最近动态（弹性行，卡内滚动） ═══ -->
-        <div class="rounded-md border border-line bg-secondary flex min-h-[150px] flex-1 flex-col">
-            <div class="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+        <div class="border-line bg-secondary flex min-h-[150px] flex-1 flex-col rounded-md border">
+            <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('overview.feed.title') }}</h2>
                 <span class="mono text-secondary-content ml-auto text-xs">
                     {{ t('overview.feed.count', { count: events.length }) }}
@@ -108,14 +116,16 @@
                 <div
                     v-for="event in events"
                     :key="event.id"
-                    class="flex gap-3 border-b border-line px-4 py-2 text-[12.5px] last:border-b-0">
+                    class="border-line flex gap-3 border-b px-4 py-2 text-[12.5px] last:border-b-0">
                     <time class="mono text-secondary-content shrink-0 pt-0.5 text-[11px]">
                         {{ formatTime(event.createdAt) }}
                     </time>
-                    <span class="shrink-0" :class="feedIcon(event).cls">{{ feedIcon(event).icon }}</span>
+                    <span class="shrink-0" :class="feedIcon(event).cls">
+                        {{ feedIcon(event).icon }}
+                    </span>
                     <span class="min-w-0">
                         <b>{{ event.requestTitle }}</b>
-                        <span class="text-secondary-content"> — {{ feedText(event) }}</span>
+                        <span class="text-secondary-content">— {{ feedText(event) }}</span>
                     </span>
                 </div>
             </div>
@@ -140,7 +150,9 @@ import { translationRequestService } from '@/cells/app/api/translationRequestSer
 import { formatDegradationEdge } from '@/cells/app/utils/degradationEdge'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
+import { useRequestGroups } from '@/cells/app/composables/useRequestGroups'
 import {
+    Hub,
     IDailyTrendStatistics,
     IPagedResult,
     IPipelineStatistics,
@@ -176,7 +188,9 @@ const trend = ref<IDailyTrendStatistics | null>(null)
 /// No quota figures by red line.
 const subtitleBacklog = ref<ISubtitleBacklog | null>(null)
 
-const configuredCount = computed(() => health.value.filter((provider) => provider.configured).length)
+const configuredCount = computed(
+    () => health.value.filter((provider) => provider.configured).length
+)
 const inProgressCount = computed(() => counts.value[TRANSLATION_STATUS.INPROGRESS] ?? 0)
 const pendingCount = computed(() => counts.value[TRANSLATION_STATUS.PENDING] ?? 0)
 
@@ -187,7 +201,8 @@ const allServicesDown = computed(() => {
         return false
     }
     return health.value.every(
-        (provider) => !provider.configured || (provider.successRate != null && provider.successRate < 0.5)
+        (provider) =>
+            !provider.configured || (provider.successRate != null && provider.successRate < 0.5)
     )
 })
 
@@ -269,9 +284,10 @@ const kpis = computed(() => [
         label: t('overview.kpi.cost'),
         value:
             pipeline.value?.monthlyCost != null
-                ? new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD' }).format(
-                      pipeline.value.monthlyCost
-                  )
+                ? new Intl.NumberFormat(locale.value, {
+                      style: 'currency',
+                      currency: 'USD'
+                  }).format(pipeline.value.monthlyCost)
                 : '—',
         cls: 'text-secondary-content/60',
         route: 'settings-providers',
@@ -280,7 +296,10 @@ const kpis = computed(() => [
     },
     {
         label: t('overview.kpi.successRate'),
-        value: pipeline.value?.successRate30Days != null ? `${pipeline.value.successRate30Days}%` : '—',
+        value:
+            pipeline.value?.successRate30Days != null
+                ? `${pipeline.value.successRate30Days}%`
+                : '—',
         cls:
             pipeline.value?.successRate30Days != null && pipeline.value.successRate30Days < 90
                 ? 'text-warning'
@@ -307,9 +326,15 @@ const kpis = computed(() => [
     }
 ])
 
-const healthDot = (provider: ITranslationServiceHealth): { cls: string; text: string; title: string } => {
+const healthDot = (
+    provider: ITranslationServiceHealth
+): { cls: string; text: string; title: string } => {
     if (!provider.configured) {
-        return { cls: 'bg-line', text: t('overview.health.offline'), title: t('overview.health.offlineHint') }
+        return {
+            cls: 'bg-line',
+            text: t('overview.health.offline'),
+            title: t('overview.health.offlineHint')
+        }
     }
     const rate = provider.successRate
     if (rate == null) {
@@ -416,22 +441,29 @@ const updateSub = (): void => {
     )
 }
 const fetchOverview = async (): Promise<void> => {
-    const [pipelineResult, countsResult, activeResult, healthResult, eventsResult, trendResult, backlogResult] =
-        await Promise.allSettled([
-            statisticsApi.getPipelineStatistics(),
-            translationRequestApi.statusCounts(),
-            translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
-                1,
-                '',
-                'CreatedAt',
-                false,
-                'InProgress'
-            ),
-            translateApi.getHealth(),
-            translationRequestApi.getRecentEvents(20),
-            statisticsApi.getDailyTrendStatistics(14),
-            subtitleSearchService.backlog()
-        ])
+    const [
+        pipelineResult,
+        countsResult,
+        activeResult,
+        healthResult,
+        eventsResult,
+        trendResult,
+        backlogResult
+    ] = await Promise.allSettled([
+        statisticsApi.getPipelineStatistics(),
+        translationRequestApi.statusCounts(),
+        translationRequestApi.requests<IPagedResult<ITranslationRequest>>(
+            1,
+            '',
+            'CreatedAt',
+            false,
+            'InProgress'
+        ),
+        translateApi.getHealth(),
+        translationRequestApi.getRecentEvents(20),
+        statisticsApi.getDailyTrendStatistics(14),
+        subtitleSearchService.backlog()
+    ])
     if (pipelineResult.status === 'fulfilled') pipeline.value = pipelineResult.value
     if (countsResult.status === 'fulfilled') counts.value = countsResult.value
     if (activeResult.status === 'fulfilled') activeItems.value = activeResult.value.items
@@ -446,7 +478,7 @@ const fetchOverview = async (): Promise<void> => {
 }
 
 let refreshTimer: ReturnType<typeof setInterval> | undefined
-let hubConnection: Awaited<ReturnType<typeof signalR.connect>> | undefined
+const hubConnection = ref<Hub | undefined>(undefined)
 
 // topbar CTA (prototype): global import entry
 onMounted(() => {
@@ -461,19 +493,29 @@ onUnmounted(() => {
 })
 
 onMounted(async () => {
-
     await fetchOverview()
     refreshTimer = setInterval(fetchOverview, REFRESH_INTERVAL_MS)
 
-    const connection = await signalR.connect('TranslationRequests', '/signalr/TranslationRequests')
-    await connection.joinGroup({ group: 'TranslationRequests' })
-    hubConnection = connection
-    connection.on('RequestProgress', onProgress)
+    // Per-request traffic lives on the request's own group since the
+    // broadcast collapse — the overview tracks the live rows by joining
+    // exactly their groups (re-synced whenever the active set refreshes).
+    hubConnection.value = await signalR.connect(
+        'TranslationRequests',
+        '/signalr/TranslationRequests'
+    )
+    hubConnection.value.on('RequestProgress', onProgress)
 })
+
+// joins the active rows' per-request groups; re-syncs on every overview
+// refresh (completions swap the active set) and leaves all on unmount
+useRequestGroups(
+    hubConnection,
+    computed(() => activeItems.value.map((item) => item.id))
+)
 
 onUnmounted(() => {
     if (refreshTimer) clearInterval(refreshTimer)
-    hubConnection?.off('RequestProgress', onProgress)
+    hubConnection.value?.off('RequestProgress', onProgress)
 })
 
 /// Live progress for the active rows; terminal transitions also refresh the
@@ -485,12 +527,14 @@ const onProgress = (progress: IRequestProgress): void => {
         row.status = progress.status
     }
     if (
-        ([
-            TRANSLATION_STATUS.COMPLETED,
-            TRANSLATION_STATUS.FAILED,
-            TRANSLATION_STATUS.CANCELLED,
-            TRANSLATION_STATUS.INTERRUPTED
-        ] as string[]).includes(progress.status)
+        (
+            [
+                TRANSLATION_STATUS.COMPLETED,
+                TRANSLATION_STATUS.FAILED,
+                TRANSLATION_STATUS.CANCELLED,
+                TRANSLATION_STATUS.INTERRUPTED
+            ] as string[]
+        ).includes(progress.status)
     ) {
         void fetchOverview()
     }

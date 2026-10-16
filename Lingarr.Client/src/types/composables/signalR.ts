@@ -28,7 +28,10 @@ export type EventCallbacks = {
     RequestProgress: (requestProgress: IRequestProgress) => void
     ActiveTranslations: (activeTranslations: IActiveTranslation[]) => void
     JobStateUpdated: (jobId: string, state: string) => void
-    LineTranslated: (line: ILineTranslated) => void
+    /// Server batches per-line translation traffic: one array message per
+    /// 50 lines / 50ms window (terminal states flush the tail). The retired
+    /// per-line LineTranslated event is gone from the wire contract.
+    LineTranslatedBatch: (lines: ILineTranslated[]) => void
     LineProofread: (line: ILineProofread) => void
 }
 

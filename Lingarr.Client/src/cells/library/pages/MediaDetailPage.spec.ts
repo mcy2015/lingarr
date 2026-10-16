@@ -517,16 +517,16 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
         expect(String(requestsMock.mock.calls[0][5] ?? '')).not.toContain('21,22,23')
     })
 
-    it('pages the per-episode table at 100 rows for thousand-episode seasons', async () => {
-        const episodes = Array.from({ length: 250 }, (_, i) => ({
+    it('renders thousand-episode seasons through the virtualized table (viewport rows only)', async () => {
+        const episodes = Array.from({ length: 1000 }, (_, i) => ({
             id: 1000 + i,
             episodeNumber: i + 1,
             title: `Episode ${i + 1}`,
-            fileName: `show.s01e${String(i + 1).padStart(3, '0')}.mkv`
+            fileName: `show.s01e${String(i + 1).padStart(4, '0')}.mkv`
         }))
         const bigShowItem = {
             ...showItem,
-            episodeCount: 250,
+            episodeCount: 1000,
             show: {
                 ...showItem.show!,
                 seasons: [{ ...showItem.show!.seasons[0], episodes }]
@@ -541,27 +541,32 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
 
         const { wrapper } = await mountDetail('show', '/library/show/3')
 
-        const table = wrapper.find('table')
-        // page 1 of a 250-episode season renders exactly the page size
-        const dataRows = table
-            .findAll('tbody tr')
-            .filter((row) => row.text() !== en.mediaDetail.noEpisodes)
-        expect(dataRows).toHaveLength(100)
-        expect(wrapper.find('[data-test="episode-pager"]').exists()).toBe(true)
-        expect(wrapper.find('[data-test="episode-pager-label"]').text()).toBe('1 / 3')
-        expect(wrapper.find('[data-test="episode-pager-prev"]').attributes('disabled')).toBeDefined()
+        // content rows only: the virtual spacers carry data-test markers and
+        // the empty-state row carries the noEpisodes text
+        const dataRows = () =>
+            wrapper
+                .find('table')
+                .findAll('tbody tr')
+                .filter(
+                    (row) =>
+                        !row.attributes('data-test') && row.text() !== en.mediaDetail.noEpisodes
+                )
+        // a thousand-episode season renders only the initial viewport window
+        // (fallback viewport 480px / 44px rows + ±5 overscan)
+        expect(dataRows().length).toBeLessThan(40)
+        expect(dataRows()[0].text()).toContain('E01')
 
-        await wrapper.find('[data-test="episode-pager-next"]').trigger('click')
-        expect(
-            table.findAll('tbody tr').filter((row) => row.text() !== en.mediaDetail.noEpisodes)
-        ).toHaveLength(100)
+        // scrolling moves the window deep into the season — still bounded
+        const scroller = wrapper.find('[data-test="virtual-scroll-container"]')
+        scroller.element.scrollTop = 44 * 500
+        await scroller.trigger('scroll')
+        const deepRows = dataRows()
+        expect(deepRows.length).toBeLessThan(40)
+        expect(deepRows[0].text()).toContain('E496')
 
-        await wrapper.find('[data-test="episode-pager-next"]').trigger('click')
-        expect(
-            table.findAll('tbody tr').filter((row) => row.text() !== en.mediaDetail.noEpisodes)
-        ).toHaveLength(50)
-        expect(wrapper.find('[data-test="episode-pager-label"]').text()).toBe('3 / 3')
-        expect(wrapper.find('[data-test="episode-pager-next"]').attributes('disabled')).toBeDefined()
+        // the client-side pager is gone with the virtualization — the whole
+        // season lives in one scrollable list
+        expect(wrapper.find('[data-test="episode-pager"]').exists()).toBe(false)
     })
 
     it('links the episode detail button to the episode request when one is in flight or failed', async () => {
@@ -753,10 +758,7 @@ describe('MediaDetailPage · 内嵌轨道翻译(F2b · 电影)', () => {
         vi.useRealTimers()
     })
 
-    const embeddedPayload = (
-        embedded: unknown[],
-        files: unknown[] = []
-    ) =>
+    const embeddedPayload = (embedded: unknown[], files: unknown[] = []) =>
         subtitlesPayload({
             files,
             embedded,
@@ -837,9 +839,7 @@ describe('MediaDetailPage · 内嵌轨道翻译(F2b · 电影)', () => {
         )
         const { wrapper } = await mountDetail('movie', '/library/movie/7')
 
-        expect(
-            wrapper.findAll('[data-test="embedded-translate"]')
-        ).toHaveLength(0)
+        expect(wrapper.findAll('[data-test="embedded-translate"]')).toHaveLength(0)
     })
 
     it('queues the embedded-track translation on menu select and toasts the request id', async () => {
@@ -900,9 +900,7 @@ describe('MediaDetailPage · 内嵌轨道翻译(F2b · 电影)', () => {
         })
         const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
 
-        const menu = wrapper
-            .find('[data-test="embedded-track-row"]')
-            .findComponent(ContextMenuStub)
+        const menu = wrapper.find('[data-test="embedded-track-row"]').findComponent(ContextMenuStub)
         menu.vm.$emit('select', { code: 'ZH', name: 'Chinese' })
         await settle()
 
@@ -1240,9 +1238,7 @@ describe('MediaDetailPage · P2 打磨(缺口豁免/IMDb/弹层 props)', () => {
         vi.useRealTimers()
     })
 
-    const showWithEpisodeFlags = (
-        noSubtitleNeeded: Record<number, boolean>
-    ): IMediaLibraryItem =>
+    const showWithEpisodeFlags = (noSubtitleNeeded: Record<number, boolean>): IMediaLibraryItem =>
         ({
             ...showItem,
             show: {

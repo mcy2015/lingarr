@@ -39,7 +39,11 @@
                 :loading="pauseBusy"
                 data-test="detail-pause"
                 @click="togglePause">
-                {{ isPaused ? t('translations.detail.resumeAction') : t('translations.detail.pauseAction') }}
+                {{
+                    isPaused
+                        ? t('translations.detail.resumeAction')
+                        : t('translations.detail.pauseAction')
+                }}
             </ButtonComponent>
         </template>
 
@@ -47,9 +51,7 @@
             <Icon name="loaderCircle" class="text-primary-content/50 h-8 w-8 animate-spin" />
         </div>
 
-        <div
-            v-else-if="detail"
-            class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        <div v-else-if="detail" class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
             <!-- ═══ 统计卡(固定):主进度 + qd-stats 真实数据格 + 执行链 ═══ -->
             <CardComponent class="shrink-0">
                 <template #content>
@@ -70,8 +72,8 @@
                             <div
                                 class="mono text-base font-semibold"
                                 :class="cell.accent ? 'text-accent' : 'text-primary-content'">
-                                {{ cell.value
-                                }}<small
+                                {{ cell.value }}
+                                <small
                                     v-if="cell.unit"
                                     class="text-secondary-content ml-1 text-[11.5px] font-normal">
                                     {{ cell.unit }}
@@ -92,13 +94,17 @@
                     <template #content>
                         <div class="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
                             <div>
-                                <span class="font-semibold">{{ t('translations.detail.status') }}</span>
+                                <span class="font-semibold">
+                                    {{ t('translations.detail.status') }}
+                                </span>
                                 <div class="mt-1">
                                     <TranslationStatus :translation-status="detail.status" />
                                 </div>
                             </div>
                             <div>
-                                <span class="font-semibold">{{ t('translations.detail.source') }}</span>
+                                <span class="font-semibold">
+                                    {{ t('translations.detail.source') }}
+                                </span>
                                 <div class="mt-1">
                                     <BadgeComponent
                                         classes="font-mono text-secondary-content border-line bg-tertiary">
@@ -107,7 +113,9 @@
                                 </div>
                             </div>
                             <div>
-                                <span class="font-semibold">{{ t('translations.detail.target') }}</span>
+                                <span class="font-semibold">
+                                    {{ t('translations.detail.target') }}
+                                </span>
                                 <div class="mt-1">
                                     <BadgeComponent
                                         classes="font-mono text-secondary-content border-line bg-tertiary">
@@ -116,9 +124,9 @@
                                 </div>
                             </div>
                             <div v-if="detail.status === TRANSLATION_STATUS.COMPLETED">
-                                <span class="font-semibold">{{
-                                    t('translations.detail.outputForm')
-                                }}</span>
+                                <span class="font-semibold">
+                                    {{ t('translations.detail.outputForm') }}
+                                </span>
                                 <div class="mt-1">
                                     <BadgeComponent
                                         :classes="
@@ -167,15 +175,15 @@
                         </div>
                         <div
                             v-if="detail.errorMessage"
-                            class="rounded-md border border-danger/40 bg-danger/15 p-4">
-                            <div class="text-sm text-danger">{{ detail.errorMessage }}</div>
+                            class="border-danger/40 bg-danger/15 rounded-md border p-4">
+                            <div class="text-danger text-sm">{{ detail.errorMessage }}</div>
                             <details v-if="detail.stackTrace" class="mt-3">
                                 <summary
-                                    class="cursor-pointer text-sm text-danger/70 hover:text-danger">
+                                    class="text-danger/70 hover:text-danger cursor-pointer text-sm">
                                     {{ t('translations.detail.stackTrace') }}
                                 </summary>
                                 <pre
-                                    class="mt-2 rounded bg-black/30 p-3 text-xs break-all whitespace-pre-wrap text-danger/80"
+                                    class="text-danger/80 mt-2 rounded bg-black/30 p-3 text-xs break-all whitespace-pre-wrap"
                                     >{{ detail.stackTrace }}</pre>
                             </details>
                         </div>
@@ -213,7 +221,8 @@
                                           ? 'bg-accent/5'
                                           : ''
                                 ">
-                                <div class="text-secondary-content/60 px-4 py-2 font-mono text-xs tabular-nums md:col-span-1">
+                                <div
+                                    class="text-secondary-content/60 px-4 py-2 font-mono text-xs tabular-nums md:col-span-1">
                                     {{ line.position }}
                                 </div>
                                 <div class="text-primary-content px-4 py-2 text-sm md:col-span-4">
@@ -262,7 +271,11 @@ import { useTranslationDetailHub } from '@/cells/queue/composables/useTranslatio
 import { formatDateTime } from '@/cells/app/utils/date'
 import { elapsedMs, formatClock, remainingMs } from '@/cells/app/utils/eta'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
-import { deriveChainState, parseServiceChain, ChainEntry } from '@/cells/queue/services/executionChain'
+import {
+    deriveChainState,
+    parseServiceChain,
+    ChainEntry
+} from '@/cells/queue/services/executionChain'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
@@ -314,9 +327,7 @@ const handleConvert = async () => {
     converting.value = true
     try {
         await translationRequestApi.convert(detail.value.id, !detail.value.isBilingual)
-        detail.value = await translationRequestApi.get<ITranslationRequestDetail>(
-            Number(props.id)
-        )
+        detail.value = await translationRequestApi.get<ITranslationRequestDetail>(Number(props.id))
     } catch (error) {
         console.error('Conversion failed:', error)
     } finally {
@@ -538,9 +549,7 @@ const statCells = computed<{ label: string; value: string; unit?: string; accent
             cells.push({
                 label: t('translations.detail.statTranslated'),
                 value: String(detail.value.lines.length),
-                unit: totalLinesEstimate.value
-                    ? `/ ~${totalLinesEstimate.value}`
-                    : undefined
+                unit: totalLinesEstimate.value ? `/ ~${totalLinesEstimate.value}` : undefined
             })
         }
         if (batchInfo.value) {
@@ -618,9 +627,7 @@ onMounted(async () => {
     }, 1000)
 
     try {
-        detail.value = await translationRequestApi.get<ITranslationRequestDetail>(
-            Number(props.id)
-        )
+        detail.value = await translationRequestApi.get<ITranslationRequestDetail>(Number(props.id))
         progress.value = detail.value.progress ?? 0
         if (!detail.value.lines) {
             detail.value.lines = []
@@ -640,7 +647,9 @@ onMounted(async () => {
 
     await translationRequestStore.fetchProofreadStatus()
 
-    await connect({
+    // the detail hub joins exactly this request's own group (per-request
+    // traffic never touches the global group any more)
+    await connect(Number(props.id), {
         onRequestProgress: handleProgress,
         onLineTranslated: handleLineTranslated,
         onLineProofread: handleLineProofread

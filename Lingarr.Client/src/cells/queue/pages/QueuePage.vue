@@ -1,5 +1,5 @@
 ﻿<template>
-    <div class="w-full flex h-full min-h-0 flex-col overflow-hidden p-4 lg:p-6">
+    <div class="flex h-full min-h-0 w-full flex-col overflow-hidden p-4 lg:p-6">
         <!-- Status filter tabs (per prototype queue screen) -->
         <div class="mb-2 flex shrink-0 flex-wrap items-center gap-2">
             <button
@@ -65,11 +65,11 @@
             </template>
         </ListToolbar>
 
-        <div class="shell-scroll w-full min-h-0 flex-1 space-y-1 overflow-y-auto px-1">
+        <div class="shell-scroll min-h-0 w-full flex-1 space-y-1 overflow-y-auto px-1">
             <div
                 v-for="item in translationRequests.items"
                 :key="item.id"
-                class="border-line hover:bg-accent/5 relative flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-b py-2.5 pl-3 pr-4 transition-colors md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_120px_auto] md:gap-4"
+                class="border-line hover:bg-accent/5 relative flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-b py-2.5 pr-4 pl-3 transition-colors md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(140px,1fr)_120px_auto] md:gap-4"
                 :style="{ borderLeft: '3px solid ' + statusColor(item.status) }"
                 :data-test="`queue-row-${item.id}`"
                 @click="openDetail(item)">
@@ -160,12 +160,11 @@
                         </span>
                     </span>
                     <span
-                        v-else-if="
-                            item.status === TRANSLATION_STATUS.COMPLETED && item.completedAt
-                        "
+                        v-else-if="item.status === TRANSLATION_STATUS.COMPLETED && item.completedAt"
                         class="text-success flex items-center justify-end gap-1"
                         :title="formatDateTime(item.completedAt)">
-                        ✓ <TranslationCompletedAt :completed-at="item.completedAt" />
+                        ✓
+                        <TranslationCompletedAt :completed-at="item.completedAt" />
                     </span>
                     <span v-else class="text-secondary-content/50">—</span>
                 </div>
@@ -184,7 +183,6 @@
             v-model="filter"
             :total-count="translationRequests.totalCount"
             :page-size="translationRequests.pageSize" />
-
     </div>
 </template>
 
@@ -192,17 +190,13 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import {
-    Hub,
-    ITranslationRequest,
-    TRANSLATION_ACTIONS,
-    TRANSLATION_STATUS
-} from '@/types'
+import { Hub, ITranslationRequest, TRANSLATION_ACTIONS, TRANSLATION_STATUS } from '@/types'
 import axios from 'axios'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useSignalR } from '@/cells/app/composables/useSignalR'
+import { useRequestGroups } from '@/cells/app/composables/useRequestGroups'
 import { useSelection } from '@/cells/kernel/composables/useSelection'
 import { usePagedList } from '@/cells/queue/composables/usePagedList'
 import { formatDateTime } from '@/cells/app/utils/date'
@@ -250,14 +244,29 @@ const openDetail = (item: ITranslationRequest): void => {
 // computed so tab labels re-resolve when the locale changes
 const statusTabs = computed(() => [
     { label: t('translations.queueTabs.all'), value: null, count: totalAll() },
-    { label: t('translations.queueTabs.inProgress'), value: TRANSLATION_STATUS.INPROGRESS, count: statusCount(TRANSLATION_STATUS.INPROGRESS) },
-    { label: t('translations.queueTabs.pending'), value: TRANSLATION_STATUS.PENDING, count: statusCount(TRANSLATION_STATUS.PENDING) },
-    { label: t('translations.queueTabs.failed'), value: TRANSLATION_STATUS.FAILED, count: statusCount(TRANSLATION_STATUS.FAILED) },
-    { label: t('translations.queueTabs.completed'), value: TRANSLATION_STATUS.COMPLETED, count: statusCount(TRANSLATION_STATUS.COMPLETED) }
+    {
+        label: t('translations.queueTabs.inProgress'),
+        value: TRANSLATION_STATUS.INPROGRESS,
+        count: statusCount(TRANSLATION_STATUS.INPROGRESS)
+    },
+    {
+        label: t('translations.queueTabs.pending'),
+        value: TRANSLATION_STATUS.PENDING,
+        count: statusCount(TRANSLATION_STATUS.PENDING)
+    },
+    {
+        label: t('translations.queueTabs.failed'),
+        value: TRANSLATION_STATUS.FAILED,
+        count: statusCount(TRANSLATION_STATUS.FAILED)
+    },
+    {
+        label: t('translations.queueTabs.completed'),
+        value: TRANSLATION_STATUS.COMPLETED,
+        count: statusCount(TRANSLATION_STATUS.COMPLETED)
+    }
 ])
 
-const statusCount = (status: string): number =>
-    translationRequestStore.getStatusCounts[status] ?? 0
+const statusCount = (status: string): number => translationRequestStore.getStatusCounts[status] ?? 0
 
 const statusColor = (status: string): string => {
     switch (status) {
@@ -349,7 +358,10 @@ onUnmounted(() => {
 watch(
     () => translationRequestStore.getStatusCounts,
     (counts) => {
-        const total = Object.values(counts ?? {}).reduce((sum: number, n) => sum + Number(n ?? 0), 0)
+        const total = Object.values(counts ?? {}).reduce(
+            (sum: number, n) => sum + Number(n ?? 0),
+            0
+        )
         uiStore.setSubOverride(t('topbar.sub.queueLive', { count: total }))
     },
     { immediate: true, deep: true }
@@ -361,14 +373,21 @@ onMounted(async () => {
         'TranslationRequests',
         '/signalr/TranslationRequests'
     )
-
-    await hubConnection.value.joinGroup({ group: 'TranslationRequests' })
     hubConnection.value.on('RequestProgress', translationRequestStore.updateProgress)
 })
 
 onUnmounted(async () => {
     hubConnection.value?.off('RequestProgress', translationRequestStore.updateProgress)
 })
+
+// Per-request traffic lives on the request's own group since the broadcast
+// collapse — join exactly the groups of the rows this page shows, re-sync on
+// every fetch/page/filter change and leave all on unmount (setup-scope call:
+// the composable registers its own unmount hook).
+useRequestGroups(
+    hubConnection,
+    computed(() => translationRequests.value.items.map((item) => item.id))
+)
 
 const isSelectMode = ref(false)
 

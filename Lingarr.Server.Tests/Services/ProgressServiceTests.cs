@@ -18,14 +18,16 @@ using Xunit;
 namespace Lingarr.Server.Tests.Services;
 
 /// <summary>
-/// Scale audit P0-10 coverage for the broadcast/write amplification fixes in
+/// Scale audit P0-10 + P2 broadcast-collapse coverage for
 /// <see cref="ProgressService"/>: progress notifications are throttled per
-/// request, every message reaches only the request's own SignalR group (plus
-/// the legacy global group the current UI subscribes to), and per-line
-/// persistence is batched — a run of N lines performs at most
-/// ceil(N / batch) line flushes, with terminal emits flushing the tail so
-/// interrupted runs keep their flushed batches and never duplicate them on
-/// resume.
+/// request, every message reaches only the request's own SignalR group (the
+/// global <c>TranslationRequests</c> group — reserved for the
+/// <c>ActiveTranslations</c> summary — receives nothing), line broadcasts
+/// leave as batched <c>LineTranslatedBatch</c> array messages (full batch or
+/// elapsed window, terminal emit flushes the tail) and per-line persistence
+/// is batched — a run of N lines performs at most ceil(N / batch) line
+/// flushes, so interrupted runs keep their flushed batches and never
+/// duplicate them on resume.
 /// </summary>
 public class ProgressServiceTests : IDisposable
 {
@@ -112,23 +114,24 @@ public class ProgressServiceTests : IDisposable
         }
 
         var midRun = Sends("RequestProgress", "TranslationRequest-1");
-        // first emit + delta≥2 emits: 1, 3, 5, …, 99 (per group; the legacy
-        // global group mirrors every send)
+        // first emit + delta≥2 emits: 1, 3, 5, …, 99 (the request's own group
+        // only — the global group carries nothing per-request any more)
         Assert.Equal(50, midRun.Count);
+        Assert.Empty(Sends("RequestProgress", "TranslationRequests"));
 
         request.Status = TranslationStatus.Completed;
         await service.Emit(request, 100);
 
         var messages = Sends("RequestProgress", "TranslationRequest-1");
-        // ≤ ceil(100 steps / 2) + 1 (the mandatory first + terminal delivery),
-        // counted per group — the legacy global group mirrors every send
+        // ≤ ceil(100 steps / 2) + 1 (the mandatory first + terminal delivery)
         Assert.True(messages.Count <= Math.Ceiling(100 / 2.0) + 1,
             $"expected at most 51 RequestProgress messages, got {messages.Count}");
         var final = messages[^1];
         Assert.Equal(100, Property(final.Args[0]!, "Progress"));
-        // the terminal state reaches both the request group and the global group
-        Assert.Contains(final.Group, new[] { "TranslationRequests", "TranslationRequest-1" });
+        // the terminal state reaches only the request's own group
+        Assert.Equal("TranslationRequest-1", final.Group);
         Assert.Equal(1, messages.Count(send => Equals(Property(send.Args[0]!, "Progress"), 100)));
+        Assert.Empty(Sends("RequestProgress", "TranslationRequests"));
     }
 
     [Fact]
@@ -139,8 +142,9 @@ public class ProgressServiceTests : IDisposable
 
         // first emission always goes out
         await service.Emit(request, 1);
-        // both the per-request group and the legacy global group receive it
+        // the request's own group receives it; the global group stays silent
         Assert.Single(Sends("RequestProgress", "TranslationRequest-5"));
+        Assert.Empty(Sends("RequestProgress", "TranslationRequests"));
 
         // a status flip (pause) is announced even without any progress delta
         request.Status = TranslationStatus.Paused;
@@ -191,10 +195,8 @@ public class ProgressServiceTests : IDisposable
             .Select(send => send.Group)
             .Distinct()
             .ToList();
-        // only the request's own group and the legacy global group
-        Assert.Equal(
-            ["TranslationRequest-11", "TranslationRequests"],
-            groupsUsedByA.OrderBy(g => g).ToArray());
+        // only the request's own group — never the global summary group
+        Assert.Equal(["TranslationRequest-11"], groupsUsedByA);
         Assert.DoesNotContain(_sends, send => send.Group == "TranslationRequest-22"
             && Equals(Property(send.Args[0]!, "Id"), 11));
 
@@ -203,15 +205,15 @@ public class ProgressServiceTests : IDisposable
             .Select(send => send.Group)
             .Distinct()
             .ToList();
-        Assert.Equal(
-            ["TranslationRequest-22", "TranslationRequests"],
-            groupsUsedByB.OrderBy(g => g).ToArray());
+        Assert.Equal(["TranslationRequest-22"], groupsUsedByB);
+        // the global group received nothing from this service at all
+        Assert.DoesNotContain(_sends, send => send.Group == "TranslationRequests");
         // B's mid-run 1%-step was throttled while A kept streaming
         Assert.Single(_sends.Where(send => send.Group == "TranslationRequest-22"));
     }
 
     [Fact]
-    public async Task EmitLine_BatchesPersistence_AndStreamsEveryBroadcast()
+    public async Task EmitLine_BatchesPersistence_AndBatchesBroadcasts()
     {
         var request = Request(7);
         var service = CreateService();
@@ -221,20 +223,87 @@ public class ProgressServiceTests : IDisposable
             await service.EmitLine(request, position, $"src {position}", $"tgt {position}", "test");
         }
 
-        // 120 lines → flushes at 50 and 100: ≤ ceil(120/50) line flushes
+        // 120 lines → persistence flushes at 50 and 100: ≤ ceil(120/50) saves
         Assert.Equal(2, _saveCounter.Saves);
         Assert.True(_saveCounter.Saves <= Math.Ceiling(120 / 50.0));
-        // broadcasts still streamed per line, to both groups
-        Assert.Equal(120, Sends("LineTranslated", "TranslationRequests").Count);
-        Assert.Equal(120, Sends("LineTranslated", "TranslationRequest-7").Count);
+        // broadcasts left as batches of 50 (frozen clock → count rule only),
+        // to the request's group alone — the retired per-line event is gone
+        // and the global group stays silent
+        var batches = Sends("LineTranslatedBatch", "TranslationRequest-7");
+        Assert.Equal(2, batches.Count);
+        Assert.All(batches, batch => Assert.Equal(50, ((object[])batch.Args[0]!).Length));
+        Assert.Empty(Sends("LineTranslated", "TranslationRequest-7"));
+        Assert.Empty(Sends("LineTranslatedBatch", "TranslationRequests"));
         // the unflushed tail (101-120) is not on disk yet
         Assert.Equal(100, _dbContext.TranslationRequestLines.Count());
 
         request.Status = TranslationStatus.Completed;
         await service.Emit(request, 100);
 
-        // the terminal emit flushed the tail: the full set is persisted
+        // the terminal emit flushed the broadcast tail and the persistence
+        // tail: the full set is persisted, every line reached the wire
         Assert.Equal(120, _dbContext.TranslationRequestLines.Count());
+        var allBatches = Sends("LineTranslatedBatch", "TranslationRequest-7");
+        Assert.Equal(3, allBatches.Count);
+        Assert.Equal(120, allBatches.Sum(batch => ((object[])batch.Args[0]!).Length));
+    }
+
+    [Fact]
+    public async Task EmitLine_FlushesTheBroadcastBatchWhenTheWindowElapses()
+    {
+        var request = Request(12);
+        var service = CreateService();
+
+        // three lines inside the window (frozen clock): buffered, no send
+        for (var position = 1; position <= 3; position++)
+        {
+            await service.EmitLine(request, position, $"src {position}", $"tgt {position}", "test");
+        }
+        Assert.Empty(Sends("LineTranslatedBatch", "TranslationRequest-12"));
+
+        // the next line after the 50ms window flushes the whole buffer
+        _time.Advance(TimeSpan.FromMilliseconds(60));
+        await service.EmitLine(request, 4, "src 4", "tgt 4", "test");
+        var first = Sends("LineTranslatedBatch", "TranslationRequest-12");
+        Assert.Single(first);
+        var items = (object[])first[0].Args[0]!;
+        Assert.Equal(4, items.Length);
+        Assert.Equal(
+            new[] { 1, 2, 3, 4 },
+            items.Select(item => (int)Property(item, "Position")!).ToArray());
+        Assert.Equal(12, Property(items[0], "Id"));
+
+        // a fresh window buffers again until the terminal emit flushes
+        for (var position = 5; position <= 6; position++)
+        {
+            await service.EmitLine(request, position, $"src {position}", $"tgt {position}", "test");
+        }
+        request.Status = TranslationStatus.Completed;
+        await service.Emit(request, 100);
+        var all = Sends("LineTranslatedBatch", "TranslationRequest-12");
+        Assert.Equal(2, all.Count);
+        Assert.Equal(6, all.Sum(batch => ((object[])batch.Args[0]!).Length));
+    }
+
+    [Fact]
+    public async Task NoMethodOfThisService_ReachesTheGlobalGroup()
+    {
+        var request = Request(13);
+        var service = CreateService();
+
+        await service.Emit(request, 1);
+        await service.EmitLine(request, 1, "hello", "hola", "test");
+        _time.Advance(TimeSpan.FromMilliseconds(60));
+        await service.EmitLine(request, 2, "bye", "adiós", "test");
+        await service.EmitProofreadLine(request, 1, "hello", "hallo", "proofread");
+
+        // progress, batched lines and the interactive proofread path all
+        // target the request's group — the global group is reserved for the
+        // ActiveTranslations summary another service owns
+        Assert.DoesNotContain(_sends, send => send.Group == "TranslationRequests");
+        Assert.All(_sends, send => Assert.Equal("TranslationRequest-13", send.Group));
+        Assert.Contains(_sends, send => send.Method == "LineProofread");
+        Assert.Contains(_sends, send => send.Method == "LineTranslatedBatch");
     }
 
     [Fact]
@@ -285,13 +354,18 @@ public class ProgressServiceTests : IDisposable
             Service = "test"
         }).ToList());
 
-        // below the batch size: broadcast, but nothing persisted yet
-        Assert.Equal(30, Sends("LineTranslated", "TranslationRequests").Count);
+        // below the batch size with a frozen clock: buffered, nothing on the
+        // wire yet and nothing persisted yet
+        Assert.Empty(Sends("LineTranslatedBatch", "TranslationRequest-9"));
         Assert.Equal(0, _dbContext.TranslationRequestLines.Count());
 
         request.Status = TranslationStatus.Completed;
         await service.Emit(request, 100);
         Assert.Equal(30, _dbContext.TranslationRequestLines.Count());
+        // the terminal emit flushed the buffered broadcasts as one batch
+        var batches = Sends("LineTranslatedBatch", "TranslationRequest-9");
+        Assert.Single(batches);
+        Assert.Equal(30, ((object[])batches[0].Args[0]!).Length);
     }
 
     /// <summary>Deterministic clock the throttle tests advance by hand.</summary>

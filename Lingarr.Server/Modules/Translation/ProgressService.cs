@@ -11,15 +11,17 @@ using Microsoft.OpenApi.Extensions;
 namespace Lingarr.Server.Modules.Translation;
 
 /// <summary>
-/// Persists translation progress and streams it over SignalR (scale audit P0-10).
+/// Persists translation progress and streams it over SignalR (scale audit
+/// P0-10, P2 broadcast collapse).
 ///
-/// Broadcast grouping: every message goes to the per-request group
-/// (<c>TranslationRequest-{id}</c>) in addition to the legacy global
-/// <c>TranslationRequests</c> group that the queue/detail screens still
-/// subscribe to. A client that joins only its request's group receives just
-/// that request's traffic — requests never cross groups. Sending to an empty
-/// group is a no-op, so the per-request groups are free until consumers
-/// migrate onto them.
+/// Broadcast grouping: every message goes only to the per-request group
+/// (<c>TranslationRequest-{id}</c>). The global <c>TranslationRequests</c>
+/// group no longer carries per-request traffic — it remains in use solely
+/// for the low-frequency <c>ActiveTranslations</c> summary that
+/// <see cref="TranslationRequestQueryService.UpdateActiveCount"/> pushes on
+/// job lifecycle transitions (the topbar badge feed). Queue/dashboard screens
+/// join the per-request groups of the rows they actually show; the detail
+/// screen joins exactly its own request's group.
 ///
 /// Progress throttling: mid-run <see cref="Emit"/> calls are collapsed to at
 /// most one message per ≥2% progress delta (or 500ms, whichever comes first);
@@ -28,21 +30,33 @@ namespace Lingarr.Server.Modules.Translation;
 /// also removes most of the per-percent <c>SaveChanges</c> write amplification.
 ///
 /// Line batching: <see cref="EmitLine"/> results are buffered per request and
-/// written in batches of <see cref="LineFlushBatchSize"/> rows (broadcasts
-/// still stream per line, so live detail views are unchanged). Any terminal
-/// <see cref="Emit"/> (completed/failed/cancelled/paused) flushes the tail, so
-/// a finished request always has its full line set on disk. If the process
-/// dies mid-run, the flushed batches persist and the unflushed tail is simply
-/// re-translated on resume — the job's checkpoint reads persisted rows by
-/// position, so already-batched lines are never duplicated.
+/// written in batches of <see cref="LineFlushBatchSize"/> rows; the broadcasts
+/// ride the same rhythm — pending line payloads are flushed as a single
+/// <c>LineTranslatedBatch</c> message per <see cref="LineBroadcastBatchSize"/>
+/// lines or <see cref="LineBroadcastWindow"/> elapsed time (whichever comes
+/// first; the window is checked lazily on the next buffered line, so no
+/// timers run). Any terminal <see cref="Emit"/> (completed/failed/cancelled/
+/// paused) flushes both buffers — the buffered line batch precedes the
+/// terminal progress message so a live detail view appends the tail before
+/// the completion status lands — and a finished request always has its full
+/// line set on disk. If the process dies mid-run, the flushed batches persist
+/// and the unflushed tail is simply re-translated on resume — the job's
+/// checkpoint reads persisted rows by position, so already-batched lines are
+/// never duplicated.
 /// </summary>
 public class ProgressService : IProgressService
 {
-    private const string GlobalGroup = "TranslationRequests";
     private const string RequestGroupPrefix = "TranslationRequest-";
     private const int LineFlushBatchSize = 50;
     private static readonly TimeSpan ProgressMinInterval = TimeSpan.FromMilliseconds(500);
     private const int ProgressMinDelta = 2;
+    /// <summary>
+    /// Line broadcasts leave this service only as <c>LineTranslatedBatch</c>
+    /// array messages, flushed after this many buffered lines or after
+    /// <see cref="LineBroadcastWindow"/> elapsed (whichever comes first).
+    /// </summary>
+    private const int LineBroadcastBatchSize = 50;
+    private static readonly TimeSpan LineBroadcastWindow = TimeSpan.FromMilliseconds(50);
 
     private readonly IHubContext<TranslationRequestsHub> _hubContext;
     private readonly LingarrDbContext _dbContext;
@@ -85,6 +99,12 @@ public class ProgressService : IProgressService
         // (and estimate ETAs) after reloads, not just for live SignalR clients
         translationRequest.Progress = Math.Max(translationRequest.Progress, progress);
         await _dbContext.SaveChangesAsync();
+        if (terminal && state.PendingLineBroadcasts.Count > 0)
+        {
+            // the buffered line tail precedes the terminal signal so live
+            // detail views append the last rows before the completion status
+            await SendLineBroadcastAsync(translationRequest.Id, state);
+        }
         await SendAsync(translationRequest.Id, "RequestProgress", new
         {
             translationRequest.Id,
@@ -130,17 +150,8 @@ public class ProgressService : IProgressService
             Tier = fallback?.Tier
         });
 
-        await SendAsync(request.Id, "LineTranslated", new
-        {
-            request.Id,
-            Position = position,
-            Source = source,
-            Target = target,
-            Service = service,
-            MatchedSource = fallback?.Source,
-            MatchedTarget = fallback?.Target,
-            Tier = fallback?.Tier.ToString()
-        });
+        BufferLineBroadcast(state, LinePayload(request, position, source, target, service, fallback));
+        await FlushLineBroadcastsIfNeededAsync(request.Id, state);
 
         if (state.PendingLines.Count >= LineFlushBatchSize)
         {
@@ -167,17 +178,9 @@ public class ProgressService : IProgressService
                 Tier = fallback?.Tier
             });
 
-            await SendAsync(request.Id, "LineTranslated", new
-            {
-                request.Id,
-                line.Position,
-                line.Source,
-                line.Target,
-                line.Service,
-                MatchedSource = fallback?.Source,
-                MatchedTarget = fallback?.Target,
-                Tier = fallback?.Tier.ToString()
-            });
+            BufferLineBroadcast(
+                state, LinePayload(request, line.Position, line.Source, line.Target, line.Service, fallback));
+            await FlushLineBroadcastsIfNeededAsync(request.Id, state);
         }
 
         if (state.PendingLines.Count >= LineFlushBatchSize)
@@ -249,14 +252,75 @@ public class ProgressService : IProgressService
     }
 
     /// <summary>
-    /// Sends one payload to the request's own group and the legacy global
-    /// group (existing queue/detail screens subscribe to the global one).
+    /// Sends one payload to the request's own group only. The global
+    /// <c>TranslationRequests</c> group is reserved for the
+    /// <c>ActiveTranslations</c> summary — per-request traffic never lands
+    /// there (P2 broadcast collapse).
     /// </summary>
     private Task SendAsync(int requestId, string method, object payload)
     {
-        return Task.WhenAll(
-            _hubContext.Clients.Group(GlobalGroup).SendAsync(method, payload),
-            _hubContext.Clients.Group(RequestGroupPrefix + requestId).SendAsync(method, payload));
+        return _hubContext.Clients.Group(RequestGroupPrefix + requestId)
+            .SendAsync(method, payload);
+    }
+
+    /// <summary>Builds one wire payload for a translated line (per-item shape of
+    /// the <c>LineTranslatedBatch</c> array — identical to the retired per-line
+    /// <c>LineTranslated</c> message, so consumers keep their payload contract).</summary>
+    private static object LinePayload(
+        TranslationRequest request,
+        int position,
+        string source,
+        string target,
+        string? service,
+        LanguagePair? fallback) => new
+    {
+        request.Id,
+        Position = position,
+        Source = source,
+        Target = target,
+        Service = service,
+        MatchedSource = fallback?.Source,
+        MatchedTarget = fallback?.Target,
+        Tier = fallback?.Tier.ToString()
+    };
+
+    private void BufferLineBroadcast(RequestProgressState state, object payload)
+    {
+        if (state.PendingLineBroadcasts.Count == 0)
+        {
+            state.LineBroadcastWindowOpenedAt = _timeProvider.GetUtcNow();
+        }
+        state.PendingLineBroadcasts.Add(payload);
+    }
+
+    /// <summary>
+    /// Flushes the buffered line payloads when the batch is full or the
+    /// broadcast window has elapsed. The window is evaluated lazily on the
+    /// next buffered line — no timers — so a stalled run simply holds its
+    /// tail until the next line or the terminal emit.
+    /// </summary>
+    private async Task FlushLineBroadcastsIfNeededAsync(int requestId, RequestProgressState state)
+    {
+        if (state.PendingLineBroadcasts.Count == 0)
+        {
+            return;
+        }
+
+        var now = _timeProvider.GetUtcNow();
+        if (state.PendingLineBroadcasts.Count < LineBroadcastBatchSize
+            && now - state.LineBroadcastWindowOpenedAt < LineBroadcastWindow)
+        {
+            return;
+        }
+
+        await SendLineBroadcastAsync(requestId, state);
+    }
+
+    private async Task SendLineBroadcastAsync(int requestId, RequestProgressState state)
+    {
+        var lines = state.PendingLineBroadcasts.ToArray();
+        state.PendingLineBroadcasts.Clear();
+        await SendAsync(requestId, "LineTranslatedBatch", lines);
     }
 
     private RequestProgressState GetState(int requestId) =>
@@ -282,5 +346,7 @@ public class ProgressService : IProgressService
         public TranslationStatus? LastStatus { get; set; }
         public bool HasEmitted { get; set; }
         public List<TranslationRequestLine> PendingLines { get; } = [];
+        public List<object> PendingLineBroadcasts { get; } = [];
+        public DateTimeOffset LineBroadcastWindowOpenedAt { get; set; }
     }
 }

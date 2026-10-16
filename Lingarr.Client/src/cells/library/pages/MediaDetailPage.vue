@@ -95,12 +95,18 @@
             </span>
         </div>
 
-        <!-- ═══ 剧集:逐集轨道表 ═══ -->
+        <!-- ═══ 剧集:逐集轨道表(虚拟滚动,P2-8:千集季只渲染视口行) ═══ -->
         <template v-if="isShow">
             <div
                 class="border-line bg-secondary flex min-h-0 flex-[1.5] flex-col rounded-md border">
-                <div class="shell-scroll min-h-0 flex-1 overflow-auto">
-                    <table class="w-full text-[13px]">
+                <VirtualEpisodeList
+                    :items="seasonEpisodes"
+                    :item-height="44"
+                    :overscan="5"
+                    :colspan="6"
+                    :label="t('mediaDetail.episodeTitle')"
+                    :key-of="(ep: EpisodeRow) => ep.id">
+                    <template #header>
                         <thead>
                             <tr>
                                 <th :class="thClass" class="w-11">#</th>
@@ -111,136 +117,105 @@
                                 <th :class="thClass" class="w-36"></th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr v-if="episodes.length === 0">
-                                <td :class="tdClass" colspan="6">
-                                    <span class="text-secondary-content/60 text-xs">
-                                        {{ t('mediaDetail.noEpisodes') }}
+                    </template>
+                    <template #row="{ item: ep }">
+                        <tr class="hover:bg-tertiary/50">
+                            <td :class="tdClass">
+                                <span class="mono text-secondary-content text-[11px]">
+                                    E{{ String(ep.episodeNumber).padStart(2, '0') }}
+                                </span>
+                            </td>
+                            <td :class="tdClass">
+                                <b class="truncate font-semibold" :title="ep.title">
+                                    {{ ep.title }}
+                                </b>
+                            </td>
+                            <td :class="tdClass">
+                                <div class="flex flex-wrap gap-1">
+                                    <span
+                                        v-for="lang in episodeLanguages(ep)"
+                                        :key="lang"
+                                        :class="
+                                            chipClass(episodeHas(ep, lang) ? 'complete' : 'none')
+                                        ">
+                                        {{ lang.toUpperCase() }}
+                                        {{ episodeHas(ep, lang) ? '✓' : '·' }}
                                     </span>
-                                </td>
-                            </tr>
-                            <tr v-for="ep in episodes" :key="ep.id" class="hover:bg-tertiary/50">
-                                <td :class="tdClass">
-                                    <span class="mono text-secondary-content text-[11px]">
-                                        E{{ String(ep.episodeNumber).padStart(2, '0') }}
-                                    </span>
-                                </td>
-                                <td :class="tdClass">
-                                    <b class="truncate font-semibold" :title="ep.title">
-                                        {{ ep.title }}
-                                    </b>
-                                </td>
-                                <td :class="tdClass">
-                                    <div class="flex flex-wrap gap-1">
-                                        <span
-                                            v-for="lang in episodeLanguages(ep)"
-                                            :key="lang"
-                                            :class="
-                                                chipClass(
-                                                    episodeHas(ep, lang) ? 'complete' : 'none'
-                                                )
-                                            ">
-                                            {{ lang.toUpperCase() }}
-                                            {{ episodeHas(ep, lang) ? '✓' : '·' }}
-                                        </span>
-                                    </div>
-                                </td>
-                                <td :class="tdClass">
-                                    <span :class="episodeStatusClass(ep)">
-                                        {{ episodeStatusLabel(ep) }}
-                                    </span>
-                                </td>
-                                <td :class="tdClass">
-                                    <time class="mono text-secondary-content text-xs">
-                                        {{
-                                            episodeRequest(ep)
-                                                ? formatTime(episodeRequest(ep)!.updatedAt ?? '')
-                                                : '—'
-                                        }}
-                                    </time>
-                                </td>
-                                <td :class="tdClass">
-                                    <div
-                                        class="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                </div>
+                            </td>
+                            <td :class="tdClass">
+                                <span :class="episodeStatusClass(ep)">
+                                    {{ episodeStatusLabel(ep) }}
+                                </span>
+                            </td>
+                            <td :class="tdClass">
+                                <time class="mono text-secondary-content text-xs">
+                                    {{
+                                        episodeRequest(ep)
+                                            ? formatTime(episodeRequest(ep)!.updatedAt ?? '')
+                                            : '—'
+                                    }}
+                                </time>
+                            </td>
+                            <td :class="tdClass">
+                                <div
+                                    class="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                    <button
+                                        type="button"
+                                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
+                                        data-test="episode-subtitle-search"
+                                        @click="openEpisodeSearch(ep)">
+                                        {{ t('mediaDetail.openSubtitleSearch') }}
+                                    </button>
+                                    <router-link
+                                        v-if="
+                                            episodeRequest(ep)?.status ===
+                                            TRANSLATION_STATUS.COMPLETED
+                                        "
+                                        :to="{
+                                            name: 'proofread',
+                                            params: { id: episodeRequest(ep)!.id }
+                                        }">
                                         <button
                                             type="button"
-                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
-                                            data-test="episode-subtitle-search"
-                                            @click="openEpisodeSearch(ep)">
-                                            {{ t('mediaDetail.openSubtitleSearch') }}
+                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
+                                            {{ t('common.translationAction.proofread') }}
                                         </button>
-                                        <router-link
-                                            v-if="
-                                                episodeRequest(ep)?.status ===
-                                                TRANSLATION_STATUS.COMPLETED
-                                            "
-                                            :to="{
-                                                name: 'proofread',
-                                                params: { id: episodeRequest(ep)!.id }
-                                            }">
-                                            <button
-                                                type="button"
-                                                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
-                                                {{ t('common.translationAction.proofread') }}
-                                            </button>
-                                        </router-link>
-                                        <router-link
-                                            v-else-if="episodeDetailRequest(ep)"
-                                            :to="{
-                                                name: 'queue-detail',
-                                                params: { id: episodeDetailRequest(ep)!.id }
-                                            }">
-                                            <button
-                                                type="button"
-                                                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
-                                                {{ t('library.action.detail') }}
-                                            </button>
-                                        </router-link>
-                                        <ContextMenu
-                                            v-if="episodeSource(ep)"
-                                            :media="ep"
-                                            :subtitle="episodeSource(ep)"
-                                            media-type="Episode"
-                                            @select="translateEpisode(ep, $event)">
-                                            <button
-                                                type="button"
-                                                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
-                                                {{ t('mediaDetail.translate') }}
-                                            </button>
-                                        </ContextMenu>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <!-- ═══ 千集季分页(P2):每页 100 行,页码为真实切片计数 ═══ -->
-                <div
-                    v-if="episodePageCount > 1"
-                    class="border-line flex shrink-0 items-center justify-center gap-3 border-t px-4 py-2"
-                    data-test="episode-pager">
-                    <button
-                        type="button"
-                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
-                        :disabled="episodePage === 1"
-                        :aria-label="t('mediaDetail.episodePagePrev')"
-                        data-test="episode-pager-prev"
-                        @click="episodePage--">
-                        ‹
-                    </button>
-                    <span class="mono text-secondary-content text-xs" data-test="episode-pager-label">
-                        {{ episodePage }} / {{ episodePageCount }}
-                    </span>
-                    <button
-                        type="button"
-                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
-                        :disabled="episodePage === episodePageCount"
-                        :aria-label="t('mediaDetail.episodePageNext')"
-                        data-test="episode-pager-next"
-                        @click="episodePage++">
-                        ›
-                    </button>
-                </div>
+                                    </router-link>
+                                    <router-link
+                                        v-else-if="episodeDetailRequest(ep)"
+                                        :to="{
+                                            name: 'queue-detail',
+                                            params: { id: episodeDetailRequest(ep)!.id }
+                                        }">
+                                        <button
+                                            type="button"
+                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
+                                            {{ t('library.action.detail') }}
+                                        </button>
+                                    </router-link>
+                                    <ContextMenu
+                                        v-if="episodeSource(ep)"
+                                        :media="ep"
+                                        :subtitle="episodeSource(ep)"
+                                        media-type="Episode"
+                                        @select="translateEpisode(ep, $event)">
+                                        <button
+                                            type="button"
+                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
+                                            {{ t('mediaDetail.translate') }}
+                                        </button>
+                                    </ContextMenu>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template #empty>
+                        <span class="text-secondary-content/60 text-xs">
+                            {{ t('mediaDetail.noEpisodes') }}
+                        </span>
+                    </template>
+                </VirtualEpisodeList>
             </div>
         </template>
 
@@ -362,7 +337,8 @@
                 </div>
 
                 <!-- ═══ 内嵌轨道分区:每轨一行(语言 chip · 标题 · codec);
-                     图形轨(PGS/DVB…)标「图形 · 不可翻译」且无动作入口 ═══ -->                <div
+                     图形轨(PGS/DVB…)标「图形 · 不可翻译」且无动作入口 ═══ -->
+                <div
                     class="border-line/60 bg-tertiary flex items-center gap-2.5 border-y px-4 py-1.5"
                     data-test="embedded-tracks-section">
                     <h3 class="text-secondary-content text-[11px] font-semibold tracking-wide">
@@ -510,6 +486,7 @@ import { translationRequestService } from '@/cells/app/api/translationRequestSer
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import SubtitleSearchModal from '@/cells/library/components/SubtitleSearchModal.vue'
+import VirtualEpisodeList from '@/cells/library/components/VirtualEpisodeList.vue'
 import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
 import {
@@ -563,11 +540,10 @@ const activeSeason = ref<number | null>(null)
 const isShow = computed(() => props.type === 'show')
 const show = computed<IShow | null>(() => item.value?.show ?? null)
 const seasons = computed<ISeason[]>(() => show.value?.seasons ?? [])
-/// Full episode list of the active season — the per-episode table pages over
-/// it client-side (thousand-episode seasons render 100 rows per page), while
-/// season-wide actions (translate missing) still walk every episode.
-const EPISODE_PAGE_SIZE = 100
-const episodePage = ref(1)
+/// Full episode list of the active season — the per-episode table windows
+/// over it at render time (thousand-episode seasons only render the viewport
+/// rows, P2-8), while season-wide actions (translate missing) still walk
+/// every episode.
 const seasonEpisodes = computed<EpisodeRow[]>(() => {
     const season = seasons.value.find((s) => s.seasonNumber === activeSeason.value)
     return (season?.episodes ?? []).map((ep) => ({
@@ -577,18 +553,6 @@ const seasonEpisodes = computed<EpisodeRow[]>(() => {
         fileName: ep.fileName ?? '',
         season: season as ISeason
     }))
-})
-const episodes = computed<EpisodeRow[]>(() =>
-    seasonEpisodes.value.slice(
-        (episodePage.value - 1) * EPISODE_PAGE_SIZE,
-        episodePage.value * EPISODE_PAGE_SIZE
-    )
-)
-const episodePageCount = computed(() =>
-    Math.max(1, Math.ceil(seasonEpisodes.value.length / EPISODE_PAGE_SIZE))
-)
-watch(activeSeason, () => {
-    episodePage.value = 1
 })
 
 const trackedLanguages = computed<string[]>(() => {
@@ -1057,9 +1021,7 @@ function coveredLanguagesFor(mediaId: number): Set<string> {
     }
 
     const episode = episodeById.value.get(mediaId)
-    const base = episode?.fileName
-        ? episode.fileName.replace(/\.[^.]+$/, '').toLowerCase()
-        : null
+    const base = episode?.fileName ? episode.fileName.replace(/\.[^.]+$/, '').toLowerCase() : null
     for (const file of subtitleFiles.value) {
         if (base && !file.fileName.toLowerCase().startsWith(base + '.')) continue
         for (const language of file.languages) covered.add(language.toLowerCase())
@@ -1105,8 +1067,7 @@ async function translateEmbeddedTrack(
         }
     } catch (error) {
         const detail = axios.isAxiosError(error)
-            ? ((error.response?.data as { message?: string } | undefined)?.message ??
-              error.message)
+            ? ((error.response?.data as { message?: string } | undefined)?.message ?? error.message)
             : String(error)
         toastStore.push({
             message: t('mediaDetail.subtitleFiles.embedded.queuedFailed', { message: detail }),
@@ -1147,8 +1108,7 @@ async function toggleSubtitleNeed(needed: boolean): Promise<void> {
         }
     } catch (error) {
         const detail = axios.isAxiosError(error)
-            ? ((error.response?.data as { message?: string } | undefined)?.message ??
-              error.message)
+            ? ((error.response?.data as { message?: string } | undefined)?.message ?? error.message)
             : String(error)
         toastStore.push({
             message: t('mediaDetail.audio.failedToast', { message: detail }),

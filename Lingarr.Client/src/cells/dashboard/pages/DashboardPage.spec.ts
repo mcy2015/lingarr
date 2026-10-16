@@ -40,9 +40,11 @@ vi.mock('@/cells/app/api/subtitleSearchService', () => ({
 
 // The page joins a live hub on mount; a real connection would negotiate
 // over the network, so the composable is replaced wholesale — the hub
-// double covers joinGroup/on/off so the mount chain never rejects.
+// double covers joinGroup/leaveGroup/on/off so the mount chain (and the
+// per-request group re-syncs) never rejects.
 const hubMock = vi.hoisted(() => ({
     joinGroup: vi.fn((): Promise<void> => Promise.resolve()),
+    leaveGroup: vi.fn((): Promise<void> => Promise.resolve()),
     on: vi.fn(),
     off: vi.fn()
 }))
@@ -76,14 +78,21 @@ const settle = async (): Promise<void> => {
     await vi.advanceTimersByTimeAsync(0)
 }
 
-async function mountDashboard(): Promise<{ wrapper: VueWrapper; router: ReturnType<typeof createRouter> }> {
+async function mountDashboard(): Promise<{
+    wrapper: VueWrapper
+    router: ReturnType<typeof createRouter>
+}> {
     const pinia = createPinia()
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
             { path: '/', name: 'dashboard', component: DashboardPage },
             // the 5th KPI deep-links into the subtitle history screen
-            { path: '/subtitle-history', name: 'subtitle-history', component: { template: '<div />' } }
+            {
+                path: '/subtitle-history',
+                name: 'subtitle-history',
+                component: { template: '<div />' }
+            }
         ]
     })
     await router.push('/')
@@ -113,10 +122,20 @@ describe('DashboardPage · subtitle backlog KPI', () => {
         })
         statisticsApi.getDailyTrendStatistics.mockResolvedValue({ days: [] })
         translationRequestApi.statusCounts.mockResolvedValue({ InProgress: 2, Pending: 12 })
-        translationRequestApi.requests.mockResolvedValue({ items: [], totalCount: 0, pageNumber: 1, pageSize: 20 })
+        translationRequestApi.requests.mockResolvedValue({
+            items: [],
+            totalCount: 0,
+            pageNumber: 1,
+            pageSize: 20
+        })
         translationRequestApi.getRecentEvents.mockResolvedValue([])
         translateApi.getHealth.mockResolvedValue([])
-        backlogMock.mockResolvedValue({ backlog: 7, pinnedCount: 1, webhookBoostedCount: 2, nextRoundCount: 3 })
+        backlogMock.mockResolvedValue({
+            backlog: 7,
+            pinnedCount: 1,
+            webhookBoostedCount: 2,
+            nextRoundCount: 3
+        })
     })
 
     afterEach(() => {
