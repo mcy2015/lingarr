@@ -19,6 +19,7 @@ import {
     IIncludeSummary,
     IPluginManifest,
     IPluginOptionsResponse,
+    IPluginSettingField,
     IPluginStatus,
     IPluginSummary,
     IProofreadLineApplyRequest,
@@ -576,4 +577,54 @@ export interface ISubtitleBacklog {
     nextRoundCount: number
     pinnedCount: number
     webhookBoostedCount: number
+}
+
+/// Subtitle attempt outcomes on the wire (SubtitleDownloadResult enum
+/// names — the same strings the download response's `result` carries).
+export type SUBTITLE_HISTORY_RESULT = 'Succeeded' | 'Failed' | 'LowConfidenceSkipped' | 'AlreadyExistsSkipped'
+
+/// How the attempt was started (SubtitleDownloadSource enum names).
+export type SUBTITLE_HISTORY_SOURCE = 'Manual' | 'Auto' | 'Webhook'
+
+/// One row of GET /api/subtitle-search/history: a subtitle_downloads row
+/// joined with its library title. mediaTitle is null when the owning
+/// movie/episode no longer exists (no FK by design) — render without a
+/// detail link. fileName is null when nothing landed (failed attempts).
+export interface ISubtitleHistoryItem {
+    id: number
+    mediaType: 'Movie' | 'Episode'
+    mediaId: number
+    mediaTitle: string | null
+    provider: string
+    language: string
+    source: SUBTITLE_HISTORY_SOURCE
+    result: SUBTITLE_HISTORY_RESULT
+    error: string | null
+    fileName: string | null
+    createdAt: string
+}
+
+/// One keyset page of the history: rows newest first plus the opaque
+/// cursor of the next page (null on the last page).
+export interface ISubtitleHistoryResponse {
+    items: ISubtitleHistoryItem[]
+    nextCursor: string | null
+}
+
+/// GET /api/subtitle-search/providers row extended with the cooldown
+/// health state (design ⑧): a non-null cooldownUntil means the source
+/// currently sits out automated rounds, with the bucketed failure name in
+/// cooldownReason. Declared here rather than on ISubtitleProviderManifest
+/// (types/plugin.ts) because the manifest type is the shared plugin-ABI
+/// shape; the cooldown fields only exist on the subtitle-sources card
+/// contract. Undefined (legacy payload without the fields) reads as null.
+export interface ISubtitleProviderHealthState {
+    provider: string
+    displayName: string
+    description: string | null
+    requiresAuth: boolean
+    credentialsConfigured: boolean
+    settings: IPluginSettingField[]
+    cooldownUntil: string | null
+    cooldownReason: string | null
 }

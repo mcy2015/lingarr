@@ -2,20 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Lingarr.Contracts.Settings;
+using Lingarr.Core.Configuration;
+using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Manifests;
+using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
+using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 using Lingarr.Server.Tests.Modules.SubtitleSearch;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -30,11 +36,16 @@ namespace Lingarr.Server.Tests.Controllers;
 /// ok=false with a message, never a 500 (translate-test precedent). The
 /// providers endpoint serves the real settings-card shape: manifest
 /// fields passed through plus requiresAuth/credentialsConfigured, with
-/// per-source degradation when the secret store cannot be read.
+/// per-source degradation when the secret store cannot be read — and the
+/// observation batch's cooldown health pair read through the production
+/// store round-trip.
 /// The M3/M4 endpoints (search/download/pin/backlog) run against the real
 /// orchestrator/queue/pipeline stack on SQLite through
 /// <see cref="SubtitleEndpointFixture"/> — validation codes, cache
-/// ownership, and the locked Query/SkipTranslation contract.
+/// ownership, and the locked Query/SkipTranslation contract. The history
+/// endpoint (screen 13) paginates real subtitle_downloads rows with the
+/// keyset cursor, the id tiebreak over same-timestamp bursts and the
+/// media-title join (episodes through season→show).
 /// </summary>
 public class SubtitleSearchControllerTests
 {
@@ -177,23 +188,50 @@ public class SubtitleSearchControllerTests
     private static SubtitleSearchController CreateController(
         ISubtitleProvider[] providers,
         ISubtitleSourceManifest[]? manifests = null,
-        Mock<ISettingsAccess>? settings = null)
-        => new(
-            new SubtitleProviderRegistry(
-                providers,
-                manifests ?? [],
-                NullLogger<SubtitleProviderRegistry>.Instance),
+        Mock<ISettingsAccess>? settings = null,
+        InMemorySettingService? settingValues = null)
+    {
+        var registry = new SubtitleProviderRegistry(
+            providers,
+            manifests ?? [],
+            NullLogger<SubtitleProviderRegistry>.Instance);
+        return new SubtitleSearchController(
+            registry,
             settings?.Object ?? SubtitleSettingsDouble.Create().Object,
-            orchestrator: null!,
+            CreateOrchestrator(registry, settingValues),
             queueService: null!,
             pinService: null!,
             pipeline: null!,
             requestBuilder: null!,
+            dbContext: null!,
             NullLogger<SubtitleSearchController>.Instance);
+    }
+
+    /// <summary>
+    /// Real orchestrator wiring so the providers endpoint reads cooldowns
+    /// through the production path (scoped store over the stateful settings
+    /// double). Telemetry is never reached by the endpoints that run under
+    /// this stack — the cooldown store and cache are live because
+    /// GetActiveCooldownsAsync uses them.
+    /// </summary>
+    private static SubtitleSearchOrchestrator CreateOrchestrator(
+        SubtitleProviderRegistry registry,
+        InMemorySettingService? settingValues)
+        => new(
+            registry,
+            new SubtitleMatchScorer(),
+            new SubtitleSourceCooldownStore(
+                settingValues ?? new InMemorySettingService(),
+                NullLogger<SubtitleSourceCooldownStore>.Instance),
+            telemetry: null!,
+            new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<SubtitleSearchOrchestrator>.Instance);
 
     /// <summary>
     /// Full-stack controller over the shared SQLite fixture — the M3/M4
-    /// endpoints run the real orchestrator/queue/pipeline wiring.
+    /// endpoints run the real orchestrator/queue/pipeline wiring, and the
+    /// observation endpoints (history, cooldown health) read the same
+    /// SQLite database and the same scoped settings the fixture owns.
     /// </summary>
     private static SubtitleSearchController CreateFullController(SubtitleEndpointFixture fixture)
         => new(
@@ -204,6 +242,7 @@ public class SubtitleSearchControllerTests
             fixture.PinService,
             fixture.Pipeline,
             fixture.RequestBuilder,
+            fixture.DbContext,
             NullLogger<SubtitleSearchController>.Instance);
 
     // Mirrors the production MVC options (InfrastructureModule): camelCase,
@@ -666,4 +705,384 @@ public class SubtitleSearchControllerTests
         NextAttemptAt = nextAttemptAt ?? DateTimeOffset.UtcNow.AddHours(-1),
         UpdatedAt = DateTimeOffset.UtcNow
     };
+
+    // --- providers cooldown health (⑧, observation batch): the settings
+    // cards read the active cooldown map through the production store
+    // round-trip — persisted JSON, expired entries dropped, 401/403 on the
+    // far-future credential sentinel.
+
+    [Fact]
+    public async Task GetProviders_ActiveCooldownMarksUntilAndReason()
+    {
+        var settingValues = new InMemorySettingService();
+        await new SubtitleSourceCooldownStore(
+                settingValues, NullLogger<SubtitleSourceCooldownStore>.Instance)
+            .RecordFailureAsync("opensubtitles", SubtitleProviderException.ForHttpStatus(
+                "opensubtitles", HttpStatusCode.TooManyRequests));
+        var controller = CreateController(SevenSources(), RealManifests(), settingValues: settingValues);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetProviders());
+        using var body = Body(result);
+
+        var byProvider = body.RootElement.EnumerateArray()
+            .ToDictionary(card => card.GetProperty("provider").GetString()!);
+        var cooled = byProvider["opensubtitles"];
+        // 429 → 1h cooldown from now, bucketed reason for the card label.
+        var until = DateTimeOffset.Parse(cooled.GetProperty("cooldownUntil").GetString()!);
+        Assert.True(until > DateTimeOffset.UtcNow.AddMinutes(55));
+        Assert.True(until <= DateTimeOffset.UtcNow.AddHours(1).AddMinutes(1));
+        Assert.Equal("RateLimited", cooled.GetProperty("cooldownReason").GetString());
+
+        // Every healthy source carries neither field (nulls are dropped).
+        foreach (var (provider, card) in byProvider)
+        {
+            if (provider == "opensubtitles")
+            {
+                continue;
+            }
+
+            Assert.True(
+                !card.TryGetProperty("cooldownUntil", out var untilValue) || untilValue.ValueKind == JsonValueKind.Null,
+                $"{provider} must not report a cooldown");
+            Assert.True(
+                !card.TryGetProperty("cooldownReason", out var reasonValue) || reasonValue.ValueKind == JsonValueKind.Null,
+                $"{provider} must not report a cooldown reason");
+        }
+    }
+
+    [Fact]
+    public async Task GetProviders_ExpiredCooldownIsDropped()
+    {
+        // The store keeps only active entries — a cooldown whose until lies
+        // in the past must not reach the card (it would read as stuck).
+        var settingValues = new InMemorySettingService();
+        var expired = new Dictionary<string, SubtitleSourceCooldown>
+        {
+            ["opensubtitles"] = new(DateTimeOffset.UtcNow.AddMinutes(-5), "RateLimited", null)
+        };
+        await settingValues.SetSetting(
+            SettingKeys.SubtitleSearch.SourceCooldowns,
+            JsonSerializer.Serialize(expired));
+        var controller = CreateController(SevenSources(), RealManifests(), settingValues: settingValues);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetProviders());
+        using var body = Body(result);
+
+        foreach (var card in body.RootElement.EnumerateArray())
+        {
+            Assert.True(
+                !card.TryGetProperty("cooldownUntil", out var until) || until.ValueKind == JsonValueKind.Null);
+            Assert.True(
+                !card.TryGetProperty("cooldownReason", out var reason) || reason.ValueKind == JsonValueKind.Null);
+        }
+    }
+
+    [Fact]
+    public async Task GetProviders_UnauthorizedCooldownCarriesTheCredentialSentinel()
+    {
+        // 401/403 cools down "until the credentials change" — the far-future
+        // sentinel, which the card renders as a reason label instead of a
+        // silly year-9999 timestamp.
+        var settingValues = new InMemorySettingService();
+        await new SubtitleSourceCooldownStore(
+                settingValues, NullLogger<SubtitleSourceCooldownStore>.Instance)
+            .RecordFailureAsync("assrt", SubtitleProviderException.ForHttpStatus(
+                "assrt", HttpStatusCode.Unauthorized));
+        var controller = CreateController(SevenSources(), RealManifests(), settingValues: settingValues);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetProviders());
+        using var body = Body(result);
+
+        var assrt = body.RootElement.EnumerateArray()
+            .Single(card => card.GetProperty("provider").GetString() == "assrt");
+        Assert.Equal("Unauthorized", assrt.GetProperty("cooldownReason").GetString());
+        var until = DateTimeOffset.Parse(assrt.GetProperty("cooldownUntil").GetString()!);
+        Assert.Equal(SubtitleSourceCooldownStore.CredentialChangeHorizon, until);
+    }
+
+    // --- history (screen 13): keyset pagination over subtitle_downloads
+    // with the media-title join, filters, and the honest empty states.
+
+    /// <summary>
+    /// Seeds one show/season/episode chain and returns the episode id —
+    /// history episode titles resolve through season→show.
+    /// </summary>
+    private static async Task<int> SeedEpisodeAsync(LingarrDbContext db)
+    {
+        var show = new Show
+        {
+            SonarrId = 1,
+            Title = "Silo",
+            Path = "/tv/silo",
+            DateAdded = DateTimeOffset.UtcNow
+        };
+        var season = new Season { SeasonNumber = 1, Show = show };
+        var episode = new Episode
+        {
+            SonarrId = 2,
+            EpisodeNumber = 2,
+            Title = "The Common",
+            Season = season,
+            DateAdded = DateTimeOffset.UtcNow
+        };
+        db.Shows.Add(show);
+        db.Seasons.Add(season);
+        db.Episodes.Add(episode);
+        await db.SaveChangesAsync();
+        return episode.Id;
+    }
+
+    /// <summary>
+    /// One history row. The entity name clashes with the ABI record of the
+    /// same name — the entity is fully qualified here (documented pitfall).
+    /// </summary>
+    private static Lingarr.Core.Entities.SubtitleDownload DownloadRow(
+        MediaType mediaType,
+        int mediaId,
+        string provider,
+        SubtitleDownloadResult result,
+        DateTimeOffset createdAt,
+        string language = "zh",
+        string filePath = "/media/movies/Movie.2019.WEBDL-1080p.zh.srt",
+        string? error = null,
+        SubtitleDownloadSource source = SubtitleDownloadSource.Manual) => new()
+    {
+        MediaType = mediaType,
+        MediaId = mediaId,
+        Provider = provider,
+        ExternalId = "ext-1",
+        Language = language,
+        FilePath = filePath,
+        MatchScore = 90,
+        HashMatch = false,
+        Source = source,
+        Result = result,
+        Error = error,
+        CreatedAt = createdAt
+    };
+
+    private static SubtitleHistoryResponse HistoryPage(IActionResult result)
+        => Assert.IsType<SubtitleHistoryResponse>(Assert.IsType<OkObjectResult>(result).Value);
+
+    [Fact]
+    public async Task History_ReturnsNewestFirstWithLibraryTitlesAndFilterCombos()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var episodeId = await SeedEpisodeAsync(fixture.DbContext);
+        var now = DateTimeOffset.UtcNow;
+        fixture.DbContext.SubtitleDownloads.AddRange(
+            DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
+                now.AddMinutes(-1)),
+            DownloadRow(MediaType.Episode, episodeId, "assrt", SubtitleDownloadResult.Failed,
+                now.AddMinutes(-2), language: "en", filePath: string.Empty, error: "assrt rejected the request",
+                source: SubtitleDownloadSource.Auto),
+            DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.LowConfidenceSkipped,
+                now.AddMinutes(-3)),
+            DownloadRow(MediaType.Movie, fixture.MovieId, "podnapisi", SubtitleDownloadResult.Succeeded,
+                now.AddMinutes(-4), source: SubtitleDownloadSource.Webhook),
+            // Media row deleted long ago — the download stays, the title goes null.
+            DownloadRow(MediaType.Movie, 999_999, "opensubtitles", SubtitleDownloadResult.AlreadyExistsSkipped,
+                now.AddMinutes(-5)));
+        await fixture.DbContext.SaveChangesAsync();
+        var controller = CreateFullController(fixture);
+
+        // Unfiltered: newest first (row 1 was seeded with the newest
+        // timestamp), one page covers the seeded rows.
+        var page = HistoryPage(await controller.History());
+        Assert.Null(page.NextCursor);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, page.Items.Select(item => item.Id).ToArray());
+
+        var newest = page.Items[0];
+        Assert.Equal("Movie", newest.MediaType);
+        Assert.Equal(fixture.MovieId, newest.MediaId);
+        Assert.Equal("Movie", newest.MediaTitle);
+        Assert.Equal("opensubtitles", newest.Provider);
+        Assert.Equal("zh", newest.Language);
+        Assert.Equal("Manual", newest.Source);
+        Assert.Equal("Succeeded", newest.Result);
+        Assert.Null(newest.Error);
+        Assert.Equal("Movie.2019.WEBDL-1080p.zh.srt", newest.FileName);
+
+        var episodeRow = page.Items[1];
+        Assert.Equal("Episode", episodeRow.MediaType);
+        Assert.Equal("Silo S01E02 The Common", episodeRow.MediaTitle);
+        Assert.Equal("Auto", episodeRow.Source);
+        Assert.Equal("Failed", episodeRow.Result);
+        Assert.Equal("assrt rejected the request", episodeRow.Error);
+        Assert.Null(episodeRow.FileName); // nothing landed
+
+        Assert.Null(page.Items[4].MediaTitle); // removed media → null
+
+        // Filter combinations narrow to the matching rows only.
+        var episodes = HistoryPage(await controller.History(mediaType: "episode"));
+        Assert.Equal(new[] { 2 }, episodes.Items.Select(item => item.Id).ToArray());
+
+        var webhook = HistoryPage(await controller.History(provider: "podnapisi"));
+        Assert.Equal(new[] { 4 }, webhook.Items.Select(item => item.Id).ToArray());
+
+        var failures = HistoryPage(await controller.History(result: "Failed"));
+        Assert.Equal(new[] { 2 }, failures.Items.Select(item => item.Id).ToArray());
+
+        var combo = HistoryPage(await controller.History(mediaType: "movie", provider: "opensubtitles", result: "Succeeded"));
+        Assert.Equal(new[] { 1 }, combo.Items.Select(item => item.Id).ToArray());
+    }
+
+    [Fact]
+    public async Task History_KeysetWalkCoversEveryRowWithoutGapsOrDupes()
+    {
+        // Ascending one-second stamps, paged two at a time: the walk must
+        // cover every row exactly once (ids DESC inside the walk order
+        // because id 5 carries the newest stamp).
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var stamp = new DateTimeOffset(2026, 10, 15, 8, 0, 0, TimeSpan.Zero);
+        fixture.DbContext.SubtitleDownloads.AddRange(
+            Enumerable.Range(0, 5)
+                .Select(index => DownloadRow(
+                    MediaType.Movie, fixture.MovieId, "opensubtitles",
+                    SubtitleDownloadResult.Succeeded, stamp.AddSeconds(index)))
+                .ToArray());
+        await fixture.DbContext.SaveChangesAsync();
+        var controller = CreateFullController(fixture);
+
+        var seen = new List<int>();
+        string? cursor = null;
+        for (var round = 0; round < 5; round++)
+        {
+            var page = HistoryPage(await controller.History(cursor: cursor, limit: 2));
+            seen.AddRange(page.Items.Select(item => item.Id));
+            if (page.NextCursor is null)
+            {
+                // Two rows per page over five rows: 2 + 2 + 1 — the last
+                // page must be the third one.
+                Assert.Equal(2, round);
+                break;
+            }
+
+            cursor = page.NextCursor;
+        }
+
+        // Newest first, nothing skipped, nothing repeated.
+        Assert.Equal(new[] { 5, 4, 3, 2, 1 }, seen);
+    }
+
+    [Fact]
+    public async Task History_SameTimestampBurstsPageWithoutGapsOrDupes()
+    {
+        // The sharper edge of the tiebreak: every row carries the exact
+        // same created_at, so the walk is pure id DESC.
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var stamp = new DateTimeOffset(2026, 10, 15, 9, 30, 0, TimeSpan.Zero);
+        fixture.DbContext.SubtitleDownloads.AddRange(
+            Enumerable.Range(0, 5)
+                .Select(_ => DownloadRow(
+                    MediaType.Movie, fixture.MovieId, "opensubtitles",
+                    SubtitleDownloadResult.Succeeded, stamp))
+                .ToArray());
+        await fixture.DbContext.SaveChangesAsync();
+        var controller = CreateFullController(fixture);
+
+        var first = HistoryPage(await controller.History(limit: 3));
+        Assert.Equal(new[] { 5, 4, 3 }, first.Items.Select(item => item.Id).ToArray());
+        Assert.NotNull(first.NextCursor);
+
+        var second = HistoryPage(await controller.History(cursor: first.NextCursor, limit: 3));
+        Assert.Equal(new[] { 2, 1 }, second.Items.Select(item => item.Id).ToArray());
+        // Last page: no cursor to follow.
+        Assert.Null(second.NextCursor);
+    }
+
+    [Fact]
+    public async Task History_EmptyAndUnknownProvider_AnswerHonestEmptyPages()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var controller = CreateFullController(fixture);
+
+        // Nothing recorded yet.
+        var empty = HistoryPage(await controller.History());
+        Assert.Empty(empty.Items);
+        Assert.Null(empty.NextCursor);
+
+        // Unknown provider is a filter, not an address — empty page, not 404.
+        var unknown = HistoryPage(await controller.History(provider: "nosuchsource"));
+        Assert.Empty(unknown.Items);
+        Assert.Null(unknown.NextCursor);
+    }
+
+    [Fact]
+    public async Task History_LimitIsClampedIntoRange()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var now = DateTimeOffset.UtcNow;
+        fixture.DbContext.SubtitleDownloads.AddRange(
+            DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
+                now.AddMinutes(-1)),
+            DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
+                now.AddMinutes(-2)),
+            DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
+                now.AddMinutes(-3)));
+        await fixture.DbContext.SaveChangesAsync();
+        var controller = CreateFullController(fixture);
+
+        // Omitted/zero limit falls back to the default of 50 (all rows).
+        var all = HistoryPage(await controller.History());
+        Assert.Equal(3, all.Items.Count);
+        Assert.Null(all.NextCursor);
+
+        // Below-range limits clamp to 1; above-range to 100 — both answer
+        // 200 with a follow-up cursor instead of rejecting. Row 1 is the
+        // newest (now-1min), so the single-item page is row 1.
+        var single = HistoryPage(await controller.History(limit: -5));
+        Assert.Equal(new[] { 1 }, single.Items.Select(item => item.Id).ToArray());
+        Assert.NotNull(single.NextCursor);
+
+        var capped = HistoryPage(await controller.History(limit: 1000));
+        Assert.Equal(3, capped.Items.Count);
+        Assert.Null(capped.NextCursor);
+    }
+
+    [Fact]
+    public async Task History_InvalidParameters_Answer400()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var controller = CreateFullController(fixture);
+
+        Assert.IsType<BadRequestObjectResult>(await controller.History(mediaType: "season"));
+        Assert.IsType<BadRequestObjectResult>(await controller.History(result: "Maybe"));
+
+        var result = Assert.IsType<BadRequestObjectResult>(await controller.History(cursor: "not-a-cursor"));
+        using var body = Body(result);
+        Assert.NotNull(body.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task History_SerializesTheLockedWireShape()
+    {
+        // The front end's contract: camelCase names, PascalCase enum names
+        // as strings, nulls dropped, ISO-8601 timestamps.
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        fixture.DbContext.SubtitleDownloads.Add(DownloadRow(
+            MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
+            new DateTimeOffset(2026, 10, 15, 10, 0, 0, TimeSpan.Zero)));
+        await fixture.DbContext.SaveChangesAsync();
+        var controller = CreateFullController(fixture);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.History());
+        using var body = Body(result);
+
+        var item = body.RootElement.GetProperty("items")[0];
+        Assert.Equal(fixture.MovieId, item.GetProperty("mediaId").GetInt32());
+        Assert.Equal("Movie", item.GetProperty("mediaType").GetString());
+        Assert.Equal("Movie", item.GetProperty("mediaTitle").GetString());
+        Assert.Equal("opensubtitles", item.GetProperty("provider").GetString());
+        Assert.Equal("zh", item.GetProperty("language").GetString());
+        Assert.Equal("Manual", item.GetProperty("source").GetString());
+        Assert.Equal("Succeeded", item.GetProperty("result").GetString());
+        Assert.Equal("Movie.2019.WEBDL-1080p.zh.srt", item.GetProperty("fileName").GetString());
+        Assert.NotNull(item.GetProperty("createdAt").GetString());
+        // error is null and therefore dropped by the response serializer
+        Assert.False(item.TryGetProperty("error", out _));
+        // last page: nextCursor is null → dropped on the wire (same
+        // convention as translationRequestId; the client reads falsy)
+        Assert.False(body.RootElement.TryGetProperty("nextCursor", out _));
+    }
 }

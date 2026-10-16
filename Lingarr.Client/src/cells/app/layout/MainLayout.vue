@@ -139,7 +139,8 @@ const pageMeta: Record<string, { title: string; sub: string }> = {
     'media-detail-movie': { title: t('nav.library'), sub: '' },
     // drill-down screens (no sidebar entry; sub/CTA come from the pages)
     'request-template': { title: t('requestTemplate.title'), sub: '' },
-    logs: { title: t('settings.logs.heading'), sub: '' }
+    logs: { title: t('settings.logs.heading'), sub: '' },
+    'subtitle-history': { title: t('nav.subtitleHistory'), sub: '' }
 }
 const currentMeta = computed(() => {
     const name = String(route.name ?? '')

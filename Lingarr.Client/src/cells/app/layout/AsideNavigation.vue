@@ -111,6 +111,14 @@ const isOpen = computed({
 const menuItems: MenuItem[] = [
     { label: 'nav.dashboard', icon: 'home', route: 'dashboard', children: [] },
     { label: 'nav.library', icon: 'movie', route: 'library', children: [] },
+    {
+        // Screen 13: subtitle download history, grouped under the library
+        // section (same icon/label pattern as the siblings above).
+        label: 'nav.subtitleHistory',
+        icon: 'history',
+        route: 'subtitle-history',
+        children: []
+    },
     { label: 'nav.queue', icon: 'language', route: 'queue', children: [] },
     { label: 'nav.import', icon: 'folders', route: 'import', children: [] },
     { label: 'nav.proofread', icon: 'checkMarkCircle', route: 'proofread', children: [] },

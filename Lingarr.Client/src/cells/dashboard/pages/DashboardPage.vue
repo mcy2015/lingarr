@@ -21,17 +21,21 @@
             </template>
         </div>
 
-        <!-- ═══ KPI 条 ═══ -->
-        <div class="grid grid-cols-2 gap-2.5 shrink-0 lg:grid-cols-4">
+        <!-- ═══ KPI 条(第 5 格:字幕补缺——积压主数 + 置顶/提升/下轮副行,无配额)═══ -->
+        <div class="grid grid-cols-2 gap-2.5 shrink-0 lg:grid-cols-5">
             <button
-                v-for="kpi in kpis"
+                v-for="(kpi, index) in kpis"
                 :key="kpi.label"
                 type="button"
                 class="border-line hover:border-accent/60 cursor-pointer rounded-md border bg-secondary px-4 py-3 text-left transition-colors"
                 :title="kpi.label"
+                :data-test="`kpi-cell-${index}`"
                 @click="router.push({ name: kpi.route, query: kpi.query })">
                 <div class="mono text-2xl font-semibold" :class="kpi.cls ?? ''">{{ kpi.value }}</div>
                 <div class="text-secondary-content mt-0.5 text-xs">{{ kpi.label }}</div>
+                <div v-if="kpi.sub" class="text-secondary-content/70 mt-0.5 text-[10.5px]">
+                    {{ kpi.sub }}
+                </div>
             </button>
         </div>
 
@@ -130,6 +134,7 @@ import axios from 'axios'
 import JobRow from '@/cells/app/components/JobRow.vue'
 import TrendCard from '@/cells/dashboard/components/TrendCard.vue'
 import { statisticsService } from '@/cells/app/api/statisticsService'
+import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
 import { translateService } from '@/cells/app/api/translateService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { formatDegradationEdge } from '@/cells/app/utils/degradationEdge'
@@ -140,6 +145,7 @@ import {
     IPagedResult,
     IPipelineStatistics,
     IRequestProgress,
+    ISubtitleBacklog,
     ITranslationRequest,
     ITranslationRequestEventSummary,
     ITranslationServiceHealth,
@@ -164,6 +170,11 @@ const activeItems = ref<ITranslationRequest[]>([])
 const health = ref<ITranslationServiceHealth[]>([])
 const events = ref<ITranslationRequestEventSummary[]>([])
 const trend = ref<IDailyTrendStatistics | null>(null)
+/// Subtitle-search backlog (5th KPI, observation batch): four real counts
+/// from the queue aggregate — backlog / pinned / webhook boosts / next
+/// round. Null until the first fetch (value renders '—' like the cost KPI).
+/// No quota figures by red line.
+const subtitleBacklog = ref<ISubtitleBacklog | null>(null)
 
 const configuredCount = computed(() => health.value.filter((provider) => provider.configured).length)
 const inProgressCount = computed(() => counts.value[TRANSLATION_STATUS.INPROGRESS] ?? 0)
@@ -244,13 +255,15 @@ const kpis = computed(() => [
         label: t('overview.kpi.inProgress'),
         value: inProgressCount.value,
         route: 'queue',
-        query: { status: 'InProgress' } as Record<string, string> | undefined
+        query: { status: 'InProgress' } as Record<string, string> | undefined,
+        sub: '' as string
     },
     {
         label: t('overview.kpi.queued'),
         value: pendingCount.value,
         route: 'queue',
-        query: { status: 'Pending' }
+        query: { status: 'Pending' },
+        sub: ''
     },
     {
         label: t('overview.kpi.cost'),
@@ -262,7 +275,8 @@ const kpis = computed(() => [
                 : '—',
         cls: 'text-secondary-content/60',
         route: 'settings-providers',
-        query: undefined
+        query: undefined,
+        sub: ''
     },
     {
         label: t('overview.kpi.successRate'),
@@ -272,7 +286,24 @@ const kpis = computed(() => [
                 ? 'text-warning'
                 : '',
         route: 'queue',
-        query: { status: 'Failed' }
+        query: { status: 'Failed' },
+        sub: ''
+    },
+    {
+        // 5th cell (observation batch): subtitle backlog with the pinned /
+        // webhook-boost / next-round breakdown — every number from the
+        // backlog aggregate, nothing about quotas (red line).
+        label: t('overview.kpi.subtitleBacklog'),
+        value: subtitleBacklog.value?.backlog ?? '—',
+        route: 'subtitle-history',
+        query: undefined,
+        sub: subtitleBacklog.value
+            ? t('dashboard.subtitles.subline', {
+                  pinned: subtitleBacklog.value.pinnedCount,
+                  boosted: subtitleBacklog.value.webhookBoostedCount,
+                  next: subtitleBacklog.value.nextRoundCount
+              })
+            : ''
     }
 ])
 
@@ -385,7 +416,7 @@ const updateSub = (): void => {
     )
 }
 const fetchOverview = async (): Promise<void> => {
-    const [pipelineResult, countsResult, activeResult, healthResult, eventsResult, trendResult] =
+    const [pipelineResult, countsResult, activeResult, healthResult, eventsResult, trendResult, backlogResult] =
         await Promise.allSettled([
             statisticsApi.getPipelineStatistics(),
             translationRequestApi.statusCounts(),
@@ -398,7 +429,8 @@ const fetchOverview = async (): Promise<void> => {
             ),
             translateApi.getHealth(),
             translationRequestApi.getRecentEvents(20),
-            statisticsApi.getDailyTrendStatistics(14)
+            statisticsApi.getDailyTrendStatistics(14),
+            subtitleSearchService.backlog()
         ])
     if (pipelineResult.status === 'fulfilled') pipeline.value = pipelineResult.value
     if (countsResult.status === 'fulfilled') counts.value = countsResult.value
@@ -406,6 +438,9 @@ const fetchOverview = async (): Promise<void> => {
     if (healthResult.status === 'fulfilled') health.value = healthResult.value
     if (eventsResult.status === 'fulfilled') events.value = eventsResult.value
     if (trendResult.status === 'fulfilled') trend.value = trendResult.value
+    // A failing backlog read leaves the KPI at '—' — honest absence, never
+    // a stale or made-up number (the allSettled contract of this page).
+    if (backlogResult.status === 'fulfilled') subtitleBacklog.value = backlogResult.value
     lastFetchAt.value = Date.now()
     updateSub()
 }

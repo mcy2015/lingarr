@@ -56,6 +56,7 @@
     "nav": {
         "dashboard": "仪表盘",
         "library": "媒体库",
+        "subtitleHistory": "字幕历史",
         "import": "导入",
         "settings": "设置",
         "queue": "任务队列",
@@ -323,7 +324,8 @@
             "inProgress": "进行中任务",
             "queued": "排队等待",
             "cost": "本月 API 成本",
-            "successRate": "30 天任务成功率"
+            "successRate": "30 天任务成功率",
+            "subtitleBacklog": "字幕补缺"
         },
         "active": {
             "title": "活跃任务",
@@ -827,7 +829,16 @@
             "configured": "已配置",
             "notConfigured": "未配置",
             "expand": "配置凭据",
-            "collapse": "收起"
+            "collapse": "收起",
+            "cooldownUntil": "冷却中 · {time}",
+            "cooldownUntilCredentials": "冷却中 · 凭证变更前",
+            "cooldownReason": {
+                "RateLimited": "触发限流(429)",
+                "Unauthorized": "凭证被拒绝(401/403)",
+                "ServerError": "源站故障(5xx)",
+                "Timeout": "源响应超时",
+                "NetworkError": "源不可达"
+            }
         },
         "subtitleOutput": {
             "title": "字幕输出",
@@ -1144,5 +1155,47 @@
         "downloadRejected": "下载失败 · {result} · {error}",
         "translationDuplicate": "已存在同类翻译请求",
         "noSources": "暂无可用字幕源 — 请先在设置中配置。"
+    },
+    "dashboard": {
+        "subtitles": {
+            "subline": "置顶 {pinned} · Webhook {boosted} · 下轮 {next}"
+        }
+    },
+    "subHistory": {
+        "title": "字幕下载历史",
+        "meta": "已载入 {count} 条记录 | 已载入 {count} 条记录",
+        "filterMediaType": "类型",
+        "filterProvider": "字幕源",
+        "filterResult": "结果",
+        "filterAll": "全部",
+        "filterMovie": "电影",
+        "filterEpisode": "剧集单集",
+        "column": {
+            "time": "时间",
+            "media": "标题",
+            "provider": "字幕源",
+            "language": "语言",
+            "source": "来源",
+            "result": "结果",
+            "fileName": "文件"
+        },
+        "source": {
+            "Manual": "手动",
+            "Auto": "自动",
+            "Webhook": "Webhook"
+        },
+        "result": {
+            "Succeeded": "成功",
+            "Failed": "失败",
+            "LowConfidenceSkipped": "低置信跳过",
+            "AlreadyExistsSkipped": "已有字幕"
+        },
+        "loadMore": "加载更多",
+        "loadingMore": "加载中…",
+        "loading": "历史加载中…",
+        "loadFailed": "下载历史加载失败。",
+        "retry": "重试",
+        "empty": "暂无字幕下载记录。",
+        "mediaRemoved": "媒体已移除"
     }
 }

@@ -9,7 +9,7 @@ import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import SubtitleSourcesCard from '@/cells/settings/components/SubtitleSourcesCard.vue'
-import { IPluginSettingField, ISubtitleProviderManifest } from '@/types'
+import { IPluginSettingField, ISubtitleProviderHealthState } from '@/types'
 import en from '@/i18n/locales/en.json'
 // side effect: installs String.prototype.format used by InputComponent validation
 import '@/cells/kernel/utils/string'
@@ -48,8 +48,8 @@ const i18n = createI18n({
 
 // 三源样本:opensubtitles(required secret 未配置,混入 url 字段;type 用
 // 契约示例的小写 'secret' 验证归一)、assrt(已配置的 'Secret' 源)、
-// podnapisi(无 secret 字段的紧凑行源)。
-const PROVIDERS: ISubtitleProviderManifest[] = [
+// podnapisi(无 secret 字段的紧凑行源)。默认全部健康(cooldown 字段 null)。
+const PROVIDERS: ISubtitleProviderHealthState[] = [
     {
         provider: 'opensubtitles',
         displayName: 'OpenSubtitles',
@@ -73,7 +73,9 @@ const PROVIDERS: ISubtitleProviderManifest[] = [
                 required: false,
                 description: null
             }
-        ]
+        ],
+        cooldownUntil: null,
+        cooldownReason: null
     },
     {
         provider: 'assrt',
@@ -89,7 +91,9 @@ const PROVIDERS: ISubtitleProviderManifest[] = [
                 required: true,
                 description: null
             }
-        ]
+        ],
+        cooldownUntil: null,
+        cooldownReason: null
     },
     {
         provider: 'podnapisi',
@@ -105,7 +109,9 @@ const PROVIDERS: ISubtitleProviderManifest[] = [
                 required: false,
                 description: null
             }
-        ]
+        ],
+        cooldownUntil: null,
+        cooldownReason: null
     }
 ]
 
@@ -325,5 +331,65 @@ describe('SubtitleSourcesCard · 加载状态', () => {
         const empty = wrapper.find('[data-test="subtitle-sources-empty"]')
         expect(empty.exists()).toBe(true)
         expect(empty.text()).toBe(en.settings.subtitleSources.empty)
+    })
+})
+
+describe('SubtitleSourcesCard · 冷却健康态(设计⑧)', () => {
+    it('renders the cooldown chip with the until time and reason tooltip on cooled sources only', async () => {
+        const until = '2026-10-15T18:30:00Z'
+        getProvidersMock.mockReset().mockResolvedValue([
+            { ...PROVIDERS[0], cooldownUntil: until, cooldownReason: 'RateLimited' },
+            PROVIDERS[1],
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        const chip = wrapper.find('[data-test="subtitle-source-cooldown-opensubtitles"]')
+        expect(chip.exists()).toBe(true)
+        // chip text: 「Cooldown · <localized datetime>」— the template's
+        // label prefix with a real interpolated time (no leftover
+        // placeholder, and text beyond the bare label)
+        const template = en.settings.subtitleSources.cooldownUntil
+        expect(chip.text()).toContain(template.split('{time}')[0])
+        expect(chip.text()).not.toContain('{time}')
+        expect(chip.text().length).toBeGreaterThan(template.replace('{time}', '').length)
+        // reason rides the tooltip (bucketed failure name, localized)
+        expect(chip.attributes('title')).toBe(en.settings.subtitleSources.cooldownReason.RateLimited)
+
+        // healthy sources render no chip at all
+        expect(wrapper.find('[data-test="subtitle-source-cooldown-assrt"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-cooldown-podnapisi"]').exists()).toBe(false)
+    })
+
+    it('renders the until-credentials label for the 401/403 sentinel instead of a year-9999 date', async () => {
+        getProvidersMock.mockReset().mockResolvedValue([
+            PROVIDERS[0],
+            {
+                ...PROVIDERS[1],
+                cooldownUntil: '9999-12-31T23:59:59+00:00',
+                cooldownReason: 'Unauthorized'
+            },
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        const chip = wrapper.find('[data-test="subtitle-source-cooldown-assrt"]')
+        expect(chip.exists()).toBe(true)
+        expect(chip.text()).toBe(en.settings.subtitleSources.cooldownUntilCredentials)
+        expect(chip.attributes('title')).toBe(en.settings.subtitleSources.cooldownReason.Unauthorized)
+        // the far-future timestamp itself never reaches the user
+        expect(chip.text()).not.toContain('9999')
+    })
+
+    it('shows no chip for legacy payloads without the cooldown fields', async () => {
+        getProvidersMock.mockReset().mockResolvedValue([
+            { ...PROVIDERS[0], cooldownUntil: undefined, cooldownReason: undefined },
+            PROVIDERS[1],
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        expect(wrapper.find('[data-test="subtitle-source-cooldown-opensubtitles"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-row-opensubtitles"]').exists()).toBe(true)
     })
 })

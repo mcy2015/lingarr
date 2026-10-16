@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using Lingarr.Contracts.Plugins;
 using Lingarr.Contracts.Settings;
+using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Modules.SubtitleSearch;
@@ -11,6 +14,7 @@ using Lingarr.Server.Modules.SubtitleSearch.Queue;
 using Lingarr.Server.Modules.SubtitleSearch.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Lingarr.Server.Controllers;
 
@@ -118,6 +122,10 @@ public sealed record SubtitleBacklogResponse(
 /// any Secret field of the manifest has a stored non-blank value. Entries
 /// without a manifest (test doubles) degrade to the provider key, a null
 /// description and an empty settings list instead of failing the list.
+/// The cooldown pair is the health state of design ⑧: a non-null
+/// <see cref="CooldownUntil"/> means the source currently sits out
+/// automated rounds (reason name in <see cref="CooldownReason"/>); expired
+/// entries are dropped by the store, so null = healthy.
 /// </summary>
 public sealed record SubtitleProviderResponse(
     string Provider,
@@ -125,13 +133,54 @@ public sealed record SubtitleProviderResponse(
     string? Description,
     bool RequiresAuth,
     bool CredentialsConfigured,
-    IReadOnlyList<PluginSettingField> Settings);
+    IReadOnlyList<PluginSettingField> Settings,
+    DateTimeOffset? CooldownUntil,
+    string? CooldownReason);
+
+/// <summary>
+/// One row of the download history (screen 13): a subtitle_downloads row
+/// joined with its library title. <see cref="MediaTitle"/> is null when the
+/// owning movie/episode no longer exists (no FK on purpose, M0008) — the
+/// row stays visible, the client renders it without a detail link.
+/// </summary>
+/// <param name="Id">subtitle_downloads id.</param>
+/// <param name="MediaType">"Movie" or "Episode".</param>
+/// <param name="MediaId">Library id of the owning movie/episode.</param>
+/// <param name="MediaTitle">Resolved title; null for removed media.</param>
+/// <param name="Provider">Source key ("opensubtitles"…).</param>
+/// <param name="Language">Normalized language code of the track.</param>
+/// <param name="Source">How the attempt started — Manual/Auto/Webhook.</param>
+/// <param name="Result">Succeeded/Failed/LowConfidenceSkipped/AlreadyExistsSkipped.</param>
+/// <param name="Error">Readable failure reason when <paramref name="Result"/> is Failed.</param>
+/// <param name="FileName">File name of the landed subtitle; null when nothing was written.</param>
+/// <param name="CreatedAt">Attempt timestamp.</param>
+public sealed record SubtitleHistoryEntryResponse(
+    int Id,
+    string MediaType,
+    int MediaId,
+    string? MediaTitle,
+    string Provider,
+    string Language,
+    string Source,
+    string Result,
+    string? Error,
+    string? FileName,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// One keyset page of the history: rows in created_at DESC order plus the
+/// opaque cursor of the next page (null on the last page).
+/// </summary>
+public sealed record SubtitleHistoryResponse(
+    IReadOnlyList<SubtitleHistoryEntryResponse> Items,
+    string? NextCursor);
 
 /// <summary>
 /// Manual surface of the subtitle search (tech design ⑥). M2 filled the
-/// provider test endpoint; M3/M4 add search (per-source, front end fans
+/// provider test endpoint; M3/M4 added search (per-source, front end fans
 /// out), download (cacheKey + index through the pipeline), pin and backlog.
-/// History/kpi land with their own batches (M5/M6).
+/// The observation batch adds the keyset-paginated download history
+/// (screen 13) and the per-source cooldown health on the providers cards.
 /// </summary>
 [ApiController]
 [Authorize("LingarrAccess")]
@@ -145,6 +194,7 @@ public class SubtitleSearchController : ControllerBase
     private readonly SubtitlePinService _pinService;
     private readonly SubtitleDownloadPipeline _pipeline;
     private readonly SubtitleSearchRequestBuilder _requestBuilder;
+    private readonly LingarrDbContext _dbContext;
     private readonly ILogger<SubtitleSearchController> _logger;
 
     public SubtitleSearchController(
@@ -155,6 +205,7 @@ public class SubtitleSearchController : ControllerBase
         SubtitlePinService pinService,
         SubtitleDownloadPipeline pipeline,
         SubtitleSearchRequestBuilder requestBuilder,
+        LingarrDbContext dbContext,
         ILogger<SubtitleSearchController> logger)
     {
         _providerRegistry = providerRegistry;
@@ -164,6 +215,7 @@ public class SubtitleSearchController : ControllerBase
         _pinService = pinService;
         _pipeline = pipeline;
         _requestBuilder = requestBuilder;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -395,30 +447,306 @@ public class SubtitleSearchController : ControllerBase
     }
 
     /// <summary>
+    /// Download history of the subtitle search (screen 13, tech design ⑥):
+    /// keyset-paginated subtitle_downloads rows, newest first, joined with
+    /// the library titles (episodes resolve through season→show). The
+    /// cursor is opaque — base64("created_at|id") over the UTC round-trip
+    /// form — and walks the ix_subtitle_downloads_created index with the id
+    /// as the tiebreak so same-second rows paginate without gaps or dupes.
+    /// Unknown providers answer an honest empty page, not a 404 (the filter
+    /// is data, not an address).
+    /// </summary>
+    /// <param name="cursor">Opaque cursor of the previous page's last row; omitted on the first page.</param>
+    /// <param name="limit">Page size, clamped to 1..100 (default 50).</param>
+    /// <param name="mediaType">Optional "movie"/"episode" filter.</param>
+    /// <param name="provider">Optional exact source-key filter.</param>
+    /// <param name="result">Optional SubtitleDownloadResult enum-name filter.</param>
+    /// <param name="cancellationToken">Token to cancel the reads.</param>
+    [HttpGet("history")]
+    public async Task<IActionResult> History(
+        string? cursor = null,
+        int limit = 0,
+        string? mediaType = null,
+        string? provider = null,
+        string? result = null,
+        CancellationToken cancellationToken = default)
+    {
+        MediaType? parsedMediaType = null;
+        if (!string.IsNullOrWhiteSpace(mediaType))
+        {
+            if (!TryParseMediaType(mediaType, out var parsed))
+            {
+                return BadRequest(new { message = "mediaType must be 'movie' or 'episode'." });
+            }
+
+            parsedMediaType = parsed;
+        }
+
+        SubtitleDownloadResult? parsedResult = null;
+        if (!string.IsNullOrWhiteSpace(result))
+        {
+            if (!Enum.TryParse(result, ignoreCase: false, out SubtitleDownloadResult parsed)
+                || !Enum.IsDefined(parsed))
+            {
+                return BadRequest(new
+                {
+                    message = "result must be one of Succeeded, Failed, LowConfidenceSkipped, AlreadyExistsSkipped."
+                });
+            }
+
+            parsedResult = parsed;
+        }
+
+        (DateTimeOffset CreatedAt, int Id)? boundary = null;
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            if (!TryDecodeHistoryCursor(cursor, out var decoded))
+            {
+                return BadRequest(new { message = "cursor is not a valid history cursor." });
+            }
+
+            boundary = decoded;
+        }
+
+        limit = Math.Clamp(limit == 0 ? HistoryDefaultLimit : limit, 1, HistoryMaxLimit);
+
+        var rows = _dbContext.SubtitleDownloads.AsNoTracking();
+        if (parsedMediaType is { } type)
+        {
+            rows = rows.Where(download => download.MediaType == type);
+        }
+        if (!string.IsNullOrWhiteSpace(provider))
+        {
+            rows = rows.Where(download => download.Provider == provider);
+        }
+        if (parsedResult is { } outcome)
+        {
+            rows = rows.Where(download => download.Result == outcome);
+        }
+        if (boundary is { } edge)
+        {
+            // Strictly-newer rows only (the page is DESC): same-timestamp
+            // rows fall through to the id tiebreak, which is what keeps
+            // same-second bursts stable across pages. The tuple is
+            // destructured up front so the predicate body stays a plain
+            // column-vs-constant comparison.
+            var edgeCreatedAt = edge.CreatedAt;
+            var edgeId = edge.Id;
+            rows = rows.Where(download =>
+                download.CreatedAt < edgeCreatedAt
+                || (download.CreatedAt == edgeCreatedAt && download.Id < edgeId));
+        }
+
+        var page = await rows
+            .OrderByDescending(download => download.CreatedAt)
+            .ThenByDescending(download => download.Id)
+            .Select(download => new SubtitleHistoryRow(
+                download.Id,
+                download.MediaType,
+                download.MediaId,
+                download.Provider,
+                download.Language,
+                download.Source,
+                download.Result,
+                download.Error,
+                download.FilePath,
+                download.CreatedAt))
+            .Take(limit + 1)
+            .ToListAsync(cancellationToken);
+
+        var hasMore = page.Count > limit;
+        if (hasMore)
+        {
+            page.RemoveAt(limit);
+        }
+
+        var titles = await ResolveMediaTitlesAsync(page, cancellationToken);
+        var items = page.Select(row => new SubtitleHistoryEntryResponse(
+            row.Id,
+            row.MediaType.ToString(),
+            row.MediaId,
+            titles.TryGetValue((row.MediaType, row.MediaId), out var title) ? title : null,
+            row.Provider,
+            row.Language,
+            row.Source.ToString(),
+            row.Result.ToString(),
+            row.Error,
+            ExtractFileName(row.FilePath),
+            row.CreatedAt)).ToList();
+
+        return Ok(new SubtitleHistoryResponse(
+            items,
+            hasMore ? EncodeHistoryCursor(page[^1].CreatedAt, page[^1].Id) : null));
+    }
+
+    private const int HistoryDefaultLimit = 50;
+    private const int HistoryMaxLimit = 100;
+
+    /// <summary>Server-side projection of one history row (AsNoTracking read set).</summary>
+    private sealed record SubtitleHistoryRow(
+        int Id,
+        MediaType MediaType,
+        int MediaId,
+        string Provider,
+        string Language,
+        SubtitleDownloadSource Source,
+        SubtitleDownloadResult Result,
+        string? Error,
+        string FilePath,
+        DateTimeOffset CreatedAt);
+
+    /// <summary>
+    /// Titles for one history page: the movie ids and episode ids of the
+    /// page resolved in two AsNoTracking lookups (episodes join through
+    /// season→show and render as "Show S01E02 Episode"). Media rows that
+    /// no longer exist simply stay absent — the caller renders null.
+    /// </summary>
+    private async Task<Dictionary<(MediaType, int), string>> ResolveMediaTitlesAsync(
+        IReadOnlyList<SubtitleHistoryRow> page, CancellationToken cancellationToken)
+    {
+        var titles = new Dictionary<(MediaType, int), string>();
+
+        var movieIds = new List<int>();
+        var episodeIds = new List<int>();
+        foreach (var row in page)
+        {
+            if (row.MediaType == MediaType.Movie)
+            {
+                movieIds.Add(row.MediaId);
+            }
+            else
+            {
+                episodeIds.Add(row.MediaId);
+            }
+        }
+
+        if (movieIds.Count > 0)
+        {
+            foreach (var pair in await _dbContext.Movies.AsNoTracking()
+                         .Where(movie => movieIds.Contains(movie.Id))
+                         .Select(movie => new { movie.Id, movie.Title })
+                         .ToListAsync(cancellationToken))
+            {
+                titles[(MediaType.Movie, pair.Id)] = pair.Title;
+            }
+        }
+
+        if (episodeIds.Count > 0)
+        {
+            foreach (var pair in await _dbContext.Episodes.AsNoTracking()
+                         .Where(episode => episodeIds.Contains(episode.Id))
+                         .Select(episode => new
+                         {
+                             episode.Id,
+                             episode.Title,
+                             episode.EpisodeNumber,
+                             episode.Season.SeasonNumber,
+                             ShowTitle = episode.Season.Show.Title
+                         })
+                         .ToListAsync(cancellationToken))
+            {
+                // Same SxxEyy shape the library/import pages show, so the
+                // history row reads like every other episode reference.
+                titles[(MediaType.Episode, pair.Id)] =
+                    $"{pair.ShowTitle} S{pair.SeasonNumber:D2}E{pair.EpisodeNumber:D2} {pair.Title}";
+            }
+        }
+
+        return titles;
+    }
+
+    /// <summary>
+    /// File name of a landed subtitle. Path.GetFileName only splits on
+    /// directory separators — release tags like "Movie.2023.WEBDL-1080p"
+    /// survive untouched (the documented GetExtension trap).
+    /// </summary>
+    private static string? ExtractFileName(string? filePath) =>
+        string.IsNullOrWhiteSpace(filePath) ? null : Path.GetFileName(filePath);
+
+    /// <summary>base64("created_at|id") over the UTC round-trip form.</summary>
+    private static string EncodeHistoryCursor(DateTimeOffset createdAt, int id)
+        => Convert.ToBase64String(Encoding.UTF8.GetBytes(
+            $"{createdAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture)}|{id}"));
+
+    private static bool TryDecodeHistoryCursor(string cursor, out (DateTimeOffset CreatedAt, int Id) decoded)
+    {
+        decoded = default;
+        try
+        {
+            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            var separator = raw.LastIndexOf('|');
+            if (separator <= 0 || separator == raw.Length - 1)
+            {
+                return false;
+            }
+
+            if (!DateTimeOffset.TryParseExact(
+                    raw[..separator], "O", CultureInfo.InvariantCulture, DateTimeStyles.None,
+                    out var createdAt)
+                || !int.TryParse(raw[(separator + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+            {
+                return false;
+            }
+
+            decoded = (createdAt, id);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Per-source cards for the settings page: one entry per registered
     /// source in registry order — manifest form fields plus the auth flags,
     /// with credentialsConfigured read live from the encrypted settings
     /// store (any stored Secret field counts, so the badge updates on the
-    /// SettingUpdatesHub hot reload). A secret read that fails degrades
-    /// that one source to credentialsConfigured=false; the list itself
-    /// never 500s over it.
+    /// SettingUpdatesHub hot reload). The cooldown pair comes from the
+    /// orchestrator's active map (design ⑧ — expired entries already
+    /// dropped), so a source sitting out rounds shows its until/reason
+    /// without the card polling anything else. A secret read that fails
+    /// degrades that one source to credentialsConfigured=false; the list
+    /// itself never 500s over it.
     /// </summary>
     [HttpGet("providers")]
     public async Task<IActionResult> GetProviders()
     {
+        // Health read through the already-injected orchestrator (its scoped
+        // cooldown store round-trips the persisted map) — no new dependency.
+        // A failing read degrades to "no cooldowns" rather than sinking the
+        // settings page.
+        var cooldowns = await GetActiveCooldownsSafeAsync();
         var providers = new List<SubtitleProviderResponse>(_providerRegistry.All.Count);
         foreach (var entry in _providerRegistry.All)
         {
+            cooldowns.TryGetValue(entry.Provider.Provider, out var cooldown);
             providers.Add(new SubtitleProviderResponse(
                 entry.Provider.Provider,
                 entry.Manifest?.DisplayName ?? entry.Provider.Provider,
                 entry.Manifest?.Description,
                 entry.RequiresAuth,
                 await IsCredentialConfigured(entry),
-                entry.Manifest?.Settings ?? []));
+                entry.Manifest?.Settings ?? [],
+                cooldown?.Until,
+                cooldown?.Reason));
         }
 
         return Ok(providers);
+    }
+
+    private async Task<IReadOnlyDictionary<string, SubtitleSourceCooldown>> GetActiveCooldownsSafeAsync()
+    {
+        try
+        {
+            return await _orchestrator.GetActiveCooldownsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex, "Could not read the subtitle source cooldown map; rendering sources as healthy.");
+            return new Dictionary<string, SubtitleSourceCooldown>();
+        }
     }
 
     /// <summary>

@@ -2,9 +2,10 @@ import axios from 'axios'
 import type {
     ISubtitleSearchOutcome,
     ISubtitleDownloadResponse,
-    ISubtitleBacklog
+    ISubtitleBacklog,
+    ISubtitleHistoryResponse,
+    ISubtitleProviderHealthState
 } from '@/types/services'
-import type { ISubtitleProviderManifest } from '@/types/plugin'
 
 /// Locked contract with the backend: `provider` is the single source key
 /// (required — the backend rejects provider-less fan-in bodies with 400),
@@ -27,6 +28,22 @@ interface DownloadRequest {
     /// true = write the file only; false/omitted = let the server's
     /// translation adjudication decide whether to queue a translation.
     skipTranslation?: boolean
+}
+
+/// Keyset filters of the history screen (screen 13). Every field is
+/// optional; undefined entries are omitted from the query string so the
+/// first page is a bare GET.
+export interface SubtitleHistoryQuery {
+    /// Opaque cursor of the previous page's last row; omit on page 1.
+    cursor?: string
+    /// Page size, server clamps to 1..100 (default 50).
+    limit?: number
+    /// "movie" | "episode" (case-insensitive on the server).
+    mediaType?: string
+    /// Exact source-key filter.
+    provider?: string
+    /// SubtitleDownloadResult enum name.
+    result?: string
 }
 
 class SubtitleSearchService {
@@ -58,10 +75,23 @@ class SubtitleSearchService {
         return response.data
     }
 
+    /// One keyset page of the subtitle download history, newest first.
+    /// The next page is requested by passing back the previous response's
+    /// nextCursor; a null cursor means the end.
+    async history<T = ISubtitleHistoryResponse>(
+        query: SubtitleHistoryQuery = {},
+        signal?: AbortSignal
+    ): Promise<T> {
+        const response = await axios.get<T>('/api/subtitle-search/history', { params: query, signal })
+        return response.data
+    }
+
     /// All registered subtitle sources in registration order, with their
     /// setting field manifests (secret fields carry the API keys/tokens the
-    /// settings card edits through the encrypted setting channel).
-    async getProviders<T = ISubtitleProviderManifest[]>(): Promise<T> {
+    /// settings card edits through the encrypted setting channel) and the
+    /// per-source cooldown health (design ⑧: cooldownUntil non-null while
+    /// the source sits out rounds).
+    async getProviders<T = ISubtitleProviderHealthState[]>(): Promise<T> {
         const response = await axios.get<T>('/api/subtitle-search/providers')
         return response.data
     }

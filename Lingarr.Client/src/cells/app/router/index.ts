@@ -46,6 +46,14 @@ export const routes: RouteRecordRaw[] = [
                 name: 'library'
             },
             {
+                // Screen 13: subtitle download history (keyset-paginated
+                // subtitle_downloads view). Lives with the library group in
+                // the nav; reached from the dashboard backlog KPI too.
+                path: '/subtitle-history',
+                component: () => import('@/cells/library/pages/SubtitleSearchHistoryPage.vue'),
+                name: 'subtitle-history'
+            },
+            {
                 path: '/queue',
                 component: () => import('@/cells/queue/pages/QueuePage.vue'),
                 name: 'queue'

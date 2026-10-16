@@ -47,7 +47,8 @@
             :key="row.provider"
             class="border-line border-b px-4 py-2.5 last:border-b-0"
             :data-test="`subtitle-source-row-${row.provider}`">
-            <!-- 紧凑头行:名称 + 配置徽章(仅含 secret 字段的源)+ API 描述 + 操作 -->
+            <!-- 紧凑头行:名称 + 配置徽章(仅含 secret 字段的源)+ 冷却警示 chip
+                 + API 描述 + 操作 -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
                 <b class="flex-none">{{ row.displayName }}</b>
                 <span
@@ -60,6 +61,15 @@
                             ? t('settings.subtitleSources.configured')
                             : t('settings.subtitleSources.notConfigured')
                     }}
+                </span>
+                <!-- 冷却健康态(设计⑧):非冷却源不渲染;到期时刻按库页绝对时间
+                     习惯显示,401/403 的「直到凭证变更」哨兵改以原因文案呈现 -->
+                <span
+                    v-if="row.cooldownUntil"
+                    class="mono border-warning/40 bg-warning/10 text-warning-content inline-flex flex-none items-center rounded border px-1 py-px text-[10px]"
+                    :title="cooldownTitle(row)"
+                    :data-test="`subtitle-source-cooldown-${row.provider}`">
+                    {{ cooldownLabel(row) }}
                 </span>
                 <span
                     v-if="row.description"
@@ -125,12 +135,13 @@ import axios from 'axios'
 import {
     IPluginManifest,
     IPluginSettingField,
-    ISubtitleProviderManifest,
+    ISubtitleProviderHealthState,
     PLUGIN_SETTING_TYPE
 } from '@/types'
 import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
+import { formatDateTime } from '@/cells/app/utils/date'
 import DynamicPluginForm from '@/cells/settings/components/DynamicPluginForm.vue'
 
 const { t } = useI18n()
@@ -138,7 +149,7 @@ const settingStore = useSettingStore()
 const toastStore = useToastStore()
 
 // ── 数据装载(数据驱动,不硬编码源名单)──────────────────────────
-const providers = ref<ISubtitleProviderManifest[]>([])
+const providers = ref<ISubtitleProviderHealthState[]>([])
 const loaded = ref(false)
 const loadFailed = ref(false)
 
@@ -157,6 +168,8 @@ interface ISubtitleSourceRow {
     credentialsConfigured: boolean
     secretFields: IPluginSettingField[]
     formManifest: IPluginManifest
+    cooldownUntil: string | null
+    cooldownReason: string | null
 }
 
 const rows = computed<ISubtitleSourceRow[]>(() =>
@@ -179,10 +192,46 @@ const rows = computed<ISubtitleSourceRow[]>(() =>
                 isBuiltIn: true,
                 hasRequestTemplate: false,
                 settings: secretFields
-            }
+            },
+            // 冷却健康态(设计⑧):`?? null` 让旧载荷(无此字段)按健康渲染
+            cooldownUntil: source.cooldownUntil ?? null,
+            cooldownReason: source.cooldownReason ?? null
         }
     })
 )
+
+// ── 冷却健康态(设计⑧)──────────────────────────────────────────
+/// 冷却原因枚举名 → 卡片文案的静态映射表(不做字符串拼键);映射外的原因
+/// 名(更新的服务端)原样回显,绝不吐键名或空白。
+const COOLDOWN_REASON_LABELS: Record<string, string> = {
+    RateLimited: 'settings.subtitleSources.cooldownReason.RateLimited',
+    Unauthorized: 'settings.subtitleSources.cooldownReason.Unauthorized',
+    ServerError: 'settings.subtitleSources.cooldownReason.ServerError',
+    Timeout: 'settings.subtitleSources.cooldownReason.Timeout',
+    NetworkError: 'settings.subtitleSources.cooldownReason.NetworkError'
+}
+
+function cooldownReasonLabel(reason: string): string {
+    const key = COOLDOWN_REASON_LABELS[reason]
+    return key ? t(key) : reason
+}
+
+/// chip 文案:「冷却中 · 到期时刻」。401/403 的冷却哨兵是「直到凭证变更」
+/// 的远期时间戳(9999 年),直接打印年份是装饰——改以原因语义文案呈现;
+/// 其余打绝对到期时刻(与库页/事件时间线的本地化格式一致)。
+function cooldownLabel(row: ISubtitleSourceRow): string {
+    if (row.cooldownReason === 'Unauthorized') {
+        return t('settings.subtitleSources.cooldownUntilCredentials')
+    }
+    return t('settings.subtitleSources.cooldownUntil', {
+        time: row.cooldownUntil ? formatDateTime(row.cooldownUntil) : ''
+    })
+}
+
+/// 原因经 title 提示补全(悬停可见失败分桶)。
+function cooldownTitle(row: ISubtitleSourceRow): string {
+    return row.cooldownReason ? cooldownReasonLabel(row.cooldownReason) : ''
+}
 
 async function fetchProviders(): Promise<void> {
     loadFailed.value = false
