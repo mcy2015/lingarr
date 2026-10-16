@@ -104,6 +104,84 @@ public class AutomatedTranslationJobTests
         }
     }
 
+    [Fact]
+    public async Task ProcessShows_ResolvesEpisodeOwnersThroughTheDictionary_AndAppliesTheShowThreshold()
+    {
+        // Audit P2-6: per-episode shows/seasons FirstOrDefault scans became
+        // dictionary lookups over AsNoTracking projections. Behavior contract
+        // pinned here: every episode's season→show chain resolves, the
+        // owning show's TranslationAgeThreshold wins over the default, and a
+        // show without one falls back to the default threshold.
+        var tempDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            // ShouldProcessMedia stats the episode's own Path with FileInfo —
+            // a directory path returns Exists=false and falls through to the
+            // DateAdded fallback (null here), so each episode needs a real
+            // aged file, not an aged parent directory.
+            var fileA = Path.Combine(tempDirectory.FullName, "A.S01E01.mkv");
+            var fileB = Path.Combine(tempDirectory.FullName, "B.S01E01.mkv");
+            File.WriteAllText(fileA, "video");
+            File.WriteAllText(fileB, "video");
+            File.SetLastWriteTimeUtc(fileA, DateTime.UtcNow - TimeSpan.FromHours(80));
+            File.SetLastWriteTimeUtc(fileB, DateTime.UtcNow - TimeSpan.FromHours(80));
+            var context = BuildContext();
+            await using var dbContext = context;
+
+            // Show A narrows its episodes past the 80h-old directory; show B
+            // has no override and inherits the 48h default.
+            var showA = new Show
+            {
+                SonarrId = 1, Title = "Threshold Show", Path = "/tv/A", DateAdded = null,
+                IncludeInTranslation = true, TranslationAgeThreshold = 1000
+            };
+            var seasonA = new Season { SeasonNumber = 1, Show = showA, IncludeInTranslation = true };
+            showA.Seasons.Add(seasonA);
+            var episodeA = new Episode
+            {
+                SonarrId = 10, EpisodeNumber = 1, Title = "A1", FileName = "A.S01E01",
+                Season = seasonA,
+                Path = fileA, DateAdded = null,
+                IncludeInTranslation = true, NeedsTranslation = true
+            };
+            seasonA.Episodes.Add(episodeA);
+
+            var showB = new Show
+            {
+                SonarrId = 2, Title = "Default Show", Path = "/tv/B", DateAdded = null,
+                IncludeInTranslation = true
+            };
+            var seasonB = new Season { SeasonNumber = 1, Show = showB, IncludeInTranslation = true };
+            showB.Seasons.Add(seasonB);
+            var episodeB = new Episode
+            {
+                SonarrId = 20, EpisodeNumber = 1, Title = "B1", FileName = "B.S01E01",
+                Season = seasonB,
+                Path = fileB, DateAdded = null,
+                IncludeInTranslation = true, NeedsTranslation = true
+            };
+            seasonB.Episodes.Add(episodeB);
+
+            dbContext.Shows.AddRange(showA, showB);
+            await dbContext.SaveChangesAsync();
+
+            var processor = new RecordingMediaSubtitleProcessor();
+            var job = CreateJob(dbContext, processor);
+            ConfigureJobForMovies(job); // default thresholds: 48h, limit 1
+
+            var processed = await InvokeProcessShowsAsync(job);
+
+            // Only B's episode passed its threshold (default 48h ≤ 80h); A's
+            // was skipped by the 1000h override found through the dictionary.
+            Assert.Equal(1, processed);
+            Assert.Equal(["B1"], processor.ProcessedTitles);
+        }
+        finally
+        {
+            tempDirectory.Delete(recursive: true);
+        }
+    }
+
     private static LingarrDbContext BuildContext()
     {
         var options = new DbContextOptionsBuilder<LingarrDbContext>()
@@ -179,6 +257,19 @@ public class AutomatedTranslationJobTests
         var resultTask = (Task<int>)method.Invoke(job, new object[] { 1 })!;
         var result = await resultTask.ConfigureAwait(false);
         return result > 0;
+    }
+
+    private static async Task<int> InvokeProcessShowsAsync(AutomatedTranslationJob job)
+    {
+        var method = typeof(AutomatedTranslationJob)
+            .GetMethod("ProcessShows", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (method == null)
+        {
+            throw new InvalidOperationException("ProcessShows method not found via reflection.");
+        }
+
+        var resultTask = (Task<int>)method.Invoke(job, new object[] { 1 })!;
+        return await resultTask.ConfigureAwait(false);
     }
 
     private static void SetPrivateField<T>(AutomatedTranslationJob job, string fieldName, T value)

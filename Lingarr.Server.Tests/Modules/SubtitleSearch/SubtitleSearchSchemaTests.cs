@@ -161,9 +161,12 @@ public class SubtitleSearchSchemaTests : IDisposable
         AssertColumns("subtitle_downloads",
             "id", "media_type", "media_id", "provider", "external_id", "language",
             "file_path", "match_score", "hash_match", "source", "search_session_id",
-            "result", "error", "removed_at", "replaced_by_download_id", "created_at");
+            // M0010 dropped the never-written replacement-chain columns.
+            "result", "error", "created_at");
+        // M0010 appended external_id (the locked (provider, external_id)
+        // blacklist key the pipeline write side fills).
         AssertColumns("subtitle_search_blacklist",
-            "id", "provider", "reason", "expires_at");
+            "id", "provider", "reason", "expires_at", "external_id");
         AssertColumns("subtitle_search_sessions",
             "id", "media_type", "media_id", "provider", "query_language",
             "result_count", "hit_target", "created_at");

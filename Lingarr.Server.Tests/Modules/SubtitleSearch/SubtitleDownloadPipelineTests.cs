@@ -81,6 +81,125 @@ public class SubtitleDownloadPipelineTests
                 "fake", "Movie.2019.WEBDL-1080p.srt", "srt", SrtPayload));
     }
 
+    /// <summary>Provider double whose download always throws the preset failure.</summary>
+    internal sealed class FailingProvider(SubtitleProviderException exception) : ISubtitleProvider
+    {
+        public string Provider => "fake";
+
+        public Task<SubtitleSearchResult> SearchAsync(
+            SubtitleSearchRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(SubtitleSearchResult.Empty);
+
+        public Task<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload> DownloadAsync(
+            SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
+            => Task.FromException<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload>(exception);
+    }
+
+    /// <summary>Provider double serving a zero-byte payload (empty content).</summary>
+    internal sealed class EmptyPayloadProvider : ISubtitleProvider
+    {
+        public string Provider => "fake";
+
+        public Task<SubtitleSearchResult> SearchAsync(
+            SubtitleSearchRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(SubtitleSearchResult.Empty);
+
+        public Task<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload> DownloadAsync(
+            SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
+            => Task.FromResult(new Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload(
+                "fake", "Movie.2019.WEBDL-1080p.srt", "srt", []));
+    }
+
+    // ── Blacklist write side (P2 data batch): content-invalid failures
+    // blacklist the (provider, external_id) pair for 90 days; transport
+    // failures never do.
+
+    [Fact]
+    public async Task Download_ContentInvalidFailure_WritesAndRefreshesBlacklistRow()
+    {
+        // An unparseable archive is a permanent property of the candidate —
+        // the same external id would serve the same bytes forever.
+        using var fixture = new SubtitleEndpointFixture(new FailingProvider(
+            SubtitleProviderException.ForInvalidResponse(
+                "fake", "the archive could not be read (corrupt central directory).")));
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Auto,
+            searchSessionId: null, CancellationToken.None);
+        Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
+
+        var row = await fixture.DbContext.SubtitleSearchBlacklists.SingleAsync();
+        Assert.Equal("fake", row.Provider);
+        Assert.Equal("ext-1", row.ExternalId);
+        Assert.Contains("unexpected response", row.Reason);
+        // Locked read/write contract: 90-day window from the failure.
+        Assert.InRange(row.ExpiresAt!.Value,
+            DateTimeOffset.UtcNow.AddDays(89), DateTimeOffset.UtcNow.AddDays(91));
+
+        // A repeat failure refreshes the same row instead of stacking rows.
+        var before = row.ExpiresAt!.Value;
+        await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Auto,
+            searchSessionId: null, CancellationToken.None);
+
+        var refreshed = await fixture.DbContext.SubtitleSearchBlacklists.SingleAsync();
+        Assert.True(refreshed.ExpiresAt!.Value >= before);
+        Assert.Equal(2, await fixture.DbContext.SubtitleDownloads.CountAsync());
+    }
+
+    [Fact]
+    public async Task Download_TimeoutFailure_DoesNotBlacklist()
+    {
+        using var fixture = new SubtitleEndpointFixture(new FailingProvider(
+            SubtitleProviderException.ForTimeout("fake")));
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Auto,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
+        Assert.Equal(0, await fixture.DbContext.SubtitleSearchBlacklists.CountAsync());
+        // The attempt still lands its history row.
+        Assert.Equal(1, await fixture.DbContext.SubtitleDownloads.CountAsync());
+    }
+
+    [Fact]
+    public async Task Download_RateLimitFailure_DoesNotBlacklist()
+    {
+        using var fixture = new SubtitleEndpointFixture(new FailingProvider(
+            SubtitleProviderException.ForHttpStatus("fake", System.Net.HttpStatusCode.TooManyRequests)));
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Auto,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
+        Assert.Equal(0, await fixture.DbContext.SubtitleSearchBlacklists.CountAsync());
+    }
+
+    [Fact]
+    public async Task Download_EmptyPayload_FailsAndBlacklistsInsteadOfWritingCoverage()
+    {
+        // A zero-byte entry used to parse into an empty SRT that was written
+        // to disk and counted as coverage; it is a content defect of the
+        // candidate and blacklists like any other unusable payload.
+        using var fixture = new SubtitleEndpointFixture(new EmptyPayloadProvider());
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
+        Assert.Null(outcome.FilePath);
+        Assert.Equal(
+            "the downloaded subtitle is empty.",
+            (await fixture.DbContext.SubtitleDownloads.SingleAsync()).Error);
+        var row = await fixture.DbContext.SubtitleSearchBlacklists.SingleAsync();
+        Assert.Equal(("fake", "ext-1"), (row.Provider, row.ExternalId));
+        Assert.InRange(row.ExpiresAt!.Value,
+            DateTimeOffset.UtcNow.AddDays(89), DateTimeOffset.UtcNow.AddDays(91));
+    }
+
     [Fact]
     public async Task Download_EnqueuesOneRequestPerTargetLanguage()
     {
