@@ -4,6 +4,9 @@ namespace Lingarr.Server.Models.Webhooks;
 
 public class RadarrWebhookPayload
 {
+    [JsonPropertyName("eventType")]
+    public string? EventType { get; set; }
+
     [JsonPropertyName("movie")]
     public RadarrWebhookMovie? Movie { get; set; }
 }

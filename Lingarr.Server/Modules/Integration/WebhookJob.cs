@@ -1,7 +1,9 @@
 using Hangfire;
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Models.Webhooks;
+using Lingarr.Server.Modules.Settings;
 using Microsoft.EntityFrameworkCore;
 using Lingarr.Server.Modules.Media;
 
@@ -13,6 +15,7 @@ public class WebhookJob
     private readonly IMediaService _mediaService;
     private readonly IMediaSubtitleProcessor _mediaSubtitleProcessor;
     private readonly Lingarr.Server.Modules.SubtitleSearch.Queue.SubtitleSearchQueueService _subtitleQueue;
+    private readonly ISettingService _settingService;
     private readonly ILogger<WebhookJob> _logger;
 
     public WebhookJob(
@@ -20,12 +23,14 @@ public class WebhookJob
         IMediaService mediaService,
         IMediaSubtitleProcessor mediaSubtitleProcessor,
         Lingarr.Server.Modules.SubtitleSearch.Queue.SubtitleSearchQueueService subtitleQueue,
+        ISettingService settingService,
         ILogger<WebhookJob> logger)
     {
         _dbContext = dbContext;
         _mediaService = mediaService;
         _mediaSubtitleProcessor = mediaSubtitleProcessor;
         _subtitleQueue = subtitleQueue;
+        _settingService = settingService;
         _logger = logger;
     }
 
@@ -49,7 +54,7 @@ public class WebhookJob
                     payload.Movie.Id);
                 return;
             }
-            
+
             var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == movieId);
             if (movie == null)
             {
@@ -61,12 +66,15 @@ public class WebhookJob
 
             // M7: a freshly imported movie goes to the front of the subtitle
             // search queue with a 48h boost (PRD card A priority semantics).
-            if (movie.NeedsTranslation && !movie.NoSubtitleNeeded)
+            // Two gates close the QA3 P2 holes: only the Download event means
+            // "a file just landed" (Grab/Rename/Test must not churn the
+            // queue), and the master switch (subtitle_search_enabled) is the
+            // rollback lever — with it off, a webhook never re-arms the
+            // queue. Legacy senders without an eventType keep the old
+            // behaviour (boost) so the field rollout breaks no one.
+            if (IsDownloadEvent(payload.EventType) && movie.NeedsTranslation && !movie.NoSubtitleNeeded)
             {
-                await _subtitleQueue.EnqueueBoostedAsync(MediaType.Movie, movie.Id);
-                _logger.LogInformation(
-                    "Movie {Title} enqueued for subtitle search with webhook boost.",
-                    movie.Title);
+                await BoostSubtitleSearchSafelyAsync(MediaType.Movie, movie.Id, movie.Title);
             }
         }
         catch (Exception ex)
@@ -117,6 +125,48 @@ public class WebhookJob
             _logger.LogError(ex, "Error processing Sonarr webhook for series {SeriesTitle} (Sonarr ID: {SonarrId})",
                 payload.Series.Title, payload.Series.Id);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Radarr's "a file just landed" event. A missing/blank eventType keeps
+    /// the boost (legacy senders and simple curl probes never sent one) —
+    /// only an explicit non-Download value (Grab, Rename, Test, …) holds the
+    /// queue back.
+    /// </summary>
+    private static bool IsDownloadEvent(string? eventType)
+        => string.IsNullOrWhiteSpace(eventType)
+           || eventType.Trim().Equals("Download", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The webhook boost, gated by the master switch and isolated from the
+    /// import handling (QA3 P2-3/P3-11): a settings hiccup or a queue-write
+    /// failure logs and lets the job succeed — media import already ran and
+    /// must not be retried (nor fail) because of the subtitle side-effect.
+    /// </summary>
+    private async Task BoostSubtitleSearchSafelyAsync(MediaType mediaType, int mediaId, string title)
+    {
+        try
+        {
+            var settings = await _settingService.GetSettings([SettingKeys.SubtitleSearch.Enabled]);
+            if (settings.GetValueOrDefault(SettingKeys.SubtitleSearch.Enabled) != "true")
+            {
+                _logger.LogInformation(
+                    "Subtitle search is disabled; skipping the webhook boost for {MediaType} {MediaId} ({Title}).",
+                    mediaType, mediaId, title);
+                return;
+            }
+
+            await _subtitleQueue.EnqueueBoostedAsync(mediaType, mediaId);
+            _logger.LogInformation(
+                "{MediaType} {Title} enqueued for subtitle search with webhook boost.",
+                mediaType, title);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Subtitle-search webhook boost failed for {MediaType} {MediaId} ({Title}); the import handling is unaffected.",
+                mediaType, mediaId, title);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -86,6 +87,30 @@ public class AssrtProviderTests
         await provider.SearchAsync(episode, CancellationToken.None);
 
         Assert.Contains("q=Show%20S01E02", handler.Requests[0].RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task Search_QueryOverride_UsesTheTagStrippedKeyword()
+    {
+        // R3b: the locked Query override replaces the title term; a trailing
+        // SxxEyy tag is stripped from it and the STRUCTURED season/episode
+        // is what lands in the keyword — "Show S01E01" as a query equals the
+        // default derived request on every provider.
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "search.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"));
+
+        var provider = Create(handler);
+        var episode = new SubtitleSearchRequest(
+            "Show", null, Season: 1, Episode: 2,
+            ReleaseName: null, VideoHash: null, Languages: ["zh"], ImdbId: null,
+            Query: "Show S01E01");
+        await provider.SearchAsync(episode, CancellationToken.None);
+
+        var searchUrl = handler.Requests[0].RequestUri!.AbsoluteUri;
+        Assert.Contains("q=Show%20S01E02", searchUrl); // structured tag, not the query's S01E01
+        Assert.DoesNotContain("S01E01", searchUrl);
     }
 
     [Fact]
@@ -186,5 +211,62 @@ public class AssrtProviderTests
         Assert.Equal("Movie.2019.WEBDL-1080p.chs.srt", download.FileName);
         Assert.Equal("srt", download.Format);
         Assert.Equal(payload, download.Content);
+    }
+
+    /// <summary>
+    /// A search page whose id list exceeds the fan-out cap (QA1 P1-1): the
+    /// detail round stops after 20 ids regardless of the page size — one
+    /// HTTP round per id is serial IO and popular titles blow the 10s
+    /// orchestrator budget otherwise.
+    /// </summary>
+    [Fact]
+    public async Task Search_CapsTheDetailFanOutAtTwentySubIds()
+    {
+        var ids = string.Join(", ", Enumerable.Range(0, 25)
+            .Select(i => $$"""{"id": {{671001 + i}}}"""));
+        var search = $$$"""{"status": 0, "sub": {"subs": [{{{ids}}}]}}""";
+        var handler = new StubHttpMessageHandler().EnqueueJson(search);
+        var detail = SubtitleFixtures.Read("assrt", "detail.json");
+        for (var i = 0; i < 20; i++)
+        {
+            handler.EnqueueJson(detail);
+        }
+
+        var provider = Create(handler);
+        var result = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+
+        // 1 search + exactly 20 detail rounds — the last one for the 20th id.
+        Assert.Equal(21, handler.Requests.Count);
+        Assert.Contains("id=671020", handler.Requests[^1].RequestUri!.AbsoluteUri);
+        // The detail fixture flattens to 2 file candidates per round.
+        Assert.Equal(40, result.Candidates.Count);
+    }
+
+    /// <summary>
+    /// Budget cancellation mid-fan-out (QA1 P1-1): the candidates the
+    /// completed detail rounds already produced survive — cancelling the
+    /// tail must not discard the accumulated head.
+    /// </summary>
+    [Fact]
+    public async Task Search_CancelledMidDetailKeepsTheAccumulatedCandidates()
+    {
+        var search = """{"status": 0, "sub": {"subs": [{"id": 671001}, {"id": 671002}, {"id": 671003}]}}""";
+        var cts = new CancellationTokenSource();
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(search)
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .Enqueue(request =>
+            {
+                cts.Cancel(); // the budget fires while round 2 is in flight
+                return null;  // hang until the cancellation unwinds it
+            });
+
+        var provider = Create(handler);
+        var result = await provider.SearchAsync(MovieRequest(), cts.Token);
+
+        // Round 1's two file candidates survive; round 2 cancelled; round 3
+        // never started.
+        Assert.Equal(2, result.Candidates.Count);
+        Assert.Equal(3, handler.Requests.Count); // search + detail1 + detail2
     }
 }

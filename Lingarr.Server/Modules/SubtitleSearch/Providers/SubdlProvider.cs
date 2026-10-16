@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Lingarr.Contracts.Settings;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
@@ -18,6 +19,9 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 public sealed class SubdlProvider : SubtitleProviderBase, ISubtitleProvider, ISubtitleProviderHealth
 {
     private const string ProductionBaseUrl = "https://api.subdl.com";
+
+    /// <summary>Per-source candidate budget of one search page (QA1 P2-5).</summary>
+    private const int MaxParsedResults = 50;
 
     /// <summary>Canonical codes → SubDL uppercase request/response codes; identity fallback (uppercased).</summary>
     private static readonly IReadOnlyDictionary<string, string> LanguageMap =
@@ -118,9 +122,17 @@ public sealed class SubdlProvider : SubtitleProviderBase, ISubtitleProvider, ISu
     }
 
     private static string BuildFilmName(SubtitleSearchRequest request)
-        => request.Season is int season && request.Episode is int episode
-            ? $"{request.Title} S{season:00}E{episode:00}"
-            : $"{request.Title}{(request.Year is int year ? $" {year}" : string.Empty)}";
+    {
+        // R3b: the locked Query override replaces the title term; a trailing
+        // SxxEyy/NxMM tag on it is stripped (the structured tag is appended
+        // from the request's own season/episode right below).
+        var keyword = string.IsNullOrWhiteSpace(request.Query)
+            ? request.Title
+            : SubtitleMatchScorer.SplitTrailingSeasonEpisode(request.Query.Trim()).Keyword;
+        return request.Season is int season && request.Episode is int episode
+            ? $"{keyword} S{season:00}E{episode:00}"
+            : $"{keyword}{(request.Year is int year ? $" {year}" : string.Empty)}";
+    }
 
     private static string MapLanguages(string[] languages)
         => string.Join(",", languages.Select(code =>
@@ -144,6 +156,11 @@ public sealed class SubdlProvider : SubtitleProviderBase, ISubtitleProvider, ISu
 
         foreach (var result in results.EnumerateArray())
         {
+            if (candidates.Count >= MaxParsedResults)
+            {
+                break; // QA1 P2-5: per-source candidate budget
+            }
+
             if (result.ValueKind != JsonValueKind.Object)
             {
                 continue;
@@ -158,11 +175,15 @@ public sealed class SubdlProvider : SubtitleProviderBase, ISubtitleProvider, ISu
                 continue;
             }
 
-            // The path is site-relative ("/subtitle/xxx.zip") — joined onto
-            // the (possibly overridden) base URL so the fake-source round
-            // downloads from the same origin it searched.
-            var separator = subtitlePath!.StartsWith('/') ? string.Empty : "/";
-            var downloadUrl = $"{baseUrl}{separator}{subtitlePath}";
+            // The path is site-relative ("/subtitle/xxx.zip") by contract —
+            // joined onto the (possibly overridden) base URL so the
+            // fake-source round downloads from the same origin it searched.
+            // An absolute echo must not be re-prefixed ("https://base/https://…",
+            // QA1 P3) — same guard shape as Podnapisi.
+            Uri.TryCreate(subtitlePath, UriKind.RelativeOrAbsolute, out var subtitleUri);
+            var downloadUrl = subtitleUri?.IsAbsoluteUri == true
+                ? subtitleUri.ToString()
+                : $"{baseUrl}{(subtitlePath!.StartsWith('/') ? string.Empty : "/")}{subtitlePath}";
             var fileName = Path.GetFileName(subtitlePath);
             var externalId = CandidateCache.Store(ProviderKey, new CandidateContext(downloadUrl, fileName));
 
@@ -193,6 +214,11 @@ public sealed class SubdlProvider : SubtitleProviderBase, ISubtitleProvider, ISu
 
         // The languages= parameter already constrained the server side; an
         // unrecognised echo falls back to the primary requested code.
+        // KNOWN IMPRECISION (QA1 P3, documented not changed): when the echo
+        // is an unmapped code the label may be wrong — the candidate is
+        // tagged with the primary requested language although the payload
+        // could be another of the requested set. The download pipeline's
+        // content-based detection is the corrective of last resort.
         return request.Languages.FirstOrDefault()?.ToLowerInvariant() ?? "en";
     }
 

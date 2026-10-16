@@ -111,6 +111,29 @@ public class SubtitlePinServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Unpin_WithExpiredBoost_ReturnsToNormal()
+    {
+        // Boundary rule unified with the dequeue downgrade: a boost counts
+        // as expired once webhook_boost_until is in the past (strictly
+        // `< now` there, `>= now` keeps it here — both files now read the
+        // boundary the same way). The exact-equality instant is not testable
+        // without clock injection; this pins the past-expiry half.
+        var now = DateTimeOffset.UtcNow;
+        var expired = new SubtitleSearchState
+        {
+            MediaType = MediaType.Movie, MediaId = 17, Pinned = true,
+            PriorityRank = SubtitlePriorityRank.Pinned,
+            WebhookBoostUntil = now.AddHours(-1), NextAttemptAt = now, UpdatedAt = now
+        };
+        _dbContext.SubtitleSearchStates.Add(expired);
+        await _dbContext.SaveChangesAsync();
+
+        var unPinned = await _service.SetPinnedAsync(MediaType.Movie, 17, pinned: false);
+
+        Assert.Equal(SubtitlePriorityRank.Normal, unPinned!.PriorityRank);
+    }
+
+    [Fact]
     public async Task Unpin_NeverQueuedRow_IsAnHonestNoOp()
     {
         var state = await _service.SetPinnedAsync(MediaType.Movie, 16, pinned: false);

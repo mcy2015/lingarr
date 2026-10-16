@@ -107,6 +107,61 @@ public class SubtitleMatchScorerTests
     }
 
     [Fact]
+    public void WrongEpisodeCandidate_WithYearIsCappedBelowTheAutoLine()
+    {
+        // QA1 P1-2: episode requests carry the SHOW year (resolved through
+        // Season→Show), so the same-show wrong episode used to reach
+        // 55 + 15 + 9 = 79 ≥ 75 and crossed the auto line.
+        var request = EpisodeRequest(year: 2019);
+
+        var wrongEpisode = _scorer.Score(request, Candidate("Show.S01E03.2019.WEBDL-1080p"));
+
+        // raw = 55 + 15 + 8 (3 of 4 tokens) = 78 → capped to 70
+        Assert.Equal(70, wrongEpisode.MatchScore);
+        Assert.False(_scorer.IsAutoEligible(wrongEpisode)); // below the default 75
+    }
+
+    [Fact]
+    public void EpisodeCandidate_WithoutAnyEpisodeTag_IsCappedToo()
+    {
+        // A season-pack-ish release with no SxxEyy tag at all is not
+        // provably the requested episode — capped the same way.
+        var request = EpisodeRequest(year: 2019);
+
+        var untagged = _scorer.Score(request, Candidate("Show.2019.WEBDL-1080p"));
+
+        // raw = 55 + 15 + 8 (3 of 4 tokens) = 78 → capped to 70
+        Assert.Equal(70, untagged.MatchScore);
+        Assert.False(_scorer.IsAutoEligible(untagged));
+    }
+
+    [Fact]
+    public void CorrectEpisodeCandidate_IsNeverCapped()
+    {
+        var request = EpisodeRequest(year: 2019);
+
+        var right = _scorer.Score(request, Candidate("Show.S01E02.2019.WEBDL-1080p"));
+
+        // title 55 + year 15 + episode 20 + tokens 10 = 100 — the cap only
+        // touches candidates whose tag disagrees (or is absent).
+        Assert.Equal(100, right.MatchScore);
+        Assert.True(_scorer.IsAutoEligible(right));
+    }
+
+    [Fact]
+    public void HashMatch_WrongEpisodeTag_StaysExemptFromTheCap()
+    {
+        // A file-hash match is the exact file — its (garbage) textual tags
+        // must not drag it under the auto line.
+        var request = EpisodeRequest(year: 2019);
+
+        var scored = _scorer.Score(request, Candidate("Show.S01E99.2019.WEBDL-1080p", hashMatch: true));
+
+        Assert.Equal(100, scored.MatchScore);
+        Assert.True(_scorer.IsAutoEligible(scored));
+    }
+
+    [Fact]
     public void NxMmForm_CountsAsSeasonEpisodeTag()
     {
         var request = EpisodeRequest(season: 2, episode: 5, releaseName: "Show.2x05");
@@ -184,5 +239,41 @@ public class SubtitleMatchScorerTests
         Assert.Equal(80, scored.MatchScore);
         Assert.Equal(0, candidate.MatchScore);
         Assert.NotSame(candidate, scored);
+    }
+
+    [Fact]
+    public void SplitTrailingSeasonEpisode_StripsTheTrailingTag()
+    {
+        // R3b: the request builder reuses this split so a pre-filled
+        // "Show Name S01E01" query equals the default derived request.
+        var (keyword, tag) = SubtitleMatchScorer.SplitTrailingSeasonEpisode("Show Name S01E01");
+        Assert.Equal("Show Name", keyword);
+        Assert.Equal((1, 1), tag);
+
+        (keyword, tag) = SubtitleMatchScorer.SplitTrailingSeasonEpisode("Show.Name.1x02");
+        Assert.Equal("Show.Name", keyword);
+        Assert.Equal((1, 2), tag);
+
+        // Only the TRAILING tag splits — inner tags stay part of the keyword.
+        (keyword, tag) = SubtitleMatchScorer.SplitTrailingSeasonEpisode("Show S01E01 S01E02");
+        Assert.Equal("Show S01E01", keyword);
+        Assert.Equal((1, 2), tag);
+    }
+
+    [Fact]
+    public void SplitTrailingSeasonEpisode_WithoutATrailingTag_IsAStructuralNoOp()
+    {
+        var (keyword, tag) = SubtitleMatchScorer.SplitTrailingSeasonEpisode("Movie 2019 WEBDL");
+        Assert.Equal("Movie 2019 WEBDL", keyword);
+        Assert.Null(tag);
+
+        // Tag-only keyword: nothing usable stays behind — returned as-is.
+        (keyword, tag) = SubtitleMatchScorer.SplitTrailingSeasonEpisode("S01E01");
+        Assert.Equal("S01E01", keyword);
+        Assert.Null(tag);
+
+        (keyword, tag) = SubtitleMatchScorer.SplitTrailingSeasonEpisode(null);
+        Assert.Equal(string.Empty, keyword);
+        Assert.Null(tag);
     }
 }

@@ -159,9 +159,17 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
         Assert.Equal(new[] { "ko" }, built!.Request.Languages);
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task Build_HashIsLazy_AgainstTheQueriedSourceSet()
     {
+        // Real-cause note (unskipped): LazyMediaHasher skips the compute
+        // delegate entirely when the media file does not exist — the fixture
+        // never wrote the video file, so every hash assertion below used to
+        // see null/0. The file must actually exist for laziness to be about
+        // the source set, not about a missing file.
+        var videoFile = Path.Combine(_root, "Film.2019.WEBDL-1080p.mkv");
+        await File.WriteAllTextAsync(videoFile, "lazy-hash-bytes");
+
         WithLanguages("zh");
         var videoHashes = 0;
         var shooterHashes = 0;
@@ -184,6 +192,66 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
         Assert.Null(osOnly.Request.ShooterFileHash);
         Assert.Equal(1, videoHashes);
         Assert.Equal(0, shooterHashes);
+    }
+
+    [Fact]
+    public async Task Build_QueryOverridesTheDerivedTitle_KeepingEpisodeContext()
+    {
+        WithLanguages("zh");
+        var hasher = new LazyMediaHasher();
+        var builder = Create(hasher);
+
+        // A manual-search keyword replaces the derived library title as the
+        // search keyword; year/season/episode context stays resolved from
+        // the library entity.
+        var movie = await builder.BuildAsync(
+            MediaType.Movie, MediaIdOf<Movie>(), ["subsource"], null,
+            query: "Alternate.Release.Name");
+        Assert.Equal("Alternate.Release.Name", movie!.Request.Title);
+        Assert.Equal(2019, movie.Request.Year);           // library year kept
+        Assert.Equal("tt1111111", movie.Request.ImdbId);  // library imdb kept
+
+        var episode = await builder.BuildAsync(
+            MediaType.Episode, MediaIdOf<Episode>(), ["subsource"], null,
+            query: "  Spaced.Out.Keyword  ");
+        Assert.Equal("Spaced.Out.Keyword", episode!.Request.Title); // trimmed
+        Assert.Equal(2015, episode.Request.Year);
+        Assert.Equal(2, episode.Request.Season);
+        Assert.Equal(5, episode.Request.Episode);
+        Assert.Equal("Series.S02E05.1080p.mkv", episode.Request.ReleaseName);
+
+        // Blank query is "no override" — the derived title survives.
+        var untouched = await builder.BuildAsync(
+            MediaType.Movie, MediaIdOf<Movie>(), ["subsource"], null, query: "   ");
+        Assert.Equal("Film", untouched!.Request.Title);
+    }
+
+    [Fact]
+    public async Task Build_QueryWithTrailingSeasonEpisodeTag_StripsItAndKeepsLibraryContext()
+    {
+        // R3b: the front end pre-fills "Show Name S01E01" as the query — the
+        // trailing tag is stripped from the keyword (so "Show S01E01" is
+        // semantically equal to the default derived request on every
+        // provider), the library's structured season/episode WIN over the
+        // tag's numbers, and a movie request never gains episode fields.
+        WithLanguages("zh");
+        var hasher = new LazyMediaHasher();
+        var builder = Create(hasher);
+
+        var episode = await builder.BuildAsync(
+            MediaType.Episode, MediaIdOf<Episode>(), ["subsource"], null,
+            query: "Series S01E01");
+        Assert.Equal("Series", episode!.Request.Title); // tag stripped off the keyword
+        Assert.Equal(2, episode.Request.Season);        // library S02 wins over the tag's S01
+        Assert.Equal(5, episode.Request.Episode);       // library E05 wins over the tag's E01
+        Assert.Equal(2015, episode.Request.Year);       // show context preserved
+
+        var movie = await builder.BuildAsync(
+            MediaType.Movie, MediaIdOf<Movie>(), ["subsource"], null,
+            query: "Alternate Title S02E03");
+        Assert.Equal("Alternate Title", movie!.Request.Title);
+        Assert.Null(movie.Request.Season);   // a movie query is never episode-ified
+        Assert.Null(movie.Request.Episode);
     }
 
     [Fact]

@@ -91,7 +91,11 @@ public sealed class SubtitlePinService
             else
             {
                 // Rank back by boost presence; attempt history is untouched.
-                state.PriorityRank = state.WebhookBoostUntil is { } until && until > now
+                // Boundary rule unified with the dequeue downgrade (QA3
+                // P3-12 follow-up): a boost counts as active while
+                // webhook_boost_until >= now — expired strictly when
+                // webhook_boost_until < now — so both reads agree.
+                state.PriorityRank = state.WebhookBoostUntil is { } until && until >= now
                     ? SubtitlePriorityRank.WebhookBoost
                     : SubtitlePriorityRank.Normal;
             }

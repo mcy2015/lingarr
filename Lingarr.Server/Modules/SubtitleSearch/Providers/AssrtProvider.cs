@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Lingarr.Contracts.Settings;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
@@ -18,6 +19,20 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISubtitleProviderHealth
 {
     private const string ProductionBaseUrl = "https://api.assrt.net/v1";
+
+    /// <summary>
+    /// Upper bound of sub ids taken from one search page (QA1 P2-5): the
+    /// per-source candidate budget — a hot title page must not translate
+    /// into an unbounded id list.
+    /// </summary>
+    private const int MaxParsedSubIds = 50;
+
+    /// <summary>
+    /// Detail-round fan-out cap (QA1 P1-1): one HTTP round per sub id is
+    /// serial IO; popular titles blew the 10s orchestrator budget long
+    /// before reaching the tail of the list.
+    /// </summary>
+    private const int MaxDetailFanOut = 20;
 
     private readonly ISettingsAccess _settings;
 
@@ -44,8 +59,8 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
         // Episode queries include the SxxEyy pattern — assrt's index matches
         // it in the subtitle title/native name.
         var keywords = request.Season is int season && request.Episode is int episode
-            ? $"{request.Title} S{season:00}E{episode:00}"
-            : $"{request.Title}{(request.Year is int year ? $" {year}" : string.Empty)}";
+            ? $"{KeywordOf(request)} S{season:00}E{episode:00}"
+            : $"{KeywordOf(request)}{(request.Year is int year ? $" {year}" : string.Empty)}";
 
         using var searchRequest = new HttpRequestMessage(
             HttpMethod.Get, $"{baseUrl}/sub/search?q={Uri.EscapeDataString(keywords)}&token={Uri.EscapeDataString(token)}");
@@ -59,19 +74,29 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
             return SubtitleSearchResult.Empty;
         }
 
-        // The file list needs one detail round per sub id; the search result
-        // set is naturally small and the detail call is the only way to the
-        // file URLs.
+        // The file list needs one detail round per sub id — the detail call
+        // is the only way to the file URLs — capped at MaxDetailFanOut so a
+        // hot title cannot blow the round budget on serial IO (QA1 P1-1).
         var candidates = new List<SubtitleCandidate>();
-        foreach (var subId in subIds)
+        foreach (var subId in subIds.Take(MaxDetailFanOut))
         {
-            using var detailRequest = new HttpRequestMessage(
-                HttpMethod.Get, $"{baseUrl}/sub/detail?id={subId}&token={Uri.EscapeDataString(token)}");
-            detailRequest.Headers.Add("Accept", "application/json");
+            try
+            {
+                using var detailRequest = new HttpRequestMessage(
+                    HttpMethod.Get, $"{baseUrl}/sub/detail?id={subId}&token={Uri.EscapeDataString(token)}");
+                detailRequest.Headers.Add("Accept", "application/json");
 
-            using var detailDocument = await SubtitleHttp.SendForJsonAsync(
-                Http, detailRequest, ProviderKey, cancellationToken);
-            candidates.AddRange(ParseDetail(detailDocument, subId, request));
+                using var detailDocument = await SubtitleHttp.SendForJsonAsync(
+                    Http, detailRequest, ProviderKey, cancellationToken);
+                candidates.AddRange(ParseDetail(detailDocument, subId, request));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Budget exhausted mid-fan-out (the orchestrator's 10s token
+                // fires): keep the candidates the earlier detail rounds
+                // already accumulated instead of discarding them (QA1 P1-1).
+                break;
+            }
         }
 
         return new SubtitleSearchResult(candidates);
@@ -117,6 +142,11 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
         {
             foreach (var entry in subs.EnumerateArray())
             {
+                if (subIds.Count >= MaxParsedSubIds)
+                {
+                    break; // QA1 P2-5: per-source candidate budget
+                }
+
                 var id = SubtitleHttp.GetInt64(entry, "id");
                 if (id is > 0)
                 {
@@ -218,6 +248,16 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
             throw SubtitleProviderException.ForInvalidResponse(ProviderKey, $"{endpoint} failed: {message}.");
         }
     }
+
+    /// <summary>
+    /// The keyword this source searches for: the locked <c>Query</c> override
+    /// (R3b — a trailing SxxEyy/NxMM tag is stripped from it, the structured
+    /// season/episode is appended above) or the library-derived title.
+    /// </summary>
+    private static string KeywordOf(SubtitleSearchRequest request)
+        => string.IsNullOrWhiteSpace(request.Query)
+            ? request.Title
+            : SubtitleMatchScorer.SplitTrailingSeasonEpisode(request.Query.Trim()).Keyword;
 
     /// <summary>Provider-side state a download needs for one assrt file entry.</summary>
     private sealed record CandidateContext(string FileUrl, string? FileName, long SubId);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Lingarr.Contracts.Settings;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
@@ -47,7 +48,14 @@ public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, 
         var baseUrl = await ResolveBaseUrlAsync(
             _settings, SubtitleSourceSettingKeys.Gestdown.BaseUrl, ProductionBaseUrl, cancellationToken);
 
-        var showId = await FindShowIdAsync(baseUrl, request.Title, cancellationToken);
+        // R3b: the series lookup keys on the show name — a Query override
+        // carries its trailing SxxEyy tag stripped (the exact-name match
+        // must not be degraded by an episode suffix; the structured
+        // season/episode go into the per-episode page path below).
+        var showKeyword = string.IsNullOrWhiteSpace(request.Query)
+            ? request.Title
+            : SubtitleMatchScorer.SplitTrailingSeasonEpisode(request.Query.Trim()).Keyword;
+        var showId = await FindShowIdAsync(baseUrl, showKeyword, cancellationToken);
         if (showId is null)
         {
             return SubtitleSearchResult.Empty;
@@ -56,18 +64,27 @@ public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, 
         var candidates = new List<SubtitleCandidate>();
         foreach (var language in request.Languages)
         {
-            var path = $"/subtitles/get/{showId}/{season}/{episode}/{MapRequestLanguage(language)}";
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, baseUrl + path);
-            httpRequest.Headers.Add("Accept", "application/json");
-
-            using var document = await SendForJsonToleratingEpisodeMissAsync(httpRequest, cancellationToken);
-            if (document is null)
+            try
             {
-                continue;
-            }
+                var path = $"/subtitles/get/{showId}/{season}/{episode}/{MapRequestLanguage(language)}";
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Get, baseUrl + path);
+                httpRequest.Headers.Add("Accept", "application/json");
 
-            using var _ = document;
-            candidates.AddRange(ParseCandidates(document, baseUrl, language));
+                using var document = await SendForJsonToleratingEpisodeMissAsync(httpRequest, cancellationToken);
+                if (document is null)
+                {
+                    continue;
+                }
+
+                using var _ = document;
+                candidates.AddRange(ParseCandidates(document, baseUrl, language));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Budget exhausted mid-loop: earlier languages' candidates
+                // stay — a cancelled tail must not discard them (QA1 P3).
+                break;
+            }
         }
 
         return new SubtitleSearchResult(candidates);

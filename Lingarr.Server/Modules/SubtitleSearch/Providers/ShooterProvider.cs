@@ -63,18 +63,27 @@ public sealed class ShooterProvider : SubtitleProviderBase, ISubtitleProvider, I
         var candidates = new List<SubtitleCandidate>();
         foreach (var language in request.Languages)
         {
-            var mapped = LanguageMap.TryGetValue(language, out var code) ? code : null;
-            var query = $"api/subtitle.php?filehash={Uri.EscapeDataString(request.ShooterFileHash!)}"
-                + $"&path={Uri.EscapeDataString(request.ReleaseName ?? request.Title)}"
-                + "&format=json"
-                + (mapped is null ? string.Empty : $"&lang={mapped}");
+            try
+            {
+                var mapped = LanguageMap.TryGetValue(language, out var code) ? code : null;
+                var query = $"api/subtitle.php?filehash={Uri.EscapeDataString(request.ShooterFileHash!)}"
+                    + $"&path={Uri.EscapeDataString(request.ReleaseName ?? request.Title)}"
+                    + "&format=json"
+                    + (mapped is null ? string.Empty : $"&lang={mapped}");
 
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/{query}");
-            httpRequest.Headers.Add("Accept", "application/json");
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/{query}");
+                httpRequest.Headers.Add("Accept", "application/json");
 
-            using var document = await SubtitleHttp.SendForJsonAsync(
-                Http, httpRequest, ProviderKey, cancellationToken);
-            candidates.AddRange(ParseCandidates(document, language));
+                using var document = await SubtitleHttp.SendForJsonAsync(
+                    Http, httpRequest, ProviderKey, cancellationToken);
+                candidates.AddRange(ParseCandidates(document, language));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Budget exhausted mid-loop: earlier languages' candidates
+                // stay — a cancelled tail must not discard them (QA1 P3).
+                break;
+            }
         }
 
         return new SubtitleSearchResult(candidates);

@@ -189,7 +189,7 @@ public class SubtitleSearchQueueServiceTests : IDisposable
         Assert.Equal(8, row.AttemptCount);
     }
 
-    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
+    [Fact]
     public async Task EnqueueGapMedia_InsertsOnlyUnqueuedGapItems_AndIsIdempotent()
     {
         _dbContext.Movies.Add(new Movie
@@ -222,6 +222,17 @@ public class SubtitleSearchQueueServiceTests : IDisposable
             NeedsTranslation = true,
             NoSubtitleNeeded = true
         });
+        // QA3 P3-9: no file location (path NULL / empty) → never queued.
+        _dbContext.Movies.Add(new Movie
+        {
+            RadarrId = 5,
+            Title = "Pathless Movie",
+            Path = null,
+            FileName = "pathless.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            NeedsTranslation = true,
+            NoSubtitleNeeded = false
+        });
         var queued = new Movie
         {
             RadarrId = 4,
@@ -235,6 +246,13 @@ public class SubtitleSearchQueueServiceTests : IDisposable
         _dbContext.Movies.Add(queued);
         await _dbContext.SaveChangesAsync();
         _dbContext.SubtitleSearchStates.Add(Row(MediaType.Movie, queued.Id));
+        var show = new Show
+        {
+            SonarrId = 1,
+            Title = "Gap Show",
+            Path = "/media/show",
+            DateAdded = DateTimeOffset.UtcNow
+        };
         _dbContext.Episodes.Add(new Episode
         {
             SonarrId = 1,
@@ -248,13 +266,27 @@ public class SubtitleSearchQueueServiceTests : IDisposable
             {
                 SeasonNumber = 1,
                 ShowId = 1,
-                Show = new Show
-                {
-                    SonarrId = 1,
-                    Title = "Gap Show",
-                    Path = "/media/show",
-                    DateAdded = DateTimeOffset.UtcNow
-                }
+                Show = show
+            },
+            NeedsTranslation = true,
+            NoSubtitleNeeded = false
+        });
+        // Episode-side path guard: an empty path is "no location" too
+        // (Episode.Path defaults to the empty string).
+        _dbContext.Episodes.Add(new Episode
+        {
+            SonarrId = 2,
+            EpisodeNumber = 2,
+            Title = "Pathless Episode",
+            Path = "",
+            FileName = "e02.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            SeasonId = 1,
+            Season = new Season
+            {
+                SeasonNumber = 1,
+                ShowId = 1,
+                Show = show
             },
             NeedsTranslation = true,
             NoSubtitleNeeded = false
@@ -266,10 +298,237 @@ public class SubtitleSearchQueueServiceTests : IDisposable
 
         Assert.Equal(2, first);  // the gap movie + the gap episode
         Assert.Equal(0, second); // idempotent: nothing new the second time
-        Assert.Equal(2, await _dbContext.SubtitleSearchStates.CountAsync());
-        var inserted = await _service.FindByMediaAsync(MediaType.Movie, 1, CancellationToken.None);
+        // The pre-existing queued row + the two inserted gap rows.
+        Assert.Equal(3, await _dbContext.SubtitleSearchStates.CountAsync());
+        // The already-queued movie keeps its row (looked up by its real id —
+        // the old test's hardcoded MediaId=1 pointed at whatever got id 1).
+        var inserted = await _service.FindByMediaAsync(MediaType.Movie, queued.Id, CancellationToken.None);
         Assert.NotNull(inserted);
         Assert.Equal(SubtitlePriorityRank.Normal, inserted.PriorityRank);
+    }
+
+    [Fact]
+    public async Task EnqueueGapMedia_RevivesSucceededRowsStillNeedingTranslation()
+    {
+        // QA3 P1-1: the en subtitle downloaded (row → Succeeded) but the
+        // target language never landed — the media still needs translation,
+        // so the next gap round must put the row back into the queue.
+        var movie = new Movie
+        {
+            RadarrId = 11,
+            Title = "Half Covered",
+            Path = "/media/half",
+            FileName = "half.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            NeedsTranslation = true,
+            NoSubtitleNeeded = false
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        var state = Row(
+            MediaType.Movie, movie.Id,
+            status: SubtitleSearchStatus.Succeeded,
+            attemptCount: 4,
+            nextAttemptAt: DateTimeOffset.UtcNow.AddDays(-3));
+        state.LastError = "old";
+        state.LastSearchedAt = DateTimeOffset.UtcNow.AddDays(-3);
+        _dbContext.SubtitleSearchStates.Add(state);
+        await _dbContext.SaveChangesAsync();
+
+        var first = await _service.EnqueueGapMediaAsync();
+        var second = await _service.EnqueueGapMediaAsync();
+
+        Assert.Equal(1, first);  // one revived row, nothing inserted
+        Assert.Equal(0, second); // now Pending — no longer Succeeded, no repeat
+        var row = await _service.FindByMediaAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+        Assert.Equal(SubtitleSearchStatus.Pending, row!.Status);
+        Assert.Equal(0, row.AttemptCount); // fresh attempt history
+        Assert.Null(row.LastError);
+        Assert.True(row.NextAttemptAt <= DateTimeOffset.UtcNow.AddSeconds(5));
+    }
+
+    [Fact]
+    public async Task EnqueueGapMedia_ReviveKeepsPinnedRowsPinned()
+    {
+        var movie = new Movie
+        {
+            RadarrId = 12,
+            Title = "Pinned Half Covered",
+            Path = "/media/pinned",
+            FileName = "pinned.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            NeedsTranslation = true,
+            NoSubtitleNeeded = false
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.SubtitleSearchStates.Add(Row(
+            MediaType.Movie, movie.Id,
+            rank: SubtitlePriorityRank.Pinned,
+            status: SubtitleSearchStatus.Succeeded,
+            pinned: true));
+        await _dbContext.SaveChangesAsync();
+
+        await _service.EnqueueGapMediaAsync();
+
+        var row = await _service.FindByMediaAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+        Assert.Equal(SubtitleSearchStatus.Pending, row!.Status);
+        Assert.True(row.Pinned); // the pin survives the revive
+        Assert.Equal(SubtitlePriorityRank.Pinned, row.PriorityRank);
+    }
+
+    [Fact]
+    public async Task EnqueueGapMedia_ActiveTranslationRequest_BlocksTheRevive()
+    {
+        // A translation still expected to land (Pending/InProgress/Paused/
+        // Interrupted) must not be re-searched under it — that loops the
+        // queue into an in-flight translation.
+        var movie = new Movie
+        {
+            RadarrId = 13,
+            Title = "Translating",
+            Path = "/media/translating",
+            FileName = "translating.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            NeedsTranslation = true,
+            NoSubtitleNeeded = false
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        var state = Row(MediaType.Movie, movie.Id, status: SubtitleSearchStatus.Succeeded);
+        _dbContext.SubtitleSearchStates.Add(state);
+        var episode = new Episode
+        {
+            SonarrId = 3,
+            EpisodeNumber = 4,
+            Title = "Translating Episode",
+            Path = "/media/show/s01",
+            FileName = "e04.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            SeasonId = 1,
+            Season = new Season
+            {
+                SeasonNumber = 1,
+                ShowId = 1,
+                Show = new Show
+                {
+                    SonarrId = 2,
+                    Title = "Translating Show",
+                    Path = "/media/show2",
+                    DateAdded = DateTimeOffset.UtcNow
+                }
+            },
+            NeedsTranslation = true,
+            NoSubtitleNeeded = false
+        };
+        _dbContext.Episodes.Add(episode);
+        await _dbContext.SaveChangesAsync();
+        var episodeState = Row(MediaType.Episode, episode.Id, status: SubtitleSearchStatus.Succeeded);
+        _dbContext.SubtitleSearchStates.Add(episodeState);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.TranslationRequests.AddRange(
+            new TranslationRequest
+            {
+                MediaId = movie.Id,
+                MediaType = MediaType.Movie,
+                Title = movie.Title,
+                SourceLanguage = "en",
+                TargetLanguage = "zh",
+                Status = TranslationStatus.InProgress
+            },
+            new TranslationRequest
+            {
+                MediaId = episode.Id,
+                MediaType = MediaType.Episode,
+                Title = episode.Title,
+                SourceLanguage = "en",
+                TargetLanguage = "zh",
+                Status = TranslationStatus.Paused // paused counts as still expected
+            });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.EnqueueGapMediaAsync();
+
+        Assert.Equal(0, result); // nothing inserted, nothing revived
+        var movieRow = await _service.FindByMediaAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+        var episodeRow = await _service.FindByMediaAsync(MediaType.Episode, episode.Id, CancellationToken.None);
+        Assert.Equal(SubtitleSearchStatus.Succeeded, movieRow!.Status);
+        Assert.Equal(SubtitleSearchStatus.Succeeded, episodeRow!.Status);
+    }
+
+    [Fact]
+    public async Task EnqueueGapMedia_FinishedTranslationRequest_DoesNotBlockTheRevive()
+    {
+        // A FAILED translation is exactly the broken chain the revive exists
+        // for (en downloaded, translation died): re-searching must happen.
+        var movie = new Movie
+        {
+            RadarrId = 14,
+            Title = "Failed Translation",
+            Path = "/media/failed",
+            FileName = "failed.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            NeedsTranslation = true,
+            NoSubtitleNeeded = false
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.SubtitleSearchStates.Add(
+            Row(MediaType.Movie, movie.Id, status: SubtitleSearchStatus.Succeeded));
+        _dbContext.TranslationRequests.AddRange(
+            new TranslationRequest
+            {
+                MediaId = movie.Id,
+                MediaType = MediaType.Movie,
+                Title = movie.Title,
+                SourceLanguage = "en",
+                TargetLanguage = "zh",
+                Status = TranslationStatus.Completed
+            },
+            new TranslationRequest
+            {
+                MediaId = movie.Id,
+                MediaType = MediaType.Movie,
+                Title = movie.Title,
+                SourceLanguage = "en",
+                TargetLanguage = "zh",
+                Status = TranslationStatus.Failed
+            });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.EnqueueGapMediaAsync();
+
+        Assert.Equal(1, result);
+        var row = await _service.FindByMediaAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+        Assert.Equal(SubtitleSearchStatus.Pending, row!.Status);
+    }
+
+    [Fact]
+    public async Task EnqueueGapMedia_CoveredMediaIsNotRevived()
+    {
+        // needs_translation flipped back to 0 (statistics scan) — a
+        // Succeeded row stays terminal.
+        var movie = new Movie
+        {
+            RadarrId = 15,
+            Title = "Covered After All",
+            Path = "/media/covered2",
+            FileName = "covered2.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            NeedsTranslation = false,
+            NoSubtitleNeeded = false
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.SubtitleSearchStates.Add(
+            Row(MediaType.Movie, movie.Id, status: SubtitleSearchStatus.Succeeded));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.EnqueueGapMediaAsync();
+
+        Assert.Equal(0, result);
+        var row = await _service.FindByMediaAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+        Assert.Equal(SubtitleSearchStatus.Succeeded, row!.Status);
     }
 
     [Fact]
@@ -340,6 +599,74 @@ public class SubtitleSearchQueueServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task MarkSucceeded_ReleasesThePinAndTheRank()
+    {
+        // QA3 P3-10: a permanently pinned Succeeded row only inflated the
+        // backlog card's PinnedCount — success ends the pin.
+        var state = Row(
+            MediaType.Movie, 42,
+            rank: SubtitlePriorityRank.Pinned,
+            status: SubtitleSearchStatus.Pending,
+            pinned: true);
+        _dbContext.SubtitleSearchStates.Add(state);
+        await _dbContext.SaveChangesAsync();
+
+        await _service.MarkSucceededAsync(state.Id);
+
+        var row = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == state.Id);
+        Assert.Equal(SubtitleSearchStatus.Succeeded, row.Status);
+        Assert.False(row.Pinned);
+        Assert.Equal(SubtitlePriorityRank.Normal, row.PriorityRank);
+    }
+
+    [Fact]
+    public void BackoffFor_NeverOverflows_AndStaysCappedAtSevenDays()
+    {
+        // QA2 P3-2: the old `Ticks << shifts` wrapped negative for large
+        // shift counts and a negative span bypassed the cap. Any attempt
+        // count must answer a positive span no larger than 7d.
+        Assert.Equal(TimeSpan.FromHours(6), SubtitleSearchQueueService.BackoffFor(1));
+        Assert.Equal(TimeSpan.FromHours(96), SubtitleSearchQueueService.BackoffFor(5));
+        Assert.Equal(TimeSpan.FromDays(7), SubtitleSearchQueueService.BackoffFor(6));
+        for (var attempt = 7; attempt <= 1000; attempt++)
+        {
+            var backoff = SubtitleSearchQueueService.BackoffFor(attempt);
+            Assert.True(backoff > TimeSpan.Zero, $"attempt {attempt}: backoff must stay positive");
+            Assert.True(backoff <= SubtitleSearchQueueService.MaxBackoff,
+                $"attempt {attempt}: backoff {backoff} exceeded the 7d cap");
+        }
+    }
+
+    [Fact]
+    public async Task Dequeue_BreaksRankAndTimeTiesById()
+    {
+        // QA3 P3-12: equal (rank, next_attempt_at) needs a deterministic
+        // final order — insertion order is not guaranteed by the store.
+        var now = DateTimeOffset.UtcNow;
+        var due = now.AddHours(-1);
+        var first = new SubtitleSearchState
+        {
+            MediaType = MediaType.Movie, MediaId = 60, Status = SubtitleSearchStatus.Pending,
+            PriorityRank = SubtitlePriorityRank.Normal, NextAttemptAt = due, UpdatedAt = due
+        };
+        var second = new SubtitleSearchState
+        {
+            MediaType = MediaType.Movie, MediaId = 61, Status = SubtitleSearchStatus.Pending,
+            PriorityRank = SubtitlePriorityRank.Normal, NextAttemptAt = due, UpdatedAt = due
+        };
+        _dbContext.SubtitleSearchStates.AddRange(second, first); // tracked out of id order
+        await _dbContext.SaveChangesAsync();
+
+        var batch = await _service.DequeueBatchAsync(10, now);
+
+        // The contract: ties resolve by ascending row id, whatever the
+        // tracking order was.
+        var expectedIds = new[] { first.Id, second.Id }.OrderBy(id => id).ToArray();
+        Assert.Equal(2, batch.Count);
+        Assert.Equal(expectedIds, batch.Select(state => state.Id).ToArray());
+    }
+
+    [Fact]
     public async Task GetBacklogSnapshot_CountsTheFourRealFigures()
     {
         var now = DateTimeOffset.UtcNow;
@@ -385,12 +712,12 @@ public class SubtitleSearchQueueServiceTests : IDisposable
         }
 
         // The exact eligibility shape DequeueBatchAsync translates to
-        // (Pending or Failed, due, rank order, limited).
+        // (Pending or Failed, due, rank order, id tiebreak, limited).
         var plan = await ExplainQueryPlanAsync(
             """
             SELECT id FROM subtitle_search_state
             WHERE status IN (0, 2) AND next_attempt_at <= @now
-            ORDER BY priority_rank, next_attempt_at
+            ORDER BY priority_rank, next_attempt_at, id
             LIMIT 200
             """,
             new Dictionary<string, object> { ["@now"] = now.UtcDateTime });

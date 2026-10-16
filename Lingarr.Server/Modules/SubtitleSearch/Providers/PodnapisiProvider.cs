@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using Lingarr.Contracts.Settings;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
@@ -43,38 +44,52 @@ public sealed class PodnapisiProvider : SubtitleProviderBase, ISubtitleProvider,
         var candidates = new List<SubtitleCandidate>();
         foreach (var language in request.Languages)
         {
-            // One request per language — the XML interface keys its language
-            // filter on a single code. zh/zh-TW collapse: the interface does
-            // not distinguish Chinese scripts.
-            var queryLanguage = language.Equals("zh-TW", StringComparison.OrdinalIgnoreCase) ? "zh" : language.ToLowerInvariant();
-            var query = $"subtitles/search/?keywords={Uri.EscapeDataString(request.Title)}"
-                + $"&language={queryLanguage}";
-            if (request.Season is int season && request.Episode is int episode)
-            {
-                query += $"&season={season}&episode={episode}";
-            }
-            else if (request.Year is int year)
-            {
-                query += $"&year={year}";
-            }
-
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/{query}");
-            httpRequest.Headers.Add("Accept", "application/xml");
-
-            using var response = await SubtitleHttp.SendCheckedAsync(
-                Http, httpRequest, ProviderKey, cancellationToken);
-            var xml = await response.Content.ReadAsStringAsync(cancellationToken);
-            XDocument document;
             try
             {
-                document = XDocument.Parse(xml);
-            }
-            catch (System.Xml.XmlException ex)
-            {
-                throw SubtitleProviderException.ForInvalidResponse(ProviderKey, "malformed XML.", ex);
-            }
+                // One request per language — the XML interface keys its language
+                // filter on a single code. zh/zh-TW collapse: the interface does
+                // not distinguish Chinese scripts. R3b: the Query override
+                // replaces the title term with its trailing tag stripped (the
+                // structured season/episode travels as its own parameters).
+                var queryLanguage = language.Equals("zh-TW", StringComparison.OrdinalIgnoreCase) ? "zh" : language.ToLowerInvariant();
+                var keyword = string.IsNullOrWhiteSpace(request.Query)
+                    ? request.Title
+                    : SubtitleMatchScorer.SplitTrailingSeasonEpisode(request.Query.Trim()).Keyword;
+                var query = $"subtitles/search/?keywords={Uri.EscapeDataString(keyword)}"
+                    + $"&language={queryLanguage}";
+                if (request.Season is int season && request.Episode is int episode)
+                {
+                    query += $"&season={season}&episode={episode}";
+                }
+                else if (request.Year is int year)
+                {
+                    query += $"&year={year}";
+                }
 
-            candidates.AddRange(ParseCandidates(document, baseUrl, language));
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/{query}");
+                httpRequest.Headers.Add("Accept", "application/xml");
+
+                using var response = await SubtitleHttp.SendCheckedAsync(
+                    Http, httpRequest, ProviderKey, cancellationToken);
+                var xml = await response.Content.ReadAsStringAsync(cancellationToken);
+                XDocument document;
+                try
+                {
+                    document = XDocument.Parse(xml);
+                }
+                catch (System.Xml.XmlException ex)
+                {
+                    throw SubtitleProviderException.ForInvalidResponse(ProviderKey, "malformed XML.", ex);
+                }
+
+                candidates.AddRange(ParseCandidates(document, baseUrl, language));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Budget exhausted mid-loop: earlier languages' candidates
+                // stay — a cancelled tail must not discard them (QA1 P3).
+                break;
+            }
         }
 
         return new SubtitleSearchResult(candidates);

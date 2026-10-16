@@ -28,7 +28,7 @@ public sealed record SubtitleSearchBacklogSnapshot(
 /// a single indexed query:
 /// <code>
 /// WHERE status=0 AND next_attempt_at&lt;=@now
-/// ORDER BY priority_rank, next_attempt_at LIMIT @batchLimit
+/// ORDER BY priority_rank, next_attempt_at, id LIMIT @batchLimit
 /// </code>
 /// backed by <c>ix_subtitle_search_state_dequeue</c>. Enqueue dedup rides
 /// the UNIQUE(media_type, media_id) index with SQLite upserts that preserve
@@ -50,6 +50,22 @@ public sealed class SubtitleSearchQueueService
     /// <summary>Webhook boost window on enqueue (⑤: now + 48h).</summary>
     public static readonly TimeSpan WebhookBoostWindow = TimeSpan.FromHours(48);
 
+    /// <summary>
+    /// Translation statuses that mean "a translation of this media is still
+    /// expected to land" (QA3 P1-1): Pending/InProgress are actively running,
+    /// Paused/Interrupted may be resumed. Completed/Failed/Cancelled are
+    /// definitive outcomes — a Failed translation must NOT block the queue
+    /// revive, or the media stays target-language-less forever (the exact
+    /// bug the revive closes).
+    /// </summary>
+    private static readonly int[] ActiveTranslationStatuses =
+    [
+        (int)TranslationStatus.Pending,
+        (int)TranslationStatus.InProgress,
+        (int)TranslationStatus.Interrupted,
+        (int)TranslationStatus.Paused
+    ];
+
     private readonly LingarrDbContext _dbContext;
     private readonly ILogger<SubtitleSearchQueueService> _logger;
 
@@ -66,10 +82,25 @@ public sealed class SubtitleSearchQueueService
     /// scan marked <c>needs_translation=1 AND no_subtitle_needed=0</c> and
     /// that has no state row yet. Two set-based INSERT…SELECT statements
     /// (one per media type) — no per-media round trips, and the NOT EXISTS
-    /// guard makes it idempotent across rounds. Existing rows are never
-    /// touched, so attempt history and boosts survive.
+    /// guard makes it idempotent across rounds.
+    /// <para>
+    /// Media without a file location (<c>path</c> NULL or empty) never enter
+    /// the selection set (QA3 P3-9): there is nothing to search for or burn
+    /// a subtitle next to, so queuing them only burns retries.
+    /// </para>
+    /// <para>
+    /// QA3 P1-1 (the Succeeded break in the chain): a download used to end
+    /// in a terminal <c>Succeeded</c> row even when the target language was
+    /// never covered (en downloaded, translation failed or was never
+    /// enqueued) — the NOT EXISTS guard then skipped that media forever.
+    /// The revive pass below re-queues <c>Succeeded</c> rows whose media
+    /// STILL needs translation (attempt history cleared, next attempt now;
+    /// pin/boost state untouched) — unless a translation request for that
+    /// media is still expected to land (Pending/InProgress/Paused/Interrupted),
+    /// which would loop re-searches into an in-flight translation.
+    /// </para>
     /// </summary>
-    /// <returns>Number of rows inserted.</returns>
+    /// <returns>Number of rows inserted or revived.</returns>
     public async Task<int> EnqueueGapMediaAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
@@ -82,6 +113,7 @@ public sealed class SubtitleSearchQueueService
             SELECT 0, m.id, 0, 2, 0, NULL, @now, 0, NULL, NULL, @now
             FROM movies m
             WHERE m.needs_translation = 1 AND m.no_subtitle_needed = 0
+              AND m.path IS NOT NULL AND m.path <> ''
               AND NOT EXISTS (SELECT 1 FROM subtitle_search_state s
                               WHERE s.media_type = 0 AND s.media_id = m.id)
             """,
@@ -95,18 +127,55 @@ public sealed class SubtitleSearchQueueService
             SELECT 3, e.id, 0, 2, 0, NULL, @now, 0, NULL, NULL, @now
             FROM episodes e
             WHERE e.needs_translation = 1 AND e.no_subtitle_needed = 0
+              AND e.path IS NOT NULL AND e.path <> ''
               AND NOT EXISTS (SELECT 1 FROM subtitle_search_state s
                               WHERE s.media_type = 3 AND s.media_id = e.id)
             """,
             new object[] { NowParameter(now) },
             cancellationToken);
 
-        if (inserted > 0)
+        // Revive pass (QA3 P1-1): status 1 = Succeeded, 0 = Pending.
+        var revived = 0;
+        revived += await _dbContext.Database.ExecuteSqlRawAsync(
+            $"""
+            UPDATE subtitle_search_state
+            SET status = 0, attempt_count = 0, next_attempt_at = @now, last_error = NULL, updated_at = @now
+            WHERE media_type = 0 AND status = 1
+              AND EXISTS (SELECT 1 FROM movies m
+                          WHERE m.id = subtitle_search_state.media_id
+                            AND m.needs_translation = 1 AND m.no_subtitle_needed = 0
+                            AND m.path IS NOT NULL AND m.path <> '')
+              AND NOT EXISTS (SELECT 1 FROM translation_requests tr
+                              WHERE tr.media_type = 0 AND tr.media_id = subtitle_search_state.media_id
+                                AND tr.status IN ({string.Join(", ", ActiveTranslationStatuses)}))
+            """,
+            new object[] { NowParameter(now) },
+            cancellationToken);
+        revived += await _dbContext.Database.ExecuteSqlRawAsync(
+            $"""
+            UPDATE subtitle_search_state
+            SET status = 0, attempt_count = 0, next_attempt_at = @now, last_error = NULL, updated_at = @now
+            WHERE media_type = 3 AND status = 1
+              AND EXISTS (SELECT 1 FROM episodes e
+                          WHERE e.id = subtitle_search_state.media_id
+                            AND e.needs_translation = 1 AND e.no_subtitle_needed = 0
+                            AND e.path IS NOT NULL AND e.path <> '')
+              AND NOT EXISTS (SELECT 1 FROM translation_requests tr
+                              WHERE tr.media_type = 3 AND tr.media_id = subtitle_search_state.media_id
+                                AND tr.status IN ({string.Join(", ", ActiveTranslationStatuses)}))
+            """,
+            new object[] { NowParameter(now) },
+            cancellationToken);
+
+        var total = inserted + revived;
+        if (total > 0)
         {
-            _logger.LogInformation("Enqueued {Count} media items into the subtitle-search queue.", inserted);
+            _logger.LogInformation(
+                "Enqueued {Count} media items into the subtitle-search queue ({Inserted} new, {Revived} revived).",
+                total, inserted, revived);
         }
 
-        return inserted;
+        return total;
     }
 
     /// <summary>
@@ -132,27 +201,10 @@ public sealed class SubtitleSearchQueueService
                 updated_at = @now
             """,
             extraParameter: new SqliteParameter("@boost", DateTimeOffset.UtcNow.Add(WebhookBoostWindow).UtcDateTime),
+            insertRank: (int)SubtitlePriorityRank.WebhookBoost,
+            insertBoostUntil: DateTimeOffset.UtcNow.Add(WebhookBoostWindow),
             cancellationToken);
     }
-
-    /// <summary>
-    /// Plain enqueue (no boost): inserts a Normal pending row, or refreshes
-    /// an existing row's next attempt without touching its rank/history.
-    /// </summary>
-    public Task EnqueueAsync(
-        MediaType mediaType,
-        int mediaId,
-        CancellationToken cancellationToken = default)
-        => ExecuteUpsertAsync(
-            mediaType,
-            mediaId,
-            """
-            ON CONFLICT(media_type, media_id) DO UPDATE SET
-                next_attempt_at = @now,
-                updated_at = @now
-            """,
-            extraParameter: null,
-            cancellationToken);
 
     /// <summary>
     /// Dequeues one batch (single indexed SELECT, ⑤) and downgrades expired
@@ -184,6 +236,7 @@ public sealed class SubtitleSearchQueueService
                             && state.NextAttemptAt <= now)
             .OrderBy(state => state.PriorityRank)
             .ThenBy(state => state.NextAttemptAt)
+            .ThenBy(state => state.Id) // deterministic final tiebreak (QA3 P3-12)
             .Take(batchLimit)
             .ToListAsync(cancellationToken);
 
@@ -210,7 +263,10 @@ public sealed class SubtitleSearchQueueService
 
     /// <summary>
     /// Round finished with all target languages covered: status Succeeded,
-    /// attempt history cleared (a later re-enqueue starts fresh).
+    /// attempt history cleared (a later re-enqueue starts fresh). The pin
+    /// and the priority rank are released too (QA3 P3-10): a permanently
+    /// pinned Succeeded row only inflated the backlog card's PinnedCount.
+    /// An unexpired webhook boost keeps its rank — expiry alone demotes it.
     /// </summary>
     public Task MarkSucceededAsync(int stateId, CancellationToken cancellationToken = default)
         => _dbContext.SubtitleSearchStates
@@ -219,6 +275,10 @@ public sealed class SubtitleSearchQueueService
                 setters => setters
                     .SetProperty(state => state.Status, SubtitleSearchStatus.Succeeded)
                     .SetProperty(state => state.AttemptCount, 0)
+                    .SetProperty(state => state.Pinned, false)
+                    .SetProperty(state => state.PriorityRank, state => state.PriorityRank == SubtitlePriorityRank.Pinned
+                        ? SubtitlePriorityRank.Normal
+                        : state.PriorityRank)
                     .SetProperty(state => state.LastError, (string?)null)
                     .SetProperty(state => state.LastSearchedAt, DateTimeOffset.UtcNow)
                     .SetProperty(state => state.UpdatedAt, DateTimeOffset.UtcNow),
@@ -265,8 +325,18 @@ public sealed class SubtitleSearchQueueService
     /// <summary>Backoff span after the n-th consecutive failure: 6h, 12h, 24h… capped at 7d.</summary>
     public static TimeSpan BackoffFor(int attemptCount)
     {
-        var shifts = Math.Clamp(attemptCount - 1, 0, 24);
-        var span = TimeSpan.FromTicks(BaseBackoff.Ticks << shifts);
+        // Doubling by repeated addition, never by a bit shift: a
+        // `Ticks << shifts` overflows to a NEGATIVE TimeSpan once shifts
+        // grows past ~31, and a negative span sails straight past the 7d
+        // cap (QA2 P3-2 — unreachable today only because attempt ≥ 8 goes
+        // Skipped; raising MaxAttempts re-arms the landmine). The loop also
+        // stops as soon as the cap is reached, so the ticks stay bounded.
+        var span = BaseBackoff;
+        for (var i = 1; i < attemptCount && span < MaxBackoff; i++)
+        {
+            span += span;
+        }
+
         return span > MaxBackoff ? MaxBackoff : span;
     }
 
@@ -302,7 +372,7 @@ public sealed class SubtitleSearchQueueService
                 Pinned = group.Count(state => state.Pinned),
                 Boosted = group.Count(state => state.PriorityRank == SubtitlePriorityRank.WebhookBoost
                                                && state.WebhookBoostUntil != null
-                                               && state.WebhookBoostUntil > now),
+                                               && state.WebhookBoostUntil >= now),
                 Due = group.Count(state => (state.Status == SubtitleSearchStatus.Pending
                                             || state.Status == SubtitleSearchStatus.Failed)
                                            && state.NextAttemptAt <= now)
@@ -318,15 +388,24 @@ public sealed class SubtitleSearchQueueService
         MediaType mediaType,
         int mediaId,
         string conflictClause,
-        SqliteParameter? extraParameter,
-        CancellationToken cancellationToken)
+        SqliteParameter? extraParameter = null,
+        int insertRank = (int)SubtitlePriorityRank.Normal,
+        DateTimeOffset? insertBoostUntil = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
         var parameters = new List<object>
         {
             new SqliteParameter("@mediaType", (int)mediaType),
             new SqliteParameter("@mediaId", mediaId),
-            NowParameter(now)
+            NowParameter(now),
+            // The insert side must honor the caller's intent: the conflict
+            // clause only repairs EXISTING rows, so a hardcoded Normal/NULL
+            // insert meant a webhook's first enqueue (the common case — a
+            // freshly downloaded movie has no row yet) never carried the
+            // boost at all.
+            new SqliteParameter("@rank", insertRank),
+            new SqliteParameter("@boostUntil", (object?)insertBoostUntil?.UtcDateTime ?? DBNull.Value)
         };
         if (extraParameter is not null)
         {
@@ -338,7 +417,7 @@ public sealed class SubtitleSearchQueueService
             INSERT INTO subtitle_search_state
                 (media_type, media_id, status, priority_rank, pinned, webhook_boost_until,
                  next_attempt_at, attempt_count, last_error, last_searched_at, updated_at)
-            VALUES (@mediaType, @mediaId, 0, 2, 0, NULL, @now, 0, NULL, NULL, @now)
+            VALUES (@mediaType, @mediaId, 0, @rank, 0, @boostUntil, @now, 0, NULL, NULL, @now)
             """ + conflictClause,
             parameters,
             cancellationToken);

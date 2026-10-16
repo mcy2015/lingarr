@@ -3,6 +3,7 @@ using System.Text.Json;
 using Lingarr.Contracts.Settings;
 using Lingarr.Core;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
@@ -29,6 +30,13 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
     public const int DailyDownloadQuota = 40;
 
     private const string ProductionBaseUrl = "https://api.opensubtitles.com/api/v1";
+
+    /// <summary>
+    /// Explicit page size of the /subtitles search (QA1 P2-5): without it
+    /// the API decides the page size itself and a hot title can flood the
+    /// candidate list; 50 aligns with the per-source candidate budget.
+    /// </summary>
+    private const int SearchPageSize = 50;
 
     /// <summary>Search-response language (ISO 639-3) → canonical code; identity fallback.</summary>
     private static readonly IReadOnlyDictionary<string, string> ResponseLanguageMap =
@@ -85,6 +93,11 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
 
         // Hash query (exact file): the whole result set counts as hash match.
         // Otherwise IMDb id outranks the title; episodes add season/episode.
+        // Trust assumption (QA1 P2 note): a movie_hashes query is scoped
+        // server-side to that exact file hash, so marking every returned
+        // candidate HashMatch=true is safe by construction — the local hash
+        // came from the media file itself (LazyMediaHasher), no title/year
+        // inference involved.
         string query;
         var hashMatch = !string.IsNullOrEmpty(request.VideoHash);
         if (hashMatch)
@@ -100,13 +113,15 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
         }
         else
         {
-            query = $"subtitles?query={Uri.EscapeDataString(request.Title)}&languages={languages}";
+            query = $"subtitles?query={Uri.EscapeDataString(KeywordOf(request))}&languages={languages}";
         }
 
         if (request.Season is int season && request.Episode is int episode && !hashMatch)
         {
             query += $"&season={season}&episode={episode}";
         }
+
+        query += $"&per_page={SearchPageSize}";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/{query}");
         ApplyHeaders(httpRequest, apiKey);
@@ -214,7 +229,12 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
                 && uploaderElement.ValueKind == JsonValueKind.Object
                 ? SubtitleHttp.GetString(uploaderElement, "name")
                 : null;
-            var releaseInfo = SubtitleHttp.GetString(attributes, "release_notes");
+            // QA1 P2-3: `release` is the documented attribute, but some
+            // deployments/fixtures only populate `release_notes` — read both.
+            var releaseAttr = SubtitleHttp.GetString(attributes, "release");
+            var releaseInfo = string.IsNullOrWhiteSpace(releaseAttr)
+                ? SubtitleHttp.GetString(attributes, "release_notes")
+                : releaseAttr;
 
             if (!attributes.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Array)
             {
@@ -269,6 +289,16 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
         // Self-describing agent per the OpenSubtitles API terms.
         request.Headers.UserAgent.ParseAdd($"{LingarrVersion.Name}/{LingarrVersion.Number}");
     }
+
+    /// <summary>
+    /// The keyword this source searches for: the locked <c>Query</c> override
+    /// (R3b — a trailing SxxEyy/NxMM tag is stripped from it; the structured
+    /// season/episode travels as its own parameters) or the library title.
+    /// </summary>
+    private static string KeywordOf(SubtitleSearchRequest request)
+        => string.IsNullOrWhiteSpace(request.Query)
+            ? request.Title
+            : SubtitleMatchScorer.SplitTrailingSeasonEpisode(request.Query.Trim()).Keyword;
 
     private string MapLanguage(string? sourceLanguage)
     {

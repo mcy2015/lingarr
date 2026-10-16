@@ -48,6 +48,11 @@ public sealed class SubtitleSearchRequestBuilder
     /// (⑨ lazy hashing). <paramref name="languagesOverride"/> replaces the
     /// target∪source default (the manual search endpoint passes the user's
     /// picks); null falls back to the settings union.
+    /// <paramref name="query"/> is the caller's explicit search keyword
+    /// (manual-search "Query" box): when non-blank it replaces the derived
+    /// library title as the search keyword, while the year/season/episode
+    /// context (and release name, hashes, languages) stay resolved from the
+    /// library entity.
     /// </summary>
     /// <returns>Null when the media item does not exist.</returns>
     public async Task<BuiltSubtitleSearchRequest?> BuildAsync(
@@ -55,7 +60,8 @@ public sealed class SubtitleSearchRequestBuilder
         int mediaId,
         IReadOnlyCollection<string>? providersToQuery,
         IReadOnlyCollection<string>? languagesOverride = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? query = null)
     {
         string title;
         int? year;
@@ -138,6 +144,36 @@ public sealed class SubtitleSearchRequestBuilder
             ? _hasher.ShooterHash(mediaFilePath)
             : null;
 
+        // QA "RequestBuilder 接 query" + R3b refinement: an explicit keyword
+        // replaces the derived title as the search keyword (providers keyword
+        // off request.Title today, so the replacement is what they search).
+        // A trailing SxxEyy/NxMM tag ("Show Name S01E01" — the front end
+        // pre-fills that shape) is stripped first via the scorer's own tag
+        // grammar, so the keyword stays equivalent to the default derived
+        // request (Title="Show Name" + structured S01E01) on every provider —
+        // Gestdown's exact show-name lookup is not degraded by the suffix.
+        // The tag's numbers are a FALLBACK only: the library's structured
+        // season/episode win whenever they exist, and a movie request never
+        // gains episode fields from its keyword (that would turn a movie
+        // query into an episode one).
+        // The `Query:` argument mirrors the effective keyword on the
+        // contracted field of the orchestrator request object (string?
+        // Query) — added by the parallel execution-chain batch; this call is
+        // the agreed consumer.
+        string? effectiveQuery = null;
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var (keyword, tag) = Scoring.SubtitleMatchScorer.SplitTrailingSeasonEpisode(query.Trim());
+            title = keyword;
+            effectiveQuery = keyword;
+            if (mediaType == MediaType.Episode && tag is { } parsed
+                && season is null && episode is null)
+            {
+                season = parsed.Season;
+                episode = parsed.Episode;
+            }
+        }
+
         return new BuiltSubtitleSearchRequest(
             new SubtitleSearchRequest(
                 title,
@@ -148,7 +184,8 @@ public sealed class SubtitleSearchRequestBuilder
                 videoHash,
                 [.. languages],
                 imdbId,
-                shooterHash),
+                shooterHash,
+                Query: effectiveQuery),
             mediaFilePath);
     }
 
