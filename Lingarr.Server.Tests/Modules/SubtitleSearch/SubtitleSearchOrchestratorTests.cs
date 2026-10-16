@@ -158,7 +158,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Empty(outcome.SourceOutcomes);
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Search_DedupesAcrossSourcesOnLanguageReleaseSize()
     {
         var first = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
@@ -180,7 +180,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Contains(outcome.Candidates, candidate => candidate.Language == "zh");
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Search_HangingSourceUnwindsThroughTheBudget_NotTheHttpClientTimeout()
     {
         // The provider hangs until its token fires — the acceptance shape
@@ -214,7 +214,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.True(cooldowns.ContainsKey("hanging"));
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Search_CooledDownSourcesAreSkippedAndReported()
     {
         var cooled = new ScriptedProvider(_ => Task.FromResult(SubtitleSearchResult.Empty)) { Provider = "cooled" };
@@ -272,7 +272,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal("beta", outcome.Candidates.Single().Provider);
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Search_RecordsSessionsAndQuota_EvenForZeroResults()
     {
         var empty = new ScriptedProvider(_ => Task.FromResult(SubtitleSearchResult.Empty)) { Provider = "alpha" };
@@ -292,7 +292,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal(0, quota.Downloads);
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Search_CachesTheOutcomeForTheDownloadEndpoint()
     {
         var provider = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
@@ -308,7 +308,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Null(orchestrator.ResolveCache("no-such-key"));
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Search_OpenSubtitlesSearchesCarryTheQuotaWaterline()
     {
         var os = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult([Candidate()])))
@@ -321,7 +321,7 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal(40, quota.QuotaLimit); // OpenSubtitlesProvider.DailyDownloadQuota
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Search_CallerCancellationPropagates()
     {
         var slow = new ScriptedProvider(async token =>

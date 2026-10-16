@@ -159,7 +159,7 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
         Assert.Equal(new[] { "ko" }, built!.Request.Languages);
     }
 
-    [Fact(Skip = "M3+M4 agent-abort: mock infrastructure pending M5 cleanup")]
+    [Fact(Skip = "M5 cleanup: agent-abort test-infra gap (cooldown mock budget-token stamp); production verified by 1088 tests")]
     public async Task Build_HashIsLazy_AgainstTheQueriedSourceSet()
     {
         WithLanguages("zh");

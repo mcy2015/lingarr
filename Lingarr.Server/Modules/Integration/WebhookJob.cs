@@ -12,17 +12,20 @@ public class WebhookJob
     private readonly LingarrDbContext _dbContext;
     private readonly IMediaService _mediaService;
     private readonly IMediaSubtitleProcessor _mediaSubtitleProcessor;
+    private readonly Lingarr.Server.Modules.SubtitleSearch.Queue.SubtitleSearchQueueService _subtitleQueue;
     private readonly ILogger<WebhookJob> _logger;
 
     public WebhookJob(
         LingarrDbContext dbContext,
         IMediaService mediaService,
         IMediaSubtitleProcessor mediaSubtitleProcessor,
+        Lingarr.Server.Modules.SubtitleSearch.Queue.SubtitleSearchQueueService subtitleQueue,
         ILogger<WebhookJob> logger)
     {
         _dbContext = dbContext;
         _mediaService = mediaService;
         _mediaSubtitleProcessor = mediaSubtitleProcessor;
+        _subtitleQueue = subtitleQueue;
         _logger = logger;
     }
 
@@ -55,6 +58,16 @@ public class WebhookJob
             }
 
             await _mediaSubtitleProcessor.ProcessMedia(movie, MediaType.Movie);
+
+            // M7: a freshly imported movie goes to the front of the subtitle
+            // search queue with a 48h boost (PRD card A priority semantics).
+            if (movie.NeedsTranslation && !movie.NoSubtitleNeeded)
+            {
+                await _subtitleQueue.EnqueueBoostedAsync(MediaType.Movie, movie.Id);
+                _logger.LogInformation(
+                    "Movie {Title} enqueued for subtitle search with webhook boost.",
+                    movie.Title);
+            }
         }
         catch (Exception ex)
         {
