@@ -1,0 +1,8 @@
+{
+  "provider": "gestdown",
+  "endpoint": "GET {base}/shows/search and /subtitles/get/{show}/{season}/{episode}/{lang} (api.gestdown.info)",
+  "recorded": "2026-10-15",
+  "recording": "Hand-shaped from Gestdown's public HTTP API: show search returns a JSON array (uuid/name), the subtitles page returns episode + subtitles[] with Addic7ed-style version strings. Values are synthetic. Note the exact-name match is NOT first in the list — the provider must pick it over the first hit.",
+  "license": "Public API shape reference; no upstream code copied.",
+  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/gestdown/*)"
+}

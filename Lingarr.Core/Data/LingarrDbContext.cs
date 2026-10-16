@@ -24,6 +24,12 @@ public class LingarrDbContext : DbContext
     public DbSet<AuthSession> AuthSessions { get; set; }
     public DbSet<MediaSubtitleTrack> MediaSubtitleTracks { get; set; }
     public DbSet<SubtitleLanguageCache> SubtitleLanguageCaches { get; set; }
+    public DbSet<SubtitleSearchState> SubtitleSearchStates { get; set; }
+    public DbSet<SubtitleDownload> SubtitleDownloads { get; set; }
+    public DbSet<SubtitleSearchBlacklist> SubtitleSearchBlacklists { get; set; }
+    public DbSet<SubtitleSearchSession> SubtitleSearchSessions { get; set; }
+    public DbSet<ProviderQuotaUsage> ProviderQuotaUsages { get; set; }
+    public DbSet<CoverageDaily> CoverageDailies { get; set; }
 
     public LingarrDbContext(DbContextOptions options) : base(options)
     {
@@ -46,6 +52,40 @@ public class LingarrDbContext : DbContext
         modelBuilder.Entity<SubtitleLanguageCache>(builder =>
         {
             builder.ToTable("subtitle_language_cache");
+        });
+
+        // Subtitle-search tables (M2 batch of the M0008/M0009 migrations):
+        // table names are pinned the same way so EnsureCreated-built test
+        // schemas match the FluentMigrator schema exactly. The two counter
+        // tables were created with raw DDL (composite inline PKs, SQLite)
+        // and additionally declare their key order here — multiple [Key]
+        // attributes alone leave the ordering to reflection order, which is
+        // not a contract.
+        modelBuilder.Entity<SubtitleSearchState>(builder =>
+        {
+            builder.ToTable("subtitle_search_state");
+        });
+        modelBuilder.Entity<SubtitleDownload>(builder =>
+        {
+            builder.ToTable("subtitle_downloads");
+        });
+        modelBuilder.Entity<SubtitleSearchBlacklist>(builder =>
+        {
+            builder.ToTable("subtitle_search_blacklist");
+        });
+        modelBuilder.Entity<SubtitleSearchSession>(builder =>
+        {
+            builder.ToTable("subtitle_search_sessions");
+        });
+        modelBuilder.Entity<ProviderQuotaUsage>(builder =>
+        {
+            builder.ToTable("provider_quota_usage");
+            builder.HasKey(usage => new { usage.Date, usage.Provider });
+        });
+        modelBuilder.Entity<CoverageDaily>(builder =>
+        {
+            builder.ToTable("coverage_daily");
+            builder.HasKey(snapshot => new { snapshot.Date, snapshot.MediaType, snapshot.Language });
         });
 
         ConvertTimestampsToUtc(modelBuilder);

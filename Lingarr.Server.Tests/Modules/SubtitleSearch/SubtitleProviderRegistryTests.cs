@@ -3,21 +3,21 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Lingarr.Contracts.Interfaces.Plugins;
 using Lingarr.Contracts.Plugins;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 
 /// <summary>
-/// M1 registry wiring (tech design ①/②): the registry reads name and
+/// Registry wiring (tech design ①/②): the registry reads name and
 /// requiresAuth from <see cref="SubtitleProviderAttribute"/>, falls back to
 /// the Provider property when the attribute is missing, keeps the first
 /// registration on duplicate keys (PluginRegistry semantics), links
-/// IPluginManifest instances by provider key for the M2 settings forms and
+/// <see cref="ISubtitleSourceManifest"/> instances by provider key and
 /// resolves keys case-insensitively.
 /// </summary>
 public class SubtitleProviderRegistryTests
@@ -56,7 +56,7 @@ public class SubtitleProviderRegistryTests
             => throw new NotSupportedException("Test double; M2 fills real downloads.");
     }
 
-    private sealed class FakeManifest(string provider) : IPluginManifest
+    private sealed class FakeSourceManifest(string provider) : ISubtitleSourceManifest
     {
         public string Provider { get; } = provider;
         public string DisplayName { get; } = $"Fake {provider}";
@@ -66,7 +66,7 @@ public class SubtitleProviderRegistryTests
 
     private static SubtitleProviderRegistry CreateRegistry(
         ISubtitleProvider[] providers,
-        IPluginManifest[] manifests) => new(
+        ISubtitleSourceManifest[] manifests) => new(
         providers,
         manifests,
         NullLogger<SubtitleProviderRegistry>.Instance);
@@ -107,18 +107,16 @@ public class SubtitleProviderRegistryTests
     [Fact]
     public void Manifest_IsLinkedByProviderKey()
     {
-        var manifest = new FakeManifest("fakesubs");
-        var other = new FakeManifest("notasource");
+        var manifest = new FakeSourceManifest("fakesubs");
         var registry = CreateRegistry(
             [new AuthedFakeProvider(), new NoAuthFakeProvider()],
-            [manifest, other]);
+            [manifest]);
 
         var linked = registry.Find("fakesubs");
         Assert.NotNull(linked);
         Assert.Same(manifest, linked.Manifest);
 
-        // A manifest without a matching provider (today: the translation
-        // plugin manifests) is simply not linked, not an error.
+        // No manifest registered for this source: null, not an error.
         var unlinked = registry.Find("keyless");
         Assert.NotNull(unlinked);
         Assert.Null(unlinked.Manifest);
@@ -143,4 +141,88 @@ public class SubtitleProviderRegistryTests
         Assert.Equal(["fakesubs", "keyless", "attributeless"],
             registry.All.Select(entry => entry.Provider.Provider).ToArray());
     }
+
+    [Fact]
+    public void AllSevenProductionSources_DeclareAttributeNameMatchingProviderKey()
+    {
+        // The DI wiring (SubtitleSearchModule.AddSource) resolves the named
+        // HttpClient from the attribute name — attribute/provider mismatches
+        // would silently search under the wrong registry key.
+        var providerTypes = new[]
+        {
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.OpenSubtitlesProvider),
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.SubSourceProvider),
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.SubdlProvider),
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.GestdownProvider),
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.PodnapisiProvider),
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.AssrtProvider),
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.ShooterProvider)
+        };
+
+        // Attribute contract first — no instances needed. The names are the
+        // DI HttpClient names and the registry keys; a typo here would
+        // silently orphan a source.
+        var expectedNames = new[]
+        {
+            "opensubtitles", "subsource", "subdl", "gestdown", "podnapisi", "assrt", "shooter"
+        };
+        for (var i = 0; i < providerTypes.Length; i++)
+        {
+            var attribute = (SubtitleProviderAttribute?)Attribute.GetCustomAttribute(
+                providerTypes[i], typeof(SubtitleProviderAttribute));
+            Assert.NotNull(attribute);
+            Assert.Equal(expectedNames[i], attribute!.Name);
+        }
+
+        // Then the full registry: seven sources in the ⑩ default site order,
+        // each linked to its manifest.
+        var cache = new SubtitleCandidateCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(
+                new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            NullLogger<SubtitleCandidateCache>.Instance);
+        var settings = SubtitleSettingsDouble.Create().Object;
+        var httpClient = new System.Net.Http.HttpClient();
+        // Concrete ctor signature is (ISettingsAccess, SubtitleCandidateCache,
+        // HttpClient, ILogger<T>) — the cache parameter is the concrete type,
+        // so reflection-by-object[] cannot match it. Construct explicitly.
+        var providers = new ISubtitleProvider[]
+        {
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.OpenSubtitlesProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.OpenSubtitlesProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.SubSourceProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.SubSourceProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.SubdlProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.SubdlProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.GestdownProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.GestdownProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.PodnapisiProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.PodnapisiProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.AssrtProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.AssrtProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.ShooterProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.ShooterProvider>.Instance)
+        };
+        var manifests = new ISubtitleSourceManifest[]
+        {
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.OpenSubtitlesPluginManifest(),
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.SubSourcePluginManifest(),
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.SubdlPluginManifest(),
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.GestdownPluginManifest(),
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.PodnapisiPluginManifest(),
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.AssrtPluginManifest(),
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.ShooterPluginManifest()
+        };
+
+        var registry = CreateRegistry(providers.ToArray(), manifests);
+
+        Assert.Equal(
+            ["opensubtitles", "subsource", "subdl", "gestdown", "podnapisi", "assrt", "shooter"],
+            registry.All.Select(entry => entry.Provider.Provider).ToArray());
+        Assert.All(registry.All, entry => Assert.NotNull(entry.Manifest));
+        Assert.All(registry.All, entry => Assert.Equal(entry.Provider.Provider, entry.Manifest!.Provider));
+        // requiresAuth: OpenSubtitles and assrt declare credentials; the
+        // other five are keyless (⑩).
+        Assert.True(registry.Find("opensubtitles")!.RequiresAuth);
+        Assert.True(registry.Find("assrt")!.RequiresAuth);
+        Assert.False(registry.Find("subsource")!.RequiresAuth);
+        Assert.False(registry.Find("subdl")!.RequiresAuth);
+        Assert.False(registry.Find("gestdown")!.RequiresAuth);
+        Assert.False(registry.Find("podnapisi")!.RequiresAuth);
+        Assert.False(registry.Find("shooter")!.RequiresAuth);
+    }
+
+    /// <summary>NullLogger&lt;T&gt;.Instance for a provider type resolved at runtime.</summary>
 }

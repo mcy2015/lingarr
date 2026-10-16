@@ -1,0 +1,20 @@
+{
+  "status": true,
+  "error": null,
+  "results": [
+    {
+      "subtitle": "/subtitle/movie-2019-ZH.zip",
+      "release_name": "Movie.2019.WEBDL-1080p",
+      "language": "ZH",
+      "author": "fixture-author",
+      "forced": false
+    },
+    {
+      "subtitle": "/subtitle/movie-2019-EN.zip",
+      "release_name": "Movie.2019.WEBDL-1080p",
+      "language": "EN",
+      "author": "fixture-author",
+      "forced": false
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "provider": "opensubtitles",
+  "endpoint": "GET {base}/subtitles and POST {base}/download (api.opensubtitles.com/api/v1)",
+  "recorded": "2026-10-15",
+  "recording": "Hand-shaped from the official OpenSubtitles v1 REST response shape documented at https://opensubtitles.stoplight.io/docs/opensubtitles-api (data[].attributes with language/forced/hearing_impaired/release_notes/uploader/files[]). Values are synthetic; two entries cover the plain and forced+hearing-impaired variants.",
+  "license": "Factual API shape reference only; no upstream code copied (tech design 13).",
+  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/opensubtitles/api/v1/*)"
+}

@@ -1,0 +1,47 @@
+{
+  "total_pages": 1,
+  "data": [
+    {
+      "id": "297233-2195383",
+      "type": "subtitle",
+      "attributes": {
+        "subtitle_id": "297233",
+        "language": "eng",
+        "forced": false,
+        "hearing_impaired": false,
+        "hd": true,
+        "fps": 23.976,
+        "release_notes": "Movie.2019.WEBDL-1080p",
+        "uploader": { "name": "fixture-uploader", "rank": "gold" },
+        "files": [
+          {
+            "file_id": 100613334,
+            "cd_number": 1,
+            "file_name": "Movie.2019.WEBDL-1080p.srt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "297233-2195384",
+      "type": "subtitle",
+      "attributes": {
+        "subtitle_id": "297234",
+        "language": "zho",
+        "forced": true,
+        "hearing_impaired": true,
+        "hd": true,
+        "fps": 23.976,
+        "release_notes": null,
+        "uploader": { "name": "fixture-uploader-2", "rank": "" },
+        "files": [
+          {
+            "file_id": 100613335,
+            "cd_number": 1,
+            "file_name": "Movie.2019.WEBDL-1080p.zho.forced.srt"
+          }
+        ]
+      }
+    }
+  ]
+}

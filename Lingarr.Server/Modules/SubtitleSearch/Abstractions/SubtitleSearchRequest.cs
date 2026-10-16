@@ -13,6 +13,12 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 /// <param name="VideoHash">OpenSubtitles-algorithm file hash; a hit scores 100 (short-circuit).</param>
 /// <param name="Languages">Normalized target language codes.</param>
 /// <param name="ImdbId">IMDb id when known ("tt…").</param>
+/// <param name="ShooterFileHash">
+/// shooter.cn segmented-MD5 filehash (see <c>ShooterFileHasher</c>), computed
+/// lazily by the request builder exactly like the OpenSubtitles hash (⑨).
+/// Optional because only the shooter source consumes it; sources that cannot
+/// use it simply ignore it.
+/// </param>
 public sealed record SubtitleSearchRequest(
     string Title,
     int? Year,
@@ -21,4 +27,5 @@ public sealed record SubtitleSearchRequest(
     string? ReleaseName,
     string? VideoHash,
     string[] Languages,
-    string? ImdbId);
+    string? ImdbId,
+    string? ShooterFileHash = null);

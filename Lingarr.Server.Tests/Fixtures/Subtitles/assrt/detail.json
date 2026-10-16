@@ -1,0 +1,16 @@
+{
+  "status": 0,
+  "sub": {
+    "subs": [
+      {
+        "id": 671234,
+        "title": "Movie 2019",
+        "native_name": "电影2019",
+        "filelist": [
+          { "f": "Movie.2019.WEBDL-1080p.chs&eng.ass", "url": "https://api.assrt.net/sub/download/671234/fixture-1.ass" },
+          { "f": "Movie.2019.WEBDL-1080p.chs.srt", "url": "https://api.assrt.net/sub/download/671234/fixture-2.srt" }
+        ]
+      }
+    ]
+  }
+}

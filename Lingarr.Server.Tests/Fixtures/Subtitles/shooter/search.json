@@ -1,0 +1,17 @@
+[
+  {
+    "Desc": "Movie.2019.WEBDL-1080p.chs",
+    "Delay": 0,
+    "Files": [
+      { "Ext": "srt", "Link": "https://files.shooter.cn/fixture/file-1.srt" },
+      { "Ext": "ass", "Link": "https://files.shooter.cn/fixture/file-2.ass" }
+    ]
+  },
+  {
+    "Desc": "Movie.2019.WEBDL-1080p.chs&eng",
+    "Delay": 0,
+    "Files": [
+      { "Ext": "srt", "Link": "https://files.shooter.cn/fixture/file-3.srt" }
+    ]
+  }
+]

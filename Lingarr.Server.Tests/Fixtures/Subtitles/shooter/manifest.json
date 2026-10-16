@@ -1,0 +1,8 @@
+{
+  "provider": "shooter",
+  "endpoint": "POST {base}/api/subtitle.php?filehash=&path=&format=json&lang= (shooter.cn)",
+  "recorded": "2026-10-15",
+  "recording": "Hand-shaped from shooter.cn's public API response: JSON array of entries with Desc/Files[]{Ext,Link}. The filehash computation (segmented MD5) is covered by ShooterFileHasherTests with hand-computed vectors. Values are synthetic.",
+  "license": "Official public algorithm reference; no upstream code copied.",
+  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/shooter/*)"
+}

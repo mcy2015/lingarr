@@ -1,10 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Lingarr.Contracts.Interfaces.Plugins;
-using Lingarr.Contracts.Plugins;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
@@ -15,15 +12,17 @@ using Xunit;
 namespace Lingarr.Server.Tests.Controllers;
 
 /// <summary>
-/// M1 skeleton contracts of the subtitle-search controller: the provider
-/// test endpoint answers 501 with a structured body for known sources and
-/// 404 for unknown keys; the providers list endpoint answers 501 with the
-/// real registry contents. Everything else lands with the M2–M6 batches.
+/// Controller contracts of the subtitle-search surface: the M1 skeleton
+/// stays intact (unknown provider 404, non-probing sources 501, providers
+/// list with real registry contents) and the M2 test endpoint runs the
+/// health probe for sources that implement
+/// <see cref="ISubtitleProviderHealth"/> — provider failures land as
+/// ok=false with a message, never a 500 (translate-test precedent).
 /// </summary>
 public class SubtitleSearchControllerTests
 {
     [SubtitleProvider("fakesubs", requiresAuth: true)]
-    private sealed class FakeProvider : ISubtitleProvider
+    private class FakeProvider : ISubtitleProvider
     {
         public string Provider => "fakesubs";
 
@@ -34,29 +33,38 @@ public class SubtitleSearchControllerTests
             => throw new NotSupportedException("Test double; M2 fills real downloads.");
     }
 
-    private sealed class FakeManifest(string provider) : IPluginManifest
+    [SubtitleProvider("probing")]
+    private sealed class ProbingFakeProvider : FakeProvider, ISubtitleProviderHealth
     {
-        public string Provider { get; } = provider;
-        public string DisplayName { get; } = $"Fake {provider}";
-        public string? Description { get; } = null;
-        public IReadOnlyList<PluginSettingField> Settings { get; } = [];
+        public Task<SubtitleProviderTestOutcome> TestConnectionAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new SubtitleProviderTestOutcome(true, "probe ok"));
+    }
+
+    [SubtitleProvider("failing")]
+    private sealed class FailingProbeFakeProvider : FakeProvider, ISubtitleProviderHealth
+    {
+        public Task<SubtitleProviderTestOutcome> TestConnectionAsync(CancellationToken cancellationToken)
+            => throw SubtitleProviderException.ForMissingCredentials("failing", "API key");
     }
 
     private static SubtitleSearchController CreateController(params ISubtitleProvider[] providers) => new(
         new SubtitleProviderRegistry(
             providers,
-            Array.Empty<IPluginManifest>(),
-            NullLogger<SubtitleProviderRegistry>.Instance));
+            Array.Empty<ISubtitleSourceManifest>(),
+            NullLogger<SubtitleProviderRegistry>.Instance),
+        NullLogger<SubtitleSearchController>.Instance);
+
+    private static readonly JsonSerializerOptions CamelCase = new(JsonSerializerDefaults.Web);
 
     private static JsonDocument Body(ObjectResult result)
-        => JsonDocument.Parse(JsonSerializer.Serialize(result.Value));
+        => JsonDocument.Parse(JsonSerializer.Serialize(result.Value, CamelCase));
 
     [Fact]
-    public void TestProvider_UnknownProvider_Returns404WithProviderEcho()
+    public async Task TestProvider_UnknownProvider_Returns404WithProviderEcho()
     {
         var controller = CreateController(new FakeProvider());
 
-        var result = Assert.IsType<NotFoundObjectResult>(controller.TestProvider("nosuch"));
+        var result = Assert.IsType<NotFoundObjectResult>(await controller.TestProvider("nosuch", CancellationToken.None));
 
         Assert.Equal(404, result.StatusCode);
         using var body = Body(result);
@@ -65,14 +73,15 @@ public class SubtitleSearchControllerTests
     }
 
     [Fact]
-    public void TestProvider_RegisteredProvider_Returns501WithStructuredBody()
+    public async Task TestProvider_NonProbingSource_KeepsTheStructured501()
     {
-        // DI mounted, registry resolving, endpoint reachable — the M2 batch
-        // replaces the 501 with the real credentials/connectivity/quota
-        // probe.
+        // Sources without ISubtitleProviderHealth (test doubles, future
+        // compiled-in sources before they gain a probe) keep the M1
+        // contract: structured 501, not an exception.
         var controller = CreateController(new FakeProvider());
 
-        var result = Assert.IsType<ObjectResult>(controller.TestProvider("fakesubs"));
+        var result = Assert.IsType<ObjectResult>(
+            await controller.TestProvider("fakesubs", CancellationToken.None));
 
         Assert.Equal(501, result.StatusCode);
         using var body = Body(result);
@@ -81,13 +90,43 @@ public class SubtitleSearchControllerTests
     }
 
     [Fact]
-    public void TestProvider_LookupIsCaseInsensitive()
+    public async Task TestProvider_ProbingSource_ReturnsOkResultWithLatency()
     {
-        var controller = CreateController(new FakeProvider());
+        var controller = CreateController(new ProbingFakeProvider());
 
-        var result = Assert.IsType<ObjectResult>(controller.TestProvider("FakeSubs"));
+        var actionResult = await controller.TestProvider("probing", CancellationToken.None);
+        var result = Assert.IsType<OkObjectResult>(actionResult);
+        using var body = Body(result);
 
-        Assert.Equal(501, result.StatusCode);
+        Assert.True(body.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("probe ok", body.RootElement.GetProperty("message").GetString());
+        // Measured around the probe — a real number, never decorative.
+        Assert.True(body.RootElement.GetProperty("latencyMs").GetDouble() >= 0);
+    }
+
+    [Fact]
+    public async Task TestProvider_ProbeFailure_ReturnsOkFalseWithReasonMessage()
+    {
+        // Provider failures are verdicts, not 500s (translate-test
+        // precedent; PRD AC2 needs the readable bucket).
+        var controller = CreateController(new FailingProbeFakeProvider());
+
+        var actionResult = await controller.TestProvider("failing", CancellationToken.None);
+        var result = Assert.IsType<OkObjectResult>(actionResult);
+        using var body = Body(result);
+
+        Assert.False(body.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("API key", body.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task TestProvider_LookupIsCaseInsensitive()
+    {
+        var controller = CreateController(new ProbingFakeProvider());
+
+        var actionResult = await controller.TestProvider("Probing", CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(actionResult);
     }
 
     [Fact]
@@ -108,8 +147,7 @@ public class SubtitleSearchControllerTests
     [Fact]
     public void GetProviders_NoSourcesRegistered_Returns501WithEmptyList()
     {
-        // Honest empty state: no source registered yet (the M1 module
-        // registers none; M2 adds the seven v1 sources).
+        // Honest empty state: no source registered yet.
         var controller = CreateController();
 
         var result = Assert.IsType<ObjectResult>(controller.GetProviders());

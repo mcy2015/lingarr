@@ -1,0 +1,8 @@
+{
+  "provider": "assrt",
+  "endpoint": "GET {base}/sub/search?q= and /sub/detail?id= (api.assrt.net/v1, token)",
+  "recorded": "2026-10-15",
+  "recording": "Hand-shaped from assrt.net's public v1 API: status=0 success envelope, sub.subs[] entries, detail carrying filelist[] with f/url. Values are synthetic.",
+  "license": "Public API shape reference; no upstream code copied.",
+  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/assrt/v1/*)"
+}

@@ -1,0 +1,7 @@
+{
+  "episode": { "season": 1, "episode": 2, "title": "Episode Two" },
+  "subtitles": [
+    { "uuid": "sub-uuid-1", "version": "720p.WEB-DL", "language": "en" },
+    { "uuid": "sub-uuid-2", "version": "1080p.WEB-DL", "language": "en", "hearingImpaired": true }
+  ]
+}
