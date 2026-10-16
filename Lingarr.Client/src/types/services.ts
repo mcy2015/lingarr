@@ -526,3 +526,44 @@ export interface IGlossaryService {
     remove<T>(id: number): Promise<T>
     bulkImport(entries: IGlossaryBulkEntry[]): Promise<IGlossaryBulkResult>
 }
+
+// ── Subtitle search ────────────────────────────────────────────
+export interface ISubtitleCandidate {
+    provider: string
+    externalId: string
+    language: string
+    matchScore: number
+    forced: boolean
+    hearingImpaired: boolean
+    release: string
+    uploader: string | null
+    format: string
+    size: number | null
+    sizeLabel?: string | null
+    hashMatch: boolean
+}
+
+export interface ISubtitleSourceOutcome {
+    provider: string
+    reason: string
+    error: string | null
+}
+
+export interface ISubtitleSearchOutcome {
+    cacheKey: string
+    candidates: ISubtitleCandidate[]
+    sourceOutcomes: ISubtitleSourceOutcome[]
+}
+
+export interface ISubtitleDownloadResponse {
+    filePath: string | null
+    historyId: number
+    needsNoSubtitles: boolean
+}
+
+export interface ISubtitleBacklog {
+    backlog: number
+    nextRoundCount: number
+    pinnedCount: number
+    webhookBoostedCount: number
+}

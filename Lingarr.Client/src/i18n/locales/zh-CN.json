@@ -1053,7 +1053,8 @@
             "markedToast": "已标记需要字幕",
             "unmarkedToast": "已取消标记",
             "failedToast": "更新字幕需求失败：{message}"
-        }
+        },
+        "openSubtitleSearch": "🔍 搜索字幕"
     },
     "cmdk": {
         "ariaLabel": "全局搜索",
@@ -1098,5 +1099,22 @@
             "taken": "该用户名已被占用。",
             "generic": "更改失败,请重试。"
         }
+    },
+    "subSearch": {
+        "title": "搜索字幕 · {title} {episode}",
+        "queryLabel": "搜索关键词",
+        "searchAction": "搜索 ▸",
+        "searching": "正在搜索字幕源…",
+        "noResults": "未找到候选字幕，可调整关键词或语言后重试。",
+        "noTranslate": "免翻译",
+        "lowConfidence": "低于自动下载分数线(75) — 仍可手动下载",
+        "download": "下载",
+        "downloadOnly": "仅下载",
+        "downloadAndTranslate": "下载并翻译 ▸",
+        "downloaded": "已写回 {file}",
+        "downloadedAndQueued": "已写回 {file} · 已加入翻译队列",
+        "downloadFailed": "下载失败 — 文件已存在或源不可用",
+        "failed": "搜索失败 — 请检查字幕源配置",
+        "meta": "{count} 候选 · {sources} 源 · {seconds}s"
     }
 }

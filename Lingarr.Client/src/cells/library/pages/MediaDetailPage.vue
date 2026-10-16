@@ -20,6 +20,20 @@
                 @click="router.push({ name: 'import' })">
                 {{ t('library.toolbar.import') }}
             </button>
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                data-test="open-subtitle-search"
+                @click="showSearchModal = true">
+                {{ t('mediaDetail.openSubtitleSearch') }}
+            </button>
+            <button
+                v-if="false"
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                @click="router.push({ name: 'import' })">
+                {{ t('library.toolbar.import') }}
+            </button>
             <ContextMenu v-if="isShow" @select="translateMissing">
                 <button
                     type="button"
@@ -451,6 +465,15 @@
             </div>
         </div>
     </DrillDownPage>
+
+    <!-- 需求卡 A:搜索字幕弹层 -->
+    <SubtitleSearchModal
+        v-if="showSearchModal && item"
+        :media-type="isShow ? 'Show' : 'Movie'"
+        :media-id="item.id"
+        :title="item.title"
+        @close="showSearchModal = false"
+        @downloaded="load" />
 </template>
 
 <script setup lang="ts">
@@ -466,6 +489,7 @@ import { subtitleService } from '@/cells/library/services/subtitleService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
+import SubtitleSearchModal from '@/cells/library/components/SubtitleSearchModal.vue'
 import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
 import {
@@ -604,6 +628,7 @@ const subtitleNeedAction = computed<{ label: string; needed: boolean } | null>((
 })
 
 const subtitleNeedBusy = ref(false)
+const showSearchModal = ref(false)
 
 const configuredSourceCodes = computed<string[]>(() => {
     const languages = (settingStore.getSetting(SETTINGS.SOURCE_LANGUAGES) ?? []) as ILanguage[]

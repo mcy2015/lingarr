@@ -1053,7 +1053,8 @@
             "markedToast": "Marked as needing subtitles",
             "unmarkedToast": "Subtitle-need mark cancelled",
             "failedToast": "Updating the subtitle need failed: {message}"
-        }
+        },
+        "openSubtitleSearch": "Search Subtitles"
     },
     "cmdk": {
         "ariaLabel": "Global search",
@@ -1098,5 +1099,22 @@
             "taken": "This username is already taken.",
             "generic": "Failed to change the username, please retry."
         }
+    },
+    "subSearch": {
+        "title": "Search subtitles · {title} {episode}",
+        "queryLabel": "Search keywords",
+        "searchAction": "Search ▸",
+        "searching": "Searching sources…",
+        "noResults": "No candidates found. Try adjusting the keywords or languages.",
+        "noTranslate": "no translation",
+        "lowConfidence": "Below the auto-download line (75) — manual download still available",
+        "download": "Download",
+        "downloadOnly": "Download",
+        "downloadAndTranslate": "Download & Translate ▸",
+        "downloaded": "Saved {file}",
+        "downloadedAndQueued": "Saved {file} · queued for translation",
+        "downloadFailed": "Download failed — the file already exists or the source is unavailable",
+        "failed": "Search failed — check source configuration",
+        "meta": "{count} candidates · {sources} sources · {seconds}s"
     }
 }
