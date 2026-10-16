@@ -41,8 +41,12 @@ public class MovieSync : IMovieSync
             .Include(m => m.Images)
             .FirstOrDefaultAsync(m => m.RadarrId == movie.Id);
 
+        // Radarr can report hasFile=true without a movieFile resource; the
+        // path then folds to the empty-path convention, exactly like a
+        // movieFile whose Path itself is null (Quality/Size stay null the
+        // same way via their own null-propagating reads).
         var moviePath = _pathConversionService.ConvertAndMapPath(
-            movie.MovieFile.Path ?? string.Empty,
+            movie.MovieFile?.Path ?? string.Empty,
             MediaType.Movie
         );
 

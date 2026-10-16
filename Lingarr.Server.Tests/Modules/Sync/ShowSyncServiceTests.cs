@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
@@ -10,6 +12,7 @@ using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Sync;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -27,6 +30,7 @@ public class ShowSyncServiceTests : IDisposable
     private const string Added = "2026-01-01T00:00:00Z";
 
     private readonly SqliteConnection _connection;
+    private readonly DeleteFailureInterceptor _deleteInterceptor;
     private readonly LingarrDbContext _context;
     private readonly Mock<ISonarrService> _sonarrService;
     private readonly ShowSyncService _service;
@@ -35,8 +39,10 @@ public class ShowSyncServiceTests : IDisposable
     {
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
+        _deleteInterceptor = new DeleteFailureInterceptor();
         var options = new DbContextOptionsBuilder<LingarrDbContext>()
             .UseSqlite(_connection)
+            .AddInterceptors(_deleteInterceptor)
             .Options;
         _context = new LingarrDbContext(options);
         _context.Database.EnsureCreated();
@@ -260,5 +266,150 @@ public class ShowSyncServiceTests : IDisposable
 
         Assert.Equal(1, await _context.Shows.CountAsync());
         Assert.Equal(1, await _context.Episodes.CountAsync());
+    }
+
+    // ── QA P1/P2: delete-chain guardrails, atomicity, chunking ─────
+
+    /// <summary>
+    /// Seeds N shows (SonarrId = 1..count) directly in the DB, each with one
+    /// season and one episode, using the production write conventions
+    /// (episode Path is the season directory, FileName the file name).
+    /// </summary>
+    private async Task SeedShowsAsync(int count)
+    {
+        var now = DateTimeOffset.UtcNow;
+        for (var i = 1; i <= count; i++)
+        {
+            var show = new Show
+            {
+                SonarrId = i, Title = $"Show {i}", Path = $"/tv/Show {i}", DateAdded = now
+            };
+            var season = new Season { SeasonNumber = 1, Show = show };
+            season.Episodes.Add(new Episode
+            {
+                SonarrId = i * 100,
+                EpisodeNumber = 1,
+                Title = "Pilot",
+                FileName = $"Show {i}.S01E01",
+                Path = $"/tv/Show {i}/Season 1",
+                Season = season,
+                DateAdded = now
+            });
+            show.Seasons.Add(season);
+            _context.Shows.Add(show);
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task RemoveNonExistentShows_EmptyUpstreamList_SkipsDeletion()
+    {
+        // HTTP 200 + empty array is the signature of a reverse-proxy outage or
+        // a reinstalled Sonarr with an empty library — it must not wipe the
+        // show library: nothing is deleted at all.
+        var show = SonarrShow(1, "Show", 1);
+        SetupEpisodes(1, 1, SonarrEpisode(10, 1, "/tv/Show/Season 1/Show.S01E10.mkv"));
+        await _service.SyncShows(new List<SonarrShow> { show }, defaultInclude: true);
+
+        await _service.RemoveNonExistentShows(new HashSet<int>());
+
+        Assert.Equal(1, await _context.Shows.CountAsync());
+        Assert.Equal(1, await _context.Seasons.CountAsync());
+        Assert.Equal(1, await _context.Episodes.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveNonExistentShows_RefusesWhenMoreThanHalfWouldGo()
+    {
+        // 51 of 100 shows (51%) would be removed — over the guardrail, so the
+        // pass is refused and the graph is left untouched.
+        await SeedShowsAsync(100);
+
+        await _service.RemoveNonExistentShows(Enumerable.Range(1, 49).ToHashSet());
+
+        Assert.Equal(100, await _context.Shows.CountAsync());
+        Assert.Equal(100, await _context.Seasons.CountAsync());
+        Assert.Equal(100, await _context.Episodes.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveNonExistentShows_AllowsWhenJustUnderHalf()
+    {
+        // 49 of 100 (49%) is a legitimate cleanup under the guardrail and
+        // deletes the full child graph of the orphans.
+        await SeedShowsAsync(100);
+
+        await _service.RemoveNonExistentShows(Enumerable.Range(1, 51).ToHashSet());
+
+        Assert.Equal(51, await _context.Shows.CountAsync());
+        Assert.Equal(51, await _context.Seasons.CountAsync());
+        Assert.Equal(51, await _context.Episodes.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveNonExistentShows_FailureBetweenStatements_RollsBackEverything()
+    {
+        // The episode DELETE (statement 1) succeeds, the season DELETE
+        // (statement 2) fails: the wrapping transaction must roll the episode
+        // deletes back — the four ExecuteDeletes used to run in four separate
+        // implicit transactions, leaving a half-deleted show graph.
+        await SeedShowsAsync(10);
+        _deleteInterceptor.FailOnDeleteNumber = 2;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.RemoveNonExistentShows(Enumerable.Range(1, 6).ToHashSet()));
+
+        Assert.Equal(10, await _context.Shows.CountAsync());
+        Assert.Equal(10, await _context.Seasons.CountAsync());
+        Assert.Equal(10, await _context.Episodes.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveNonExistentShows_MoreThanOneChunk_DeletesExactlyTheOrphans()
+    {
+        // 550 orphan shows span two 500-id chunks — pins the chunked
+        // semantics (every survivor and its children intact) and the bounded
+        // parameter count per statement (500, far under SQLite's 32766
+        // host-parameter limit, which the old single-Contains delete hit
+        // around a 32k-id library).
+        const int survivors = 650;
+        await SeedShowsAsync(1200);
+
+        await _service.RemoveNonExistentShows(Enumerable.Range(1, survivors).ToHashSet());
+
+        Assert.Equal(survivors, await _context.Shows.CountAsync());
+        Assert.Equal(survivors, await _context.Seasons.CountAsync());
+        Assert.Equal(survivors, await _context.Episodes.CountAsync());
+        var remaining = await _context.Shows.AsNoTracking()
+            .Select(show => show.SonarrId)
+            .ToListAsync();
+        Assert.Equal(Enumerable.Range(1, survivors).ToList(), remaining.OrderBy(id => id).ToList());
+    }
+
+    /// <summary>
+    /// Fails the Nth DELETE statement (1-based, 0 = never) to simulate an
+    /// outage between the delete statements of the orphan-removal pass.
+    /// </summary>
+    private sealed class DeleteFailureInterceptor : DbCommandInterceptor
+    {
+        private int _deleteCount;
+        public int FailOnDeleteNumber;
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (FailOnDeleteNumber > 0
+                && command.CommandText.StartsWith("DELETE", StringComparison.OrdinalIgnoreCase)
+                && ++_deleteCount == FailOnDeleteNumber)
+            {
+                throw new InvalidOperationException(
+                    $"Simulated failure on DELETE statement #{FailOnDeleteNumber}");
+            }
+
+            return ValueTask.FromResult(result);
+        }
     }
 }
