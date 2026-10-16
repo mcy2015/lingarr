@@ -154,6 +154,100 @@ public class ScheduleServiceTests : IDisposable
         Assert.False(await _service.SetJobEnabled("DoesNotExist", false));
     }
 
+    // ── SetJobEnabled: subtitle-search master-switch linkage (AC7) ──
+
+    [Fact]
+    public async Task SetJobEnabled_SubtitleSearch_SharesTheMasterSwitch()
+    {
+        // AC7 (the broken chain): the schedule toggle used to only register
+        // the job while subtitle_search_enabled (seeded false by M0008)
+        // short-circuited every Execute() round. The toggle now mirrors the
+        // automation-switch precedent — one source of truth, written on both
+        // directions, disabled-jobs list stays out of it.
+        _settingService.Values[SettingKeys.Automation.SubtitleSearchSchedule] = "15 5 * * *";
+
+        Assert.True(await _service.SetJobEnabled("SubtitleSearchJob", true));
+
+        Assert.Equal("true", _settingService.Values[SettingKeys.SubtitleSearch.Enabled]);
+        Assert.DoesNotContain("SubtitleSearchJob", ReadDisabledSetting());
+        var enabled = (await _service.GetRecurringJobs()).Single(job => job.Id == "SubtitleSearchJob");
+        Assert.True(enabled.Enabled);
+        Assert.Equal("15 5 * * *", enabled.Cron);
+
+        Assert.True(await _service.SetJobEnabled("SubtitleSearchJob", false));
+
+        Assert.Equal("false", _settingService.Values[SettingKeys.SubtitleSearch.Enabled]);
+        Assert.DoesNotContain("SubtitleSearchJob", ReadDisabledSetting());
+        var disabledRow = (await _service.GetRecurringJobs()).Single(job => job.Id == "SubtitleSearchJob");
+        Assert.False(disabledRow.Enabled);
+        // the persisted cron survives for the merged disabled row
+        Assert.Equal("15 5 * * *", disabledRow.Cron);
+    }
+
+    [Fact]
+    public async Task SetJobEnabled_SubtitleSearchEnable_HealsALegacyDisabledListEntry()
+    {
+        // Pre-linkage toggle-offs wrote the job into disabled_recurring_jobs;
+        // IsBuiltinDisabled honours that list first, so an enable that left
+        // the stale entry behind would stay disabled after the next
+        // Initialize().
+        _settingService.Values[SettingKeys.Automation.DisabledRecurringJobs] =
+            JsonConvert.SerializeObject(new List<string> { "SubtitleSearchJob" });
+
+        Assert.True(await _service.SetJobEnabled("SubtitleSearchJob", true));
+
+        Assert.Equal("true", _settingService.Values[SettingKeys.SubtitleSearch.Enabled]);
+        Assert.DoesNotContain("SubtitleSearchJob", ReadDisabledSetting());
+        Assert.True((await _service.GetRecurringJobs())
+            .Single(job => job.Id == "SubtitleSearchJob").Enabled);
+    }
+
+    [Fact]
+    public async Task GetRecurringJobs_SubtitleSearchMasterSwitchOff_ListsJobAsDisabled()
+    {
+        // The M0008 seeded default (no "true" in the settings) must surface
+        // the row as disabled — the honest state, since Execute() would
+        // short-circuit every round of a registered job.
+        _settingService.Values[SettingKeys.Automation.SubtitleSearchSchedule] = "0 5 * * *";
+
+        var job = (await _service.GetRecurringJobs()).Single(job => job.Id == "SubtitleSearchJob");
+
+        Assert.False(job.Enabled);
+        Assert.Equal("0 5 * * *", job.Cron);
+        Assert.Equal("SubtitleSearchJob", job.JobMethod);
+    }
+
+    [Fact]
+    public async Task Initialize_SubtitleSearchSwitchOff_SkipsUntilToggledOn()
+    {
+        var translationRequests = new Mock<ITranslationRequestService>();
+        translationRequests
+            .Setup(service => service.ResumeTranslationRequests())
+            .Returns(Task.CompletedTask);
+
+        using var provider = BuildProvider(translationRequests.Object);
+        var service = new ScheduleService(
+            null!,
+            provider,
+            NullLogger<ScheduleService>.Instance);
+
+        _settingService.Values[SettingKeys.Automation.MovieSchedule] = "0 4 * * *";
+        _settingService.Values[SettingKeys.Automation.ShowSchedule] = "0 4 * * *";
+        _settingService.Values[SettingKeys.Automation.AutomationEnabled] = "true";
+
+        await service.Initialize();
+
+        // master switch off (the seeded default): not registered, offered as
+        // a disabled row instead of a no-op recurring job.
+        Assert.False((await service.GetRecurringJobs())
+            .Single(job => job.Id == "SubtitleSearchJob").Enabled);
+
+        // flipping the toggle registers the round immediately
+        Assert.True(await service.SetJobEnabled("SubtitleSearchJob", true));
+        Assert.True((await service.GetRecurringJobs())
+            .Single(job => job.Id == "SubtitleSearchJob").Enabled);
+    }
+
     // ── GetRecurringJobs: disabled-row merge ────────────────────────
 
     [Fact]

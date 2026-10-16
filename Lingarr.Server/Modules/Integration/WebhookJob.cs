@@ -116,6 +116,22 @@ public class WebhookJob
                 }
 
                 await _mediaSubtitleProcessor.ProcessMedia(episodeEntity, MediaType.Episode);
+
+                // Design ⑤ episode parity with the Radarr branch above: a
+                // Download event boosts exactly THIS episode (not the show)
+                // to the front of the subtitle-search queue with the 48h
+                // window. Same three gates as Radarr: only Download means
+                // "a file just landed" (Grab/Rename/Test just import), the
+                // master switch inside BoostSubtitleSearchSafelyAsync is
+                // the rollback lever, and the media must still expect a
+                // subtitle. Legacy senders without an eventType keep the
+                // boost so the field rollout breaks no one.
+                if (IsDownloadEvent(payload.EventType)
+                    && episodeEntity.NeedsTranslation
+                    && !episodeEntity.NoSubtitleNeeded)
+                {
+                    await BoostSubtitleSearchSafelyAsync(MediaType.Episode, episodeEntity.Id, episodeEntity.Title);
+                }
             }
 
             _logger.LogInformation("Completed processing Sonarr webhook for series: {SeriesTitle}", payload.Series.Title);
@@ -129,10 +145,10 @@ public class WebhookJob
     }
 
     /// <summary>
-    /// Radarr's "a file just landed" event. A missing/blank eventType keeps
-    /// the boost (legacy senders and simple curl probes never sent one) —
-    /// only an explicit non-Download value (Grab, Rename, Test, …) holds the
-    /// queue back.
+    /// The *arr "a file just landed" event (Radarr and Sonarr v3 both send
+    /// "Download"). A missing/blank eventType keeps the boost (legacy
+    /// senders and simple curl probes never sent one) — only an explicit
+    /// non-Download value (Grab, Rename, Test, …) holds the queue back.
     /// </summary>
     private static bool IsDownloadEvent(string? eventType)
         => string.IsNullOrWhiteSpace(eventType)

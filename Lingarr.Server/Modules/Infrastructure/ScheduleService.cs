@@ -29,7 +29,7 @@ public class ScheduleService : IScheduleService
     /// Built-in recurring jobs and where their cron comes from. The catalog
     /// backs Initialize(), the enable/disable endpoints, the cron-update
     /// endpoint and the disabled-row merge in GetRecurringJobs() — one
-    /// structure, four consumers. The six built-ins are the whole job
+    /// structure, four consumers. The seven built-ins are the whole job
     /// catalogue: nothing else creates recurring jobs anymore (legacy
     /// custom_recurring_jobs entries keep running, frozen per precedent).
     /// </summary>
@@ -49,7 +49,7 @@ public class ScheduleService : IScheduleService
         new("StatisticsJob", "StatisticsJob", SettingKeys.Automation.StatisticsSchedule, Cron.Daily()),
         new("EmbeddedTrackScanJob", "EmbeddedTrackScanJob",
             SettingKeys.Automation.EmbeddedTrackSchedule, "30 4 * * *"),
-        // 8th built-in (subtitle-search M3, design ⑤): queue=system, cron
+        // 7th built-in (subtitle-search M3, design ⑤): queue=system, cron
         // seeded "0 5 * * *" by M0008 — an hour behind the sync wave. The
         // subtitle_search_enabled master switch additionally short-circuits
         // Execute(), so disabling either the schedule row or the feature
@@ -87,7 +87,8 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.EmbeddedTrackSchedule,
             SettingKeys.Automation.SubtitleSearchSchedule,
-            SettingKeys.Automation.AutomationEnabled
+            SettingKeys.Automation.AutomationEnabled,
+            SettingKeys.SubtitleSearch.Enabled
         ]);
 
         if (TimeZoneConfiguration.ResolutionWarning != null)
@@ -155,7 +156,8 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.EmbeddedTrackSchedule,
             SettingKeys.Automation.SubtitleSearchSchedule,
-            SettingKeys.Automation.AutomationEnabled
+            SettingKeys.Automation.AutomationEnabled,
+            SettingKeys.SubtitleSearch.Enabled
         ]);
 
         foreach (var builtin in BuiltinJobs)
@@ -273,6 +275,37 @@ public class ScheduleService : IScheduleService
                 SettingKeys.Automation.AutomationEnabled,
                 enabled ? "true" : "false");
         }
+        else if (builtin.Id == "SubtitleSearchJob")
+        {
+            // AC7 (the broken chain): the schedule toggle is the only UI
+            // surface of the subtitle-search master switch
+            // (subtitle_search_enabled, seeded false by M0008). Mirroring
+            // the automation-switch precedent keeps one source of truth —
+            // before this write the toggle registered the job while
+            // Execute() still short-circuited every round. The persisted
+            // setting also bootstraps Initialize() through
+            // IsBuiltinDisabled below, and the direct registration makes
+            // the toggle effective immediately.
+            await settingService.SetSetting(
+                SettingKeys.SubtitleSearch.Enabled,
+                enabled ? "true" : "false");
+            if (enabled)
+            {
+                // Heal a pre-linkage toggle-off: the old path wrote this
+                // job into disabled_recurring_jobs, and IsBuiltinDisabled
+                // honours that list first — an enable that left the stale
+                // entry behind would stay disabled after the next
+                // Initialize(). Automation never needed this because its
+                // switch predates the list path.
+                var disabled = await ReadDisabledJobIds(settingService);
+                if (disabled.Remove(builtin.Id))
+                {
+                    await settingService.SetSetting(
+                        SettingKeys.Automation.DisabledRecurringJobs,
+                        JsonConvert.SerializeObject(disabled));
+                }
+            }
+        }
         else
         {
             var disabled = await ReadDisabledJobIds(settingService);
@@ -347,7 +380,8 @@ public class ScheduleService : IScheduleService
 
         var disabled = await ReadDisabledJobIds(settingService);
         var settings = await settingService.GetSettings([
-            SettingKeys.Automation.AutomationEnabled
+            SettingKeys.Automation.AutomationEnabled,
+            SettingKeys.SubtitleSearch.Enabled
         ]);
         if (!IsBuiltinDisabled(builtin, disabled, settings))
         {
@@ -433,7 +467,11 @@ public class ScheduleService : IScheduleService
     /// <summary>
     /// A built-in is effectively disabled when it carries the disabled flag,
     /// or — for the automated translation job — when the automation switch
-    /// the settings screen shares is off.
+    /// the settings screen shares is off. The subtitle-search job follows the
+    /// same shared-switch semantics through subtitle_search_enabled (AC7):
+    /// the master switch its Execute() short-circuits on also governs the
+    /// registration, so an off feature never registers no-op rounds and the
+    /// schedule screen honestly offers「启用」on the merged disabled row.
     /// </summary>
     private static bool IsBuiltinDisabled(
         BuiltinJob builtin,
@@ -444,8 +482,12 @@ public class ScheduleService : IScheduleService
         {
             return true;
         }
-        return builtin.Id == "AutomatedTranslationJob" &&
-               settings.GetValueOrDefault(SettingKeys.Automation.AutomationEnabled) != "true";
+        if (builtin.Id == "AutomatedTranslationJob")
+        {
+            return settings.GetValueOrDefault(SettingKeys.Automation.AutomationEnabled) != "true";
+        }
+        return builtin.Id == "SubtitleSearchJob" &&
+               settings.GetValueOrDefault(SettingKeys.SubtitleSearch.Enabled) != "true";
     }
 
     private static string ResolveBuiltinCron(BuiltinJob builtin, Dictionary<string, string> settings)

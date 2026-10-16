@@ -16,7 +16,7 @@ using Microsoft.OpenApi.Extensions;
 namespace Lingarr.Server.Modules.SubtitleSearch.Jobs;
 
 /// <summary>
-/// Automated subtitle-search batch (tech design ⑤, the 8th recurring job,
+/// Automated subtitle-search batch (tech design ⑤, the 7th recurring job,
 /// queue=system, cron from subtitle_search_schedule seeded "0 5 * * *").
 /// One round: fill the queue from the needs-translation gap scan → dequeue
 /// one priority batch (≤ subtitle_search_batch_limit, default 200) → per
