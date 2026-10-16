@@ -12,6 +12,7 @@
         <PackageVersion Include="Swashbuckle.AspNetCore" Version="9.0.6" />
         <PackageVersion Include="Ude.NetStandard" Version="1.2.0" />
         <PackageVersion Include="OpenccNetLib" Version="1.4.0" />
+        <PackageVersion Include="SharpCompress" Version="0.38.2" />
         <!-- EF Core -->
         <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
         <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />

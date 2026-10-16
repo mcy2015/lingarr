@@ -48,7 +48,14 @@ public class ScheduleService : IScheduleService
         new("CleanupJob", "CleanupJob", SettingKeys.Automation.CleanupSchedule, Cron.Weekly()),
         new("StatisticsJob", "StatisticsJob", SettingKeys.Automation.StatisticsSchedule, Cron.Daily()),
         new("EmbeddedTrackScanJob", "EmbeddedTrackScanJob",
-            SettingKeys.Automation.EmbeddedTrackSchedule, "30 4 * * *")
+            SettingKeys.Automation.EmbeddedTrackSchedule, "30 4 * * *"),
+        // 8th built-in (subtitle-search M3, design ⑤): queue=system, cron
+        // seeded "0 5 * * *" by M0008 — an hour behind the sync wave. The
+        // subtitle_search_enabled master switch additionally short-circuits
+        // Execute(), so disabling either the schedule row or the feature
+        // stops the rounds.
+        new("SubtitleSearchJob", "SubtitleSearchJob",
+            SettingKeys.Automation.SubtitleSearchSchedule, "0 5 * * *")
     ];
 
     private readonly IHubContext<JobProgressHub> _hubContext;
@@ -79,6 +86,7 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.CleanupSchedule,
             SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.EmbeddedTrackSchedule,
+            SettingKeys.Automation.SubtitleSearchSchedule,
             SettingKeys.Automation.AutomationEnabled
         ]);
 
@@ -146,6 +154,7 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.CleanupSchedule,
             SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.EmbeddedTrackSchedule,
+            SettingKeys.Automation.SubtitleSearchSchedule,
             SettingKeys.Automation.AutomationEnabled
         ]);
 
@@ -411,6 +420,10 @@ public class ScheduleService : IScheduleService
                 break;
             case "EmbeddedTrackScanJob":
                 RecurringJob.AddOrUpdate<EmbeddedTrackScanJob>(jobId, job => job.Execute(), cron, options);
+                break;
+            case "SubtitleSearchJob":
+                RecurringJob.AddOrUpdate<Lingarr.Server.Modules.SubtitleSearch.Jobs.SubtitleSearchJob>(
+                    jobId, job => job.Execute(), cron, options);
                 break;
             default:
                 throw new ArgumentException($"Unsupported job type '{jobType}'.", nameof(jobType));

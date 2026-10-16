@@ -64,6 +64,14 @@ public class LingarrDbContext : DbContext
         modelBuilder.Entity<SubtitleSearchState>(builder =>
         {
             builder.ToTable("subtitle_search_state");
+            // The dequeue covering index and the upsert target (M0008): raw
+            // SQL in the queue service addresses both by database name, so
+            // EnsureCreated-built test schemas must carry them too.
+            builder.HasIndex(state => new { state.Status, state.PriorityRank, state.NextAttemptAt })
+                .HasDatabaseName("ix_subtitle_search_state_dequeue");
+            builder.HasIndex(state => new { state.MediaType, state.MediaId })
+                .IsUnique()
+                .HasDatabaseName("ux_subtitle_search_state_media");
         });
         modelBuilder.Entity<SubtitleDownload>(builder =>
         {

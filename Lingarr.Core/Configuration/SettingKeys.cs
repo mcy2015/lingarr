@@ -154,6 +154,13 @@ public static class SettingKeys
         public const string EmbeddedTrackSchedule = "embedded_track_schedule";
 
         /// <summary>
+        /// Cron of the automated subtitle-search batch (subtitle-search M3,
+        /// design ⑤). Seeded "0 5 * * *" by M0008 — one hour after the 04:00
+        /// sync wave so a round sees same-night syncs.
+        /// </summary>
+        public const string SubtitleSearchSchedule = "subtitle_search_schedule";
+
+        /// <summary>
         /// Upper bound of media files one embedded track scan run may probe
         /// (audit P0-6). Already-scanned files are free (marker skip), so the
         /// next run resumes right after the last processed file. Values below
@@ -182,6 +189,42 @@ public static class SettingKeys
         /// means every built-in job runs (the historical default).
         /// </summary>
         public const string DisabledRecurringJobs = "disabled_recurring_jobs";
+    }
+
+    /// <summary>
+    /// Settings of the subtitle-search feature (docs/subtitle-search-tech-
+    /// design.zh-CN.md ④/⑧). The five scalar rows are seeded by migration
+    /// M0008; the cooldown map is a JSON blob written by the orchestrator —
+    /// no seeded row, absent means "no source is cooling down".
+    /// </summary>
+    public static class SubtitleSearch
+    {
+        /// <summary>Master switch of the automated batch; seeded "false".</summary>
+        public const string Enabled = "subtitle_search_enabled";
+
+        /// <summary>Single auto-download threshold (0–100); seeded "75".</summary>
+        public const string AutoScore = "subtitle_search_auto_score";
+
+        /// <summary>Whether downloaded non-SRT tracks are converted to SRT; seeded "true".</summary>
+        public const string ConvertToSrt = "subtitle_search_convert_srt";
+
+        /// <summary>Upper bound of media items one automated round processes; seeded "200".</summary>
+        public const string BatchLimit = "subtitle_search_batch_limit";
+
+        /// <summary>
+        /// Whether an "en" download is enqueued for translation; seeded
+        /// "true" (design ⑦ step ⑦).
+        /// </summary>
+        public const string AutoTranslate = "subtitle_search_auto_translate";
+
+        /// <summary>
+        /// JSON map of active per-source cooldowns (design ⑧):
+        /// <c>{ "opensubtitles": { "until": "...", "reason": "RateLimited", "error": "..." } }</c>.
+        /// Read at round start to skip cooled-down sources; written whenever a
+        /// source call fails with a cooldown-worthy reason. 401/403 entries
+        /// carry until=9999-12-31 (until credentials change).
+        /// </summary>
+        public const string SourceCooldowns = "subtitle_source_cooldowns";
     }
 
     public static class SubtitleValidation

@@ -52,6 +52,11 @@ public class SubtitleSearchControllerTests
             providers,
             Array.Empty<ISubtitleSourceManifest>(),
             NullLogger<SubtitleProviderRegistry>.Instance),
+        orchestrator: null!,
+        queueService: null!,
+        pinService: null!,
+        pipeline: null!,
+        requestBuilder: null!,
         NullLogger<SubtitleSearchController>.Instance);
 
     private static readonly JsonSerializerOptions CamelCase = new(JsonSerializerDefaults.Web);
