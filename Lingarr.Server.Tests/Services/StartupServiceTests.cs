@@ -7,7 +7,11 @@ using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
+using Lingarr.Server.Modules.SubtitleSearch;
+using Lingarr.Server.Modules.Translation.Plugins;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -287,6 +291,184 @@ public class StartupServiceTests : IDisposable
         Assert.Null(await GetSettingValue(serviceProvider, SettingKeys.Authentication.AuthEnabled));
     }
 
+    // ===== Subtitle-source setting seeding (credential-save 400 fix) =====
+
+    /// <summary>
+    /// Expected (key, provider) pairs of the subtitle-source seed. Deliberately
+    /// written out independently from the StartupService table so a typo or a
+    /// missing entry there fails here instead of silently re-breaking saves.
+    /// </summary>
+    private static readonly (string Key, string? Provider)[] ExpectedSubtitleSourceSeeds =
+    {
+        (SubtitleSourceSettingKeys.GlobalProxyUrl, null),
+        (SubtitleSourceSettingKeys.OpenSubtitles.ApiKey, "opensubtitles"),
+        (SubtitleSourceSettingKeys.OpenSubtitles.BaseUrl, "opensubtitles"),
+        (SubtitleSourceSettingKeys.OpenSubtitles.ProxyUrl, "opensubtitles"),
+        (SubtitleSourceSettingKeys.SubSource.BaseUrl, "subsource"),
+        (SubtitleSourceSettingKeys.SubSource.ProxyUrl, "subsource"),
+        (SubtitleSourceSettingKeys.Subdl.ApiKey, "subdl"),
+        (SubtitleSourceSettingKeys.Subdl.BaseUrl, "subdl"),
+        (SubtitleSourceSettingKeys.Subdl.ProxyUrl, "subdl"),
+        (SubtitleSourceSettingKeys.Gestdown.BaseUrl, "gestdown"),
+        (SubtitleSourceSettingKeys.Gestdown.ProxyUrl, "gestdown"),
+        (SubtitleSourceSettingKeys.Podnapisi.BaseUrl, "podnapisi"),
+        (SubtitleSourceSettingKeys.Podnapisi.ProxyUrl, "podnapisi"),
+        (SubtitleSourceSettingKeys.Assrt.Token, "assrt"),
+        (SubtitleSourceSettingKeys.Assrt.BaseUrl, "assrt"),
+        (SubtitleSourceSettingKeys.Assrt.ProxyUrl, "assrt"),
+        (SubtitleSourceSettingKeys.Shooter.BaseUrl, "shooter"),
+        (SubtitleSourceSettingKeys.Shooter.ProxyUrl, "shooter")
+    };
+
+    private static readonly string[] SubtitleSourceNames =
+    {
+        "opensubtitles", "subsource", "subdl", "gestdown", "podnapisi", "assrt", "shooter"
+    };
+
+    public static IEnumerable<object[]> SubtitleSourceSeedData() =>
+        ExpectedSubtitleSourceSeeds.Select(seed => new object[] { seed.Key, seed.Provider! });
+
+    [Theory]
+    [MemberData(nameof(SubtitleSourceSeedData))]
+    public async Task SeedSubtitleSourceSettings_FreshDatabase_CreatesEmptyRowOwnedBySource(
+        string key,
+        string? provider)
+    {
+        // Arrange
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: every seeded row exists, holds the empty value and is owned
+        // by its source (provider key identical to the providers endpoint).
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var row = await dbContext.Settings.FindAsync(key);
+        Assert.NotNull(row);
+        Assert.Equal(string.Empty, row.Value);
+        Assert.Equal(provider, row.Provider);
+    }
+
+    [Fact]
+    public async Task SeedSubtitleSourceSettings_FreshDatabase_DoesNotSeedEnableSwitches()
+    {
+        // Arrange: a missing enable switch means "enabled" — seeding one would
+        // change source availability semantics for no migration benefit.
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        foreach (var source in SubtitleSourceNames)
+        {
+            Assert.Null(await dbContext.Settings.FindAsync(SubtitleSourceSettingKeys.EnabledKey(source)));
+        }
+    }
+
+    [Fact]
+    public async Task SeedSubtitleSourceSettings_ExistingRowValue_IsNotOverwritten()
+    {
+        // Arrange: an install that already stored a credential keeps it —
+        // the seed only ever adds missing rows.
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            seedDb.Settings.Add(new Setting
+            {
+                Key = SubtitleSourceSettingKeys.OpenSubtitles.ApiKey,
+                Value = "cipher",
+                Provider = null
+            });
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: value and provider ownership are untouched.
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var row = await dbContext.Settings.FindAsync(SubtitleSourceSettingKeys.OpenSubtitles.ApiKey);
+        Assert.NotNull(row);
+        Assert.Equal("cipher", row.Value);
+        Assert.Null(row.Provider);
+    }
+
+    [Fact]
+    public async Task StartAsync_AfterSubtitleSeed_SetEncryptedSettingSucceeds()
+    {
+        // Arrange: the bug's acceptance core — SetSetting only updates rows
+        // that exist, so before the seed every subtitle credential save was
+        // refused and the controller answered 400 "Setting could not be updated."
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Act
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var settingService = new SettingService(
+            scope.ServiceProvider.GetRequiredService<LingarrDbContext>(),
+            NullLogger<ISettingService>.Instance,
+            new MemoryCache(new MemoryCacheOptions()),
+            new SettingChangeNotifier(),
+            new EncryptionService(new EphemeralDataProtectionProvider()));
+        var saved = await settingService.SetEncryptedSetting(
+            SubtitleSourceSettingKeys.OpenSubtitles.ApiKey, "x");
+
+        // Assert: the write lands and round-trips through real encryption.
+        Assert.True(saved);
+        Assert.Equal("x", await settingService.GetEncryptedSetting(
+            SubtitleSourceSettingKeys.OpenSubtitles.ApiKey));
+    }
+
+    [Fact]
+    public async Task SyncPluginSettings_WithPluginLoading_KeepsSubtitleRowsWhileRemovingUnknownProviders()
+    {
+        // Arrange: external plugin loading enabled (PLUGINS_PATH set) — the
+        // orphan cleanup must remove provider-owned rows of unloaded plugins
+        // but never the compiled-in subtitle-source rows it does not own.
+        // The subtitle row is pre-seeded (second-boot shape) so the cleanup
+        // pass actually sees it.
+        var pluginsDir = Path.Combine(_tempDir, "plugins");
+        Directory.CreateDirectory(pluginsDir);
+        Environment.SetEnvironmentVariable(PluginLoader.PluginsPathEnvironmentVariable, pluginsDir);
+
+        var serviceProvider = BuildProvider(withPluginLoading: true);
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            seedDb.Settings.Add(new Setting
+            {
+                Key = SubtitleSourceSettingKeys.OpenSubtitles.ApiKey,
+                Value = "cipher",
+                Provider = "opensubtitles"
+            });
+            seedDb.Settings.Add(new Setting { Key = "ghost_api_key", Value = string.Empty, Provider = "ghostplugin" });
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: the ghost row proves removal ran; the subtitle row survived it
+        // with its stored value intact.
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var subtitleRow = await dbContext.Settings.FindAsync(SubtitleSourceSettingKeys.OpenSubtitles.ApiKey);
+        Assert.NotNull(subtitleRow);
+        Assert.Equal("cipher", subtitleRow.Value);
+        Assert.Null(await dbContext.Settings.FindAsync("ghost_api_key"));
+    }
+
     // ===== Default user seeding =====
 
     [Fact]
@@ -450,11 +632,12 @@ public class StartupServiceTests : IDisposable
             Environment.SetEnvironmentVariable(envVar + "_FILE", null);
         }
 
+        Environment.SetEnvironmentVariable(PluginLoader.PluginsPathEnvironmentVariable, null);
         Environment.SetEnvironmentVariable(AdminUserEnvVar, null);
         Environment.SetEnvironmentVariable(AdminPasswordEnvVar, null);
     }
 
-    private static IServiceProvider BuildProvider()
+    private static IServiceProvider BuildProvider(bool withPluginLoading = false)
     {
         var databaseName = Guid.NewGuid().ToString();
         var services = new ServiceCollection();
@@ -464,6 +647,17 @@ public class StartupServiceTests : IDisposable
         services.AddScoped<IAuthService, AuthService>();
         services.AddDbContext<LingarrDbContext>(options =>
             options.UseInMemoryDatabase(databaseName));
+
+        if (withPluginLoading)
+        {
+            // Mirrors TranslationModule: the loader scans PLUGINS_PATH before
+            // the container is built; an existing empty directory flips
+            // LoadingEnabled on without loading any plugin.
+            var pluginLoader = new PluginLoader(NullLogger<PluginLoader>.Instance);
+            pluginLoader.LoadPlugins(services);
+            services.AddSingleton(pluginLoader);
+            services.AddSingleton<IPluginRegistry, PluginRegistry>();
+        }
 
         var serviceProvider = services.BuildServiceProvider();
 

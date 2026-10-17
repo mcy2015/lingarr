@@ -1,6 +1,7 @@
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
+using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.Translation.Plugins;
 using Lingarr.Server.Modules.Translation;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,40 @@ public class StartupService : IHostedService
 {
     private const string AdminUserEnvVar = "LINGARR_ADMIN_USER";
     private const string AdminPasswordEnvVar = "LINGARR_ADMIN_PASSWORD";
+
+    /// <summary>
+    /// Settings rows owned by the compiled-in subtitle sources. Unlike the
+    /// translation plugins, these keys have no manifest-driven seeder, and
+    /// <c>SettingService.SetSetting</c> only updates rows that already exist —
+    /// without these placeholder rows the settings UI could never store
+    /// subtitle-source credentials (every save was rejected with 400
+    /// "Setting could not be updated."). The <c>*_enabled</c> switches are
+    /// deliberately not seeded: a missing row means enabled, so the rollout
+    /// needs no migration. Provider names match the subtitle providers
+    /// endpoint keys ("opensubtitles"…); the global proxy override belongs to
+    /// the module itself and carries no provider.
+    /// </summary>
+    private static readonly (string Key, string? Provider)[] SubtitleSourceSettingSeeds =
+    [
+        (SubtitleSourceSettingKeys.GlobalProxyUrl, null),
+        (SubtitleSourceSettingKeys.OpenSubtitles.ApiKey, "opensubtitles"),
+        (SubtitleSourceSettingKeys.OpenSubtitles.BaseUrl, "opensubtitles"),
+        (SubtitleSourceSettingKeys.OpenSubtitles.ProxyUrl, "opensubtitles"),
+        (SubtitleSourceSettingKeys.SubSource.BaseUrl, "subsource"),
+        (SubtitleSourceSettingKeys.SubSource.ProxyUrl, "subsource"),
+        (SubtitleSourceSettingKeys.Subdl.ApiKey, "subdl"),
+        (SubtitleSourceSettingKeys.Subdl.BaseUrl, "subdl"),
+        (SubtitleSourceSettingKeys.Subdl.ProxyUrl, "subdl"),
+        (SubtitleSourceSettingKeys.Gestdown.BaseUrl, "gestdown"),
+        (SubtitleSourceSettingKeys.Gestdown.ProxyUrl, "gestdown"),
+        (SubtitleSourceSettingKeys.Podnapisi.BaseUrl, "podnapisi"),
+        (SubtitleSourceSettingKeys.Podnapisi.ProxyUrl, "podnapisi"),
+        (SubtitleSourceSettingKeys.Assrt.Token, "assrt"),
+        (SubtitleSourceSettingKeys.Assrt.BaseUrl, "assrt"),
+        (SubtitleSourceSettingKeys.Assrt.ProxyUrl, "assrt"),
+        (SubtitleSourceSettingKeys.Shooter.BaseUrl, "shooter"),
+        (SubtitleSourceSettingKeys.Shooter.ProxyUrl, "shooter")
+    ];
 
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<StartupService> _logger;
@@ -43,6 +78,8 @@ public class StartupService : IHostedService
         {
             await SyncPluginSettings(dbContext, pluginRegistry, pluginLoader?.LoadingEnabled ?? false);
         }
+
+        await SeedSubtitleSourceSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -169,6 +206,48 @@ public class StartupService : IHostedService
         await dbContext.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Seeds empty Settings rows for every subtitle-source key that does not exist
+    /// yet, so <c>SetSetting</c> can update them afterwards. Existing rows are never
+    /// overwritten — stored values and their provider ownership always win. The
+    /// whole batch is committed with a single SaveChanges.
+    /// </summary>
+    /// <param name="dbContext">The database context used to access settings.</param>
+    private async Task SeedSubtitleSourceSettings(LingarrDbContext dbContext)
+    {
+        var keys = SubtitleSourceSettingSeeds
+            .Select(seed => seed.Key)
+            .ToArray();
+
+        var existingKeys = (await dbContext.Settings
+                .Where(setting => keys.Contains(setting.Key))
+                .Select(setting => setting.Key)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = SubtitleSourceSettingSeeds
+            .Where(seed => !existingKeys.Contains(seed.Key))
+            .ToList();
+
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (key, provider) in missing)
+        {
+            dbContext.Settings.Add(new Setting
+            {
+                Key = key,
+                Value = string.Empty,
+                Provider = provider
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation("Seeded {Count} subtitle-source setting rows.", missing.Count);
+    }
+
     private async Task RemoveOrphanedSettings(LingarrDbContext dbContext, IReadOnlyList<RegisteredPlugin> pluginEntries)
     {
         var loadedProviders = new HashSet<string>(
@@ -179,7 +258,14 @@ public class StartupService : IHostedService
             .Where(setting => setting.Provider != null)
             .ToListAsync();
 
+        // Rows owned by the compiled-in subtitle sources are not translation
+        // plugin settings — unloading translation plugins must never remove them.
+        var subtitleSourceKeys = SubtitleSourceSettingSeeds
+            .Select(seed => seed.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var orphaned = ownedRows
+            .Where(setting => !subtitleSourceKeys.Contains(setting.Key))
             .Where(setting => !loadedProviders.Contains(setting.Provider!))
             .ToList();
 

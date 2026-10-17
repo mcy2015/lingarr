@@ -5,6 +5,7 @@
         "show": "显示",
         "hide": "隐藏",
         "loadFailed": "读取失败",
+        "saveFailed": "保存失败——值未写入。",
         "menu": "打开菜单",
         "language": "语言",
         "theme": "主题",

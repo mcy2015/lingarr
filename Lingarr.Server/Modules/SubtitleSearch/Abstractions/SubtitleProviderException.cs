@@ -160,7 +160,7 @@ public sealed class SubtitleProviderException : Exception
     public static SubtitleProviderException ForTimeout(string provider, Exception? inner = null) => new(
         provider,
         SubtitleProviderFailureReason.Timeout,
-        $"{provider} did not answer within the per-source timeout (10s, tech design ②).",
+        $"{provider} did not answer within the per-source timeout (10s).",
         cooldown: TimeSpan.FromMinutes(10),
         inner: inner);
 

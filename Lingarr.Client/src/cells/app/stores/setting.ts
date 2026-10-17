@@ -10,8 +10,10 @@ import {
     SETTINGS
 } from '@/types'
 import axios from 'axios'
+import i18n from '@/i18n'
 import { settingService } from '@/cells/app/api/settingService'
 import { useInstanceStore } from '@/cells/app/stores/instance'
+import { useToastStore } from '@/cells/app/stores/toast'
 
 const settingApi = settingService(axios)
 
@@ -59,11 +61,27 @@ export const useSettingStore = defineStore('setting', {
             key: keyof IEncryptedSettingStates,
             value: string,
             isValid: boolean = true
-        ): Promise<void> {
+        ): Promise<boolean> {
             // Write-only mirror: locally we keep just the configured flag.
+            // The flag flips optimistically and rolls back when the server
+            // refuses the write, so the UI never claims "configured" for a
+            // value that was not stored.
+            const previous = this.encrypted_settings[key]
             this.encrypted_settings[key] = value.trim() !== ''
-            if (isValid) {
+            if (!isValid) return false
+            try {
                 await settingApi.setEncryptedSetting(key, value)
+                return true
+            } catch {
+                this.encrypted_settings[key] = previous
+                // Failure feedback lives here, not in the callers: every
+                // caller fires this action fire-and-forget from a computed
+                // setter that cannot await it.
+                useToastStore().push({
+                    message: i18n.global.t('common.saveFailed'),
+                    type: 'error'
+                })
+                return false
             }
         },
         /// Local-only flag sync for flows whose endpoint already persisted the

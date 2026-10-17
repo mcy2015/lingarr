@@ -5,6 +5,7 @@
         "show": "Show",
         "hide": "Hide",
         "loadFailed": "Failed to load",
+        "saveFailed": "Saving failed — the value was not stored.",
         "menu": "Open menu",
         "language": "Language",
         "theme": "Theme",

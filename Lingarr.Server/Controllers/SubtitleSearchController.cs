@@ -303,7 +303,7 @@ public class SubtitleSearchController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(body.Provider))
         {
-            return BadRequest(new { message = "provider is required (per-source search, tech design ⑥)." });
+            return BadRequest(new { message = "provider is required." });
         }
 
         if (_providerRegistry.Find(body.Provider) is null)
