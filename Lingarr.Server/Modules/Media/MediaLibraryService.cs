@@ -79,6 +79,10 @@ public class MediaLibraryService : IMediaLibraryService
         // most real queries. TrySearchAsync also returns null (→ LIKE) when
         // the index is unavailable (non-SQLite provider, table absent,
         // SQLite error), keeping the predicate as the safety net.
+        // B2: whichever branch serves the term, the title predicate is a
+        // union with a Path substring match — a media row titled 狗阵 whose
+        // path is "/movies/Black Dog" must surface for "black dog", which
+        // neither the title FTS nor a title-only LIKE could ever find.
         Dictionary<MediaType, List<int>>? ftsIds = null;
         if (needle is not null && needle.All(c => c <= '\u007F'))
         {
@@ -461,9 +465,12 @@ public class MediaLibraryService : IMediaLibraryService
     /// <summary>Shared show predicates of both paths: search, native, audio-unknown.
     /// Search arrives either as the FTS-resolved id set (ASCII queries — the
     /// index already decided the word-prefix matches, so the id membership
-    /// replaces the title predicate entirely: no LIKE, no lower() over the
-    /// table) or as the LIKE substring fallback (non-ASCII queries or an
-    /// unavailable index).</summary>
+    /// replaces the title predicate: no lower(title) scan over the table)
+    /// or as the LIKE substring fallback (non-ASCII queries or an
+    /// unavailable index). Either way the predicate is a union: title match
+    /// OR path substring match — a CJK-titled media row often carries the
+    /// romanised release name only in its on-disk path (B2), so the path is
+    /// searched alongside the title.</summary>
     private static IQueryable<Show> ApplyShowFilters(
         IQueryable<Show> query,
         string? needle,
@@ -473,11 +480,13 @@ public class MediaLibraryService : IMediaLibraryService
     {
         if (ftsShowIds is not null)
         {
-            query = query.Where(s => ftsShowIds.Contains(s.Id));
+            query = query.Where(s => ftsShowIds.Contains(s.Id)
+                                     || s.Path.ToLower().Contains(needle!));
         }
         else if (needle is not null)
         {
-            query = query.Where(s => s.Title.ToLower().Contains(needle));
+            query = query.Where(s => s.Title.ToLower().Contains(needle)
+                                     || s.Path.ToLower().Contains(needle));
         }
         if (wantNative)
         {
@@ -497,7 +506,7 @@ public class MediaLibraryService : IMediaLibraryService
 
     /// <summary>Shared movie predicates of both paths: search, native,
     /// audio-unknown. See <see cref="ApplyShowFilters"/> for the FTS/LIKE
-    /// split of the search predicate.</summary>
+    /// split and the title-OR-path union of the search predicate.</summary>
     private static IQueryable<Movie> ApplyMovieFilters(
         IQueryable<Movie> query,
         string? needle,
@@ -507,11 +516,13 @@ public class MediaLibraryService : IMediaLibraryService
     {
         if (ftsMovieIds is not null)
         {
-            query = query.Where(m => ftsMovieIds.Contains(m.Id));
+            query = query.Where(m => ftsMovieIds.Contains(m.Id)
+                                     || (m.Path != null && m.Path.ToLower().Contains(needle!)));
         }
         else if (needle is not null)
         {
-            query = query.Where(m => m.Title.ToLower().Contains(needle));
+            query = query.Where(m => m.Title.ToLower().Contains(needle)
+                                     || (m.Path != null && m.Path.ToLower().Contains(needle)));
         }
         if (wantNative)
         {

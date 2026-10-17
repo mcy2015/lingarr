@@ -1,9 +1,20 @@
 // P1-2 execution chain derivation: chip states come from the persisted event
 // timeline — failed providers get ✗, the producing provider gets ▸, the rest
 // stay dim. Degraded and clean histories must both derive correctly.
+// Walk-through fix D1: a terminal task demotes the producing chip from
+// current to done — "Currently processing" must not outlive the run.
 import { describe, expect, it } from 'vitest'
-import { deriveChainState, parseServiceChain } from '@/cells/queue/services/executionChain'
-import { ITranslationRequestEvent, TRANSLATION_EVENT_TYPE, TranslationEventType } from '@/types'
+import {
+    deriveChainState,
+    isTerminalRequestStatus,
+    parseServiceChain
+} from '@/cells/queue/services/executionChain'
+import {
+    ITranslationRequestEvent,
+    TRANSLATION_EVENT_TYPE,
+    TRANSLATION_STATUS,
+    TranslationEventType
+} from '@/types'
 
 const event = (eventType: TranslationEventType | null, provider?: string | null): ITranslationRequestEvent => ({
     id: Math.random(),
@@ -128,5 +139,102 @@ describe('deriveChainState', () => {
 
         // deepl is not on the configured chain — only chips for chain members
         expect(entries.map((entry) => entry.state)).toEqual(['failed', 'unused', 'unused'])
+    })
+
+    // ── walk-through fix D1: terminal tasks demote current → done ──
+    it('demotes the producing chip to done on a completed task', () => {
+        const entries = deriveChainState(
+            chain,
+            [event(TRANSLATION_EVENT_TYPE.STARTED), event(TRANSLATION_EVENT_TYPE.COMPLETED)],
+            'openai',
+            TRANSLATION_STATUS.COMPLETED
+        )
+
+        expect(entries).toEqual([
+            { service: 'gemini', state: 'unused' },
+            { service: 'openai', state: 'done' },
+            { service: 'ollama', state: 'unused' }
+        ])
+    })
+
+    it('marks the degradation target done on a degraded completion', () => {
+        // events outrank the stale request.serviceType; the terminal status
+        // then demotes the fallback producer from current to done
+        const entries = deriveChainState(
+            chain,
+            [
+                event(TRANSLATION_EVENT_TYPE.PROVIDER_FAILED, 'gemini'),
+                event(TRANSLATION_EVENT_TYPE.DEGRADED, 'openai'),
+                event(TRANSLATION_EVENT_TYPE.COMPLETED)
+            ],
+            'gemini',
+            TRANSLATION_STATUS.COMPLETED
+        )
+
+        expect(entries).toEqual([
+            { service: 'gemini', state: 'failed' },
+            { service: 'openai', state: 'done' },
+            { service: 'ollama', state: 'unused' }
+        ])
+    })
+
+    it('demotes the producing chip on every terminal status, never masking a failure', () => {
+        for (const status of [
+            TRANSLATION_STATUS.FAILED,
+            TRANSLATION_STATUS.CANCELLED,
+            TRANSLATION_STATUS.INTERRUPTED
+        ]) {
+            // the failed check runs first: a provider with a ProviderFailed
+            // event stays failed even though it is also the producing service
+            const entries = deriveChainState(
+                chain,
+                [event(TRANSLATION_EVENT_TYPE.PROVIDER_FAILED, 'openai')],
+                'openai',
+                status
+            )
+
+            expect(entries.map((entry) => entry.state)).toEqual(['unused', 'failed', 'unused'])
+        }
+    })
+
+    it('keeps the chip current while the task may still produce output', () => {
+        for (const status of [
+            TRANSLATION_STATUS.INPROGRESS,
+            TRANSLATION_STATUS.PAUSED,
+            TRANSLATION_STATUS.PENDING,
+            undefined
+        ]) {
+            const entries = deriveChainState(
+                chain,
+                [event(TRANSLATION_EVENT_TYPE.STARTED)],
+                'openai',
+                status
+            )
+
+            expect(entries.map((entry) => entry.state)).toEqual(['unused', 'current', 'unused'])
+        }
+    })
+})
+
+describe('isTerminalRequestStatus', () => {
+    it('recognizes exactly the terminal statuses', () => {
+        for (const status of [
+            TRANSLATION_STATUS.COMPLETED,
+            TRANSLATION_STATUS.FAILED,
+            TRANSLATION_STATUS.CANCELLED,
+            TRANSLATION_STATUS.INTERRUPTED
+        ]) {
+            expect(isTerminalRequestStatus(status)).toBe(true)
+        }
+        for (const status of [
+            TRANSLATION_STATUS.INPROGRESS,
+            TRANSLATION_STATUS.PAUSED,
+            TRANSLATION_STATUS.PENDING,
+            null,
+            undefined,
+            ''
+        ]) {
+            expect(isTerminalRequestStatus(status)).toBe(false)
+        }
     })
 })

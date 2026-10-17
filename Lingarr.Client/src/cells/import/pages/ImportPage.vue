@@ -454,7 +454,7 @@ const uiStore = useUiStore()
 
 // topbar CTA (prototype): 开始处理 runs the workbench import
 onMounted(() => {
-    uiStore.registerCta(t('topbar.cta.process'), () => {
+    uiStore.registerCta({ key: 'topbar.cta.process' }, () => {
         if (rows.value.length === 0) {
             toastStore.push({ message: t('library.tray.needSelection'), type: 'info' })
             return
@@ -602,7 +602,7 @@ function formatCost(value: number): string {
 
 // live topbar sub: workbench queue counts
 watch([() => rows.value.length, translateCount], ([files, translate]) => {
-    uiStore.setSubOverride(t('topbar.sub.importLive', { files, translate }))
+    uiStore.setSubOverride({ key: 'topbar.sub.importLive', params: { files, translate } })
 }, { immediate: true })
 const storeCount = computed(() => rows.value.filter((row) => row.action === 'store').length)
 const matchedCount = computed(() => rows.value.filter((row) => row.parse?.episode != null).length)

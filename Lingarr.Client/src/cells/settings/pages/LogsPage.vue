@@ -158,12 +158,14 @@ const filteredLogs = computed(() => {
     })
 })
 
+/// 行内级别与筛选徽章同一套写法(批E E5):INFO/WARN/ERROR,等宽网格
+/// 的 46px 级别列足够容纳最长形态,不换行。
 const levelShort = (level: string): string => {
     const key = levelKey(level)
-    if (key === 'error') return 'ERR'
-    if (key === 'warning') return 'WRN'
-    if (key === 'information') return 'INF'
-    return level.slice(0, 3).toUpperCase()
+    if (key === 'error') return 'ERROR'
+    if (key === 'warning') return 'WARN'
+    if (key === 'information') return 'INFO'
+    return level.slice(0, 5).toUpperCase()
 }
 
 const levelClass = (level: string): string => {
@@ -303,8 +305,8 @@ watch(
 
 onMounted(() => {
     // topbar CTA (prototype act table): ⇩ export of the filtered view
-    uiStore.registerCta(t('settings.logs.exportCta'), exportLogs)
-    uiStore.setSubOverride(t('settings.logs.topbarSub'))
+    uiStore.registerCta({ key: 'settings.logs.exportCta' }, exportLogs)
+    uiStore.setSubOverride({ key: 'settings.logs.topbarSub' })
 
     eventSource = logsApi.getStream()
 

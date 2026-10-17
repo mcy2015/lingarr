@@ -98,13 +98,14 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         int? explicitId = null,
         int? year = null,
         string? imdbId = null,
-        double? imdbRating = null)
+        double? imdbRating = null,
+        string? path = null)
     {
         var show = new Show
         {
             SonarrId = _nextExternalId++,
             Title = title,
-            Path = "/tv/" + title,
+            Path = path ?? "/tv/" + title,
             DateAdded = DateTimeOffset.UtcNow,
             SubtitleCoverage = coverage,
             Year = year,
@@ -120,7 +121,7 @@ public class MediaLibraryServiceSqliteTests : IDisposable
             var season = new Season
             {
                 SeasonNumber = seasonNumber,
-                Path = $"/tv/{title}/S{seasonNumber:00}",
+                Path = $"{show.Path}/S{seasonNumber:00}",
                 Show = show
             };
             for (var i = 1; i <= episodesPerSeason[seasonNumber - 1]; i++)
@@ -153,14 +154,15 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         string? imdbId = null,
         string? quality = null,
         long? sizeBytes = null,
-        double? imdbRating = null)
+        double? imdbRating = null,
+        string? path = null)
     {
         var movie = new Movie
         {
             RadarrId = _nextExternalId++,
             Title = title,
             FileName = title + ".mkv",
-            Path = "/movies/" + title,
+            Path = path ?? "/movies/" + title,
             DateAdded = DateTimeOffset.UtcNow,
             SubtitleCoverage = coverage,
             AudioLanguages = audioLanguages,
@@ -308,16 +310,75 @@ public class MediaLibraryServiceSqliteTests : IDisposable
         Assert.Equal(["Apple", "Apricot"], result.Items.Select(i => i.Title).ToArray());
     }
 
+    // ── B2: search matches the on-disk path alongside the title ─────────
+    // A CJK-titled library row typically carries the romanised release name
+    // only in its path — the title dimension alone (FTS or LIKE) can never
+    // surface it.
+
+    [Fact]
+    public async Task Search_MatchesTheOnDiskPathForBothBranches()
+    {
+        // 狗阵 ("Black Dog") releases live under the English name on disk.
+        await SeedMovieAsync("狗阵", path: "/movies/Black Dog (2024)");
+        await SeedShowAsync("黑猫警长", [1], path: "/tv/Black Cat Sheriff");
+        // same-title control: matches by title regardless of path
+        await SeedMovieAsync("Black Dog Movie", path: "/movies/bdm");
+
+        var service = CreateService();
+
+        // ASCII branch (FTS id set ∪ path substring): the FTS finds nothing
+        // for the CJK titles, the path arm surfaces both.
+        var english = await service.GetLibrary(null, "black dog", null, null, "Title", true, 1, 20);
+        Assert.Equal(2, english.TotalCount);
+        Assert.Equal(
+            ["Black Dog Movie", "狗阵"],
+            english.Items.Select(i => i.Title).ToArray());
+
+        // CJK branch (title LIKE OR path LIKE): the Chinese title still hits
+        // by title, and a Chinese path fragment hits by path.
+        var chineseTitle = await service.GetLibrary(null, "狗阵", null, null, "Title", true, 1, 20);
+        Assert.Equal("狗阵", chineseTitle.Items.Single().Title);
+        var chinesePath = await service.GetLibrary(null, "黑猫警长", null, null, "Title", true, 1, 20);
+        Assert.Equal("黑猫警长", chinesePath.Items.Single().Title);
+        // the English show path answers to an ASCII term too
+        var sheriff = await service.GetLibrary(MediaType.Show, "sheriff", null, null, "Title", true, 1, 20);
+        Assert.Equal("黑猫警长", sheriff.Items.Single().Title);
+
+        // a term in no title and no path still returns nothing
+        Assert.Equal(0, (await service.GetLibrary(null, "nonexistent term", null, null, "Title", true, 1, 20)).TotalCount);
+    }
+
+    [Fact]
+    public async Task Search_PathUnionAppliesToTheSqlPagedPathToo()
+    {
+        // target-language filter forces the full aggregation path; the
+        // default browsing shape pages in SQL — the path arm must behave
+        // identically on both (GetLibraryPagedAsync shares the predicates,
+        // this pins it end to end).
+        await SeedMovieAsync("狗阵", path: "/movies/Black Dog (2024)");
+
+        var aggregated = await CreateService().GetLibrary(null, "black dog", null, "zh", "Title", true, 1, 20);
+        Assert.Equal("狗阵", aggregated.Items.Single().Title);
+
+        var paged = await CreateService().GetLibrary(null, "black dog", null, null, "Title", true, 1, 20);
+        Assert.Equal("狗阵", paged.Items.Single().Title);
+        Assert.Equal(1, paged.TotalCount);
+    }
+
     // ── FTS5 title search (audit P1-4): prefix semantics, id-set pushdown,
     //    LIKE fallbacks and the drift self-heal ──────────────────────────
 
     [Fact]
     public async Task FtsSearch_MatchesWordPrefixesNotInfixes()
     {
-        await SeedShowAsync("Star Trek", [1]);
-        await SeedMovieAsync("Starship Troopers");
-        await SeedMovieAsync("Startled Muse");
-        await SeedMovieAsync("Pineapple");
+        // Opaque paths: the search predicate is a title-OR-path union (B2),
+        // so this title-semantics test seeds paths that carry no title text
+        // — otherwise a title infix would surface through the path match
+        // and blur what is being pinned here.
+        await SeedShowAsync("Star Trek", [1], path: "/tv/s1");
+        await SeedMovieAsync("Starship Troopers", path: "/movies/m1");
+        await SeedMovieAsync("Startled Muse", path: "/movies/m2");
+        await SeedMovieAsync("Pineapple", path: "/movies/m3");
 
         var service = CreateService();
 
@@ -347,10 +408,13 @@ public class MediaLibraryServiceSqliteTests : IDisposable
     [Fact]
     public async Task FtsSearch_FiltersByIdSetNotTitleScan()
     {
-        await SeedShowAsync("Apple Orchard", [1]);
-        await SeedShowAsync("Apricot Tree", [1]);
-        await SeedMovieAsync("Apricot Lane");
-        await SeedMovieAsync("Pineapple Express");
+        // Opaque paths (see FtsSearch_MatchesWordPrefixesNotInfixes): the
+        // path arm of the union predicate must not manufacture extra hits
+        // here — what this test pins is the SQL shape of the FTS branch.
+        await SeedShowAsync("Apple Orchard", [1], path: "/tv/s1");
+        await SeedShowAsync("Apricot Tree", [1], path: "/tv/s2");
+        await SeedMovieAsync("Apricot Lane", path: "/movies/m1");
+        await SeedMovieAsync("Pineapple Express", path: "/movies/m2");
 
         _sqlLog.Clear();
         var result = await CreateService().GetLibrary(null, "ap", null, null, "Title", true, 1, 20);
@@ -361,9 +425,11 @@ public class MediaLibraryServiceSqliteTests : IDisposable
 
         // The media scans consumed the FTS-resolved id set: membership over
         // ids, no lower(title) LIKE predicate left — the audit P1-4
-        // full-table scan is gone from the media queries of both types. (The
-        // show side carries two matched ids so the IN form is unambiguous;
-        // EF may render a single-id membership as an equality.)
+        // full-table title scan is gone from the media queries of both
+        // types. The B2 path arm rides along as an OR-ed instr() on the
+        // path column (never a LIKE). (The show side carries two matched
+        // ids so the IN form is unambiguous; EF may render a single-id
+        // membership as an equality.)
         var mediaQueries = _sqlLog.Where(sql =>
                 sql.Contains("FROM \"Shows\"", StringComparison.OrdinalIgnoreCase)
                 || sql.Contains("FROM \"Movies\"", StringComparison.OrdinalIgnoreCase))

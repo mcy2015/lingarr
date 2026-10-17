@@ -293,7 +293,7 @@ describe('QueuePage', () => {
         const { wrapper, uiStore, router } = await mountQueuePage()
 
         expect(uiStore.cta).not.toBeNull()
-        expect(uiStore.cta?.label).toBe(en.topbar.cta.newTask)
+        expect(uiStore.cta?.label).toEqual({ key: 'topbar.cta.newTask' })
         expect(uiStore.subOverride).not.toBe('')
 
         await uiStore.cta?.handler()

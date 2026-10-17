@@ -86,8 +86,16 @@
                     v-for="track in item?.tracks ?? []"
                     :key="track.language"
                     :class="chipClass(movieBusyState(track))"
-                    :title="trackTitle(track)">
+                    :title="trackTitle(track)"
+                    data-test="track-chip">
                     {{ trackLabel(track) }}
+                    <!-- C5:none 态用样式化状态点元素,不输出尾随文本「·」——裸点会被
+                         误读成列表悬空分隔符 -->
+                    <span
+                        v-if="trackIsNone(track)"
+                        class="bg-secondary-content ml-0.5 inline-block h-1.5 w-1.5 rounded-full"
+                        aria-hidden="true"
+                        data-test="track-none-dot"></span>
                 </span>
             </div>
             <span class="mono text-secondary-content ml-auto text-xs">
@@ -97,11 +105,14 @@
 
         <!-- ═══ 剧集:逐集轨道表(虚拟滚动,P2-8:千集季只渲染视口行) ═══ -->
         <template v-if="isShow">
+            <!-- C4:卡高度内容自适应(短季不留大片空白),max-h 上限内滚动(长季
+                 仍可滚);剩余空间交给下方 Translation history 卡 -->
             <div
-                class="border-line bg-secondary flex min-h-0 flex-[1.5] flex-col rounded-md border">
+                class="border-line bg-secondary flex max-h-[min(70vh,560px)] min-h-0 flex-col rounded-md border"
+                data-test="episode-list-card">
                 <VirtualEpisodeList
                     :items="seasonEpisodes"
-                    :item-height="44"
+                    :item-height="40"
                     :overscan="5"
                     :colspan="6"
                     :label="t('mediaDetail.episodeTitle')"
@@ -137,9 +148,19 @@
                                         :key="lang"
                                         :class="
                                             chipClass(episodeHas(ep, lang) ? 'complete' : 'none')
-                                        ">
+                                        "
+                                        data-test="episode-lang-chip">
                                         {{ lang.toUpperCase() }}
-                                        {{ episodeHas(ep, lang) ? '✓' : '·' }}
+                                        <!-- C5:缺失态用样式化状态点,与头部 track chip 一致,
+                                             不输出尾随文本「·」 -->
+                                        <span v-if="episodeHas(ep, lang)" aria-hidden="true"
+                                            >✓</span
+                                        >
+                                        <span
+                                            v-else
+                                            class="bg-secondary-content ml-0.5 inline-block h-1.5 w-1.5 rounded-full"
+                                            aria-hidden="true"
+                                            data-test="episode-lang-dot"></span>
                                     </span>
                                 </div>
                             </td>
@@ -178,8 +199,13 @@
                                         }">
                                         <button
                                             type="button"
-                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors">
-                                            {{ t('common.translationAction.proofread') }}
+                                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
+                                            :title="t('common.translationAction.proofread')"
+                                            :aria-label="
+                                                t('common.translationAction.proofread')
+                                            "
+                                            data-test="episode-proofread">
+                                            {{ t('common.translationAction.proofreadShort') }}
                                         </button>
                                     </router-link>
                                     <router-link
@@ -224,7 +250,7 @@
             v-else
             class="border-line bg-secondary flex min-h-[160px] flex-1 flex-col rounded-md border">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
-                <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.tasks') }}</h2>
+                <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.tasks.heading') }}</h2>
                 <span v-if="tasksMeta" class="mono text-secondary-content ml-auto text-xs">
                     {{ tasksMeta }}
                 </span>
@@ -234,7 +260,14 @@
                 <div
                     v-if="item && activeRequests.length === 0"
                     class="flex flex-wrap items-center justify-center gap-3 px-4 py-6 text-center">
-                    <span v-if="movieTargetComplete" class="text-success text-xs">
+                    <!-- C2:全目标语言就绪 → 静默完成态(无 Start translation 按钮) -->
+                    <span
+                        v-if="movieAllTargetsComplete"
+                        class="text-success text-xs"
+                        data-test="tasks-all-done">
+                        ✓ {{ t('mediaDetail.tasks.allDone') }}
+                    </span>
+                    <span v-else-if="movieTargetComplete" class="text-success text-xs">
                         ✓ {{ t('mediaDetail.movie.done') }}
                     </span>
                     <template v-else>
@@ -268,36 +301,63 @@
                 </span>
             </div>
 
-            <!-- ═══ 需求卡 B:音轨行 —— mono 语言码(null=未知);「标记需要字幕/取消标记」
-                 入口按真实豁免态渲染,已知音轨且不含目标语言时不渲染任何入口 ═══ -->
-            <div
-                v-if="item"
-                class="border-line/60 bg-tertiary/40 flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1 border-b px-4 py-2 text-[12.5px]"
-                data-test="audio-languages-row">
-                <span class="text-secondary-content text-[11px] font-semibold tracking-wide">
-                    {{ t('mediaDetail.audio.title') }}
-                </span>
-                <span
-                    v-if="audioLanguages"
-                    class="mono text-primary-content text-[11.5px]"
-                    data-test="audio-languages-value">
-                    {{ audioLanguages.join(' · ') }}
-                </span>
-                <span
-                    v-else
-                    class="text-secondary-content/70 text-xs"
-                    data-test="audio-languages-unknown">
-                    {{ t('mediaDetail.audio.unknown') }}
-                </span>
-                <button
-                    v-if="subtitleNeedAction"
-                    type="button"
-                    class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
-                    :disabled="subtitleNeedBusy"
-                    data-test="subtitle-need-toggle"
-                    @click="toggleSubtitleNeed(subtitleNeedAction.needed)">
-                    {{ subtitleNeedAction.label }}
-                </button>
+            <!-- ═══ 需求卡 B / C1:音轨覆盖徽章行 —— 卡内独立分组(内缩圆角框 + 底色,
+                 非普通文件行样式):Audio 徽章 + mono 语言码 + 覆盖说明 + 短标签操作。
+                 该行不计入 "N files" 计数;已知音轨且不含目标语言时不渲染任何入口 ═══ -->
+            <div v-if="item" class="shrink-0 px-4 pb-1 pt-3" data-test="audio-languages-row">
+                <div
+                    class="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]"
+                    :class="
+                        audioContainsTarget
+                            ? 'border-success/35 bg-success/10'
+                            : 'border-line bg-tertiary/50'
+                    "
+                    data-test="audio-coverage-box">
+                    <span
+                        class="mono rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold"
+                        :class="
+                            audioContainsTarget
+                                ? 'border-success/40 bg-success/15 text-success'
+                                : 'border-line bg-tertiary text-secondary-content'
+                        "
+                        data-test="audio-badge">
+                        {{ t('mediaDetail.audio.audioLabel') }}
+                    </span>
+                    <span
+                        v-if="audioLanguages"
+                        class="mono text-primary-content text-[11.5px]"
+                        data-test="audio-languages-value">
+                        {{ audioLanguages.join(' · ') }}
+                    </span>
+                    <span
+                        v-else
+                        class="text-secondary-content/70 text-xs"
+                        data-test="audio-languages-unknown">
+                        {{ t('mediaDetail.audio.unknown') }}
+                    </span>
+                    <!-- 覆盖说明只在音轨确实覆盖了某目标语言时出现(否则文案失真) -->
+                    <span
+                        v-if="audioContainsTarget"
+                        class="text-secondary-content text-xs"
+                        data-test="audio-coverage-note">
+                        {{
+                            t('mediaDetail.audio.coverageNote', {
+                                langs: audioLanguages!.join(', ')
+                            })
+                        }}
+                    </span>
+                    <button
+                        v-if="subtitleNeedAction"
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
+                        :disabled="subtitleNeedBusy"
+                        :title="subtitleNeedAction.title"
+                        :aria-label="subtitleNeedAction.title"
+                        data-test="subtitle-need-toggle"
+                        @click="toggleSubtitleNeed(subtitleNeedAction.needed)">
+                        {{ subtitleNeedAction.label }}
+                    </button>
+                </div>
             </div>
             <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
                 <div
@@ -423,7 +483,7 @@
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.history') }}</h2>
                 <span class="mono text-secondary-content ml-auto text-xs">
-                    {{ t('mediaDetail.historyCount', { count: history.length }) }}
+                    {{ t('mediaDetail.historyCount', history.length) }}
                 </span>
             </div>
             <div
@@ -606,23 +666,30 @@ const audioContainsTarget = computed<boolean>(() => {
 /// target-covering exemption (AC5 reversible) and confirms unknown-audio
 /// items;「取消标记」(needed=false) lifts the mark so the exemption
 /// re-applies. Known audio without the target has nothing to toggle — no
-/// entry renders there.
-const subtitleNeedAction = computed<{ label: string; needed: boolean } | null>(() => {
-    const media = item.value
-    if (!media) return null
-    if (media.needsNoSubtitles) {
-        return audioContainsTarget.value
-            ? { label: t('mediaDetail.audio.markNeeded'), needed: true }
-            : { label: t('mediaDetail.audio.cancelMark'), needed: false }
+/// entry renders there. The button shows the SHORT label (C1: row space is
+/// tight); `title`/`aria-label` keep the full sentence for hover/SR.
+const subtitleNeedAction = computed<{ label: string; title: string; needed: boolean } | null>(
+    () => {
+        const media = item.value
+        if (!media) return null
+        const markNeeded = {
+            label: t('mediaDetail.audio.markNeeded'),
+            title: t('mediaDetail.audio.markNeeded'),
+            needed: true
+        }
+        const cancelMark = {
+            label: t('mediaDetail.audio.cancelMarkShort'),
+            title: t('mediaDetail.audio.cancelMark'),
+            needed: false
+        }
+        if (media.needsNoSubtitles) {
+            return audioContainsTarget.value ? markNeeded : cancelMark
+        }
+        if (audioLanguages.value === null) return markNeeded
+        if (audioContainsTarget.value) return cancelMark
+        return null
     }
-    if (audioLanguages.value === null) {
-        return { label: t('mediaDetail.audio.markNeeded'), needed: true }
-    }
-    if (audioContainsTarget.value) {
-        return { label: t('mediaDetail.audio.cancelMark'), needed: false }
-    }
-    return null
-})
+)
 
 const subtitleNeedBusy = ref(false)
 
@@ -704,10 +771,9 @@ const headerMeta = computed(() => {
     if (isShow.value) {
         const missing = missingTargetEpisodes.value
         return (
-            t('mediaDetail.showMeta', {
-                seasons: item.value.seasonCount,
-                episodes: item.value.episodeCount
-            }) +
+            t('mediaDetail.seasonCount', item.value.seasonCount) +
+            ' · ' +
+            t('mediaDetail.episodeCount', item.value.episodeCount) +
             (missing
                 ? ' · ' +
                   t('mediaDetail.missingEpisodes', {
@@ -749,7 +815,7 @@ const tasksMeta = computed(() => {
         const meta = `#${request.id}` + (request.serviceType ? ` · ${request.serviceType}` : '')
         return t('mediaDetail.tasksMeta', { meta })
     }
-    return t('mediaDetail.tasksCount', { count: requests.length })
+    return t('mediaDetail.tasksCount', requests.length)
 })
 
 /// Active request per target language — backs the busy chip variant
@@ -771,18 +837,33 @@ const movieTargetComplete = computed(() => {
     )
 })
 
+/// C2:every configured target language already has its subtitle track in
+/// place (tracks state, not history) — the tasks card then shows the silent
+/// all-done state instead of "Not translated yet + Start translation".
+const movieAllTargetsComplete = computed(() => {
+    const targets = targetLanguageCodes.value
+    if (targets.length === 0) return false
+    const tracks = item.value?.tracks ?? []
+    return targets.every((target) =>
+        tracks.some(
+            (track) => track.language.toLowerCase() === target && track.have >= track.total
+        )
+    )
+})
+
 onMounted(load)
 onUnmounted(() => {
     uiStore.clearCta()
     uiStore.setSubOverride('')
 })
 
-// live topbar sub mirrors the page header line
+// live topbar sub mirrors the page header line; watching headerMeta itself
+// (a computed over item + t()) re-registers the string on locale switches
 watch(
-    [item, activeSeason],
-    ([value]) => {
+    headerMeta,
+    (value) => {
         if (!value) return
-        uiStore.setSubOverride(headerMeta.value)
+        uiStore.setSubOverride(value)
     },
     { immediate: true }
 )
@@ -1191,7 +1272,7 @@ async function movieTranslateMissing(): Promise<void> {
 // target directly (the language menu stays on the screen button), movies
 // run the busy/create path verbatim.
 onMounted(() => {
-    uiStore.registerCta(t('mediaDetail.translateMissing'), () => {
+    uiStore.registerCta({ key: 'mediaDetail.translateMissing' }, () => {
         if (isShow.value) {
             const target = firstTargetLanguage.value
             if (!target) {
@@ -1237,7 +1318,16 @@ function trackLabel(track: { language: string; have: number; total: number }): s
     }
     if (track.have >= track.total) return `${lang} ✓`
     if (track.have > 0) return `${lang} ◐ ${track.have}/${track.total}`
-    return `${lang} ·`
+    // none 态只输出语言码,状态点由模板渲染(见 trackIsNone)
+    return lang
+}
+
+/// None-state track (no subtitles, no live request) — its chip renders a
+/// styled status dot ELEMENT instead of a trailing text '·': a bare dot
+/// glyph after the code reads like a dangling list separator (C5).
+function trackIsNone(track: { language: string; have: number; total: number }): boolean {
+    if (!isShow.value && activeByLanguage.value.has(track.language.toLowerCase())) return false
+    return track.have === 0 && track.have < track.total
 }
 
 function trackTitle(track: { language: string; have: number; total: number }): string {

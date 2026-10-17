@@ -16,7 +16,9 @@ public class TranslationHealthSnapshot
 
 /// <summary>
 /// Health row for the overview service-health card and the settings provider
-/// cards. Cost stays null until usage/price tracking lands (A5, batch B2).
+/// cards. Latency/success are process-local rolling windows (since restart);
+/// MonthlyCost is null until a rate is configured and MonthlyRequests counts
+/// the provider's completed requests of the current month (0 when unused).
 /// </summary>
 public class TranslationServiceHealth
 {
@@ -29,4 +31,11 @@ public class TranslationServiceHealth
     public DateTimeOffset? LastRequestAt { get; init; }
     public int SampleCount { get; init; }
     public double? MonthlyCost { get; init; }
+
+    /// <summary>
+    /// Completed translation requests attributed to this provider in the
+    /// current month — the same serviceType/month criteria the cost rollup
+    /// prices (walkthrough fix B3: the card's number is real, not decorative).
+    /// </summary>
+    public int MonthlyRequests { get; init; }
 }

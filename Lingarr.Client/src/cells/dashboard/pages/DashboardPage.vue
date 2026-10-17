@@ -8,19 +8,20 @@
                 <div v-if="index > 0" class="link hidden self-center md:block"></div>
                 <button
                     type="button"
-                    class="border-line hover:border-accent/60 bg-secondary min-w-[150px] flex-1 cursor-pointer rounded-md border px-3.5 py-3 text-left transition-colors"
+                    class="border-line hover:border-accent/60 bg-secondary min-w-[150px] flex-1 cursor-pointer rounded-md border px-4 py-3 text-left transition-colors"
                     :class="node.hot ? 'border-accent/55' : 'border-line'"
                     :title="node.label"
+                    :data-test="`pipe-node-${node.key}`"
                     @click="router.push({ name: node.route, query: node.query })">
-                    <div class="text-secondary-content text-[11.5px]">{{ node.label }}</div>
                     <div
-                        class="mono text-[22px] leading-tight font-semibold"
+                        class="mono text-2xl font-semibold"
                         :class="node.hot ? 'text-accent' : ''">
                         {{ node.value }}
                         <small class="text-secondary-content ml-1 text-xs font-normal">
                             {{ node.small }}
                         </small>
                     </div>
+                    <div class="text-secondary-content mt-0.5 text-xs">{{ node.label }}</div>
                 </button>
             </template>
         </div>
@@ -45,8 +46,13 @@
             </button>
         </div>
 
-        <!-- ═══ 活跃任务 + 服务健康（弹性行，卡内滚动） ═══ -->
-        <div class="grid min-h-[170px] flex-[1.4] gap-3.5 lg:grid-cols-[1.6fr_1fr]">
+        <!-- ═══ 活跃任务 + 服务健康（弹性行，卡内滚动） ═══
+             批E E1:无活动任务时该行不再吃 flex-[1.4] 弹性、不设最小高——
+             左卡收敛到内容高度,不再撑出大片空白;有任务时弹性布局原样。 -->
+        <div
+            class="grid gap-3.5 lg:grid-cols-[1.6fr_1fr]"
+            :class="activeItems.length > 0 ? 'min-h-[170px] flex-[1.4]' : ''"
+            data-test="active-row">
             <div class="border-line bg-secondary flex min-h-0 flex-col rounded-md border">
                 <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                     <h2 class="text-[13px] font-semibold">{{ t('overview.active.title') }}</h2>
@@ -125,7 +131,9 @@
                     </span>
                     <span class="min-w-0">
                         <b>{{ event.requestTitle }}</b>
-                        <span class="text-secondary-content">— {{ feedText(event) }}</span>
+                        <!-- 破折号前后都留空格(批E E3,解 CJK 标题贴边):
+                             模板编译会吃掉元素首的裸空格,放进插值才可靠 -->
+                        <span class="text-secondary-content">{{ ' — ' + feedText(event) }}</span>
                     </span>
                 </div>
             </div>
@@ -429,16 +437,18 @@ const isHubDegraded = (): boolean => {
 
 const updateSub = (): void => {
     if (isHubDegraded()) {
-        uiStore.setSubOverride(t('topbar.sub.offlineReconnecting'))
+        uiStore.setSubOverride({ key: 'topbar.sub.offlineReconnecting' })
         return
     }
     const running = inProgressCount.value > 0
-    uiStore.setSubOverride(
-        t('topbar.sub.dashboardLive', {
+    uiStore.setSubOverride({
+        key: 'topbar.sub.dashboardLive',
+        params: {
+            // pre-translated; the 1s sub timer re-registers on locale switch
             state: running ? t('topbar.sub.pipelineRunning') : t('topbar.sub.pipelineIdle'),
             seconds: Math.max(0, Math.round((Date.now() - lastFetchAt.value) / 1000))
-        })
-    )
+        }
+    })
 }
 const fetchOverview = async (): Promise<void> => {
     const [
@@ -482,7 +492,7 @@ const hubConnection = ref<Hub | undefined>(undefined)
 
 // topbar CTA (prototype): global import entry
 onMounted(() => {
-    uiStore.registerCta(t('library.toolbar.import'), () => router.push({ name: 'import' }))
+    uiStore.registerCta({ key: 'library.toolbar.import' }, () => router.push({ name: 'import' }))
     updateSub()
     subTimer.value = setInterval(updateSub, 1000)
 })

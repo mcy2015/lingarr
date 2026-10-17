@@ -8,11 +8,13 @@ import en from '@/i18n/locales/en.json'
 import QueueDetailPage from '@/cells/queue/pages/QueueDetailPage.vue'
 import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import useTranslationRequestStore from '@/cells/app/stores/translationRequest'
+import { useSettingStore } from '@/cells/app/stores/setting'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
 import {
     ITranslationRequestDetail,
     ITranslationRequestEvent,
+    SETTINGS,
     TRANSLATION_EVENT_TYPE,
     TRANSLATION_STATUS
 } from '@/types'
@@ -109,7 +111,10 @@ interface MountedDetail {
     router: ReturnType<typeof createRouter>
 }
 
-async function mountDetail(detail: ITranslationRequestDetail): Promise<MountedDetail> {
+async function mountDetail(
+    detail: ITranslationRequestDetail,
+    options: { serviceType?: string } = {}
+): Promise<MountedDetail> {
     translationRequestApi.get.mockResolvedValue(detail)
     translationRequestApi.getEvents.mockResolvedValue(batchEvents())
     translationRequestApi.requests.mockResolvedValue({
@@ -122,6 +127,10 @@ async function mountDetail(detail: ITranslationRequestDetail): Promise<MountedDe
     translateApi.proofreadStatus.mockResolvedValue({ supported: false })
 
     const pinia = createPinia()
+    if (options.serviceType !== undefined) {
+        // seed the fallback-chain setting so ExecutionChain renders real chips
+        useSettingStore(pinia).storeSetting(SETTINGS.SERVICE_TYPE, options.serviceType)
+    }
     const i18n = createI18n({
         legacy: false,
         locale: 'en',
@@ -238,20 +247,92 @@ describe('QueueDetailPage (drill-down, prototype screen-09)', () => {
         expect(uiStore.cta).toBeNull()
     })
 
+    // ── walk-through fix D1: no "Running"/"Currently processing" residue ──
+    it('labels the elapsed cell Duration and demotes the chain chip on a completed request', async () => {
+        const { wrapper } = await mountDetail(
+            makeDetail({
+                status: TRANSLATION_STATUS.COMPLETED,
+                serviceType: 'openai',
+                // 5 minutes after the STARTED event, so the duration cell shows
+                completedAt: new Date(Date.now() - 5 * 60_000).toISOString()
+            }),
+            { serviceType: '["openai","gemini"]' }
+        )
+
+        const stats = wrapper.find('[data-test="qd-stats"]')
+        const labels = stats.findAll('.text-\\[11\\.5px\\]').map((cell) => cell.text())
+        expect(labels).toContain(en.translations.detail.statDuration)
+        expect(labels).not.toContain(en.translations.detail.statElapsed)
+
+        const chip = wrapper.find('[data-test="chain-openai"]')
+        expect(chip.exists()).toBe(true)
+        expect(chip.text()).toContain('✓')
+        expect(chip.text()).not.toContain('▸')
+        expect(chip.attributes('title')).toBe(en.translations.detail.completed)
+        expect(chip.attributes('title')).not.toBe(en.translations.chain.state.current)
+    })
+
+    it('keeps the chain chip current with the Running label while the request is in progress', async () => {
+        const { wrapper } = await mountDetail(makeDetail({ serviceType: 'openai' }), {
+            serviceType: '["openai","gemini"]'
+        })
+
+        const stats = wrapper.find('[data-test="qd-stats"]')
+        const labels = stats.findAll('.text-\\[11\\.5px\\]').map((cell) => cell.text())
+        expect(labels).toContain(en.translations.detail.statElapsed)
+
+        const chip = wrapper.find('[data-test="chain-openai"]')
+        expect(chip.text()).toContain('▸')
+        expect(chip.attributes('title')).toBe(en.translations.chain.state.current)
+    })
+
+    // ── walk-through fix D2: subtitle markup renders, never as literal tags ──
+    it('renders <i>/<b> markup as styled segments in the translated lines table', async () => {
+        const { wrapper } = await mountDetail(
+            makeDetail({
+                status: TRANSLATION_STATUS.COMPLETED,
+                lines: [
+                    {
+                        position: 1,
+                        source: 'A <i>quiet</i> part',
+                        target: '一个<b>安静</b>的段落',
+                        service: 'openai'
+                    }
+                ]
+            })
+        )
+
+        const box = wrapper.find('.max-h-96')
+        expect(box.find('span.italic').text()).toBe('quiet')
+        expect(box.find('span.font-bold').text()).toBe('安静')
+        expect(box.text()).not.toContain('<i>')
+        expect(box.text()).not.toContain('<b>')
+    })
+
+    // ── walk-through fix D3: first row fully visible inside the scroll box ──
+    it('pads the lines scroll box so the first row is not clipped at the edge', async () => {
+        const { wrapper } = await mountDetail(makeDetail())
+
+        const box = wrapper.find('.max-h-96')
+        expect(box.exists()).toBe(true)
+        expect(box.classes()).toContain('pt-1')
+        expect(box.classes()).toContain('scroll-pt-2')
+    })
+
     // ── pause / resume wiring (P0: pb-head button = topbar CTA) ────
     it('pauses through the pb-head primary action and swaps both buttons to resume', async () => {
         translationRequestApi.pause.mockResolvedValue(undefined)
         const { wrapper, uiStore, toastStore } = await mountDetail(makeDetail())
 
         expect(pauseButton(wrapper).text()).toContain('⏸')
-        expect(uiStore.cta?.label).toBe(en.translations.detail.pauseAction)
+        expect(uiStore.cta?.label).toEqual({ key: 'translations.detail.pauseAction' })
 
         await pauseButton(wrapper).trigger('click')
         await settle()
 
         expect(translationRequestApi.pause).toHaveBeenCalledTimes(1)
         expect(pauseButton(wrapper).text()).toContain('▶')
-        expect(uiStore.cta?.label).toBe(en.translations.detail.resumeAction)
+        expect(uiStore.cta?.label).toEqual({ key: 'translations.detail.resumeAction' })
         expect(toastStore.toasts[0].message).toBe(
             en.translations.detail.pauseToast.replace('{id}', '2417')
         )
@@ -264,14 +345,14 @@ describe('QueueDetailPage (drill-down, prototype screen-09)', () => {
         )
 
         expect(pauseButton(wrapper).text()).toContain('▶')
-        expect(uiStore.cta?.label).toBe(en.translations.detail.resumeAction)
+        expect(uiStore.cta?.label).toEqual({ key: 'translations.detail.resumeAction' })
 
         await pauseButton(wrapper).trigger('click')
         await settle()
 
         expect(translationRequestApi.resumePaused).toHaveBeenCalledTimes(1)
         expect(pauseButton(wrapper).text()).toContain('⏸')
-        expect(uiStore.cta?.label).toBe(en.translations.detail.pauseAction)
+        expect(uiStore.cta?.label).toEqual({ key: 'translations.detail.pauseAction' })
         expect(toastStore.toasts[0].message).toBe(
             en.translations.detail.resumeToast.replace('{id}', '2417')
         )

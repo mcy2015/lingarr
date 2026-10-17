@@ -140,4 +140,55 @@ describe('VirtualEpisodeList', () => {
         expect(wrapper.find('[data-test="virtual-row"]').exists()).toBe(false)
         expect(wrapper.find('[data-test="virtual-spacer-bottom"]').exists()).toBe(false)
     })
+
+    // ═══ C4:行高量测校准 —— 真实行高接管 spacer 数学,估计值不再产生跳行 ═══
+    it('calibrates the window and spacer math to the measured row height', async () => {
+        const { wrapper } = await mountList(makeRows(1000), { itemHeight: 20 })
+
+        // simulate a real layout engine reporting 33px rows — patch the row
+        // prototype (window moves swap row elements, so one element is not
+        // enough) and restore it after the assertions
+        const proto = Object.getPrototypeOf(
+            wrapper.find('[data-test="virtual-row"]').element
+        ) as object
+        const original = Object.getOwnPropertyDescriptor(proto, 'offsetHeight')
+        Object.defineProperty(proto, 'offsetHeight', { configurable: true, get: () => 33 })
+        try {
+            // a scroll re-renders the window → onUpdated re-measures → the
+            // math switches from the 20px estimate to the measured 33px
+            const scroller = wrapper.find('[data-test="virtual-scroll-container"]')
+            scroller.element.scrollTop = 33 * 100
+            await scroller.trigger('scroll')
+            await nextTick()
+
+            // first = floor(3300/33) = 100 → start 95; visible = ceil(480/33)
+            // = 15 → end = 120; spacers carry the measured height, not the
+            // 20px estimate — no drift, no jump rows
+            const rows = wrapper.findAll('[data-test="virtual-row"]')
+            expect(rows[0].text()).toContain('Episode 96')
+            expect(wrapper.find('[data-test="virtual-spacer-top"]').attributes('style')).toContain(
+                `height: ${95 * 33}px`
+            )
+            expect(
+                wrapper.find('[data-test="virtual-spacer-bottom"]').attributes('style')
+            ).toContain(`height: ${(1000 - 120) * 33}px`)
+        } finally {
+            if (original) Object.defineProperty(proto, 'offsetHeight', original)
+            else delete (proto as { offsetHeight?: number }).offsetHeight
+        }
+    })
+
+    it('ignores non-positive measurements so layout-less engines keep the estimate', async () => {
+        const { wrapper } = await mountList(makeRows(100), { itemHeight: 20 })
+
+        // happy-dom reports offsetHeight 0 — the 20px estimate must survive
+        const scroller = wrapper.find('[data-test="virtual-scroll-container"]')
+        scroller.element.scrollTop = 20 * 10
+        await scroller.trigger('scroll')
+        await nextTick()
+
+        expect(wrapper.find('[data-test="virtual-spacer-top"]').attributes('style')).toContain(
+            `height: ${5 * 20}px`
+        )
+    })
 })

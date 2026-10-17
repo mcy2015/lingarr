@@ -344,7 +344,7 @@ async function handleAction(translationRequest: ITranslationRequest, action: TRA
 // topbar CTA (prototype): new task — translation starts in the library,
 // with the hint toast from the prototype act table (screen 03)
 onMounted(() => {
-    uiStore.registerCta(t('topbar.cta.newTask'), async () => {
+    uiStore.registerCta({ key: 'topbar.cta.newTask' }, async () => {
         toastStore.push({ message: t('topbar.cta.newTaskHint'), type: 'info' })
         await router.push({ name: 'library' })
     })
@@ -362,7 +362,7 @@ watch(
             (sum: number, n) => sum + Number(n ?? 0),
             0
         )
-        uiStore.setSubOverride(t('topbar.sub.queueLive', { count: total }))
+        uiStore.setSubOverride({ key: 'topbar.sub.queueLive', params: { count: total } })
     },
     { immediate: true, deep: true }
 )

@@ -84,7 +84,7 @@
                     </div>
 
                     <!-- ═══ 执行链(P1-2):service_type 链 chips,状态从事件推导 ═══ -->
-                    <ExecutionChain :entries="chainEntries" />
+                    <ExecutionChain :entries="chainEntries" :task-status="detail.status" />
                 </template>
             </CardComponent>
 
@@ -209,7 +209,10 @@
                                 {{ t('translations.detail.service') }}
                             </div>
                         </div>
-                        <div class="max-h-96 overflow-y-auto">
+                        <!-- scroll-pt/pt: the first row's trailing action buttons
+                             used to sit flush against the clip edge (walk-through
+                             fix D3) — inner padding keeps them fully visible. -->
+                        <div class="max-h-96 scroll-pt-2 overflow-y-auto pt-1">
                             <div
                                 v-for="line in reversedLines"
                                 :key="line.position"
@@ -225,11 +228,23 @@
                                     class="text-secondary-content/60 px-4 py-2 font-mono text-xs tabular-nums md:col-span-1">
                                     {{ line.position }}
                                 </div>
+                                <!-- D2: subtitle <i>/<b> markup renders as styled
+                                     segments — never literal tag text, no v-html. -->
                                 <div class="text-primary-content px-4 py-2 text-sm md:col-span-4">
-                                    {{ line.source }}
+                                    <span
+                                        v-for="(segment, index) in renderSubtitleRichText(line.source)"
+                                        :key="index"
+                                        :class="{ italic: segment.italic, 'font-bold': segment.bold }">
+                                        {{ segment.text }}
+                                    </span>
                                 </div>
                                 <div class="text-primary-content px-4 py-2 text-sm md:col-span-5">
-                                    {{ line.target }}
+                                    <span
+                                        v-for="(segment, index) in renderSubtitleRichText(line.target)"
+                                        :key="index"
+                                        :class="{ italic: segment.italic, 'font-bold': segment.bold }">
+                                        {{ segment.text }}
+                                    </span>
                                 </div>
                                 <LineProofreadPanel
                                     :line="line"
@@ -270,10 +285,12 @@ import axios from 'axios'
 import { useTranslationDetailHub } from '@/cells/queue/composables/useTranslationDetailHub'
 import { formatDateTime } from '@/cells/app/utils/date'
 import { elapsedMs, formatClock, remainingMs } from '@/cells/app/utils/eta'
+import { renderSubtitleRichText } from '@/cells/app/utils/richText'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
 import {
     deriveChainState,
     parseServiceChain,
+    isTerminalRequestStatus,
     ChainEntry
 } from '@/cells/queue/services/executionChain'
 import { useSettingStore } from '@/cells/app/stores/setting'
@@ -367,7 +384,7 @@ const currentService = computed(() => {
 })
 
 const chainEntries = computed<ChainEntry[]>(() =>
-    deriveChainState(serviceChain.value, timelineEvents.value, currentService.value)
+    deriveChainState(serviceChain.value, timelineEvents.value, currentService.value, detail.value?.status)
 )
 
 async function fetchEvents(): Promise<void> {
@@ -567,8 +584,13 @@ const statCells = computed<{ label: string; value: string; unit?: string; accent
         }
         const elapsed = elapsedMs(startedAt.value, detail.value.completedAt, nowTick.value)
         if (elapsed !== null) {
+            // walk-through fix D1: the value is always the total duration; the
+            // label must not claim "Running" once the run reached a terminal
+            // status (Completed/Failed/…) — the clock has stopped by then.
             cells.push({
-                label: t('translations.detail.statElapsed'),
+                label: isTerminalRequestStatus(detail.value.status)
+                    ? t('translations.detail.statDuration')
+                    : t('translations.detail.statElapsed'),
                 value: formatClock(elapsed)
             })
         }
@@ -594,8 +616,8 @@ watch(
         if (canPause.value && detail.value) {
             uiStore.registerCta(
                 isPaused.value
-                    ? t('translations.detail.resumeAction')
-                    : t('translations.detail.pauseAction'),
+                    ? { key: 'translations.detail.resumeAction' }
+                    : { key: 'translations.detail.pauseAction' },
                 () => void togglePause()
             )
         } else {
@@ -608,11 +630,14 @@ watch(
                 : null
         uiStore.setSubOverride(
             detail.value && remaining !== null
-                ? t('translations.detail.topbarSub', {
-                      id: detail.value.id,
-                      progress: displayProgress.value,
-                      eta: formatClock(remaining)
-                  })
+                ? {
+                      key: 'translations.detail.topbarSub',
+                      params: {
+                          id: detail.value.id,
+                          progress: displayProgress.value,
+                          eta: formatClock(remaining)
+                      }
+                  }
                 : ''
         )
     },

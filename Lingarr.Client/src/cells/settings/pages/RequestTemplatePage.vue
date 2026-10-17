@@ -67,7 +67,7 @@ const pluginApi = pluginService(axios)
 const router = useRouter()
 const settingsStore = useSettingStore()
 const uiStore = useUiStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps<{ service: string }>()
 const allPlugins = ref<IPluginSummary[]>([])
@@ -177,11 +177,12 @@ watch(
     { immediate: true }
 )
 
-// topbar: CTA = the same save action; sub = service · model · editing phrase
+// topbar: CTA = the same save action; sub = service · model · editing phrase.
+// locale in the sources re-renders the joined sub after a language switch.
 watch(
-    [currentDisplayName, subLine],
+    [currentDisplayName, subLine, locale],
     ([displayName]) => {
-        uiStore.registerCta(t('requestTemplate.save'), saveTemplate)
+        uiStore.registerCta({ key: 'requestTemplate.save' }, saveTemplate)
         const parts = [displayName, subLine.value, t('requestTemplate.topbarTail')]
         uiStore.setSubOverride(parts.filter(Boolean).join(' · '))
     },

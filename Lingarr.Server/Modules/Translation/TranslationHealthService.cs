@@ -104,7 +104,11 @@ public class TranslationHealthService : ITranslationHealthService
                 LastError = snapshot?.LastError,
                 LastRequestAt = snapshot?.LastRequestAt,
                 SampleCount = snapshot?.SampleCount ?? 0,
-                MonthlyCost = await costService.GetProviderMonthlyCostAsync(plugin.Manifest.Provider)
+                MonthlyCost = await costService.GetProviderMonthlyCostAsync(plugin.Manifest.Provider),
+                // Same serviceType/month criteria the cost rollup prices —
+                // the request count on the card is durable history, unlike
+                // the since-restart window above (B3).
+                MonthlyRequests = await costService.GetProviderMonthlyRequestsAsync(plugin.Manifest.Provider)
             });
         }
 

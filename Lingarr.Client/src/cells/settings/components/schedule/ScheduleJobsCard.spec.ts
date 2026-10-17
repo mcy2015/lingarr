@@ -123,6 +123,29 @@ describe('ScheduleJobsCard (自动化 tab · 任务表)', () => {
         expect(page.find('[data-test="schedule-qdepth"]').exists()).toBe(false)
     })
 
+    // ── 卡头 meta 复数(批E E8):queuesCount/jobsCount 承担单复数 ────
+
+    it('pluralizes the Hangfire meta line correctly for one queue and one job', async () => {
+        const page = await mountCard()
+
+        expect(page.find('[data-test="schedule-subline"]').text()).toBe(
+            'Hangfire · 1 queue · 1 recurring job'
+        )
+    })
+
+    it('pluralizes queues and jobs beyond one', async () => {
+        scheduleApi.recurringJobs.mockResolvedValue([
+            makeJob({ id: 'StatisticsJob', queue: 'system' }),
+            makeJob({ id: 'MovieSyncJob', queue: 'movies' }),
+            makeJob({ id: 'ShowSyncJob', queue: 'system' })
+        ])
+        const page = await mountCard()
+
+        expect(page.find('[data-test="schedule-subline"]').text()).toBe(
+            'Hangfire · 2 queues · 3 recurring jobs'
+        )
+    })
+
     it('shows dimmed rows with an Enable action for disabled jobs', async () => {
         scheduleApi.recurringJobs.mockResolvedValue([
             makeJob({ id: 'CleanupJob', cron: '0 2 * * 0', enabled: false })

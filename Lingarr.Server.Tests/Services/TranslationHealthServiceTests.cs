@@ -19,6 +19,13 @@ public class TranslationHealthServiceTests
         out Mock<IPluginRegistry> registry,
         out Mock<ISettingService> settings,
         params IPluginManifest[] manifests)
+        => CreateService(out registry, out settings, new Mock<ICostService>(), manifests);
+
+    private static TranslationHealthService CreateService(
+        out Mock<IPluginRegistry> registry,
+        out Mock<ISettingService> settings,
+        Mock<ICostService> costService,
+        params IPluginManifest[] manifests)
     {
         registry = new Mock<IPluginRegistry>();
         registry.SetupGet(r => r.All).Returns(manifests
@@ -30,7 +37,7 @@ public class TranslationHealthServiceTests
         // real scope factory, so tests provide one backed by a minimal provider
         var services = new ServiceCollection();
         services.AddSingleton(settings.Object);
-        services.AddSingleton(new Mock<ICostService>().Object);
+        services.AddSingleton(costService.Object);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         return new TranslationHealthService(registry.Object, scopeFactory);
@@ -176,5 +183,38 @@ public class TranslationHealthServiceTests
         }
 
         Assert.Equal(2, await service.GetOnlineServiceCountAsync());
+    }
+
+    // ── B3: monthlyRequests rides the cost rollup, durable history next to
+    //    the since-restart window
+
+    [Fact]
+    public async Task GetServiceHealthAsync_CarriesMonthlyRequestsFromTheCostRollup()
+    {
+        var costService = new Mock<ICostService>();
+        costService
+            .Setup(c => c.GetProviderMonthlyRequestsAsync("openai"))
+            .ReturnsAsync(7);
+        costService
+            .Setup(c => c.GetProviderMonthlyRequestsAsync("deepl"))
+            .ReturnsAsync(0);
+        costService
+            .Setup(c => c.GetProviderMonthlyCostAsync(It.IsAny<string>()))
+            .ReturnsAsync((double?)null);
+        var service = CreateService(
+            out _,
+            out var settings,
+            costService,
+            Manifest("openai", "OpenAI"),
+            Manifest("deepl", "DeepL"));
+        settings
+            .Setup(s => s.GetEncryptedSetting(It.IsAny<string>()))
+            .ReturnsAsync("configured");
+
+        var health = await service.GetServiceHealthAsync();
+
+        // used provider reports its real completed count, unused reports 0
+        Assert.Equal(7, health.Single(h => h.Provider == "openai").MonthlyRequests);
+        Assert.Equal(0, health.Single(h => h.Provider == "deepl").MonthlyRequests);
     }
 }

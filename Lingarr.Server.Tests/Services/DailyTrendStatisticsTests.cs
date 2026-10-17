@@ -65,11 +65,14 @@ public class DailyTrendStatisticsTests : IDisposable
     [Fact]
     public async Task BucketsByLocalDay_AndZeroFillsMissingDays()
     {
-        var today = DateTimeOffset.UtcNow;
+        // Anchor seeds to local noon so the -1h offset below can never cross
+        // a day boundary regardless of the host timezone or the wall clock.
+        var localNow = DateTimeOffset.Now;
+        var todayNoon = new DateTimeOffset(localNow.Date.AddHours(12), localNow.Offset);
         await SeedAsync(
-            Request(today.AddDays(-2), characters: null),
-            Request(today.AddDays(-2).AddHours(-1), characters: null),
-            Request(today, characters: null));
+            Request(todayNoon.AddDays(-2).AddHours(-1), characters: null),
+            Request(todayNoon.AddDays(-2), characters: null),
+            Request(todayNoon, characters: null));
 
         var trend = await CreateService().GetDailyTrendStatistics(14);
 

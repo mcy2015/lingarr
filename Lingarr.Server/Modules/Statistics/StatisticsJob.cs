@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Hangfire;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
@@ -6,13 +5,13 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Filters;
 using Lingarr.Server.Models;
-using Lingarr.Server.Models.FileSystem;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Extensions;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Modules.Statistics;
@@ -158,8 +157,8 @@ public class StatisticsJob
             // bubbles to the top-level handler and fails the job.
             var subtitles = await _subtitleService.GetAllSubtitles(movie.Path);
             movieSubtitles += subtitles.Count;
-            var coverage = CoverageFromFiles(subtitles);
-            var json = SerializeCoverage(coverage);
+            var coverage = SubtitleCoverageMath.MovieCoverage(subtitles);
+            var json = SubtitleCoverageMath.SerializeCoverage(coverage);
             var needs = SubtitleNeedRule.NeedsTranslation(
                 movie.AudioOverride, movie.AudioLanguages, coverage.Keys, targetLanguages);
             var native = SubtitleNeedRule.NoSubtitleNeeded(
@@ -176,7 +175,7 @@ public class StatisticsJob
 
             // Group by language for language counts — dual-language files
             // (scjp/简日…) count once per language they carry.
-            foreach (var language in subtitles.SelectMany(LanguagesOf))
+            foreach (var language in subtitles.SelectMany(SubtitleCoverageMath.LanguagesOf))
             {
                 byLanguage.TryAdd(language, 0);
                 byLanguage[language]++;
@@ -234,7 +233,13 @@ public class StatisticsJob
 
                 var subtitles = await _subtitleService.GetAllSubtitles(season.Path);
                 scannedAnySeason = true;
-                MergeCoverage(coverage, season.Episodes, subtitles, episodeLanguages);
+                SubtitleCoverageMath.MergeSeasonCoverage(
+                    coverage,
+                    season.Episodes
+                        .Select(episode => new EpisodeFileRef(episode.Id, episode.FileName))
+                        .ToList(),
+                    subtitles,
+                    episodeLanguages);
 
                 if (processedSeasonPaths.Any(p => season.Path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
                 {
@@ -251,7 +256,7 @@ public class StatisticsJob
                 }
             }
 
-            var json = scannedAnySeason ? SerializeCoverage(coverage) : show.SubtitleCoverageJson;
+            var json = scannedAnySeason ? SubtitleCoverageMath.SerializeCoverage(coverage) : show.SubtitleCoverageJson;
             if (!string.Equals(json, show.SubtitleCoverageJson, StringComparison.Ordinal))
             {
                 showCoverageUpdates.Add((show.Id, json!));
@@ -349,148 +354,10 @@ public class StatisticsJob
         await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
     }
 
-    /// <summary>
-    /// Movie coverage: every language present counts as one file. Dual-language
-    /// files (scjp/简日…) contribute to each language they carry. Audit P2:
-    /// each file is stat'ed once and the size reused per language — the old
-    /// Where().Sum(BytesOf) re-statted every file for every language.
-    /// </summary>
-    private static Dictionary<string, MediaLanguageCoverage> CoverageFromFiles(List<Subtitles> subtitles)
-    {
-        var sizes = subtitles
-            .Select(subtitle => (Subtitle: subtitle, Size: BytesOf(subtitle)))
-            .ToList();
-
-        var coverage = new Dictionary<string, MediaLanguageCoverage>();
-        foreach (var language in sizes.SelectMany(entry => LanguagesOf(entry.Subtitle)).Distinct())
-        {
-            var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
-            slot.Count++;
-            slot.Bytes += sizes
-                .Where(entry => LanguagesOf(entry.Subtitle).Contains(language))
-                .Sum(entry => entry.Size);
-            coverage[language] = slot;
-        }
-
-        return coverage;
-    }
-
-    /// <summary>
-    /// Season coverage merged into the show's running dictionary: a subtitle
-    /// belongs to an episode when its base name extends the episode file
-    /// name, matching how the translation flow pairs subtitles with media.
-    /// Unmatched files still contribute bytes to their language for the
-    /// estimate heuristic. <paramref name="episodeLanguages"/> collects the
-    /// languages each episode carries — the coverage input of the per-episode
-    /// subtitle-need rule.
-    /// </summary>
-    private static void MergeCoverage(
-        Dictionary<string, MediaLanguageCoverage> coverage,
-        List<EpisodeProjection> episodes,
-        List<Subtitles> subtitles,
-        Dictionary<int, HashSet<string>> episodeLanguages)
-    {
-        // QA4 P3: matchable episodes with extension-safe base names,
-        // computed once per season. Entity file names carry no (or a known
-        // video) extension while release base names contain dots
-        // ("Show.S01E01"), so Path.GetFileNameWithoutExtension would eat
-        // ".S01E01"-style segments — only a known video extension is ever
-        // stripped (EmbeddedTrackService precedent).
-        var matchable = new List<(EpisodeProjection Episode, string BaseName)>();
-        foreach (var episode in episodes)
-        {
-            if (string.IsNullOrEmpty(episode.FileName)) continue;
-            matchable.Add((episode, EpisodeBaseName(episode.FileName!)));
-        }
-
-        // QA4 P3: the composite int hash key ("id * 31 + language hash") is
-        // replaced by a value-tuple key — the hash of a string is randomized
-        // per process, so distinct (episode, language) pairs could collide
-        // and silently drop coverage counts.
-        var coveredEpisodes = new HashSet<(int EpisodeId, string Language)>();
-        foreach (var subtitle in subtitles)
-        {
-            var size = BytesOf(subtitle);
-            // QA4 P3: the most specific (longest) matching base name wins, so
-            // a subtitle of a versioned release ("…e01.v2.zh.srt") is
-            // attributed to the versioned episode instead of the plain one
-            // the old FirstOrDefault picked. Genuinely ambiguous duplicates —
-            // two episode entities sharing one file name across version
-            // directories — cannot be separated by name and stay attributed
-            // to the first, as before.
-            (EpisodeProjection Episode, string BaseName)? match = null;
-            foreach (var candidate in matchable)
-            {
-                if (!SubtitleMatchesEpisode(subtitle.FileName, candidate.BaseName)) continue;
-                if (match == null || candidate.BaseName.Length > match.Value.BaseName.Length)
-                {
-                    match = candidate;
-                }
-            }
-
-            var episode = match?.Episode;
-            HashSet<string>? episodeSet = null;
-            if (episode != null && !episodeLanguages.TryGetValue(episode.Id, out episodeSet))
-            {
-                episodeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                episodeLanguages[episode.Id] = episodeSet;
-            }
-            foreach (var language in LanguagesOf(subtitle))
-            {
-                episodeSet?.Add(language);
-                var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
-                slot.Bytes += size;
-                if (episode != null && coveredEpisodes.Add((episode.Id, language)))
-                {
-                    slot.Count++;
-                }
-                coverage[language] = slot;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Known video container extensions — the only suffixes ever stripped
-    /// from an episode file name. Anything after the last dot of a release
-    /// base name ("Show.S01E01.WEBDL-1080p") must never be treated as an
-    /// extension.
-    /// </summary>
-    private static readonly string[] VideoNameExtensions =
-        [".mkv", ".mp4", ".m4v", ".avi", ".mov", ".wmv", ".mpg", ".mpeg", ".ts", ".m2ts"];
-
-    /// <summary>The episode file name without its known video extension.</summary>
-    private static string EpisodeBaseName(string fileName)
-    {
-        foreach (var extension in VideoNameExtensions)
-        {
-            if (fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
-            {
-                return fileName[..^extension.Length];
-            }
-        }
-
-        return fileName;
-    }
-
-    /// <summary>The language codes a subtitle file carries ("unknown" when untagged).</summary>
-    private static IEnumerable<string> LanguagesOf(Subtitles subtitle) =>
-        subtitle.Languages.Count > 0 ? subtitle.Languages : [subtitle.Language];
-
-    /// <summary>File size guarded for existence — a vanished file counts as zero bytes (audit P2).</summary>
-    private static long BytesOf(Subtitles subtitle) =>
-        File.Exists(subtitle.Path) ? new FileInfo(subtitle.Path).Length : 0;
-
-    /// <summary>Serializes exactly like the entities' SubtitleCoverage setter, so stored JSON stays byte-identical to the old writer.</summary>
-    private static string? SerializeCoverage(Dictionary<string, MediaLanguageCoverage>? coverage) =>
-        coverage == null ? null : JsonSerializer.Serialize(coverage);
-
-    /// <summary>Counterpart of the entities' SubtitleCoverage getter.</summary>
-    private static Dictionary<string, MediaLanguageCoverage>? DeserializeCoverage(string? json) =>
-        json == null
-            ? null
-            : JsonSerializer.Deserialize<Dictionary<string, MediaLanguageCoverage>>(json);
-
-    private static bool SubtitleMatchesEpisode(string subtitleFileName, string episodeBaseName) =>
-        subtitleFileName.StartsWith(episodeBaseName + ".", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(subtitleFileName, episodeBaseName, StringComparison.OrdinalIgnoreCase);
+    // The coverage computations this scan runs (movie coverage from a
+    // directory scan, season merge with episode attribution, serialization)
+    // live in the shared SubtitleCoverageMath — the same implementation the
+    // single-media SubtitleCoverageRefresher writes with, so the daily scan
+    // and the "flip the flag now" path can never produce different
+    // snapshots.
 }

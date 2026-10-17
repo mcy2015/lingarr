@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
 import TrendCard from '@/cells/dashboard/components/TrendCard.vue'
-import { buildTrendSeries } from '@/cells/dashboard/services/trendSeries'
+import { axisTickLabel, buildTrendSeries } from '@/cells/dashboard/services/trendSeries'
 import { IDailyTrendStatistics } from '@/types'
 import en from '@/i18n/locales/en.json'
 
@@ -74,6 +74,25 @@ describe('buildTrendSeries', () => {
     })
 })
 
+describe('axisTickLabel (E4 x-axis ticks)', () => {
+    it('keeps the first and last days plus every third day as short MM-DD labels', () => {
+        // 14-day window: ticks at 0, 3, 6, 9, 12 and the final day 13
+        expect(axisTickLabel('2026-10-04', 0, 14)).toBe('10-04')
+        expect(axisTickLabel('2026-10-07', 3, 14)).toBe('10-07')
+        expect(axisTickLabel('2026-10-13', 9, 14)).toBe('10-13')
+        expect(axisTickLabel('2026-10-17', 14, 14)).toBe('') // out of range safety
+        expect(axisTickLabel('2026-10-16', 13, 14)).toBe('10-16') // last day
+
+        // hidden ticks return '' so the label cells keep the bar alignment
+        expect(axisTickLabel('2026-10-05', 1, 14)).toBe('')
+        expect(axisTickLabel('2026-10-10', 6, 14)).toBe('10-10')
+    })
+
+    it('always labels a single-day window', () => {
+        expect(axisTickLabel('2026-10-10', 0, 1)).toBe('10-10')
+    })
+})
+
 describe('TrendCard', () => {
     it('renders one group per day with proportional bar heights', () => {
         const wrapper = mountCard(makeTrend())
@@ -85,6 +104,29 @@ describe('TrendCard', () => {
         expect(peak.attributes('title')).toContain('11')
         const bars = peak.findAll('div[class*=bg-]')
         expect(bars[0].attributes('style')).toContain('height: 100%')
+    })
+
+    it('renders the visible x-axis date ticks below the bars (E4)', () => {
+        const wrapper = mountCard(makeTrend())
+
+        const axis = wrapper.find('[data-test="trend-axis"]')
+        expect(axis.exists()).toBe(true)
+        // one label cell per day group keeps the per-day alignment
+        expect(axis.findAll('span')).toHaveLength(3)
+        // first and last day carry the short MM-DD label, the middle day hides
+        expect(axis.text()).toContain('10-10')
+        expect(axis.text()).toContain('10-12')
+        expect(axis.text()).not.toContain('10-11')
+    })
+
+    it('widens the bars to at least 12px so single bars stay visible (E4)', () => {
+        const wrapper = mountCard(makeTrend())
+
+        const bars = wrapper.findAll('[data-test="trend-bars"] div[class*=bg-]')
+        expect(bars.length).toBeGreaterThan(0)
+        for (const bar of bars) {
+            expect(bar.classes()).toContain('max-w-[12px]')
+        }
     })
 
     it('shows the legend peak note computed from the data', () => {

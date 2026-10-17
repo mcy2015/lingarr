@@ -379,14 +379,14 @@ describe('ProofreadPage', () => {
     it('registers the stash CTA on mount and pushes a success toast on handler', async () => {        const { uiStore, toastStore } = await mountProofreadPage()
 
         expect(uiStore.cta).not.toBeNull()
-        expect(uiStore.cta?.label).toBe(en.topbar.cta.stash)
+        expect(uiStore.cta?.label).toEqual({ key: 'topbar.cta.stash' })
 
         uiStore.cta?.handler()
 
         expect(toastStore.toasts).toHaveLength(1)
         expect(toastStore.toasts[0].type).toBe('success')
         // live counts: nothing approved yet, four lines in the fixture
-        expect(toastStore.toasts[0].message).toBe('Stashed · 0/4 lines')
+        expect(toastStore.toasts[0].message).toBe('Stashed · 0 / 4 lines')
     })
 
     it('⌘S stashes with the same action as the CTA and swallows the browser save', async () => {
@@ -397,7 +397,7 @@ describe('ProofreadPage', () => {
 
         expect(event.defaultPrevented).toBe(true)
         expect(toastStore.toasts).toHaveLength(1)
-        expect(toastStore.toasts[0].message).toBe('Stashed · 0/4 lines')
+        expect(toastStore.toasts[0].message).toBe('Stashed · 0 / 4 lines')
     })
 
     it('clears the topbar CTA and sub override on unmount', async () => {
@@ -520,5 +520,41 @@ describe('ProofreadPage', () => {
         expect(vm.rejected.has(1)).toBe(true)
         const row = wrapper.find('.pline')
         expect(row.classes()).toContain('rej')
+    })
+
+    // ── walk-through fix D2: subtitle markup renders, never as literal tags ──
+    it('renders <i>/<b> markup as styled segments on both tracks', async () => {
+        getMock.mockResolvedValue({
+            ...makeDetail(),
+            lines: [
+                { position: 1, source: 'Hello <i>there</i>.', target: '你好<b>呀</b>。' }
+            ] as ISubtitleLineComparison[]
+        })
+
+        const { wrapper } = await mountProofreadPage()
+
+        const row = wrapper.find('.pline')
+        expect(row.find('.src span.italic').text()).toBe('there')
+        expect(row.find('.dst span.font-bold').text()).toBe('呀')
+        expect(wrapper.text()).not.toContain('<i>')
+        expect(wrapper.text()).not.toContain('<b>')
+    })
+
+    // ── walk-through fix D4: no stray accent mark at 0% progress ──────────
+    it('keeps the 0% progress track empty and reveals the fill on first approval', async () => {
+        const { wrapper, vm } = await mountProofreadPage()
+
+        expect(vm.approvedCount).toBe(0)
+        expect(wrapper.find('.track .fill').exists()).toBe(false)
+        expect(wrapper.find('.track .head').exists()).toBe(false)
+
+        press('Enter') // approve line 1 → 1/4 = 25%
+        await settle()
+
+        expect(vm.approvedCount).toBe(1)
+        const fill = wrapper.find('.track .fill')
+        expect(fill.exists()).toBe(true)
+        expect(fill.attributes('style')).toContain('width: 25%')
+        expect(wrapper.find('.track .head').exists()).toBe(true)
     })
 })

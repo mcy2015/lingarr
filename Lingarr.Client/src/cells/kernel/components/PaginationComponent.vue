@@ -1,13 +1,13 @@
 ﻿<template>
     <div class="flex w-full justify-center p-4 md:items-center md:justify-between">
         <div class="hidden md:block">
-            {{ t('common.pagination.page') }}
-            <span class="font-bold">{{ modelValue.pageNumber }}</span>
-            {{ t('common.pagination.of') }}
-            <span class="font-bold">{{ numberOfPages }}</span>
-            {{ t('common.pagination.of') }}
-            <span class="font-bold">{{ totalCount }}</span>
-            {{ t('common.pagination.items') }}
+            {{
+                t('common.pagination.summary', {
+                    page: modelValue.pageNumber,
+                    pages: numberOfPages,
+                    items: totalCount
+                })
+            }}
         </div>
         <div>
             <ul v-if="numberOfPages >= 1" class="flex space-x-1 md:space-x-2">

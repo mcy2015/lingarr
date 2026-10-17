@@ -129,7 +129,8 @@ describe('LogsPage (drill-down, prototype screen-11)', () => {
         const grid = rows[3].find('.grid')
         expect(grid.classes()).toContain('grid-cols-[70px_46px_1fr]')
         expect(grid.find('time').text()).toMatch(/\d{2}:\d{2}:\d{2}/)
-        expect(grid.find('span.font-semibold').text()).toBe('ERR')
+        // 批E E5:行内级别与筛选徽章同一套写法(INFO/WARN/ERROR),不再是缩写
+        expect(grid.find('span.font-semibold').text()).toBe('ERROR')
         expect(grid.find('span.text-danger').exists()).toBe(true)
         // the source prefix keeps its data inside the message column
         expect(grid.text()).toContain('TranslationJob')
@@ -244,8 +245,8 @@ describe('LogsPage (drill-down, prototype screen-11)', () => {
     it('registers the export CTA and closes the stream on unmount', async () => {
         const { wrapper, uiStore } = await mountPage()
 
-        expect(uiStore.cta?.label).toBe(en.settings.logs.exportCta)
-        expect(uiStore.subOverride).toBe(en.settings.logs.topbarSub)
+        expect(uiStore.cta?.label).toEqual({ key: 'settings.logs.exportCta' })
+        expect(uiStore.subOverride).toEqual({ key: 'settings.logs.topbarSub' })
 
         wrapper.unmount()
 

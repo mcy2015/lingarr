@@ -9,9 +9,11 @@ using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Core.Interfaces;
+using Lingarr.Server.Hubs;
 using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -20,6 +22,7 @@ using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 
 namespace Lingarr.Server.Tests.Jobs;
 
@@ -112,7 +115,28 @@ public class TranslationJobTests
                 NullLogger<TranslationPipeline>.Instance),
             _translationRequestService.Object,
             _eventService.Object,
-            new Mock<IGlossaryService>().Object);
+            new Mock<IGlossaryService>().Object,
+            // Real refresher over the InMemory context: the requests seeded
+            // below carry no MediaId, so the post-writeback refresh is a
+            // no-op and never reaches the relational ExecuteUpdate path.
+            new SubtitleCoverageRefresher(
+                _context, _subtitleService.Object, _settings, NullLogger<SubtitleCoverageRefresher>.Instance),
+            HubContext());
+    }
+
+    /// <summary>No-op hub double — the writeback broadcast never reaches a client here.</summary>
+    private static IHubContext<JobProgressHub> HubContext()
+    {
+        var proxy = new Mock<IClientProxy>();
+        proxy
+            .Setup(client => client.SendCoreAsync(
+                It.IsAny<string>(), It.IsAny<object?[]>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var clients = new Mock<IHubClients>();
+        clients.Setup(hubClients => hubClients.Group(It.IsAny<string>())).Returns(proxy.Object);
+        var context = new Mock<IHubContext<JobProgressHub>>();
+        context.Setup(hubContext => hubContext.Clients).Returns(clients.Object);
+        return context.Object;
     }
 
     // ===== Status gating =====

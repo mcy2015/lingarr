@@ -41,3 +41,14 @@ export function buildTrendSeries(trend: IDailyTrendStatistics | null): TrendSeri
 
     return { bars, peakWritten, peakCost, hasData }
 }
+
+/// Visible x-axis tick (dashboard E4): the first and last days plus every
+/// third day in between — a 14-day window stays readable without crowding
+/// the per-day cells. Hidden ticks return '' so the label row's flex cells
+/// keep the exact per-day alignment of the bar groups above.
+export function axisTickLabel(date: string, index: number, count: number): string {
+    if (index === 0 || index === count - 1 || index % 3 === 0) {
+        return date.slice(5)
+    }
+    return ''
+}

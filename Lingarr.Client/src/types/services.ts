@@ -371,6 +371,10 @@ export interface ITranslationServiceHealth {
     lastRequestAt: string | null
     sampleCount: number
     monthlyCost: number | null
+    /// Requests counted in the current calendar month (0 when none yet);
+    /// optional because older payloads predate the field — consumers fall
+    /// back to 0 via `?? 0`, same as an empty month.
+    monthlyRequests?: number
 }
 
 /// Language capability of one service (P1-3): "restricted" = concrete

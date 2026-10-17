@@ -150,6 +150,19 @@ describe('SubtitleSourcesCard · 行渲染', () => {
         expect(wrapper.find('[data-test="subtitle-sources-count"]').text()).toContain('3')
     })
 
+    it('pins the name column to a fixed width so the enable switches align vertically (E6)', async () => {
+        const wrapper = await mountCard()
+
+        for (const source of PROVIDERS) {
+            const name = wrapper.find(`[data-test="subtitle-source-row-${source.provider}"] b`)
+            // fixed width column + truncate for overlong plugin names — the
+            // switch that follows starts at the same x on every row
+            expect(name.classes()).toContain('w-[11.5rem]')
+            expect(name.classes()).toContain('truncate')
+            expect(name.text()).toBe(source.displayName)
+        }
+    })
+
     it('renders no-secret sources as compact rows: no form, no expand, no badge', async () => {
         const wrapper = await mountCard()
 

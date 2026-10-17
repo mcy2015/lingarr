@@ -22,7 +22,8 @@
         "pagination": {
             "page": "Page",
             "of": "of",
-            "items": "items"
+            "items": "items",
+            "summary": "Page {page} of {pages} · {items} items"
         },
         "noMedia": {
             "title": "No Media Found",
@@ -38,6 +39,7 @@
             "resume": "Resume, reuse already-translated lines",
             "resumePaused": "Resume paused",
             "proofread": "Proofread, compare against the source and correct mistranslations",
+            "proofreadShort": "Proofread",
             "retry": "Retry, start over",
             "logs": "Open the system log"
         },
@@ -158,7 +160,7 @@
         },
         "scan": {
             "title": "Scan path",
-            "pathTitle": "Server-path scanning arrives with the B3 batch",
+            "pathTitle": "Server-path scanning coming soon",
             "placeholder": "Server path, e.g. /media/subtitles",
             "scanning": "Scanning…",
             "noneFound": "No new subtitle files found at that path.",
@@ -585,13 +587,15 @@
             "heading": "Scheduled jobs",
             "subLine": "Hangfire · {queues} queues · {jobs} recurring jobs",
             "subLineBase": "Hangfire recurring",
+            "queuesCount": "{n} queue | {n} queues",
+            "jobsCount": "{n} recurring job | {n} recurring jobs",
             "viewQueue": "View task queue",
             "jobName": "Job Name",
             "cron": "Cron",
             "state": "State",
             "stateRunning": "▸ Running",
             "stateSucceeded": "✓ Succeeded",
-            "stateNone": "—",
+            "stateNone": "Never run",
             "lastExecution": "Last Execution",
             "nextExecution": "Next Execution",
             "actions": "Actions",
@@ -741,7 +745,9 @@
             "deleteLastGuard": "Keep at least one service on the fallback chain",
             "deleteNotChained": "{service} is not on the fallback chain — nothing to remove",
             "deletePartial": "{service} was removed from the fallback chain, but clearing its configuration failed — check the plugin manifest.",
-            "deleteFailed": "Removing {service} from the fallback chain failed."
+            "deleteFailed": "Removing {service} from the fallback chain failed.",
+            "sinceRestart": "Since restart",
+            "requestsThisMonth": "{count} requests this month"
         },
         "glossary": {
             "title": "Glossary",
@@ -913,6 +919,7 @@
             "statCurrentBatch": "Current batch",
             "statCost": "Cost (est.)",
             "statElapsed": "Running",
+            "statDuration": "Duration",
             "statRemaining": "ETA",
             "editThisLine": "Edit this line",
             "proofreadThisLine": "Proofread this line",
@@ -981,13 +988,13 @@
         "glossaryLocked": "{source} → {target} · locked",
         "glossaryHint": "{source} → {target}",
         "export": "Export snapshot",
-        "finish": "Finish & write back ({done}/{total})",
+        "finish": "Finish & write back ({done} / {total})",
         "mark": {
             "approved": "Approved",
             "pending": "Pending review",
             "rejected": "Rejected"
         },
-        "stashed": "Stashed · {done}/{total} lines",
+        "stashed": "Stashed · {done} / {total} lines",
         "suggestGlossary": "✎ {count} edits → suggest glossary terms",
         "suggestGlossaryHint": "Jump to the glossary in settings · subtitles & quality. Terms are not created automatically."
     },
@@ -999,12 +1006,12 @@
             "dashboardLive": "{state} · updated {seconds}s ago",
             "pipelineRunning": "Pipeline running",
             "pipelineIdle": "Pipeline idle",
-            "queueLive": "{count} tasks · live via SignalR",
+            "queueLive": "{count} task · live via SignalR | {count} tasks · live via SignalR",
             "importLive": "{files} files in the workbench · {translate} to translate",
-            "proofreadLive": "{title} · {done}/{total} lines reviewed",
+            "proofreadLive": "{title} · {done} / {total} lines reviewed",
             "offlineReconnecting": "Offline · reconnecting"
         },
-        "search": "⌘K 搜索",
+        "search": "Search ⌘K",
         "searchHint": "Global search (⌘K)",
         "cta": {
             "translateSelected": "Translate selected ▸",
@@ -1029,18 +1036,23 @@
         "seasons": "Season",
         "episodeTitle": "Episode",
         "history": "Translation history",
-        "historyCount": "{count} requests",
+        "historyCount": "{count} request | {count} requests",
         "noHistory": "No translation requests for this media yet.",
         "noEpisodes": "No episodes in this season.",
         "episodePagePrev": "Previous episode page",
         "episodePageNext": "Next episode page",
         "translate": "Translate ▾",
         "showMeta": "{seasons} seasons · {episodes} episodes",
+        "seasonCount": "{n} season | {n} seasons",
+        "episodeCount": "{n} episode | {n} episodes",
         "movieMeta": "movie",
         "lastActivity": "last activity {time}",
-        "tasks": "In-progress tasks",
+        "tasks": {
+            "heading": "In-progress tasks",
+            "allDone": "All target languages translated"
+        },
         "tasksMeta": "request {meta}",
-        "tasksCount": "{count} requests",
+        "tasksCount": "{count} request | {count} requests",
         "missingEpisodes": "{count} episodes missing {lang} subtitles",
         "noTarget": "No target language configured",
         "show": {
@@ -1062,7 +1074,7 @@
             "embedded": {
                 "title": "Embedded tracks",
                 "count": "{count} tracks",
-                "notScanned": "Not probed · run \"Embedded track scan\" (EmbeddedTrackScanJob) under Settings → Automation",
+                "notScanned": "Not scanned yet · run Embedded track scan manually under Settings → Automation",
                 "empty": "No embedded subtitle tracks in the container",
                 "graphic": "Image-based · not translatable",
                 "translate": "Translate",
@@ -1080,9 +1092,12 @@
         },
         "audio": {
             "title": "Audio",
+            "audioLabel": "Audio",
             "unknown": "Audio language unknown",
+            "coverageNote": "Audio track already covers {langs} — usually no subtitles needed",
             "markNeeded": "Needs subtitles",
             "cancelMark": "Cancel mark",
+            "cancelMarkShort": "Clear mark",
             "markedToast": "Marked as needing subtitles",
             "unmarkedToast": "Subtitle-need mark cancelled",
             "failedToast": "Updating the subtitle need failed: {message}"

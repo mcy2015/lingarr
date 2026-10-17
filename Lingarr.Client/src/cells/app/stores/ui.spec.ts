@@ -35,6 +35,16 @@ describe('useUiStore', () => {
         expect(store.subOverride).toBe('x')
     })
 
+    it('accepts structured i18n entries for the CTA label and the sub override', () => {
+        const store = useUiStore()
+
+        store.registerCta({ key: 'topbar.cta.newTask' }, () => {})
+        expect(store.cta?.label).toEqual({ key: 'topbar.cta.newTask' })
+
+        store.setSubOverride({ key: 'topbar.sub.queueLive', params: { count: 3 } })
+        expect(store.subOverride).toEqual({ key: 'topbar.sub.queueLive', params: { count: 3 } })
+    })
+
     it('focusSearch increments searchFocusTick on every call', () => {
         const store = useUiStore()
         expect(store.searchFocusTick).toBe(0)

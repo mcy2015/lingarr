@@ -10,7 +10,11 @@
         data-test="jobs-card">
         <div class="border-line flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
             <h2 class="text-[13px] font-semibold">{{ t('settings.schedule.heading') }}</h2>
-            <span class="text-secondary-content mono ml-auto text-[11px]">{{ subLine }}</span>
+            <span
+                class="text-secondary-content mono ml-auto text-[11px]"
+                data-test="schedule-subline">
+                {{ subLine }}
+            </span>
             <span class="flex flex-none items-center gap-1.5">
                 <ReloadComponent @toggle:update="refresh" />
                 <button
@@ -211,13 +215,18 @@ const thClass =
     'text-secondary-content border-line whitespace-nowrap border-b px-3 py-2 text-left text-xs font-medium'
 
 /// 卡头 meta 只用真实数据:任务未加载时仅「Hangfire recurring」,加载后
-/// 附任务数与队列数。
+/// 附队列数与任务数。复数交由 queuesCount/jobsCount 承担(批E E8,en 走
+/// "1 queue | {n} queues" 单复数,zh 单复数同形)。
 const subLine = computed(() => {
     if (jobs.value.length === 0) {
         return t('settings.schedule.subLineBase')
     }
     const queues = new Set(jobs.value.map((job) => job.queue).filter((queue) => queue))
-    return t('settings.schedule.subLine', { jobs: jobs.value.length, queues: queues.size })
+    return [
+        'Hangfire',
+        t('settings.schedule.queuesCount', queues.size),
+        t('settings.schedule.jobsCount', jobs.value.length)
+    ].join(' · ')
 })
 
 const stateChipClass = (job: IRecurringJob): string => {

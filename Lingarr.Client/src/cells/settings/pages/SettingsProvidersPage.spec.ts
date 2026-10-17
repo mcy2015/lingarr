@@ -526,14 +526,16 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         expect(wrapper.find('[data-test="add-service-menu"]').exists()).toBe(false)
     })
 
-    it('fills the always-present meta slot with model · batch info once readable, "—" before that', async () => {
+    it('fills the meta slot with model · batch info once readable, omitting the line before that (E7)', async () => {
         getHealthMock.mockResolvedValue([openai])
         const { wrapper, pinia } = await mountPage('["openai"]')
 
-        // configured but nothing stored yet -> the slot stays with a placeholder
+        // configured but nothing stored yet -> the whole mono line is absent
+        // instead of an orphan dash
         const meta = wrapper.find('[data-test="card-meta-openai"]')
         expect(meta.exists()).toBe(true)
-        expect(meta.text()).toBe('—')
+        expect(meta.find('.mono').exists()).toBe(false)
+        expect(meta.text()).not.toContain('—')
 
         const settingStore = useSettingStore(pinia)
         settingStore.storeSetting(SETTINGS.OPENAI_MODEL, 'gpt-4o-mini')
@@ -541,7 +543,8 @@ describe('SettingsProvidersPage · ＋添加服务与编辑模态(A3)', () => {
         settingStore.storeSetting(SETTINGS.MAX_BATCH_SIZE, '500')
         await flushPromises()
 
-        const line = wrapper.find('[data-test="card-meta-openai"]')
+        const line = wrapper.find('[data-test="card-meta-openai"] .mono')
+        expect(line.exists()).toBe(true)
         expect(line.text()).toContain('gpt-4o-mini')
         expect(line.text()).toContain('500')
     })
@@ -591,6 +594,74 @@ describe('SettingsProvidersPage · pcard 骨架对齐', () => {
         expect(wrapper.find('[data-test="card-meta-libretranslate"]').text()).toContain(
             'http://libretranslate:5000'
         )
+    })
+})
+
+describe('SettingsProvidersPage · 用量行(批E E7)', () => {
+    it('labels latency and success as since-restart scope while the month keeps its cost', async () => {
+        getHealthMock.mockResolvedValue([
+            {
+                ...openai,
+                monthlyCost: 1.234,
+                monthlyRequests: 22,
+                latencyMs: 812,
+                successRate: 0.98
+            }
+        ])
+        const { wrapper } = await mountPage()
+
+        const usage = wrapper.find('[data-test="card-usage-openai"]')
+        // the month slot shows the cost, not the request phrase
+        expect(usage.text()).toContain(en.settings.providers.month)
+        expect(usage.text()).toContain('$1.23')
+        expect(usage.text()).not.toContain('requests this month')
+        // latency/success carry the rolling-window scope label, one each
+        expect(usage.text()).toContain('812 ms')
+        expect(usage.text()).toContain('98%')
+        const scopes = usage.text().split(en.settings.providers.sinceRestart).length - 1
+        expect(scopes).toBe(2)
+    })
+
+    it('shows the request phrase when the rate is unknown but requests were made', async () => {
+        getHealthMock.mockResolvedValue([
+            {
+                ...openai,
+                monthlyCost: null,
+                monthlyRequests: 22,
+                latencyMs: 812,
+                successRate: 0.98
+            }
+        ])
+        const { wrapper } = await mountPage()
+
+        const usage = wrapper.find('[data-test="card-usage-openai"]')
+        expect(usage.text()).toContain(
+            en.settings.providers.requestsThisMonth.replace('{count}', '22')
+        )
+        // the phrase carries its own month wording — no doubled label
+        expect(usage.text()).not.toContain(en.settings.providers.month)
+        expect(usage.text()).not.toContain('—')
+    })
+
+    it('keeps the honest dash when neither cost nor requests are known', async () => {
+        getHealthMock.mockResolvedValue([openai]) // monthlyCost null, no monthlyRequests
+        const { wrapper } = await mountPage()
+
+        const usage = wrapper.find('[data-test="card-usage-openai"]')
+        expect(usage.text()).toContain(en.settings.providers.month)
+        expect(usage.text()).toContain('—')
+        expect(usage.text()).not.toContain('requests this month')
+    })
+
+    it('treats zero monthly requests as no data (dash, not a zero phrase)', async () => {
+        getHealthMock.mockResolvedValue([
+            { ...openai, monthlyCost: null, monthlyRequests: 0 }
+        ])
+        const { wrapper } = await mountPage()
+
+        const usage = wrapper.find('[data-test="card-usage-openai"]')
+        expect(usage.text()).not.toContain('requests this month')
+        expect(usage.text()).toContain('—')
     })
 })
 

@@ -13,6 +13,13 @@ public interface ICostService
     /// <summary>Current-month cost for one provider; null when unpriced or unused.</summary>
     Task<double?> GetProviderMonthlyCostAsync(string provider);
 
+    /// <summary>
+    /// Current-month completed request count for one provider (the same
+    /// month/serviceType grouping <see cref="GetCostSummary"/> prices), 0
+    /// when the provider has no qualifying requests.
+    /// </summary>
+    Task<int> GetProviderMonthlyRequestsAsync(string provider);
+
     /// <summary>Current-month total cost; null when any used provider is unpriced.</summary>
     Task<double?> GetCurrentMonthTotalCostAsync();
 

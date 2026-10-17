@@ -38,7 +38,12 @@ public class MediaController : ControllerBase
     /// <summary>Lifetime of a cached directory scan. Settable so tests can expire entries deterministically.</summary>
     public static TimeSpan SubtitleFileCacheTtl { get; set; } = TimeSpan.FromMinutes(1);
 
-    /// <summary>Drops one directory's cached scan (every directory when null).</summary>
+    /// <summary>
+    /// Drops one directory's cached scan (every directory when null).
+    /// Production callers: the translation writeback path (TranslationJob)
+    /// drops the directory a freshly translated subtitle landed in, so the
+    /// Files card reflects it on the next view instead of after the TTL.
+    /// </summary>
     public static void InvalidateSubtitleFileCache(string? directory = null)
     {
         if (directory == null)

@@ -52,7 +52,11 @@
                  停用源退出聚合/自动轮,手动点名仍可查)+ 配置徽章(仅含 secret
                  字段的源)+ 冷却警示 chip + API 描述 + 操作 -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
-                <b class="flex-none">{{ row.displayName }}</b>
+                <!-- 名称列固定宽度(批E E6):7 行启用开关纵向对齐成列,
+                     超长插件名 truncate 截断;窄屏 flex-wrap 行为不变 -->
+                <b class="w-[11.5rem] flex-none truncate" :title="row.displayName">
+                    {{ row.displayName }}
+                </b>
                 <span
                     class="flex-none"
                     :title="t('settings.subtitleSources.enableHint')"

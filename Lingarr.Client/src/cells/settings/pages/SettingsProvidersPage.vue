@@ -1,8 +1,9 @@
 <template>
     <div class="space-y-3">
         <!-- ═══ Provider 卡片网格(原型屏 6 .pcard 骨架)═══
-             每卡固定四槽 head/meta/usage/ops:meta 恒占一行(URL/model 信息或「未配置」),
-             ops 以 mt-auto 钉在卡底 —— 行内等高,统计行与按钮行跨卡对齐。 -->
+             每卡固定四槽 head/meta/usage/ops:meta 一行 URL/model 信息或「未配置」
+             (无内容时整行省略),ops 以 mt-auto 钉在卡底 —— 行内等高,统计行与
+             按钮行跨卡对齐。 -->
         <p class="text-secondary-content px-4 text-[12.5px]">
             {{ t('settings.providers.blurb') }}
         </p>
@@ -26,10 +27,12 @@
                         {{ statusText(card) }}
                     </span>
                 </div>
-                <!-- meta 槽:恒在的一行 mono 小字 —— 已配置显示 URL/model 信息,
-                     未配置显示弱化文案;LibreTranslate 的 URL 归入此槽。 -->
+                <!-- meta 槽:一行 mono 小字 —— 已配置显示 URL/model 信息,
+                     未配置显示弱化文案;两者都无内容时整行不渲染,不再留孤立的
+                     「—」。LibreTranslate 的 URL 归入此槽。 -->
                 <div class="min-w-0" :data-test="`card-meta-${card.provider}`">
                     <div
+                        v-if="metaLine(card)"
                         class="mono text-secondary-content truncate text-xs"
                         :class="{ 'opacity-70': !card.configured }"
                         :title="metaLine(card)">
@@ -42,24 +45,32 @@
                         {{ card.lastError }}
                     </div>
                 </div>
-                <!-- usage 槽:本月/延迟/成功 三格,骨架一致 -->
+                <!-- usage 槽:本月(费率或请求数)+ 自重启延迟/成功率 三格,骨架一致 -->
                 <div
                     class="text-secondary-content flex flex-wrap gap-x-5 gap-y-1 text-xs"
                     :data-test="`card-usage-${card.provider}`">
-                    <span>
+                    <!-- 本月格:有费率显示金额;无费率但有本月请求数时以自述式
+                         短语呈现("22 requests this month",文案自带月份语境,
+                         不再叠加 This month 标签);两者皆无保持「—」。 -->
+                    <span v-if="monthRequestsPhrase(card)">
+                        <b class="text-primary-content font-semibold">
+                            {{ monthRequestsPhrase(card) }}
+                        </b>
+                    </span>
+                    <span v-else>
                         {{ t('settings.providers.month') }}
                         <b class="mono text-primary-content font-semibold">
                             {{ card.monthlyCost != null ? formatCost(card.monthlyCost) : '—' }}
                         </b>
                     </span>
                     <span>
-                        {{ t('settings.providers.latency') }}
+                        {{ t('settings.providers.sinceRestart') }}
                         <b class="mono text-primary-content font-semibold">
                             {{ card.latencyMs != null ? `${Math.round(card.latencyMs)} ms` : '—' }}
                         </b>
                     </span>
                     <span>
-                        {{ t('settings.providers.success') }}
+                        {{ t('settings.providers.sinceRestart') }}
                         <b class="mono text-primary-content font-semibold">
                             {{ card.successRate != null ? `${Math.round(card.successRate * 100)}%` : '—' }}
                         </b>
@@ -438,10 +449,20 @@ function modelLine(provider: string): string {
 }
 
 /// 恒定一行的 meta 文案:未配置 → 弱化「未配置」;已配置 → URL/model
-/// 信息(如 gpt-4o-mini · 批 500、http://libretranslate:5000),无则「—」。
+/// 信息(如 gpt-4o-mini · 批 500、http://libretranslate:5000);读不到
+/// 时返回空串,模板对该行 v-if,不再渲染孤立的「—」。
 function metaLine(card: ITranslationServiceHealth): string {
     if (!card.configured) return t('settings.providers.notConfigured')
-    return modelLine(card.provider) || '—'
+    return modelLine(card.provider)
+}
+
+/// 本月用量短语(批E E7):无费率但健康行带本月请求数(>0)时,以
+/// requestsThisMonth 短语呈现;其余情况返回空串,走 费率/「—」分支。
+function monthRequestsPhrase(card: ITranslationServiceHealth): string {
+    if (card.monthlyCost != null) return ''
+    const requests = card.monthlyRequests ?? 0
+    if (requests <= 0) return ''
+    return t('settings.providers.requestsThisMonth', { count: requests })
 }
 
 // ── ＋添加服务(A3):所有未上链的服务(内置+插件)──

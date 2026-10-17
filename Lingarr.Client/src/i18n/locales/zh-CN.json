@@ -16,29 +16,31 @@
         "orderBy": "排序",
         "translateTo": "翻译为…",
         "translationStarted": "已开始翻译",
-        "requiredPlaceholdersMissing": "缺少必需的占位符:{placeholders}",
+        "requiredPlaceholdersMissing": "缺少必需的占位符：{placeholders}",
         "selectItems": "选择项目…",
         "selectSourceLanguageFirst": "请先选择源语言。",
         "pagination": {
             "page": "第",
-            "of": "页,共",
-            "items": "项"
+            "of": "页，共",
+            "items": "项",
+            "summary": "第 {page}/{pages} 页 · 共 {items} 项"
         },
         "noMedia": {
             "title": "未找到媒体",
-            "description": "看起来您的媒体尚未被收集。别担心,我们可以解决这个问题!",
-            "nextSteps": "后续步骤:",
+            "description": "看起来您的媒体尚未被收集。别担心，我们可以解决这个问题!",
+            "nextSteps": "后续步骤：",
             "step1": "检查您的集成设置",
             "step2": "确保所有连接均已正确配置",
-            "step3": "请稍等几分钟,让应用收集您的媒体",
+            "step3": "请稍等几分钟，让应用收集您的媒体",
             "goToSettings": "前往设置"
         },
         "translationAction": {
             "pause": "暂停",
-            "resume": "继续翻译,复用已翻译的字幕行",
+            "resume": "继续翻译，复用已翻译的字幕行",
             "resumePaused": "恢复",
-            "proofread": "校对,对照源字幕并纠正误译",
-            "retry": "重试,从头开始",
+            "proofread": "校对：对照源字幕并纠正误译",
+            "proofreadShort": "校对",
+            "retry": "重试，从头开始",
             "logs": "打开系统日志"
         },
         "translationStatus": {
@@ -128,11 +130,11 @@
         "nativeBadge": "原生音轨",
         "nativeBadgeTitle": "容器音轨已覆盖目标语言 —— 无需字幕",
         "audioUnknownBadge": "音轨未知",
-        "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理,详见详情页标记入口"
+        "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理，详见详情页标记入口"
     },
     "version": {
         "development": "开发版",
-        "current": "版本:{version}"
+        "current": "版本：{version}"
     },
     "login": {
         "title": "登录 Lingarr",
@@ -158,7 +160,7 @@
         },
         "scan": {
             "title": "扫描路径",
-            "pathTitle": "服务器路径扫描将在 B3 批次提供",
+            "pathTitle": "服务器路径扫描即将推出",
             "placeholder": "服务器路径，如 /media/subtitles",
             "scanning": "扫描中…",
             "noneFound": "该路径下没有新的字幕文件。",
@@ -379,7 +381,7 @@
         "userMessage": {
             "insert": "插入 {'{'}userMessage{'}'}",
             "title": "用户消息",
-            "description": "渲染后的用户提示词,批量模式下为字幕批次"
+            "description": "渲染后的用户提示词，批量模式下为字幕批次"
         },
         "sourceLanguage": {
             "insert": "插入 {'{'}sourceLanguage{'}'}",
@@ -424,7 +426,7 @@
         },
         "template": {
             "mustBeObject": "模板必须是 JSON 对象",
-            "invalidJson": "无效的 JSON:{message}"
+            "invalidJson": "无效的 JSON：{message}"
         },
         "validation": {
             "invalidNumber": "请输入有效的数字",
@@ -444,7 +446,7 @@
             "radarrUrlError": "请输入有效的 URL(例如 http://localhost:7878 或 https://example.com)",
             "sonarrUrlError": "请输入有效的 URL(例如 http://localhost:8989 或 https://example.com)",
             "apiKeyLengthError": "API 密钥长度必须为 {minLength} 个字符",
-            "apiKeyConfigured": "已配置,留空保持不变",
+            "apiKeyConfigured": "已配置，留空保持不变",
             "includeByDefault": "默认包含新导入的内容"
         },
         "mapping": {
@@ -456,13 +458,13 @@
             "show": "剧集",
             "add": "新增映射",
             "pick": "选择路径",
-            "explain": "源 = Sonarr/Radarr 报给 Lingarr 的路径;目标 = Lingarr 容器内的真实路径。两者不一致时字幕无法落盘,先保存再用下方测试验证。",
+            "explain": "源 = Sonarr/Radarr 报给 Lingarr 的路径；目标 = Lingarr 容器内的真实路径。两者不一致时字幕无法落盘，先保存再用下方测试验证。",
             "sourcePlaceholder": "/data/movies(*arr 容器视角)",
             "test": "测试映射",
-            "testPlaceholder": "粘贴一条 Sonarr/Radarr 报告的路径,如 /data/movies/…",
+            "testPlaceholder": "粘贴一条 Sonarr/Radarr 报告的路径，如 /data/movies/…",
             "testOk": "✓ 可达 → {path}",
             "testMissing": "✗ 映射后不可达 → {path}",
-            "testNoHit": "✗ 无映射命中:该路径未被任何已保存的源路径包含"
+            "testNoHit": "✗ 无映射命中：该路径未被任何已保存的源路径包含"
         },
         "plugins": {
             "title": "插件",
@@ -472,26 +474,26 @@
             "loading": "正在加载插件…",
             "loadError": "插件加载失败。",
             "noPluginsPrefix": "尚未加载任何插件。请将插件 DLL 放入",
-            "noPluginsSuffix": "所指定的文件夹,然后重启 Lingarr。",
+            "noPluginsSuffix": "所指定的文件夹，然后重启 Lingarr。",
             "noSettings": "该服务商没有可配置的设置。",
             "selectOption": "请选择…",
             "loadingOptions": "正在加载选项…",
             "noOptionsEndpoint": "未配置选项接口。",
             "noOptionsReturned": "未返回任何选项。",
-            "optionsLoadError": "加载选项出错,请重试。",
-            "secretConfigured": "已配置,留空保持不变"
+            "optionsLoadError": "加载选项出错，请重试。",
+            "secretConfigured": "已配置，留空保持不变"
         },
         "webhook": {
-            "description": "在 Radarr 和 Sonarr 中配置 Webhook,以便在添加新媒体时自动触发翻译。",
+            "description": "在 Radarr 和 Sonarr 中配置 Webhook，以便在添加新媒体时自动触发翻译。",
             "goTo": "前往",
-            "andUseThisUrl": "并使用此 URL:"
+            "andUseThisUrl": "并使用此 URL："
         },
         "template": {
             "title": "AI 请求体模板",
-            "description": "自定义发送给 AI 服务商的 JSON 结构。执行翻译时,占位符会在整个模板范围内替换,可在任意字段中使用。",
+            "description": "自定义发送给 AI 服务商的 JSON 结构。执行翻译时，占位符会在整个模板范围内替换，可在任意字段中使用。",
             "presets": "预设",
             "builder": "构建器",
-            "languageFormat": "语言格式:",
+            "languageFormat": "语言格式：",
             "codeFormat": "代码(en)",
             "nameFormat": "名称(英文)",
             "preview": "预览",
@@ -507,11 +509,11 @@
         },
         "preview": {
             "title": "试译预览",
-            "description": "单行 · 走该服务已保存请求模版的真实请求;未保存的模版改动保存后才生效。",
+            "description": "单行 · 走该服务已保存请求模版的真实请求；未保存的模版改动保存后才生效。",
             "sample": "The Shōgun commands the Anjin to sail west.",
             "inputLabel": "要翻译的行",
             "run": "试译 ▸",
-            "failed": "试译失败:{message}",
+            "failed": "试译失败：{message}",
             "lockedTerm": "锁定术语 —— 每次翻译后强制执行"
         },
         "directory": {
@@ -536,10 +538,10 @@
         },
         "authentication": {
             "title": "身份验证设置",
-            "enabled": "启用身份验证:",
-            "note": "注意:启用身份验证前,必须至少存在一个用户。",
-            "noUsers": "当前没有任何用户。请先创建用户,再启用身份验证。",
-            "verifyFailed": "验证用户失败,请重试。"
+            "enabled": "启用身份验证：",
+            "note": "注意：启用身份验证前，必须至少存在一个用户。",
+            "noUsers": "当前没有任何用户。请先创建用户，再启用身份验证。",
+            "verifyFailed": "验证用户失败，请重试。"
         },
         "apiKey": {
             "title": "API 密钥",
@@ -552,7 +554,7 @@
             "revoked": "API 密钥已吊销",
             "howToUse": "使用方法",
             "headerIntro": "请在 HTTP 请求中使用",
-            "headerSuffix": "请求头传入密钥:",
+            "headerSuffix": "请求头传入密钥：",
             "show": "显示密钥",
             "hide": "隐藏密钥",
             "copy": "复制",
@@ -564,13 +566,13 @@
             "subLine": "已加载 {count} 个插件"
         },
         "automation": {
-            "description": "设置自动化。注意:启用自动化后,还需要配置所需的",
+            "description": "设置自动化。注意：启用自动化后，还需要配置所需的",
             "servicesLink": "服务",
             "descriptionSuffix": "。",
-            "cronFormat": "Cron 格式:分 时 日 月 星期(例如 '0 * * * *' 表示每小时)",
+            "cronFormat": "Cron 格式：分 时 日 月 星期(例如 '0 * * * *' 表示每小时)",
             "limitPerSchedule": "限制每次计划执行的翻译数量",
-            "movieAgeDelay": "电影文件延迟(单位:小时)",
-            "showAgeDelay": "剧集文件延迟(单位:小时)",
+            "movieAgeDelay": "电影文件延迟(单位：小时)",
+            "showAgeDelay": "剧集文件延迟(单位：小时)",
             "batchesTitle": "自动化批次",
             "batchesMeta": "cron",
             "dailyRow": "每日补缺",
@@ -579,19 +581,21 @@
             "editFailed": "请检查标红的字段。",
             "toggleFailed": "开关切换失败，请重试。",
             "consumeEmbeddedTracks": "消费内嵌字幕轨",
-            "consumeEmbeddedTracksHint": "每日补缺同时抽取文本型内嵌轨作为翻译源;媒体页的手动翻译不受此开关限制"
+            "consumeEmbeddedTracksHint": "每日补缺同时抽取文本型内嵌轨作为翻译源；媒体页的手动翻译不受此开关限制"
         },
         "schedule": {
             "heading": "定时任务",
             "subLine": "Hangfire · {queues} 队列 · {jobs} 个 recurring 任务",
             "subLineBase": "Hangfire recurring",
+            "queuesCount": "{n} 个队列",
+            "jobsCount": "{n} 个 recurring 任务",
             "viewQueue": "查看任务队列",
             "jobName": "任务名称",
             "cron": "Cron",
             "state": "状态",
             "stateRunning": "▸ 运行中",
             "stateSucceeded": "✓ 成功",
-            "stateNone": "—",
+            "stateNone": "从未运行",
             "lastExecution": "上次执行",
             "nextExecution": "下次执行",
             "actions": "操作",
@@ -600,58 +604,58 @@
             "enable": "启用",
             "disable": "停用",
             "stateDisabled": "关闭",
-            "enabledToast": "已启用:{job}",
-            "disabledToast": "已停用:{job}",
+            "enabledToast": "已启用：{job}",
+            "disabledToast": "已停用：{job}",
             "toggleFailed": "切换任务状态失败",
             "cronUpdated": "已更新 {job} → {cron}",
-            "jobNotFound": "任务不存在,刷新后重试。",
-            "cronUpdateFailed": "cron 更新失败,请重试。",
+            "jobNotFound": "任务不存在，刷新后重试。",
+            "cronUpdateFailed": "cron 更新失败，请重试。",
             "cronInvalid": "Cron 表达式无效",
-            "cronTimeZone": "Cron 按服务器时区 {timeZone} 解释,执行时间也按该时区显示",
-            "timeZoneWarning": "服务器 TZ 环境变量未设置或无效,定时任务已回退 UTC——cron 与显示时间均按 UTC 计算"
+            "cronTimeZone": "Cron 按服务器时区 {timeZone} 解释，执行时间也按该时区显示",
+            "timeZoneWarning": "服务器 TZ 环境变量未设置或无效，定时任务已回退 UTC——cron 与显示时间均按 UTC 计算"
         },
         "subtitle": {
-            "description": "配置字幕的清理与时间轴处理,以防止时间轴重叠并去除多余的格式。",
-            "ignoreCaptions": "若存在带标签的字幕则跳过翻译:",
-            "ignoreCaptionsDescription": "如果目标字幕已包含听障(Hearing Impaired)或强制(Forced)等标签字幕,则跳过翻译。",
-            "fixOverlapping": "修复重叠字幕:",
-            "fixOverlappingDescription": "通过裁剪前一条字幕的结束时间来自动解决字幕重叠问题。该功能对时间轴本身不同步的字幕无效,而且在大多数情况下反而会导致字幕不同步。",
-            "stripFormatting": "去除字幕格式:",
-            "stripFormattingDescription": "启用此选项将移除(SRT)字幕中的所有格式标签(如斜体、粗体、颜色、位置),生成纯文本字幕。",
-            "preserveLineBreaks": "保留换行:",
-            "preserveLineBreaksDescription": "翻译后保留多行字幕的分行,而不是合并为单行。AI 服务会将整条字幕一次性翻译;传统服务(DeepL、Google、Libre 等)则逐行翻译。",
+            "description": "配置字幕的清理与时间轴处理，以防止时间轴重叠并去除多余的格式。",
+            "ignoreCaptions": "若存在带标签的字幕则跳过翻译：",
+            "ignoreCaptionsDescription": "如果目标字幕已包含听障(Hearing Impaired)或强制(Forced)等标签字幕，则跳过翻译。",
+            "fixOverlapping": "修复重叠字幕：",
+            "fixOverlappingDescription": "通过裁剪前一条字幕的结束时间来自动解决字幕重叠问题。该功能对时间轴本身不同步的字幕无效，而且在大多数情况下反而会导致字幕不同步。",
+            "stripFormatting": "去除字幕格式：",
+            "stripFormattingDescription": "启用此选项将移除(SRT)字幕中的所有格式标签(如斜体、粗体、颜色、位置)，生成纯文本字幕。",
+            "preserveLineBreaks": "保留换行：",
+            "preserveLineBreaksDescription": "翻译后保留多行字幕的分行，而不是合并为单行。AI 服务会将整条字幕一次性翻译；传统服务(DeepL、Google、Libre 等)则逐行翻译。",
             "bilingualOutput": "双语字幕输出",
-            "bilingualOutputDescription": "在同一条字幕中上方写入译文、下方附上原文(合并为一行)。ASS/SSA 格式的原文以小字号显示。仅对新的翻译生效;已有翻译可在「翻译任务」页一键转换。",
+            "bilingualOutputDescription": "在同一条字幕中上方写入译文、下方附上原文(合并为一行)。ASS/SSA 格式的原文以小字号显示。仅对新的翻译生效；已有翻译可在「翻译任务」页一键转换。",
             "addTranslatorInfo": "添加翻译者信息",
             "addTranslatorInfoDescription": "在字幕开头添加翻译者信息。",
             "removeLanguageTag": "移除语言标签",
             "removeLanguageTagDescription": "从文件名中移除语言标签(如“.en.”)。",
             "useTagging": "使用字幕标签",
-            "useTaggingDescription": "在字幕文件名后附加自定义片段。这不是标准的字幕命名规范,可能会导致其他应用出现问题。",
+            "useTaggingDescription": "在字幕文件名后附加自定义片段。这不是标准的字幕命名规范，可能会导致其他应用出现问题。",
             "tagLabel": "字幕标签"
         },
         "validation": {
-            "description": "配置字幕校验规则。这些规则将在处理字幕文件时应用,如果校验失败,翻译将被取消。",
-            "enable": "启用校验:",
-            "minDuration": "字幕最短显示时长(毫秒):",
-            "maxDuration": "字幕最长显示时长(秒):",
-            "minLength": "字幕最少字符数:",
-            "maxLength": "字幕最多字符数:",
-            "maxSize": "字幕文件最大大小(字节):"
+            "description": "配置字幕校验规则。这些规则将在处理字幕文件时应用，如果校验失败，翻译将被取消。",
+            "enable": "启用校验：",
+            "minDuration": "字幕最短显示时长(毫秒)：",
+            "maxDuration": "字幕最长显示时长(秒)：",
+            "minLength": "字幕最少字符数：",
+            "maxLength": "字幕最多字符数：",
+            "maxSize": "字幕文件最大大小(字节)："
         },
         "translation": {
             "description": "通过修改重试选项或批量大小(如果服务支持)来调整翻译请求设置。",
             "useBatch": "使用批量翻译",
-            "useBatchDescription": "将多条字幕行合并为批次处理,以提高翻译效率和上下文理解能力。注意,带上下文的单行翻译仍然更可靠、质量更高。",
-            "batchSize": "批量大小:",
+            "useBatchDescription": "将多条字幕行合并为批次处理，以提高翻译效率和上下文理解能力。注意，带上下文的单行翻译仍然更可靠、质量更高。",
+            "batchSize": "批量大小：",
             "batchSizeDescription": "单个批次包含的字幕行数。",
-            "requestTimeout": "请求超时:",
-            "requestTimeoutDescription": "等待翻译服务单个请求的最长时间(分钟)。如果在低配置硬件上运行较慢的本地 AI,建议调大此值。",
-            "maxRetries": "最大翻译重试次数:",
+            "requestTimeout": "请求超时：",
+            "requestTimeoutDescription": "等待翻译服务单个请求的最长时间(分钟)。如果在低配置硬件上运行较慢的本地 AI，建议调大此值。",
+            "maxRetries": "最大翻译重试次数：",
             "maxRetriesDescription": "每行或每批次的最大重试次数。",
-            "retryDelay": "重试间隔:",
+            "retryDelay": "重试间隔：",
             "retryDelayDescription": "首次重试前的初始延迟(秒)。",
-            "retryDelayMultiplier": "重试延迟倍数:",
+            "retryDelayMultiplier": "重试延迟倍数：",
             "retryDelayMultiplierDescription": "每次重试后延迟时间的递增倍数。"
         },
         "translationPrompt": {
@@ -660,12 +664,12 @@
             "systemPrompt": "翻译系统提示词",
             "systemPromptDescription": "通过设置全局指令来定义 AI 的行为和语气。",
             "userPrompt": "翻译用户提示词",
-            "userPromptDescription": "使用上下文占位符包含当前字幕前后的内容,帮助 AI 生成更准确的翻译。",
+            "userPromptDescription": "使用上下文占位符包含当前字幕前后的内容，帮助 AI 生成更准确的翻译。",
             "contextBefore": "前文上下文",
             "contextAfter": "后文上下文",
             "structuredContext": "带译文的结构化上下文",
-            "structuredContextDescription": "将 {'{'}contextBefore{'}'} 和 {'{'}contextAfter{'}'} 作为单个 JSON 对象按行发送,包含每行的位置和文本,以及已翻译行的译文,使 AI 能保持人名与术语一致。仅当在用户提示词中使用这些占位符时生效;请在提示词中告知模型参考已有的译文。",
-            "batchNote": "批量发送字幕时不使用用户提示词,字幕批次将直接作为用户消息发送。"
+            "structuredContextDescription": "将 {'{'}contextBefore{'}'} 和 {'{'}contextAfter{'}'} 作为单个 JSON 对象按行发送，包含每行的位置和文本，以及已翻译行的译文，使 AI 能保持人名与术语一致。仅当在用户提示词中使用这些占位符时生效；请在提示词中告知模型参考已有的译文。",
+            "batchNote": "批量发送字幕时不使用用户提示词，字幕批次将直接作为用户消息发送。"
         },
         "proofread": {
             "title": "校对提示词",
@@ -686,18 +690,18 @@
             "autoScrollLabel": "自动滚动",
             "export": "导出",
             "exportTitle": "系统日志导出",
-            "exportGenerated": "生成时间:{datetime}",
-            "exportTotalEntries": "总条数:{count}",
-            "exportStackTrace": "堆栈跟踪:",
+            "exportGenerated": "生成时间：{datetime}",
+            "exportTotalEntries": "总条数：{count}",
+            "exportStackTrace": "堆栈跟踪：",
             "copy": "复制",
             "copied": "日志已复制到剪贴板",
             "copyFailed": "日志复制失败",
             "clear": "清空",
-            "autoScroll": "自动滚动:",
+            "autoScroll": "自动滚动：",
             "level": "级别",
             "waiting": "等待日志…",
-            "failedToProcessData": "处理日志数据失败:{data}",
-            "connectionError": "日志流连接出错,将在 5 秒后尝试重新连接…"
+            "failedToProcessData": "处理日志数据失败：{data}",
+            "connectionError": "日志流连接出错，将在 5 秒后尝试重新连接…"
         },
         "languageSelect": {
             "placeholder": "选择语言…",
@@ -725,23 +729,25 @@
             "edit": "编辑",
             "configure": "配置",
             "addService": "＋ 添加服务",
-            "addServiceHint": "未上链:内置 {builtin} 个 · 插件 {plugins} 个",
+            "addServiceHint": "未上链：内置 {builtin} 个 · 插件 {plugins} 个",
             "externalPlugins": "外部插件",
             "pluginsCount": "已加载 {count} 个",
             "open": "打开",
             "notConfigured": "未配置",
             "delete": "删除",
             "deleteTitle": "删除 {service}?",
-            "deleteBody": "将从回退链移除 {service},并清空其已保存的配置(API Key、URL、模型等)。免配置服务仍会保留在列表中,其余服务将不再展示,可经「＋ 添加服务」重新加入。",
+            "deleteBody": "将从回退链移除 {service}，并清空其已保存的配置(API Key、URL、模型等)。免配置服务仍会保留在列表中，其余服务将不再展示，可经「＋ 添加服务」重新加入。",
             "deleteCancel": "取消",
             "deleteConfirm": "删除服务",
             "deleting": "删除中…",
             "deleteDone": "已删除 {service} · 配置已清空",
             "deleteDefaultMigrated": "已删除 {service} · 新链首 {next} 自动成为默认服务",
             "deleteLastGuard": "链上至少保留一个服务",
-            "deleteNotChained": "{service} 未在回退链上,无需移除",
-            "deletePartial": "已将 {service} 移出回退链,但清空其配置失败 —— 请检查插件清单。",
-            "deleteFailed": "从回退链移除 {service} 失败。"
+            "deleteNotChained": "{service} 未在回退链上，无需移除",
+            "deletePartial": "已将 {service} 移出回退链，但清空其配置失败 —— 请检查插件清单。",
+            "deleteFailed": "从回退链移除 {service} 失败。",
+            "sinceRestart": "自重启起",
+            "requestsThisMonth": "本月 {count} 次请求"
         },
         "glossary": {
             "title": "术语表",
@@ -762,7 +768,7 @@
             "title": "语言策略",
             "meta": "翻译管线的语言范围 · 缺字幕统计与自动化批次均遵循此配置",
             "coverage": "链上语言覆盖",
-            "coverageHint": "派生只读:回退链成员语言能力 ∩(源白名单 × 目标语言);语言匹配按根粒度(如 zh-Hans≈zh);「未知」指语言表获取失败的链上成员,不计为可用",
+            "coverageHint": "派生只读：回退链成员语言能力 ∩(源白名单 × 目标语言)；语言匹配按根粒度(如 zh-Hans≈zh)；「未知」指语言表获取失败的链上成员，不计为可用",
             "unsupported": "({services} 不支持)",
             "unknownCount": "{count} 个未知",
             "chainEmpty": "链上无服务。",
@@ -773,7 +779,7 @@
             "edit": "编辑",
             "empty": "未配置",
             "languagesField": "语言",
-            "variantHint": "地区变体按根语言回退匹配:en-US 会按 en 匹配。",
+            "variantHint": "地区变体按根语言回退匹配：en-US 会按 en 匹配。",
             "required": "请至少选择一个语言。",
             "coverageDerived": "派生只读 · 随回退链增删实时重算"
         },
@@ -832,7 +838,7 @@
             "collapse": "收起",
             "enabled": "已启用",
             "disabled": "已停用",
-            "enableHint": "停用的源不参与聚合与自动搜索轮;手动指名单源搜索仍会查询。",
+            "enableHint": "停用的源不参与聚合与自动搜索轮；手动指名单源搜索仍会查询。",
             "toggleFailed": "源开关保存失败。",
             "cooldownUntil": "冷却中 · {time}",
             "cooldownUntilCredentials": "冷却中 · 凭证变更前",
@@ -850,7 +856,7 @@
             "naming": "文件命名",
             "edit": "编辑",
             "namingTemplateLabel": "命名模板",
-            "namingVars": "变量:{'{'}原名{'}'} = 清洗后的原名(剥离字幕/语言段)· {'{'}语言{'}'} = 目标语言标记",
+            "namingVars": "变量：{'{'}原名{'}'} = 清洗后的原名(剥离字幕/语言段)· {'{'}语言{'}'} = 目标语言标记",
             "namingSuffix": "与媒体同目录写回",
             "namingRequired": "命名模板不能为空。"
         },
@@ -913,6 +919,7 @@
             "statCurrentBatch": "当前批次",
             "statCost": "成本(估算)",
             "statElapsed": "已运行",
+            "statDuration": "耗时",
             "statRemaining": "预计剩余",
             "editThisLine": "编辑此行",
             "proofreadThisLine": "校对此行",
@@ -981,13 +988,13 @@
         "glossaryLocked": "{source} → {target} · 已锁定",
         "glossaryHint": "{source} → {target}",
         "export": "导出当前快照",
-        "finish": "完成校对并写回（{done}/{total}）",
+        "finish": "完成校对并写回（{done} / {total}）",
         "mark": {
             "approved": "已通过",
             "pending": "待校对",
             "rejected": "已驳回"
         },
-        "stashed": "已暂存 · {done}/{total} 行",
+        "stashed": "已暂存 · {done} / {total} 行",
         "suggestGlossary": "✎ {count} 处修改 → 建议入术语表",
         "suggestGlossaryHint": "跳转到 设置 · 字幕与质量 的术语表区。不会自动创建术语。"
     },
@@ -1001,7 +1008,7 @@
             "pipelineIdle": "管线空闲",
             "queueLive": "{count} 个任务 · SignalR 实时",
             "importLive": "处理队列 {files} 个文件 · 翻译 {translate}",
-            "proofreadLive": "{title} · 已校对 {done}/{total} 行",
+            "proofreadLive": "{title} · 已校对 {done} / {total} 行",
             "offlineReconnecting": "离线 · 重连中"
         },
         "search": "⌘K 搜索",
@@ -1036,9 +1043,14 @@
         "episodePageNext": "下一页剧集",
         "translate": "翻译 ▾",
         "showMeta": "{seasons} 季 · {episodes} 集",
+        "seasonCount": "{n} 季",
+        "episodeCount": "{n} 集",
         "movieMeta": "电影",
         "lastActivity": "最近活动 {time}",
-        "tasks": "进行中任务",
+        "tasks": {
+            "heading": "进行中任务",
+            "allDone": "目标语言均已翻译"
+        },
         "tasksMeta": "请求 {meta}",
         "tasksCount": "{count} 个请求",
         "missingEpisodes": "缺 {count} 集 {lang} 字幕",
@@ -1062,7 +1074,7 @@
             "embedded": {
                 "title": "内嵌轨道",
                 "count": "{count} 条轨道",
-                "notScanned": "未探测 · 到 设置 → 自动化 手动运行「内嵌轨道探测」(EmbeddedTrackScanJob)",
+                "notScanned": "尚未探测 · 可在 设置 → 自动化 手动运行「内嵌轨道探测」",
                 "empty": "容器内没有内嵌字幕轨",
                 "graphic": "图形 · 不可翻译",
                 "translate": "翻译",
@@ -1080,9 +1092,12 @@
         },
         "audio": {
             "title": "音轨",
+            "audioLabel": "音轨",
             "unknown": "音轨语言未知",
+            "coverageNote": "音轨已含 {langs}，通常无需字幕",
             "markNeeded": "标记需要字幕",
             "cancelMark": "取消标记",
+            "cancelMarkShort": "清除标记",
             "markedToast": "已标记需要字幕",
             "unmarkedToast": "已取消标记",
             "failedToast": "更新字幕需求失败：{message}"
@@ -1103,35 +1118,35 @@
     "changePassword": {
         "title": "修改密码",
         "forcedTitle": "设置新密码",
-        "forcedIntro": "此实例仍在使用默认管理员凭据。请设置新密码后继续,完成后需使用新密码重新登录。",
+        "forcedIntro": "此实例仍在使用默认管理员凭据。请设置新密码后继续，完成后需使用新密码重新登录。",
         "cardNote": "修改成功后需重新登录",
         "currentPassword": "当前密码",
         "newPassword": "新密码",
         "confirmPassword": "确认新密码",
         "submit": "修改密码",
         "submitting": "修改中…",
-        "hint": "至少 8 个字符,且需包含字母和数字。",
-        "success": "密码已修改,请使用新密码重新登录。",
+        "hint": "至少 8 个字符，且需包含字母和数字。",
+        "success": "密码已修改，请使用新密码重新登录。",
         "errors": {
             "required": "请填写所有字段",
             "mismatch": "两次输入的新密码不一致",
-            "weak": "新密码长度至少 8 位,且需包含字母和数字",
+            "weak": "新密码长度至少 8 位，且需包含字母和数字",
             "invalidCurrent": "当前密码不正确",
-            "generic": "修改密码失败,请重试。"
+            "generic": "修改密码失败，请重试。"
         }
     },
     "changeUsername": {
         "title": "更改用户名",
-        "cardNote": "登录账户名 · 验证当前密码后生效,无需重登",
+        "cardNote": "登录账户名 · 验证当前密码后生效，无需重登",
         "newUsername": "新用户名",
-        "hint": "3-32 个字符:字母、数字、点、横线、下划线",
+        "hint": "3-32 个字符：字母、数字、点、横线、下划线",
         "submit": "更改用户名",
         "success": "用户名已改为 {username}",
         "errors": {
-            "invalid": "用户名须为 3-32 个字符:字母、数字、点、横线、下划线。",
+            "invalid": "用户名须为 3-32 个字符：字母、数字、点、横线、下划线。",
             "same": "这就是当前用户名。",
             "taken": "该用户名已被占用。",
-            "generic": "更改失败,请重试。"
+            "generic": "更改失败，请重试。"
         }
     },
     "subSearch": {
@@ -1161,7 +1176,7 @@
         "sourceSearching": "搜索中…",
         "sourceOk": "命中 {count}",
         "sourceSkipped": "未配置",
-        "sourceError": "失败:{message}",
+        "sourceError": "失败：{message}",
         "downloadRejected": "下载失败 · {result} · {error}",
         "translationDuplicate": "已存在同类翻译请求",
         "noSources": "暂无可用字幕源 — 请先在设置中配置。"

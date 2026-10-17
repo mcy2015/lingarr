@@ -83,6 +83,19 @@ public class CostService : ICostService
         return summary.Providers.FirstOrDefault(x => x.Provider == provider)?.Cost;
     }
 
+    /// <summary>
+    /// Current-month completed request count via the same aggregation
+    /// <see cref="GetCostSummary"/> prices (CompletedAt inside the local
+    /// month, ServiceType set, CharactersTranslated recorded) — the service
+    /// card's monthlyRequests rides the cost rollup's exact criteria.
+    /// Unused providers report 0, never null.
+    /// </summary>
+    public async Task<int> GetProviderMonthlyRequestsAsync(string provider)
+    {
+        var summary = await GetCostSummary(null, null);
+        return summary.Providers.FirstOrDefault(x => x.Provider == provider)?.Requests ?? 0;
+    }
+
     /// <inheritdoc />
     public async Task<double?> GetCurrentMonthTotalCostAsync()
     {

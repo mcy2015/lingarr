@@ -460,7 +460,10 @@ async function fetchLibrary(): Promise<void> {
         })
         items.value = page.items
         totalCount.value = page.totalCount
-        uiStore.setSubOverride(t('topbar.sub.libraryLive', { count: totalCount.value }))
+        uiStore.setSubOverride({
+            key: 'topbar.sub.libraryLive',
+            params: { count: totalCount.value }
+        })
         pruneSelection()
     } finally {
         loading.value = false
@@ -478,7 +481,7 @@ async function fetchLibrary(): Promise<void> {
 // Topbar CTA (prototype): 翻译所选 opens the tray's language menu —
 // selecting nothing gets a hint instead.
 onMounted(() => {
-    uiStore.registerCta(t('topbar.cta.translateSelected'), () => {
+    uiStore.registerCta({ key: 'topbar.cta.translateSelected' }, () => {
         if (selection.size === 0) {
             toastTip()
             return

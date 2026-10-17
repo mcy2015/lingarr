@@ -44,13 +44,25 @@
                     class="flex h-full min-w-0 flex-1 items-end justify-center gap-[2px]"
                     :title="barTitle(bar)">
                     <div
-                        class="w-full max-w-[9px] rounded-t-[2px] bg-accent"
+                        class="w-full max-w-[12px] rounded-t-[2px] bg-accent"
                         :style="{ height: Math.max(bar.writtenPct, bar.writtenPct > 0 ? 4 : 0) + '%' }"></div>
                     <div
                         v-if="bar.costPct !== null"
-                        class="w-full max-w-[9px] rounded-t-[2px] bg-info/75"
+                        class="w-full max-w-[12px] rounded-t-[2px] bg-info/75"
                         :style="{ height: Math.max(bar.costPct, bar.costPct > 0 ? 4 : 0) + '%' }"></div>
                 </div>
+            </div>
+            <!-- x 轴刻度(批E E4):首/尾日 + 每隔 3 天,空刻度以空 span 占位,
+                 flex-1 单元与上方柱组一一对应保持对齐 -->
+            <div
+                class="text-secondary-content/70 flex justify-between gap-[3px] text-[10px] leading-none"
+                data-test="trend-axis">
+                <span
+                    v-for="(bar, index) in series.bars"
+                    :key="`axis-${bar.date}`"
+                    class="min-w-0 flex-1 truncate text-center tabular-nums">
+                    {{ axisTickLabel(bar.date, index, series.bars.length) }}
+                </span>
             </div>
             <div class="text-secondary-content flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
                 <span class="flex items-center gap-1.5">
@@ -85,7 +97,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { IDailyTrendStatistics } from '@/types'
-import { buildTrendSeries, TrendBarGroup } from '@/cells/dashboard/services/trendSeries'
+import { axisTickLabel, buildTrendSeries, TrendBarGroup } from '@/cells/dashboard/services/trendSeries'
 
 const props = defineProps<{
     trend: IDailyTrendStatistics | null

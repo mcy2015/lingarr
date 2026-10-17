@@ -43,7 +43,7 @@
                         type="button"
                         class="bg-accent text-accent-content border-accent cursor-pointer rounded border px-2.5 py-1 text-[12.5px] font-semibold whitespace-nowrap transition-colors hover:brightness-106"
                         @click="uiStore.cta.handler?.()">
-                        {{ uiStore.cta.label }}
+                        {{ ctaLabel }}
                     </button>
                     <LanguageDropdown />
                     <DropdownComponent
@@ -133,8 +133,11 @@ const onActiveTranslations = (activeTranslations: IActiveTranslation[]) => {
 }
 
 /// Prototype topbar: page title + one-line context per screen. Pages may
-/// override the sub (live counts) through the ui store.
-const pageMeta: Record<string, { title: string; sub: string }> = {
+/// override the sub (live counts) through the ui store. Computed so the
+/// built-in titles/subs re-translate on locale switch; page-registered
+/// overrides arrive as { key, params } entries (or plain strings) — see
+/// ctaLabel/pageSub below.
+const pageMeta = computed<Record<string, { title: string; sub: string }>>(() => ({
     dashboard: { title: t('nav.dashboard'), sub: '' },
     library: { title: t('nav.library'), sub: t('topbar.sub.library') },
     queue: { title: t('nav.queue'), sub: '' },
@@ -148,17 +151,29 @@ const pageMeta: Record<string, { title: string; sub: string }> = {
     'request-template': { title: t('requestTemplate.title'), sub: '' },
     logs: { title: t('settings.logs.heading'), sub: '' },
     'subtitle-history': { title: t('nav.subtitleHistory'), sub: '' }
-}
+}))
 const currentMeta = computed(() => {
     const name = String(route.name ?? '')
     return (
-        pageMeta[name] ??
-        (name.startsWith('settings-') ? pageMeta.settings : { title: 'Lingarr', sub: '' })
+        pageMeta.value[name] ??
+        (name.startsWith('settings-') ? pageMeta.value.settings : { title: 'Lingarr', sub: '' })
     )
 })
 const pageTitle = computed(() => currentMeta.value.title)
+/// Translates a page-registered override entry at render time (named
+/// params with `count` keep vue-i18n implicit pluralization); plain
+/// strings are shown verbatim.
+const translateEntry = (entry: { key: string; params?: Record<string, unknown> }): string =>
+    entry.params ? t(entry.key, entry.params) : t(entry.key)
+const ctaLabel = computed(() => {
+    const label = uiStore.cta?.label
+    if (!label) return ''
+    return typeof label === 'string' ? label : translateEntry(label)
+})
 const pageSub = computed(() => {
-    if (uiStore.subOverride) return uiStore.subOverride
+    const override = uiStore.subOverride
+    if (typeof override !== 'string') return translateEntry(override)
+    if (override) return override
     if (String(route.name ?? '').startsWith('settings')) {
         const version = instanceStore.getVersion?.currentVersion
         return version ? `v${version}` : ''

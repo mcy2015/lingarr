@@ -13,7 +13,7 @@
         @scroll.passive="onScroll">
         <table class="w-full text-[13px]">
             <slot name="header" />
-            <tbody>
+            <tbody ref="tbodyEl">
                 <tr v-if="items.length === 0" data-test="virtual-empty-row">
                     <td :colspan="colspan" :class="cellClass">
                         <slot name="empty" />
@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts" generic="T">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, onUpdated, ref, watch } from 'vue'
 
 /// Layout engines without a real viewport (happy-dom and friends) report
 /// clientHeight 0 — fall back to a bounded default so those contexts render
@@ -55,7 +55,8 @@ const props = withDefaults(
     defineProps<{
         /** Full item list — windowing is render-time only, never data-time. */
         items: readonly T[]
-        /** Assumed uniform row height in px (spacer math; rows may grow). */
+        /** Row height estimate in px — used until a real row is measured
+         *  (C4: keeps spacer math honest when CSS drifts from the estimate). */
         itemHeight: number
         /** Extra rows rendered above/below the viewport. */
         overscan?: number
@@ -78,26 +79,49 @@ defineSlots<{
 const cellClass = 'border-line/50 align-middle border-b px-3 py-2'
 
 const scrollEl = ref<HTMLElement | null>(null)
+const tbodyEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const viewportPx = ref(FALLBACK_VIEWPORT_PX)
+/// First rendered content row's offsetHeight once a real layout engine
+/// reports one (happy-dom et al. report 0 → the prop estimate stays).
+/// Spacers switch to the measured value so estimate drift never skews
+/// the window (no jump rows while scrolling deep seasons).
+const measuredItemHeight = ref(0)
+
+/// Effective uniform row height: measurement wins over the estimate.
+const itemHeightPx = computed(() => measuredItemHeight.value || props.itemHeight)
 
 const measure = (): void => {
     const reported = scrollEl.value?.clientHeight ?? 0
     viewportPx.value = reported > 0 ? reported : FALLBACK_VIEWPORT_PX
 }
 
+/// Reads the first content row (spacers are aria-hidden and skipped; the
+/// empty-state row never coexists with spacers). Zero heights — layout
+/// engines without layout — never overwrite a previous measurement.
+const measureRows = (): void => {
+    if (!tbodyEl.value) return
+    const row = tbodyEl.value.querySelector<HTMLTableRowElement>('tr:not([aria-hidden="true"])')
+    const height = row?.offsetHeight ?? 0
+    if (height > 0 && height !== measuredItemHeight.value) {
+        measuredItemHeight.value = height
+    }
+}
+
 const start = computed(() => {
-    const first = Math.floor(scrollTop.value / props.itemHeight)
+    const first = Math.floor(scrollTop.value / itemHeightPx.value)
     return Math.min(props.items.length, Math.max(0, first - props.overscan))
 })
 const end = computed(() => {
-    const first = Math.floor(scrollTop.value / props.itemHeight)
-    const visible = Math.ceil(viewportPx.value / props.itemHeight)
+    const first = Math.floor(scrollTop.value / itemHeightPx.value)
+    const visible = Math.ceil(viewportPx.value / itemHeightPx.value)
     return Math.min(props.items.length, first + visible + props.overscan)
 })
 const windowItems = computed(() => props.items.slice(start.value, end.value))
-const padTop = computed(() => start.value * props.itemHeight)
-const padBottom = computed(() => Math.max(0, props.items.length - end.value) * props.itemHeight)
+const padTop = computed(() => start.value * itemHeightPx.value)
+const padBottom = computed(
+    () => Math.max(0, props.items.length - end.value) * itemHeightPx.value
+)
 
 const onScroll = (): void => {
     scrollTop.value = scrollEl.value?.scrollTop ?? 0
@@ -118,9 +142,20 @@ watch(
     }
 )
 
+// viewport + row heights are re-read together on resize (wrapping widths
+// can change both); every reactive re-render (scroll, season switch, font
+// swap) re-reads the live row height too — unchanged heights are guarded
+// away, so this settles
+const remeasure = (): void => {
+    measure()
+    measureRows()
+}
+
 onMounted(() => {
     measure()
-    window.addEventListener('resize', measure)
+    measureRows()
+    window.addEventListener('resize', remeasure)
 })
-onUnmounted(() => window.removeEventListener('resize', measure))
+onUnmounted(() => window.removeEventListener('resize', remeasure))
+onUpdated(measureRows)
 </script>

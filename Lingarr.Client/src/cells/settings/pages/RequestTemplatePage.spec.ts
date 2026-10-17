@@ -154,7 +154,7 @@ describe('RequestTemplatePage (drill-down, prototype screen-10)', () => {
     it('saves through the pb-head primary action with the new-batch toast (same action as the CTA)', async () => {
         const { wrapper, toastStore, uiStore } = await mountPage()
 
-        expect(uiStore.cta?.label).toBe(en.requestTemplate.save)
+        expect(uiStore.cta?.label).toEqual({ key: 'requestTemplate.save' })
 
         await wrapper.find('[data-test="tpl-save"]').trigger('click')
         await flushPromises()

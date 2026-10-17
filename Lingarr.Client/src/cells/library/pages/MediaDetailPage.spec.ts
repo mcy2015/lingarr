@@ -338,7 +338,12 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
         expect(wrapper.text()).toContain(en.library.toolbar.import)
         // chips row replaces the removed subtitle-files card (EN ok / ZH none)
         expect(wrapper.text()).toContain('EN ✓')
-        expect(wrapper.text()).toContain('ZH ·')
+        // C5: none-state chip renders the bare code + a styled dot ELEMENT —
+        // never a trailing text '·' that reads like a dangling separator
+        const chips = wrapper.findAll('[data-test="track-chip"]')
+        expect(chips[1].text()).toBe('ZH')
+        expect(chips[1].find('[data-test="track-none-dot"]').exists()).toBe(true)
+        expect(wrapper.text()).not.toContain('ZH ·')
         // no per-file subtitle list renders anywhere on the movie screen
         expect(wrapper.findAll('table')).toHaveLength(0)
     })
@@ -366,6 +371,61 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
             en.mediaDetail.movie.queuedToast.replace('{id}', '55')
         )
         expect(vm.activeRequests).toHaveLength(0) // refreshed history still empty
+    })
+
+    // ═══ C2:全目标语言就绪 → 静默完成态(无 Start translation)═══
+    it('shows the silent all-done state instead of the start CTA when every target track is complete', async () => {
+        libraryMock.mockResolvedValue({
+            items: [
+                {
+                    ...movieItem,
+                    tracks: [
+                        { language: 'en', have: 1, total: 1, state: 'complete' },
+                        { language: 'zh', have: 1, total: 1, state: 'complete' }
+                    ]
+                }
+            ],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        expect(wrapper.find('[data-test="tasks-all-done"]').text()).toContain(
+            en.mediaDetail.tasks.allDone
+        )
+        expect(wrapper.text()).not.toContain(en.mediaDetail.movie.untranslated)
+        expect(
+            wrapper.findAll('button').find((b) => b.text() === en.mediaDetail.movie.start)
+        ).toBeUndefined()
+    })
+
+    it('keeps the per-target done state while any target language track is still missing', async () => {
+        // targets [ZH, JA]: first target ZH complete, JA missing → the
+        // all-done state must NOT claim completion (only every() unlocks it)
+        libraryMock.mockResolvedValue({
+            items: [
+                {
+                    ...movieItem,
+                    tracks: [
+                        { language: 'en', have: 1, total: 1, state: 'complete' },
+                        { language: 'zh', have: 1, total: 1, state: 'complete' },
+                        { language: 'ja', have: 0, total: 1, state: 'none' }
+                    ]
+                }
+            ],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('movie', '/library/movie/7', [
+            { code: 'ZH', name: 'Chinese' },
+            { code: 'JA', name: 'Japanese' }
+        ])
+
+        expect(wrapper.find('[data-test="tasks-all-done"]').exists()).toBe(false)
+        // the established first-target done message still covers the gap
+        expect(wrapper.text()).toContain(en.mediaDetail.movie.done)
     })
 
     it('renders the in-progress task card from the real request and toasts busy on CTA', async () => {
@@ -450,18 +510,25 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
     it('appends the computed missing-episode count to the head sub line', async () => {
         const { wrapper } = await mountDetail('show', '/library/show/3')
 
-        // 3 episodes, 1 ZH track → 2 missing
+        // 3 episodes, 1 ZH track → 2 missing; the head line joins the split
+        // plural keys (1 → one form, 3 → other form) as "1 season · 3 episodes"
         const sub = wrapper.find('div.mono').text()
-        expect(sub).toContain(
-            en.mediaDetail.showMeta.replace('{seasons}', '1').replace('{episodes}', '3')
-        )
+        const seasonPart = en.mediaDetail.seasonCount
+            .split('|')[0]
+            .trim()
+            .replace('{n}', '1')
+        const episodePart = en.mediaDetail.episodeCount
+            .split('|')[1]
+            .trim()
+            .replace('{n}', '3')
+        expect(sub).toContain(`${seasonPart} · ${episodePart}`)
         expect(sub).toContain('2 episodes missing ZH subtitles')
     })
 
     it('queues every missing episode through the shared CTA, toasts the real count and jumps to the queue', async () => {
         const { uiStore, toastStore, router } = await mountDetail('show', '/library/show/3')
 
-        expect(uiStore.cta!.label).toBe(en.mediaDetail.translateMissing)
+        expect(uiStore.cta!.label).toEqual({ key: 'mediaDetail.translateMissing' })
         await uiStore.cta!.handler()
         await settle()
 
@@ -541,6 +608,14 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
 
         const { wrapper } = await mountDetail('show', '/library/show/3')
 
+        // C4: the episode card no longer stretches to fill the viewport
+        // (flex-[1.5] removed) — it self-sizes under a scroll cap so short
+        // seasons leave no dead space while long ones still scroll inside
+        const card = wrapper.find('[data-test="episode-list-card"]')
+        expect(card.exists()).toBe(true)
+        expect(card.classes().some((cls) => cls === 'flex-[1.5]')).toBe(false)
+        expect(card.classes().some((cls) => cls.startsWith('max-h-['))).toBe(true)
+
         // content rows only: the virtual spacers carry data-test markers and
         // the empty-state row carries the noEpisodes text
         const dataRows = () =>
@@ -552,13 +627,13 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
                         !row.attributes('data-test') && row.text() !== en.mediaDetail.noEpisodes
                 )
         // a thousand-episode season renders only the initial viewport window
-        // (fallback viewport 480px / 44px rows + ±5 overscan)
+        // (fallback viewport 480px / 40px row estimate + ±5 overscan)
         expect(dataRows().length).toBeLessThan(40)
         expect(dataRows()[0].text()).toContain('E01')
 
         // scrolling moves the window deep into the season — still bounded
         const scroller = wrapper.find('[data-test="virtual-scroll-container"]')
-        scroller.element.scrollTop = 44 * 500
+        scroller.element.scrollTop = 40 * 500
         await scroller.trigger('scroll')
         const deepRows = dataRows()
         expect(deepRows.length).toBeLessThan(40)
@@ -611,6 +686,25 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
         // only ep02 has a request; ep01/ep03 must not render a detail link
         const detailLinks = wrapper.find('table').findAll('a')
         expect(detailLinks.map((a) => a.attributes('href'))).toEqual(['/queue/30'])
+    })
+
+    // ═══ C3:Proofread 按钮短标签,悬浮/读屏保留整句 ═══
+    it('labels the episode proofread entry with the short tag and keeps the full sentence on hover', async () => {
+        requestsMock.mockResolvedValue({
+            items: [makeRequest({ id: 40, mediaId: 21, status: TRANSLATION_STATUS.COMPLETED })],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('show', '/library/show/3')
+
+        const button = wrapper.find('[data-test="episode-proofread"]')
+        expect(button.exists()).toBe(true)
+        expect(button.text()).toBe(en.common.translationAction.proofreadShort)
+        expect(button.attributes('title')).toBe(en.common.translationAction.proofread)
+        expect(button.attributes('aria-label')).toBe(en.common.translationAction.proofread)
+        // the row links into the proofread screen with the request id
+        expect(button.element.closest('a')?.getAttribute('href')).toBe('/proofread/40')
     })
 
     // ═══ 字幕文件卡:目录实际存在的文件 + 双语标签 ═══
@@ -1029,11 +1123,19 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
         const card = wrapper.find('[data-test="subtitle-files-card"]')
         const row = card.find('[data-test="audio-languages-row"]')
         expect(row.exists()).toBe(true)
-        // null audio renders the honest unknown hint, never fake codes
+        // C1: the audio strip renders as its own bordered/tinted group (an
+        // inset coverage box), visually separated from the plain file rows
+        expect(row.find('[data-test="audio-coverage-box"]').exists()).toBe(true)
+        expect(row.find('[data-test="audio-badge"]').text()).toBe(
+            en.mediaDetail.audio.audioLabel
+        )
+        // null audio renders the honest unknown hint, never fake codes — and
+        // no coverage note (nothing is covered)
         expect(row.find('[data-test="audio-languages-value"]').exists()).toBe(false)
         expect(row.find('[data-test="audio-languages-unknown"]').text()).toBe(
             en.mediaDetail.audio.unknown
         )
+        expect(row.find('[data-test="audio-coverage-note"]').exists()).toBe(false)
 
         // unknown audio is conservatively unexempted → the mark entry shows
         const toggle = row.find('[data-test="subtitle-need-toggle"]')
@@ -1048,10 +1150,11 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
         expect(toastStore.toasts[0].type).toBe('success')
         // in-place refresh: only the subtitle card is re-fetched (no reload)
         expect(mediaSubtitlesMock).toHaveBeenCalledTimes(2)
-        // the response's effective state drives the toggle's new label
-        expect(wrapper.find('[data-test="subtitle-need-toggle"]').text()).toBe(
-            en.mediaDetail.audio.cancelMark
-        )
+        // the response's effective state drives the toggle's new SHORT label
+        // (C1); the full sentence moves to the hover title
+        const after = wrapper.find('[data-test="subtitle-need-toggle"]')
+        expect(after.text()).toBe(en.mediaDetail.audio.cancelMarkShort)
+        expect(after.attributes('title')).toBe(en.mediaDetail.audio.cancelMark)
     })
 
     it('lists the mono audio codes and offers the override for target-covering audio', async () => {
@@ -1068,6 +1171,11 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
         const row = wrapper.find('[data-test="audio-languages-row"]')
         expect(row.find('[data-test="audio-languages-value"]').text()).toBe('en · zh')
         expect(row.find('[data-test="audio-languages-unknown"]').exists()).toBe(false)
+        // C1: covering audio carries the coverage note with the language list
+        expect(row.find('[data-test="audio-coverage-note"]').text()).toContain('en, zh')
+        expect(row.find('[data-test="audio-coverage-note"]').text()).toContain(
+            'usually no subtitles needed'
+        )
 
         // exempt via zh audio → the entry overrides it back into the pool
         const toggle = row.find('[data-test="subtitle-need-toggle"]')
@@ -1078,9 +1186,10 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
 
         expect(subtitleNeedMock).toHaveBeenCalledWith('Movie', 7, true)
         expect(toastStore.toasts[0].type).toBe('success')
-        // reversible (AC5): with the override active the entry flips
+        // reversible (AC5): with the override active the entry flips to the
+        // short clear-mark label (C1)
         expect(wrapper.find('[data-test="subtitle-need-toggle"]').text()).toBe(
-            en.mediaDetail.audio.cancelMark
+            en.mediaDetail.audio.cancelMarkShort
         )
     })
 
@@ -1090,6 +1199,8 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
 
         const row = wrapper.find('[data-test="audio-languages-row"]')
         expect(row.find('[data-test="audio-languages-value"]').text()).toBe('ja')
+        // audio without any target → no coverage note, no entry
+        expect(row.find('[data-test="audio-coverage-note"]').exists()).toBe(false)
         expect(row.find('[data-test="subtitle-need-toggle"]').exists()).toBe(false)
     })
 
@@ -1202,9 +1313,13 @@ describe('MediaDetailPage · 搜索字幕入口与音轨判定(QA6)', () => {
 
         const row = wrapper.find('[data-test="audio-languages-row"]')
         expect(row.find('[data-test="audio-languages-value"]').text()).toBe('zh')
-        // known audio covering a target → the cancel-mark override entry
-        expect(row.find('[data-test="subtitle-need-toggle"]').text()).toBe(
-            en.mediaDetail.audio.cancelMark
+        // known audio covering a target → the short clear-mark override with
+        // the full sentence kept on the title (C1)
+        const toggle = row.find('[data-test="subtitle-need-toggle"]')
+        expect(toggle.text()).toBe(en.mediaDetail.audio.cancelMarkShort)
+        expect(toggle.attributes('title')).toBe(en.mediaDetail.audio.cancelMark)
+        expect(row.find('[data-test="audio-coverage-note"]').text()).toContain(
+            'Audio track already covers zh'
         )
     })
 

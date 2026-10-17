@@ -18,8 +18,11 @@
             </div>
             <div class="prog flex min-w-[220px] flex-1 items-center gap-3">
                 <div class="track flex-1">
-                    <div class="fill" :style="{ width: progressPct + '%' }"></div>
-                    <div class="head" :style="{ left: progressPct + '%' }"></div>
+                    <!-- D4: at 0% nothing has been reviewed — the fill width is
+                         0 but the .head tick still painted a stray accent mark,
+                         so both nodes stay out of the DOM until progress > 0. -->
+                    <div v-if="progressPct > 0" class="fill" :style="{ width: progressPct + '%' }"></div>
+                    <div v-if="progressPct > 0" class="head" :style="{ left: progressPct + '%' }"></div>
                 </div>
                 <span class="mono text-secondary-content min-w-[110px] text-right text-xs">
                     {{ t('proofread.progress', { done: approvedCount, total: lines.length }) }}
@@ -65,8 +68,15 @@
                         → {{ formatTimecode(line.endTimeMs ?? line.startTimeMs) }}
                     </template>
                 </div>
+                <!-- D2: subtitle <i>/<b> markup renders as styled segments —
+                     never literal tag text, no v-html. -->
                 <div class="src border-line relative border-r px-3.5 py-2.5 text-[13px] text-secondary-content">
-                    {{ line.source }}
+                    <span
+                        v-for="(segment, index) in renderSubtitleRichText(line.source)"
+                        :key="index"
+                        :class="{ italic: segment.italic, 'font-bold': segment.bold }">
+                        {{ segment.text }}
+                    </span>
                 </div>
                 <div class="dst relative px-3.5 py-2.5 text-[13px]">
                     <template v-if="editingPosition === line.position">
@@ -100,7 +110,14 @@
                         </div>
                     </template>
                     <template v-else>
-                        <span class="dst-text">{{ line.target }}</span>
+                        <span class="dst-text">
+                            <span
+                                v-for="(segment, index) in renderSubtitleRichText(line.target)"
+                                :key="index"
+                                :class="{ italic: segment.italic, 'font-bold': segment.bold }">
+                                {{ segment.text }}
+                            </span>
+                        </span>
                         <!-- 术语胶囊(原型 .gloss):词 → 译,锁定 = 绿边 -->
                         <span
                             v-for="entry in glossaryHits(line)"
@@ -178,6 +195,7 @@ import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { glossaryService } from '@/cells/app/api/glossaryService'
 import { translationRequestService } from '@/cells/app/api/translationRequestService'
+import { renderSubtitleRichText } from '@/cells/app/utils/richText'
 import { useProofreadKeyboard } from '@/cells/proofread/composables/useProofreadKeyboard'
 import {
     IPagedResult,
@@ -247,7 +265,7 @@ const onPageKeydown = (event: KeyboardEvent): void => {
 }
 
 onMounted(() => {
-    uiStore.registerCta(t('topbar.cta.stash'), stash)
+    uiStore.registerCta({ key: 'topbar.cta.stash' }, stash)
     window.addEventListener('keydown', onPageKeydown)
 })
 onUnmounted(() => {
@@ -259,11 +277,14 @@ onUnmounted(() => {
 // live topbar sub: title + reviewed progress (updates as Enter approves)
 watch([approvedCount, () => lines.value.length, () => detail.value?.title], ([done, total, title]) => {
     if (!title) return
-    uiStore.setSubOverride(t('topbar.sub.proofreadLive', {
-        title: String(title),
-        done: Number(done),
-        total: Number(total)
-    }))
+    uiStore.setSubOverride({
+        key: 'topbar.sub.proofreadLive',
+        params: {
+            title: String(title),
+            done: Number(done),
+            total: Number(total)
+        }
+    })
 }, { immediate: true })
 
 onMounted(async () => {

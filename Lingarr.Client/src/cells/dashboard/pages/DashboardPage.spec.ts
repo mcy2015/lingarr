@@ -8,6 +8,7 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import DashboardPage from '@/cells/dashboard/pages/DashboardPage.vue'
+import { ITranslationRequest, ITranslationRequestEventSummary } from '@/types'
 import en from '@/i18n/locales/en.json'
 
 const statisticsApi = vi.hoisted(() => ({
@@ -183,5 +184,122 @@ describe('DashboardPage · subtitle backlog KPI', () => {
 
         // the rest of the page kept its data (allSettled isolation)
         expect(wrapper.find('[data-test="kpi-cell-0"]').find('.text-2xl').text()).toBe('2')
+    })
+})
+
+describe('DashboardPage · 布局杂项(批E)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        statisticsApi.getPipelineStatistics.mockResolvedValue({
+            mediaCount: 10,
+            missingSubtitles: 63,
+            queueDepth: 1,
+            servicesOnline: 2,
+            writtenThisMonth: 42,
+            successRate30Days: null,
+            monthlyCost: null
+        })
+        statisticsApi.getDailyTrendStatistics.mockResolvedValue({ days: [] })
+        translationRequestApi.statusCounts.mockResolvedValue({ InProgress: 2, Pending: 12 })
+        translationRequestApi.requests.mockResolvedValue({
+            items: [] as ITranslationRequest[],
+            totalCount: 0,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        translationRequestApi.getRecentEvents.mockResolvedValue([])
+        translateApi.getHealth.mockResolvedValue([])
+        backlogMock.mockResolvedValue({
+            backlog: 7,
+            pinnedCount: 1,
+            webhookBoostedCount: 2,
+            nextRoundCount: 3
+        })
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('collapses the in-progress row to content height when no task is active (E1)', async () => {
+        const { wrapper } = await mountDashboard()
+
+        const row = wrapper.find('[data-test="active-row"]')
+        expect(row.exists()).toBe(true)
+        // no flex grow, no floor height — the card shrinks to its content
+        // instead of stretching into a ~300px blank block
+        expect(row.classes()).not.toContain('flex-[1.4]')
+        expect(row.classes()).not.toContain('min-h-[170px]')
+    })
+
+    it('keeps the flexible in-progress row when tasks are active (E1)', async () => {
+        translationRequestApi.requests.mockResolvedValue({
+            // shallow mount stubs JobRow — the row only needs id for :key
+            items: [{ id: 41, status: 'InProgress', progress: 5 }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDashboard()
+
+        const row = wrapper.find('[data-test="active-row"]')
+        expect(row.classes()).toContain('flex-[1.4]')
+        expect(row.classes()).toContain('min-h-[170px]')
+    })
+
+    it('mirrors the KPI value-over-label order on the pipeline strip (E2)', async () => {
+        const { wrapper } = await mountDashboard()
+
+        const nodes = wrapper.findAll('[data-test^="pipe-node-"]')
+        expect(nodes).toHaveLength(5)
+
+        const kpiValue = wrapper.find('[data-test="kpi-cell-0"] .text-2xl')
+        expect(kpiValue.exists()).toBe(true)
+
+        // every pipeline node: value block first (KPI typography), label below
+        for (const node of nodes) {
+            const divs = node.findAll('div')
+            expect(divs[0].classes()).toContain('text-2xl')
+            expect(divs[0].classes()).toContain('font-semibold')
+            expect(divs[1].classes()).toContain('text-xs')
+            expect(divs[1].classes()).toContain('mt-0.5')
+        }
+        // same padding system as the KPI cells
+        expect(nodes[0].classes()).toContain('px-4')
+        expect(nodes[0].classes()).toContain('py-3')
+        expect(wrapper.find('[data-test="kpi-cell-0"]').classes()).toContain('px-4')
+
+        // the leading node still carries its real number and unit
+        expect(nodes[0].findAll('div')[0].text()).toContain('10')
+        expect(nodes[0].findAll('div')[0].text()).toContain(en.overview.pipe.mediaUnit)
+        expect(nodes[0].findAll('div')[1].text()).toBe(en.overview.pipe.library)
+    })
+
+    it('separates the feed title from its status with spaces on both sides (E3)', async () => {
+        translationRequestApi.getRecentEvents.mockResolvedValue([
+            {
+                id: 1,
+                requestId: 1,
+                requestTitle: 'Movie (2023)',
+                status: 'Completed',
+                eventType: null,
+                provider: null,
+                message: null,
+                createdAt: '2026-10-13T15:41:22Z'
+            } as ITranslationRequestEventSummary
+        ])
+        const { wrapper } = await mountDashboard()
+
+        // wrapper.text() trims — assert on the raw textContent so the
+        // leading space (the actual E3 fix) is verified
+        const separator = wrapper.findAll('.text-secondary-content').find((node) =>
+            (node.element.textContent ?? '').startsWith(' — ')
+        )
+        expect(separator).toBeDefined()
+        // the localized status label follows the spaced dash, not glued to it
+        expect(separator!.element.textContent).toContain(
+            en.common.translationStatus.completed
+        )
     })
 })

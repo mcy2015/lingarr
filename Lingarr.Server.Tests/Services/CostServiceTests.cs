@@ -140,4 +140,34 @@ public class CostServiceTests : IDisposable
         Assert.Equal(0, summary.TotalCost);
         Assert.True(summary.RatesConfigured);
     }
+
+    // ── B3: the service card's monthly request count rides the cost
+    //    rollup's exact criteria (current month, completed, ServiceType set)
+
+    [Fact]
+    public async Task ProviderMonthlyRequestsCountsCompletedCurrentMonthRequests()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await SeedAsync("openai", TranslationStatus.Completed, 1_000, now);
+        await SeedAsync("openai", TranslationStatus.Completed, 500, now);
+        await SeedAsync("openai", TranslationStatus.Completed, 9_999, now.AddMonths(-2)); // other month
+        await SeedAsync("openai", TranslationStatus.InProgress, 9_999, now);              // not completed
+        await SeedAsync("deepl", TranslationStatus.Completed, 2_000, now);
+        SetupRates(("openai", 2.0m));
+
+        var service = CreateService();
+
+        Assert.Equal(2, await service.GetProviderMonthlyRequestsAsync("openai"));
+        Assert.Equal(1, await service.GetProviderMonthlyRequestsAsync("deepl"));
+        Assert.Equal(0, await service.GetProviderMonthlyRequestsAsync("mystery"));
+    }
+
+    [Fact]
+    public async Task ProviderMonthlyRequests_IsZeroNotNullForUnusedProviders()
+    {
+        SetupRates(("openai", 2.0m));
+
+        // the service card renders a real 0, never a null placeholder
+        Assert.Equal(0, await CreateService().GetProviderMonthlyRequestsAsync("openai"));
+    }
 }

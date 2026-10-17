@@ -5,15 +5,19 @@ using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Controllers;
 using Lingarr.Server.Filters;
+using Lingarr.Server.Hubs;
 using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models.FileSystem;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Extensions;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using SubtitleValidationOptions = Lingarr.Server.Models.SubtitleValidationOptions;
 namespace Lingarr.Server.Modules.Translation;
 
@@ -30,6 +34,8 @@ public class TranslationJob
     private readonly ITranslationRequestService _translationRequestService;
     private readonly ITranslationRequestEventService _eventService;
     private readonly IGlossaryService _glossaryService;
+    private readonly SubtitleCoverageRefresher _coverageRefresher;
+    private readonly IHubContext<JobProgressHub> _hubContext;
 
     public TranslationJob(
         ILogger<TranslationJob> logger,
@@ -42,7 +48,9 @@ public class TranslationJob
         ITranslationPipeline translationPipeline,
         ITranslationRequestService translationRequestService,
         ITranslationRequestEventService eventService,
-        IGlossaryService glossaryService)
+        IGlossaryService glossaryService,
+        SubtitleCoverageRefresher coverageRefresher,
+        IHubContext<JobProgressHub> hubContext)
     {
         _logger = logger;
         _settings = settings;
@@ -55,6 +63,8 @@ public class TranslationJob
         _translationRequestService = translationRequestService;
         _glossaryService = glossaryService;
         _eventService = eventService;
+        _coverageRefresher = coverageRefresher;
+        _hubContext = hubContext;
     }
 
     [AutomaticRetry(Attempts = 0)]
@@ -249,7 +259,8 @@ public class TranslationJob
                 subtitleTag = settings[SettingKeys.Translation.SubtitleTag];
             }
 
-            await WriteSubtitles(request, translatedSubtitles, stripSubtitleFormatting, subtitleTag, removeLanguageTag, bilingualOutput);
+            await WriteSubtitles(request, translatedSubtitles, stripSubtitleFormatting, subtitleTag, removeLanguageTag,
+                bilingualOutput, cancellationToken);
             await HandleCompletion(jobName, request, cancellationToken);
         }
         catch (OperationCanceledException)
@@ -305,7 +316,8 @@ public class TranslationJob
         bool stripSubtitleFormatting,
         string subtitleTag,
         bool removeLanguageTag,
-        bool bilingual)
+        bool bilingual,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -326,6 +338,11 @@ public class TranslationJob
                 TranslationStatus.InProgress,
                 message: outputPath);
 
+            // The file is on disk now — the coverage snapshot, the episode
+            // need flags and the detail page's cached directory scan must
+            // reflect it immediately, not on the next daily statistics run.
+            await RefreshMediaAfterWritebackAsync(translationRequest, outputPath, cancellationToken);
+
             _logger.LogInformation("TranslateJob completed and created subtitle: |Green|{filePath}|/Green|",
                 outputPath);
         }
@@ -333,6 +350,79 @@ public class TranslationJob
         {
             _logger.LogError(e, e.Message);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Post-writeback media refresh (walkthrough fix B1): recomputes the
+    /// media's subtitle coverage the same moment the translated file lands —
+    /// movies refresh their coverage snapshot + need flags, episodes refresh
+    /// the owning show's aggregated snapshot + every episode flag — drops the
+    /// detail page's cached scan of the directory the file was written to,
+    /// and broadcasts the same "a subtitle landed for this media" hub event
+    /// the download pipeline emits. Every step is best-effort: the file is
+    /// already safely on disk, the daily scan re-syncs whatever a failed
+    /// refresh would have missed, and a refresh problem must not fail the
+    /// translation job.
+    /// </summary>
+    private async Task RefreshMediaAfterWritebackAsync(
+        TranslationRequest translationRequest,
+        string outputPath,
+        CancellationToken cancellationToken)
+    {
+        if (translationRequest.MediaId is not int mediaId)
+        {
+            return;
+        }
+
+        // Movie requests carry the movie id; episode requests carry the
+        // episode id under both conventions (Episode, and the legacy Show
+        // rows) — the refresher maps the episode to its owning show.
+        var isMovie = translationRequest.MediaType == MediaType.Movie;
+        var isEpisode = translationRequest.MediaType is MediaType.Episode or MediaType.Show;
+        if (!isMovie && !isEpisode)
+        {
+            return;
+        }
+
+        var mediaType = isMovie ? MediaType.Movie : MediaType.Episode;
+        try
+        {
+            await _coverageRefresher.RefreshAsync(mediaType, mediaId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Coverage refresh failed after translation writeback for request {RequestId}.",
+                translationRequest.Id);
+        }
+
+        // The Files card caches directory scans for a short TTL — drop the
+        // directory that just received the file so the next view re-scans.
+        MediaController.InvalidateSubtitleFileCache(Path.GetDirectoryName(outputPath));
+
+        try
+        {
+            // Same event, group and payload shape as the download pipeline's
+            // SubtitleDownloaded broadcast: for consumers a subtitle that
+            // landed is a subtitle that landed, downloaded or translated.
+            await _hubContext.Clients.Group("JobProgress").SendAsync(
+                "SubtitleDownloaded",
+                new
+                {
+                    mediaType = mediaType.ToString(),
+                    mediaId,
+                    language = translationRequest.TargetLanguage,
+                    provider = translationRequest.ServiceType,
+                    path = outputPath
+                },
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Subtitle writeback broadcast failed for request {RequestId}.",
+                translationRequest.Id);
         }
     }
 
