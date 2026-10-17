@@ -1,5 +1,13 @@
 ﻿<template>
-    <component :is="type === INPUT_TYPE.PASSWORD ? 'form' : 'div'" class="relative">
+    <!-- password 态根为 form + submit.prevent:Enter 不再触发隐式提交导航
+         (#6),并以组件级 submit 事件把「Enter 提交」交给调用方(如 secret
+         的显式保存语义 #8)。trailing 具名插槽占据输入框右端:有插槽内容时
+         本地显隐按钮与 ValidationIcon 不渲染(#1B/#7 —— reveal 等尾部语义
+         留在调用方,本组件保持哑组件)。 -->
+    <component
+        :is="type === INPUT_TYPE.PASSWORD ? 'form' : 'div'"
+        class="relative"
+        @submit.prevent="emit('submit')">
         <label v-if="label" :for="id" class="mb-1 block text-sm">
             {{ label }}
         </label>
@@ -14,9 +22,10 @@
                 :type="type == INPUT_TYPE.PASSWORD ? (showPassword ? 'text' : 'password') : type"
                 :class="inputClasses"
                 :placeholder="placeholder"
-                @input="handleInput" />
+                @input="handleInput"
+                @blur="emit('blur')" />
             <ValidationIcon
-                v-if="validationType"
+                v-if="validationType && !hasTrailing"
                 :is-valid="isValid"
                 :is-invalid="isInvalid"
                 :size="size"
@@ -26,20 +35,25 @@
                     'pr-1': size === 'sm'
                 }" />
             <button
-                v-if="type === INPUT_TYPE.PASSWORD"
+                v-if="type === INPUT_TYPE.PASSWORD && !hasTrailing"
                 type="button"
                 class="absolute inset-y-0 right-0 flex cursor-pointer items-center pr-3"
                 @click="togglePassword">
                 <Icon v-if="showPassword" name="eyeOn" class="h-5 w-5" />
                 <Icon v-else name="eyeOff" class="h-5 w-5" />
             </button>
+            <div
+                v-if="hasTrailing"
+                class="absolute inset-y-0 right-0 flex items-center pr-3">
+                <slot name="trailing"></slot>
+            </div>
         </div>
         <p v-if="validationType && isInvalid" class="mt-1 text-sm text-danger" v-html="error" />
     </component>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useSlots } from 'vue'
 import { InputType, INPUT_TYPE, InputValidationType } from '@/types'
 import useValidation from '@/cells/settings/composables/useValidation'
 import useDebounce from '@/cells/kernel/composables/useDebounce'
@@ -70,8 +84,15 @@ const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void
     (e: 'update:validation', isValid: boolean): void
     (e: 'update:value', value: string): void
+    /// blur 直通(password 态另有组件级 submit = 被阻止默认行为的 Enter)
+    (e: 'blur'): void
+    (e: 'submit'): void
 }>()
 const { isValid, isInvalid, error, validate } = useValidation(props)
+
+/// trailing 插槽占据输入框右端:存在时本地显隐按钮与 ValidationIcon 让位
+const slots = useSlots()
+const hasTrailing = computed(() => !!slots.trailing)
 
 const showPassword = ref(false)
 const inputClasses = computed(() => [
@@ -85,7 +106,8 @@ const inputClasses = computed(() => [
     { 'border-success': props.validationType && isValid.value },
     { 'border-danger': props.validationType && isInvalid.value },
     { 'border-line': !props.validationType || (!isValid.value && !isInvalid.value) },
-    { 'pr-10': props.type === 'password' }
+    // 右端有 trailing 控件时文本同样需要让位(含 reveal 后的 text 态)
+    { 'pr-10': props.type === 'password' || hasTrailing.value }
 ])
 
 const emitValue = (event: Event) => {

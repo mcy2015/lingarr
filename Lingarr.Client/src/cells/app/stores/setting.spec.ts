@@ -2,7 +2,7 @@
 // setting store · 加密设置保存失败路径验收:API 拒绝时本地「已配置」镜像
 // 回滚到原值(消除"已配置"假象,placeholder 不再谎报)、toast 报
 // common.saveFailed、返回 false;成功路径返回 true 且镜像翻转;
-// 校验失败不发请求、不弹 toast。
+// 校验失败不发请求、不翻转镜像(#4)、不弹 toast。
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import i18n from '@/i18n'
@@ -71,7 +71,7 @@ describe('useSettingStore · updateEncryptedSetting', () => {
         expect(useToastStore().toasts).toHaveLength(1)
     })
 
-    it('does not call the API and reports failure when the value is invalid', async () => {
+    it('does not call the API, flip the mirror, or toast when the value is invalid', async () => {
         const store = useSettingStore()
 
         const result = await store.updateEncryptedSetting(
@@ -82,8 +82,8 @@ describe('useSettingStore · updateEncryptedSetting', () => {
 
         expect(result).toBe(false)
         expect(setEncryptedSettingMock).not.toHaveBeenCalled()
-        // 校验失败仍如实镜像「输入非空」,但无保存发生也不弹 toast
-        expect(store.isEncryptedSettingConfigured('openai_api_key')).toBe(true)
+        // #4:invalid 输入不再翻转本地镜像 —— 不产生「已配置」假 placeholder
+        expect(store.isEncryptedSettingConfigured('openai_api_key')).toBe(false)
         expect(useToastStore().toasts).toHaveLength(0)
     })
 })

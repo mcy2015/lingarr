@@ -284,40 +284,98 @@ describe('SubtitleSourcesCard · 测试连接', () => {
 
 describe('SubtitleSourcesCard · 保存与刷新', () => {
     it('writes the secret through the encrypted channel and re-fetches providers so the badge flips', async () => {
-        vi.useFakeTimers()
-        try {
-            const wrapper = await mountCard()
+        // local pinia so the success toast can be asserted (#2: exactly one)
+        const pinia = createPinia()
+        const wrapper = mount(SubtitleSourcesCard, {
+            global: { plugins: [pinia, i18n] }
+        })
+        onTestFinished(() => wrapper.unmount())
+        await flushPromises()
+        getProvidersMock.mockClear()
+        // next fetch (triggered by the save) reports the key as configured
+        getProvidersMock.mockResolvedValueOnce([
+            { ...PROVIDERS[0], credentialsConfigured: true },
+            PROVIDERS[1],
+            PROVIDERS[2]
+        ])
 
-            await wrapper.find('[data-test="subtitle-source-toggle-opensubtitles"]').trigger('click')
-            await flushPromises()
-            getProvidersMock.mockClear()
-            // next fetch (triggered by the save) reports the key as configured
-            getProvidersMock.mockResolvedValueOnce([
-                { ...PROVIDERS[0], credentialsConfigured: true },
-                PROVIDERS[1],
-                PROVIDERS[2]
-            ])
+        await wrapper.find('[data-test="subtitle-source-toggle-opensubtitles"]').trigger('click')
+        await flushPromises()
 
-            const input = wrapper.find('#subtitle_opensubtitles_api_key')
-            await input.setValue('k'.repeat(32))
-            await vi.advanceTimersByTimeAsync(1100)
-            await flushPromises()
+        const input = wrapper.find('#subtitle_opensubtitles_api_key')
+        await input.setValue('k'.repeat(32))
+        // #8:secret 提交语义是 blur/Enter,不再是防抖输入
+        await input.trigger('blur')
+        await flushPromises()
 
-            expect(setEncryptedSettingMock).toHaveBeenCalledWith(
-                'subtitle_opensubtitles_api_key',
-                'k'.repeat(32)
-            )
-            expect(getProvidersMock).toHaveBeenCalledTimes(1)
-            expect(wrapper.find('[data-test="subtitle-source-badge-opensubtitles"]').text()).toBe(
-                en.settings.subtitleSources.configured
-            )
-            // the expanded form survives the refresh
-            expect(wrapper.find('[data-test="subtitle-source-form-opensubtitles"]').exists()).toBe(
-                true
-            )
-        } finally {
-            vi.useRealTimers()
-        }
+        expect(setEncryptedSettingMock).toHaveBeenCalledWith(
+            'subtitle_opensubtitles_api_key',
+            'k'.repeat(32)
+        )
+        expect(getProvidersMock).toHaveBeenCalledTimes(1)
+        expect(wrapper.find('[data-test="subtitle-source-badge-opensubtitles"]').text()).toBe(
+            en.settings.subtitleSources.configured
+        )
+        // the expanded form survives the refresh
+        expect(wrapper.find('[data-test="subtitle-source-form-opensubtitles"]').exists()).toBe(
+            true
+        )
+        // #2:真成功后恰好一条「已保存」(onSaved 在 emit 之后执行)
+        const toastStore = useToastStore(pinia)
+        expect(toastStore.toasts).toHaveLength(1)
+        expect(toastStore.toasts[0].message).toBe(en.common.saved)
+        expect(toastStore.toasts[0].type).toBe('success')
+    })
+
+    it('shows no Saved toast, keeps the badge and skips the refresh when the write fails (#2)', async () => {
+        setEncryptedSettingMock.mockRejectedValueOnce(new Error('boom'))
+        // local pinia so the toast the store pushes can be asserted
+        const pinia = createPinia()
+        const wrapper = mount(SubtitleSourcesCard, {
+            global: { plugins: [pinia, i18n] }
+        })
+        onTestFinished(() => wrapper.unmount())
+        await flushPromises()
+        getProvidersMock.mockClear()
+
+        await wrapper.find('[data-test="subtitle-source-toggle-opensubtitles"]').trigger('click')
+        await flushPromises()
+
+        const input = wrapper.find('#subtitle_opensubtitles_api_key')
+        await input.setValue('k'.repeat(32))
+        await input.trigger('blur')
+        await flushPromises()
+
+        const toastStore = useToastStore(pinia)
+        expect(toastStore.toasts).toHaveLength(1)
+        expect(toastStore.toasts[0].message).toBe(en.common.saveFailed)
+        expect(toastStore.toasts[0].type).toBe('error')
+        // emit('save') 未触发 → 无「已保存」toast、不重拉、徽章保持未配置
+        expect(toastStore.toasts.some((toast) => toast.message === en.common.saved)).toBe(false)
+        expect(getProvidersMock).not.toHaveBeenCalled()
+        expect(wrapper.find('[data-test="subtitle-source-badge-opensubtitles"]').text()).toBe(
+            en.settings.subtitleSources.notConfigured
+        )
+    })
+
+    it('does not write while the user pauses mid-secret — commit waits for blur/Enter (#8)', async () => {
+        const wrapper = await mountCard()
+        setEncryptedSettingMock.mockClear()
+
+        await wrapper.find('[data-test="subtitle-source-toggle-opensubtitles"]').trigger('click')
+        await flushPromises()
+
+        const input = wrapper.find('#subtitle_opensubtitles_api_key')
+        await input.setValue('k'.repeat(32))
+        await flushPromises()
+
+        // 半截(乃至完整)输入停在框里:零写请求,刷新未发生
+        expect(setEncryptedSettingMock).not.toHaveBeenCalled()
+        expect(getProvidersMock).toHaveBeenCalledTimes(1) // 仅挂载那次
+
+        await input.trigger('blur')
+        await flushPromises()
+        expect(setEncryptedSettingMock).toHaveBeenCalledTimes(1)
     })
 })
 

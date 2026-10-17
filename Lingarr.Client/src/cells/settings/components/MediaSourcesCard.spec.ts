@@ -184,51 +184,112 @@ describe('MediaSourcesCard · 编辑模态', () => {
     })
 
     it('keeps the stored key when the input is cleared (no empty overwrite)', async () => {
-        vi.useFakeTimers()
-        try {
-            const { wrapper, pinia } = await mountCard()
-            setEncryptedSettingMock.mockClear()
+        const { wrapper, pinia } = await mountCard()
+        setEncryptedSettingMock.mockClear()
 
-            await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
-            await flushPromises()
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
 
-            const modal = document.querySelector('[data-test="source-modal-radarr"]')
-            const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
-            keyInput.value = ''
-            keyInput.dispatchEvent(new Event('input'))
-            await vi.advanceTimersByTimeAsync(1100)
-            await flushPromises()
+        const modal = document.querySelector('[data-test="source-modal-radarr"]')
+        const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
+        keyInput.value = ''
+        keyInput.dispatchEvent(new Event('input'))
+        // #8:提交语义是 blur/Enter —— 空输入即使提交也不写空串覆盖
+        keyInput.dispatchEvent(new Event('blur'))
+        await flushPromises()
 
-            expect(setEncryptedSettingMock).not.toHaveBeenCalled()
-            expect(
-                useSettingStore(pinia).isEncryptedSettingConfigured('radarr_api_key' as never)
-            ).toBe(true)
-        } finally {
-            vi.useRealTimers()
-        }
+        expect(setEncryptedSettingMock).not.toHaveBeenCalled()
+        expect(
+            useSettingStore(pinia).isEncryptedSettingConfigured('radarr_api_key' as never)
+        ).toBe(true)
     })
 
-    it('writes a newly typed key through the encrypted channel once it is valid', async () => {
-        vi.useFakeTimers()
-        try {
-            const { wrapper } = await mountCard()
-            setEncryptedSettingMock.mockClear()
+    it('does not write while the user pauses mid-key — commit waits for blur/Enter (#8)', async () => {
+        const { wrapper } = await mountCard()
+        setEncryptedSettingMock.mockClear()
 
-            await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
-            await flushPromises()
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
 
-            const modal = document.querySelector('[data-test="source-modal-radarr"]')
-            const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
-            const freshKey = 'k'.repeat(32)
-            keyInput.value = freshKey
-            keyInput.dispatchEvent(new Event('input'))
-            await vi.advanceTimersByTimeAsync(1100)
-            await flushPromises()
+        const modal = document.querySelector('[data-test="source-modal-radarr"]')
+        const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
+        keyInput.value = 'k'.repeat(32)
+        keyInput.dispatchEvent(new Event('input'))
+        await flushPromises()
 
-            expect(setEncryptedSettingMock).toHaveBeenCalledWith('radarr_api_key', freshKey)
-        } finally {
-            vi.useRealTimers()
-        }
+        // 输入即存已废:32 字符停在框里(未 blur/Enter)零写请求
+        expect(setEncryptedSettingMock).not.toHaveBeenCalled()
+
+        keyInput.dispatchEvent(new Event('blur'))
+        await flushPromises()
+        expect(setEncryptedSettingMock).toHaveBeenCalledTimes(1)
+        expect(setEncryptedSettingMock).toHaveBeenCalledWith('radarr_api_key', 'k'.repeat(32))
+    })
+
+    it('writes a newly typed key through the encrypted channel on blur', async () => {
+        const { wrapper } = await mountCard()
+        setEncryptedSettingMock.mockClear()
+
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
+
+        const modal = document.querySelector('[data-test="source-modal-radarr"]')
+        const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
+        const freshKey = 'k'.repeat(32)
+        keyInput.value = freshKey
+        keyInput.dispatchEvent(new Event('input'))
+        keyInput.dispatchEvent(new Event('blur'))
+        await flushPromises()
+
+        expect(setEncryptedSettingMock).toHaveBeenCalledWith('radarr_api_key', freshKey)
+        // #8:blur 保存后输入框回到空,占位符说明留空保持不变
+        expect(keyInput.value).toBe('')
+        expect(keyInput.placeholder).toBe(en.services.integration.apiKeyConfigured)
+    })
+
+    it('toasts Saved only after the write really landed (#2)', async () => {
+        const { wrapper, toastStore } = await mountCard()
+
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
+
+        const modal = document.querySelector('[data-test="source-modal-radarr"]')
+        const keyInput = [...(modal?.querySelectorAll('input') ?? [])][1] as HTMLInputElement
+        keyInput.value = 'k'.repeat(32)
+        keyInput.dispatchEvent(new Event('input'))
+        keyInput.dispatchEvent(new Event('blur'))
+        await flushPromises()
+
+        expect(toastStore.toasts).toHaveLength(1)
+        expect(toastStore.toasts[0].message).toBe(en.common.saved)
+
+        // 写失败:零「已保存」,只有 store 统一弹的「保存失败」
+        setEncryptedSettingMock.mockRejectedValueOnce(new Error('500'))
+        toastStore.toasts.splice(0)
+        keyInput.value = 'j'.repeat(32)
+        keyInput.dispatchEvent(new Event('input'))
+        keyInput.dispatchEvent(new Event('blur'))
+        await flushPromises()
+
+        expect(toastStore.toasts).toHaveLength(1)
+        expect(toastStore.toasts[0].message).not.toBe(en.common.saved)
+        expect(toastStore.toasts[0].message).toBe(en.common.saveFailed)
+    })
+
+    it('keeps exactly one eye inside the key box: the reveal button, no local toggle (#1B/#7)', async () => {
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
+
+        const form = document.querySelector('[data-test="source-modal-radarr"] form')
+        expect(form).not.toBeNull()
+        // password form 内只有 trailing 插槽里的 reveal 一颗按钮
+        expect(form?.querySelectorAll('button')).toHaveLength(1)
+        expect(form?.querySelector('[data-test="key-visibility-radarr"]')).not.toBeNull()
+        // ValidationIcon 让位:框内无成功/失败图标
+        expect(form?.querySelector('span.text-success')).toBeNull()
+        expect(form?.querySelector('span.text-danger')).toBeNull()
     })
 })
 
@@ -295,6 +356,38 @@ describe('MediaSourcesCard · API Key 显示', () => {
         await flushPromises()
 
         expect(document.querySelector('[data-test="key-visibility-radarr"]')).toBeNull()
+    })
+
+    it('disables the reveal button while the fetch is in flight (#5, no double request)', async () => {
+        let release: (value: string) => void = () => {}
+        revealEncryptedSettingMock.mockReturnValueOnce(
+            new Promise((resolve) => {
+                release = resolve
+            })
+        )
+        const { wrapper } = await mountCard()
+
+        await wrapper.find('[data-test="edit-source-radarr"]').trigger('click')
+        await flushPromises()
+
+        const button = document.querySelector(
+            '[data-test="key-visibility-radarr"]'
+        ) as HTMLButtonElement | null
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+
+        expect(button?.disabled).toBe(true)
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+        expect(revealEncryptedSettingMock).toHaveBeenCalledTimes(1)
+
+        release('x'.repeat(32))
+        await flushPromises()
+        // reveal 完成后 type 切 TEXT、根元素 form→div 重建,按钮需重查
+        const refreshed = document.querySelector(
+            '[data-test="key-visibility-radarr"]'
+        ) as HTMLButtonElement | null
+        expect(refreshed?.disabled).toBe(false)
     })
 })
 

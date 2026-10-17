@@ -389,12 +389,18 @@ async function setDefault(provider: string): Promise<void> {
     })
 }
 
-onMounted(async () => {
+/// #10:health 重拉入口 —— 挂载与编辑模态关闭共用。模态内的保存是即时
+/// 落库的,关闭时重拉让卡背 configured/状态在一次往返内跟上真值。
+async function loadHealth(): Promise<void> {
     try {
         health.value = await translateApi.getHealth()
     } catch {
-        // the forms below still work without the health glance
+        // keep the previous glance; the forms below still work without it
     }
+}
+
+onMounted(async () => {
+    await loadHealth()
     try {
         plugins.value = await pluginApi.list()
         pluginsLoaded.value = true
@@ -507,6 +513,8 @@ function openEdit(provider: string): void {
 
 function closeEdit(): void {
     editProvider.value = null
+    // #10:保存是即时落库的,关闭模态即重拉 —— 卡背配置态 ≤ 一次往返更新
+    void loadHealth()
 }
 
 // ── 删除服务:确认模态 → 链移除 + 配置清空 + 刷新 health ───────────

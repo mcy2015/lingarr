@@ -145,7 +145,7 @@
                 v-if="expanded.has(row.provider)"
                 class="border-line mt-2.5 border-t pt-3"
                 :data-test="`subtitle-source-form-${row.provider}`">
-                <DynamicPluginForm :manifest="row.formManifest" @save="onSaved" />
+                <DynamicPluginForm :manifest="row.formManifest" @save="onSaved" @refresh="() => void fetchProviders()" />
             </div>
         </div>
     </div>
@@ -321,6 +321,8 @@ function toggleExpand(provider: string): void {
 }
 
 // ── 保存后刷新(徽章跟随 credentialsConfigured 更新)──────────────
+/// #2:PluginField 的 emit('save') 现在只在加密写真实落库后触发,因此此处
+/// 的「已保存」toast 与重拉都发生在真成功之后 —— 写失败时零「已保存」。
 async function onSaved(): Promise<void> {
     toastStore.push({ message: t('common.saved'), type: 'success' })
     await fetchProviders()

@@ -482,7 +482,11 @@
             "noOptionsEndpoint": "未配置选项接口。",
             "noOptionsReturned": "未返回任何选项。",
             "optionsLoadError": "加载选项出错，请重试。",
-            "secretConfigured": "已配置，留空保持不变"
+            "secretConfigured": "已配置，留空保持不变",
+            "clearCredential": "清除凭据",
+            "clearConfirmBody": "清除后该源在重新填入密钥前不可用，确认清除？",
+            "credentialCleared": "凭据已清除。",
+            "clearFailed": "清除失败。"
         },
         "webhook": {
             "description": "在 Radarr 和 Sonarr 中配置 Webhook，以便在添加新媒体时自动触发翻译。",

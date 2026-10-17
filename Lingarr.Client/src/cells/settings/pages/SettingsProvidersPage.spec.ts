@@ -891,3 +891,22 @@ describe('SettingsProvidersPage · 设为默认 → 回退顺序卡实时同步(
         expect(wrapper.find('[data-test="fb-row-2"]').text()).toContain('Ollama')
     })
 })
+
+describe('SettingsProvidersPage · 编辑模态关闭刷新(#10)', () => {
+    it('re-fetches health when the edit modal closes so the card-back configured state follows', async () => {
+        const { wrapper } = await mountPage('["openai"]', { shallow: false })
+        getHealthMock.mockClear()
+        // the refetch after closing reports the provider as unconfigured
+        getHealthMock.mockResolvedValue([{ ...openai, configured: false }])
+
+        await wrapper.find('[data-test="edit-openai"]').trigger('click')
+        await flushPromises()
+        // opening loads the manifest only — no health refetch yet
+        expect(getHealthMock).not.toHaveBeenCalled()
+
+        ;(document.querySelector('[data-test="provider-edit-close"]') as HTMLElement).click()
+        await flushPromises()
+
+        expect(getHealthMock).toHaveBeenCalledTimes(1)
+    })
+})

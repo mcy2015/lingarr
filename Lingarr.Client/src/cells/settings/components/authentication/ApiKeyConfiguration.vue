@@ -41,6 +41,7 @@
                     type="button"
                     class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1.5 text-xs transition-colors"
                     :title="revealed ? t('settings.apiKey.hide') : t('settings.apiKey.show')"
+                    :aria-label="revealed ? t('settings.apiKey.hide') : t('settings.apiKey.show')"
                     data-test="apikey-visibility"
                     @click="toggleReveal()">
                     <Icon :name="revealed ? 'eyeOn' : 'eyeOff'" class="h-4 w-4" />

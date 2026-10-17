@@ -34,6 +34,9 @@
                         {{ t('common.loading') }}
                     </div>
                     <p v-else-if="error" class="text-danger py-6 text-center text-sm">{{ error }}</p>
+                    <!-- #2:PluginField 只在加密写真实落库后才 emit('save'),
+                         此处 toast 因此是真成功反馈(非乐观);写失败由
+                         setting store 统一弹「保存失败」,本模态零重复 toast。 -->
                     <DynamicPluginForm
                         v-else-if="manifest"
                         :manifest="manifest"

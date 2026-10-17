@@ -309,3 +309,14 @@ describe('ApiKeyConfiguration · f) 生成/吊销零回归', () => {
         expect(wrapper.find('[data-test="apikey-card"]').exists()).toBe(false)
     })
 })
+
+describe('ApiKeyConfiguration · aria(#11)', () => {
+    it('labels the visibility button for screen readers (title mirrored as aria-label)', async () => {
+        const { wrapper } = await mountCard(true)
+        const button = wrapper.find('[data-test="apikey-visibility"]')
+
+        expect(button.attributes('aria-label')).toBe(en.settings.apiKey.show)
+        await revealKey(wrapper)
+        expect(button.attributes('aria-label')).toBe(en.settings.apiKey.hide)
+    })
+})

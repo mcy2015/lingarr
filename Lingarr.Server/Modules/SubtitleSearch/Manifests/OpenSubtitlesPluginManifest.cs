@@ -27,9 +27,7 @@ public sealed class OpenSubtitlesPluginManifest : ISubtitleSourceManifest
             Label = "API key",
             Type = PluginSettingType.Secret,
             Required = true,
-            Description = "OpenSubtitles.com API key. Stored encrypted.",
-            MinLength = 1,
-            ValidationErrorMessage = "Value must not be empty"
+            Description = "OpenSubtitles.com API key. Stored encrypted."
         },
         new()
         {

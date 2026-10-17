@@ -63,12 +63,13 @@ export const useSettingStore = defineStore('setting', {
             isValid: boolean = true
         ): Promise<boolean> {
             // Write-only mirror: locally we keep just the configured flag.
-            // The flag flips optimistically and rolls back when the server
-            // refuses the write, so the UI never claims "configured" for a
-            // value that was not stored.
+            // The flip happens only after the validity gate (#4: invalid input
+            // must not fabricate a "configured" placeholder) and rolls back
+            // when the server refuses the write, so the UI never claims
+            // "configured" for a value that was not stored.
             const previous = this.encrypted_settings[key]
-            this.encrypted_settings[key] = value.trim() !== ''
             if (!isValid) return false
+            this.encrypted_settings[key] = value.trim() !== ''
             try {
                 await settingApi.setEncryptedSetting(key, value)
                 return true

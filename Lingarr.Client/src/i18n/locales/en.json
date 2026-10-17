@@ -482,7 +482,11 @@
             "noOptionsEndpoint": "No options endpoint configured.",
             "noOptionsReturned": "No options returned.",
             "optionsLoadError": "Error loading options. Please try again.",
-            "secretConfigured": "Configured — leave blank to keep the current value"
+            "secretConfigured": "Configured — leave blank to keep the current value",
+            "clearCredential": "Clear credential",
+            "clearConfirmBody": "This source will stop working until a new key is entered. Clear?",
+            "credentialCleared": "Credential cleared.",
+            "clearFailed": "Clear failed."
         },
         "webhook": {
             "description": "Configure webhooks in Radarr and Sonarr to automatically trigger translations when new media is added.",

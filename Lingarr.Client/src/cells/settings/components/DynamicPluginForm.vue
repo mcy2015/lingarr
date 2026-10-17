@@ -16,7 +16,8 @@
             v-for="field in manifest.settings"
             :key="field.key"
             :field="field"
-            @save="emit('save')" />
+            @save="emit('save')"
+            @refresh="emit('refresh')" />
     </div>
 </template>
 
@@ -31,5 +32,5 @@ defineProps<{
     manifest: IPluginManifest
 }>()
 
-const emit = defineEmits(['save'])
+const emit = defineEmits(['save', 'refresh'])
 </script>

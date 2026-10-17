@@ -141,37 +141,41 @@
                                 :label="t('services.integration.address')"
                                 :error-message="editingSource.urlError"
                                 @update:validation="(val) => setValid(editing, 'url', val)" />
-                            <div class="flex items-end gap-1.5">
-                                <InputComponent
-                                    v-model="editingSource.keyModel.value"
-                                    class="min-w-0 flex-1"
-                                    :min-length="32"
-                                    :max-length="32"
-                                    :validation-type="INPUT_VALIDATION_TYPE.STRING"
-                                    :type="
-                                        revealedKey !== null
-                                            ? INPUT_TYPE.TEXT
-                                            : INPUT_TYPE.PASSWORD
-                                    "
-                                    :label="t('services.integration.apiKey')"
-                                    :placeholder="editingKeyPlaceholder"
-                                    :error-message="
-                                        t('services.integration.apiKeyLengthError', { minLength: 32 })
-                                    "
-                                    @update:validation="(val) => setValid(editing, 'key', val)" />
-                                <button
-                                    v-if="editingKeyConfigured"
-                                    type="button"
-                                    class="border-line text-primary-content hover:bg-tertiary mb-[2px] cursor-pointer rounded-md border px-2 py-1.5 transition-colors"
-                                    :title="revealedKey !== null ? t('common.hide') : t('common.show')"
-                                    :aria-label="revealedKey !== null ? t('common.hide') : t('common.show')"
-                                    :data-test="`key-visibility-${editing}`"
-                                    @click="toggleKeyReveal()">
-                                    <Icon
-                                        :name="revealedKey !== null ? 'eyeOn' : 'eyeOff'"
-                                        class="h-4 w-4" />
-                                </button>
-                            </div>
+                            <!-- API Key 行(#1B/#7/#8):reveal 按钮经 trailing 插槽进
+                                 框内(框外按钮移除,本地显隐/验证图标让位),保存改为
+                                 blur / Enter 显式提交,半截输入不再触发写请求。 -->
+                            <InputComponent
+                                v-model="keyDraft"
+                                class="min-w-0 flex-1"
+                                :min-length="32"
+                                :max-length="32"
+                                :validation-type="INPUT_VALIDATION_TYPE.STRING"
+                                :type="revealedKey !== null ? INPUT_TYPE.TEXT : INPUT_TYPE.PASSWORD"
+                                :label="t('services.integration.apiKey')"
+                                :placeholder="editingKeyPlaceholder"
+                                :error-message="
+                                    t('services.integration.apiKeyLengthError', { minLength: 32 })
+                                "
+                                :debounce="0"
+                                @update:validation="(val) => setValid(editing, 'key', val)"
+                                @blur="commitKey"
+                                @submit="commitKey">
+                                <template #trailing>
+                                    <button
+                                        v-if="editingKeyConfigured"
+                                        type="button"
+                                        class="hover:bg-tertiary flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                                        :disabled="revealing"
+                                        :title="revealedKey !== null ? t('common.hide') : t('common.show')"
+                                        :aria-label="revealedKey !== null ? t('common.hide') : t('common.show')"
+                                        :data-test="`key-visibility-${editing}`"
+                                        @click="toggleKeyReveal()">
+                                        <Icon
+                                            :name="revealedKey !== null ? 'eyeOn' : 'eyeOff'"
+                                            class="h-4 w-4" />
+                                    </button>
+                                </template>
+                            </InputComponent>
                             <div class="flex items-center space-x-2 pt-1">
                                 <ToggleButton v-model="editingSource.includeModel.value">
                                     <span class="text-primary-content text-xs font-medium">
@@ -327,24 +331,54 @@ function keyConfigured(kind: 'radarr' | 'sonarr' | null): boolean {
 }
 
 const revealedKey = ref<string | null>(null)
+const revealing = ref(false)
+const keyCommitting = ref(false)
 
-// 切换编辑对象时收回已显示的密钥:显示态只属于当前打开的那一个。
+/// #8:API Key 输入只进本地草稿,blur / Enter(commitKey)才落库;切换编辑
+/// 对象时收回已显示的密钥并清空草稿(显示态只属于当前打开的那一个)。
+const keyDraft = ref('')
+
 watch(editing, () => {
     revealedKey.value = null
+    keyDraft.value = ''
 })
 
 async function toggleKeyReveal(): Promise<void> {
-    if (!editingKeyConfigured.value) return
+    if (!editingKeyConfigured.value || revealing.value) return
     if (revealedKey.value !== null) {
         revealedKey.value = null
+        keyDraft.value = ''
         return
     }
     const key = keyFor(editing.value)
     if (key === null) return
+    revealing.value = true
     try {
         revealedKey.value = await settingApi.revealEncryptedSetting(key)
+        keyDraft.value = revealedKey.value
     } catch {
         toastStore.push({ message: t('common.loadFailed'), type: 'error' })
+    } finally {
+        revealing.value = false
+    }
+}
+
+/// #2/#8:显式提交(blur 或 Enter)。空输入 = 保持已配置的密钥不变;
+/// updateEncryptedSetting 落库成功才 toast「已保存」(失败反馈由 store 统一
+/// 弹出)。提交后输入框回到空(或已显示的明文),占位符说明「留空保持不变」。
+async function commitKey(): Promise<void> {
+    const key = keyFor(editing.value)
+    if (key === null || keyCommitting.value) return
+    const value = keyDraft.value
+    if (value === '') return
+    const valid = editing.value === 'radarr' ? radarrValid.key : sonarrValid.key
+    keyCommitting.value = true
+    try {
+        const ok = await settingStore.updateEncryptedSetting(key, value, valid)
+        if (ok) toastStore.push({ message: t('common.saved'), type: 'success' })
+    } finally {
+        keyCommitting.value = false
+        keyDraft.value = revealedKey.value ?? ''
     }
 }
 
@@ -358,23 +392,6 @@ const radarrUrlModel = computed({
     set: (newValue: string): void => {
         settingStore.updateSetting(SETTINGS.RADARR_URL, newValue, radarrValid.url)
         if (radarrValid.url) {
-            toastStore.push({ message: t('common.saved'), type: 'success' })
-        }
-    }
-})
-const radarrKeyModel = computed({
-    // 默认不回显(Secret 输入恒从空开始);「显示」后 revealedKey 持有
-    // 明文,输入框以文本态展示并可直接编辑保存。
-    get: (): string => revealedKey.value ?? '',
-    set: (newValue: string): void => {
-        // 空输入 = 保持已配置的密钥不变,不做任何写入
-        if (newValue === '') return
-        settingStore.updateEncryptedSetting(
-            ENCRYPTED_SETTINGS.RADARR_API_KEY,
-            newValue,
-            radarrValid.key
-        )
-        if (radarrValid.key) {
             toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
@@ -393,22 +410,6 @@ const sonarrUrlModel = computed({
     set: (newValue: string): void => {
         settingStore.updateSetting(SETTINGS.SONARR_URL, newValue, sonarrValid.url)
         if (sonarrValid.url) {
-            toastStore.push({ message: t('common.saved'), type: 'success' })
-        }
-    }
-})
-const sonarrKeyModel = computed({
-    // 同 radarr:默认空输入 + 「留空保持不变」,显示态回填明文。
-    get: (): string => revealedKey.value ?? '',
-    set: (newValue: string): void => {
-        // 空输入 = 保持已配置的密钥不变,不做任何写入
-        if (newValue === '') return
-        settingStore.updateEncryptedSetting(
-            ENCRYPTED_SETTINGS.SONARR_API_KEY,
-            newValue,
-            sonarrValid.key
-        )
-        if (sonarrValid.key) {
             toastStore.push({ message: t('common.saved'), type: 'success' })
         }
     }
@@ -432,7 +433,6 @@ const editingSource = computed(() => {
         return {
             name: 'Radarr',
             urlModel: radarrUrlModel,
-            keyModel: radarrKeyModel,
             includeModel: radarrIncludeModel,
             urlError: t('services.integration.radarrUrlError')
         }
@@ -441,7 +441,6 @@ const editingSource = computed(() => {
         return {
             name: 'Sonarr',
             urlModel: sonarrUrlModel,
-            keyModel: sonarrKeyModel,
             includeModel: sonarrIncludeModel,
             urlError: t('services.integration.sonarrUrlError')
         }
