@@ -145,10 +145,10 @@ public class SubtitleSearchControllerTests
         public override string Provider => "gestdown";
     }
 
-    [SubtitleProvider("podnapisi")]
-    private sealed class FakePodnapisiProvider : FakeProvider
+    [SubtitleProvider("xunlei")]
+    private sealed class FakeXunleiProvider : FakeProvider
     {
-        public override string Provider => "podnapisi";
+        public override string Provider => "xunlei";
     }
 
     [SubtitleProvider("assrt", requiresAuth: true)]
@@ -169,7 +169,7 @@ public class SubtitleSearchControllerTests
         new FakeSubSourceProvider(),
         new FakeSubdlProvider(),
         new FakeGestdownProvider(),
-        new FakePodnapisiProvider(),
+        new FakeXunleiProvider(),
         new FakeAssrtProvider(),
         new FakeShooterProvider()
     ];
@@ -180,7 +180,7 @@ public class SubtitleSearchControllerTests
         new SubSourcePluginManifest(),
         new SubdlPluginManifest(),
         new GestdownPluginManifest(),
-        new PodnapisiPluginManifest(),
+        new XunleiPluginManifest(),
         new AssrtPluginManifest(),
         new ShooterPluginManifest()
     ];
@@ -189,7 +189,8 @@ public class SubtitleSearchControllerTests
         ISubtitleProvider[] providers,
         ISubtitleSourceManifest[]? manifests = null,
         Mock<ISettingsAccess>? settings = null,
-        InMemorySettingService? settingValues = null)
+        InMemorySettingService? settingValues = null,
+        SubtitleQuotaStore? quotaStore = null)
     {
         var registry = new SubtitleProviderRegistry(
             providers,
@@ -199,6 +200,7 @@ public class SubtitleSearchControllerTests
             registry,
             settings?.Object ?? SubtitleSettingsDouble.Create().Object,
             CreateOrchestrator(registry, settingValues),
+            quotaStore ?? new SubtitleQuotaStore(),
             queueService: null!,
             pinService: null!,
             pipeline: null!,
@@ -238,6 +240,7 @@ public class SubtitleSearchControllerTests
             fixture.Registry,
             SubtitleSettingsDouble.Create().Object,
             fixture.Orchestrator,
+            new SubtitleQuotaStore(),
             fixture.QueueService,
             fixture.PinService,
             fixture.Pipeline,
@@ -338,7 +341,7 @@ public class SubtitleSearchControllerTests
         Assert.Equal(JsonValueKind.Array, body.RootElement.ValueKind);
         Assert.Equal(7, body.RootElement.GetArrayLength());
         Assert.Equal(
-            new[] { "opensubtitles", "subsource", "subdl", "gestdown", "podnapisi", "assrt", "shooter" },
+            new[] { "opensubtitles", "subsource", "subdl", "gestdown", "xunlei", "assrt", "shooter" },
             body.RootElement.EnumerateArray().Select(card => card.GetProperty("provider").GetString()).ToArray());
 
         // Manifest fields pass through untouched: display name,
@@ -800,6 +803,85 @@ public class SubtitleSearchControllerTests
         Assert.Equal(SubtitleSourceCooldownStore.CredentialChangeHorizon, until);
     }
 
+    // --- providers quota observability (R3): the singleton store's latest
+    // snapshot aggregates onto the card as quotaRemaining/quotaResetUtc;
+    // sources without a captured snapshot carry neither field, and the
+    // quota_exhausted cooldown reaches the card like any other bucket.
+
+    [Fact]
+    public async Task GetProviders_QuotaSnapshotMarksRemainingAndResetOnThatSourceOnly()
+    {
+        var resetUtc = new DateTimeOffset(2026, 10, 18, 0, 0, 0, TimeSpan.Zero);
+        var quotaStore = new SubtitleQuotaStore();
+        quotaStore.Record("opensubtitles", new SubtitleQuotaSnapshot(
+            Remaining: 7, Total: null, Requests: 33, ResetUtc: resetUtc,
+            CapturedAtUtc: DateTimeOffset.UtcNow));
+        var controller = CreateController(SevenSources(), RealManifests(), quotaStore: quotaStore);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetProviders());
+        using var body = Body(result);
+
+        var opensubtitles = body.RootElement.EnumerateArray()
+            .Single(card => card.GetProperty("provider").GetString() == "opensubtitles");
+        Assert.Equal(7, opensubtitles.GetProperty("quotaRemaining").GetInt32());
+        Assert.Equal(resetUtc, DateTimeOffset.Parse(opensubtitles.GetProperty("quotaResetUtc").GetString()!));
+
+        // Every source without a captured snapshot carries neither field
+        // (nulls are dropped under WhenWritingNull — the badge stays hidden).
+        foreach (var card in body.RootElement.EnumerateArray())
+        {
+            if (card.GetProperty("provider").GetString() == "opensubtitles")
+            {
+                continue;
+            }
+
+            Assert.True(
+                !card.TryGetProperty("quotaRemaining", out var remaining) || remaining.ValueKind == JsonValueKind.Null,
+                $"{card.GetProperty("provider").GetString()} must not report a quota");
+            Assert.True(
+                !card.TryGetProperty("quotaResetUtc", out var reset) || reset.ValueKind == JsonValueKind.Null,
+                $"{card.GetProperty("provider").GetString()} must not report a quota reset");
+        }
+    }
+
+    [Fact]
+    public async Task GetProviders_WithoutAnyQuotaSnapshot_OmitsTheQuotaFields()
+    {
+        var controller = CreateController(SevenSources(), RealManifests());
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetProviders());
+        using var body = Body(result);
+
+        foreach (var card in body.RootElement.EnumerateArray())
+        {
+            Assert.True(
+                !card.TryGetProperty("quotaRemaining", out var remaining) || remaining.ValueKind == JsonValueKind.Null);
+            Assert.True(
+                !card.TryGetProperty("quotaResetUtc", out var reset) || reset.ValueKind == JsonValueKind.Null);
+        }
+    }
+
+    [Fact]
+    public async Task GetProviders_QuotaExhaustedCooldownCarriesUntilAndReason()
+    {
+        // The R3 circuit-breaker state on the card: until = the source's own
+        // reset moment, reason = the quota_exhausted bucket.
+        var resetUtc = DateTimeOffset.UtcNow.AddHours(6);
+        var settingValues = new InMemorySettingService();
+        await new SubtitleSourceCooldownStore(
+                settingValues, NullLogger<SubtitleSourceCooldownStore>.Instance)
+            .RecordQuotaExhaustedAsync("opensubtitles", resetUtc, "quota gone");
+        var controller = CreateController(SevenSources(), RealManifests(), settingValues: settingValues);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetProviders());
+        using var body = Body(result);
+
+        var opensubtitles = body.RootElement.EnumerateArray()
+            .Single(card => card.GetProperty("provider").GetString() == "opensubtitles");
+        Assert.Equal("quota_exhausted", opensubtitles.GetProperty("cooldownReason").GetString());
+        Assert.Equal(resetUtc, DateTimeOffset.Parse(opensubtitles.GetProperty("cooldownUntil").GetString()!));
+    }
+
     // --- history (screen 13): keyset pagination over subtitle_downloads
     // with the media-title join, filters, and the honest empty states.
 
@@ -878,7 +960,7 @@ public class SubtitleSearchControllerTests
                 source: SubtitleDownloadSource.Auto),
             DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.LowConfidenceSkipped,
                 now.AddMinutes(-3)),
-            DownloadRow(MediaType.Movie, fixture.MovieId, "podnapisi", SubtitleDownloadResult.Succeeded,
+            DownloadRow(MediaType.Movie, fixture.MovieId, "gestdown", SubtitleDownloadResult.Succeeded,
                 now.AddMinutes(-4), source: SubtitleDownloadSource.Webhook),
             // Media row deleted long ago — the download stays, the title goes null.
             DownloadRow(MediaType.Movie, 999_999, "opensubtitles", SubtitleDownloadResult.AlreadyExistsSkipped,
@@ -917,7 +999,7 @@ public class SubtitleSearchControllerTests
         var episodes = HistoryPage(await controller.History(mediaType: "episode"));
         Assert.Equal(new[] { 2 }, episodes.Items.Select(item => item.Id).ToArray());
 
-        var webhook = HistoryPage(await controller.History(provider: "podnapisi"));
+        var webhook = HistoryPage(await controller.History(provider: "gestdown"));
         Assert.Equal(new[] { 4 }, webhook.Items.Select(item => item.Id).ToArray());
 
         var failures = HistoryPage(await controller.History(result: "Failed"));

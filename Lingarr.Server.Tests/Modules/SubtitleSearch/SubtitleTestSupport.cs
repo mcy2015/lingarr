@@ -8,13 +8,28 @@ using System.Threading;
 using System.Threading.Tasks;
 using Lingarr.Contracts.Settings;
 using Moq;
+using Xunit;
 
 namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 
 /// <summary>
+/// Serializes the test classes that touch <c>SubtitleHttp</c>'s
+/// process-wide request-throttle state (the OpenSubtitles/assrt pacing
+/// cases measure real waits, and any concurrent
+/// <c>ClearRequestThrottling</c>/<c>SetMinimumRequestInterval</c> from a
+/// parallel class would zero those waits and flake the assertions).
+/// Members: the provider test classes with pacing/reset logic and the
+/// download-pipeline class that lifts the assrt interval.
+/// </summary>
+[CollectionDefinition("SubtitleHttpThrottle", DisableParallelization = true)]
+public sealed class SubtitleHttpThrottleCollection
+{
+}
+
+/// <summary>
 /// Fixture access for the subtitle-source tests: responses live under
-/// <c>Lingarr.Server.Tests/Fixtures/Subtitles/{provider}/</c> on disk (JSON
-/// plus Podnapisi XML, each folder with a manifest.json recording note) and
+/// <c>Lingarr.Server.Tests/Fixtures/Subtitles/{provider}/</c> on disk (JSON,
+/// each folder with a manifest.json recording note) and
 /// are located by walking up from the assembly directory to the solution
 /// root — no csproj copy wiring, same layout in dev and CI checkouts.
 /// </summary>

@@ -130,6 +130,13 @@ public sealed record SubtitleBacklogResponse(
 /// (<c>subtitle_{source}_enabled</c>, design ⑧ polish): false means the
 /// aggregate and automated rounds skip the source — a manual per-source
 /// search still queries it by name.
+/// The quota pair is the R3 observability state: the source's own latest
+/// claim about its daily download quota (captured from response headers by
+/// the provider, kept in the singleton <see cref="SubtitleQuotaStore"/>).
+/// Null for sources without a verified quota contract — only OpenSubtitles
+/// captures today. Pass-through by design: staleness/exhaustion is the
+/// front end's rendering concern (remaining &lt;= 0 or a past reset hides
+/// the badge; the cooldown chip covers the exhausted case).
 /// </summary>
 public sealed record SubtitleProviderResponse(
     string Provider,
@@ -140,7 +147,9 @@ public sealed record SubtitleProviderResponse(
     IReadOnlyList<PluginSettingField> Settings,
     DateTimeOffset? CooldownUntil,
     string? CooldownReason,
-    bool Enabled);
+    bool Enabled,
+    int? QuotaRemaining = null,
+    DateTimeOffset? QuotaResetUtc = null);
 
 /// <summary>
 /// One row of the download history (screen 13): a subtitle_downloads row
@@ -195,6 +204,7 @@ public class SubtitleSearchController : ControllerBase
     private readonly SubtitleProviderRegistry _providerRegistry;
     private readonly ISettingsAccess _settingsAccess;
     private readonly SubtitleSearchOrchestrator _orchestrator;
+    private readonly SubtitleQuotaStore _quotaStore;
     private readonly SubtitleSearchQueueService _queueService;
     private readonly SubtitlePinService _pinService;
     private readonly SubtitleDownloadPipeline _pipeline;
@@ -206,6 +216,7 @@ public class SubtitleSearchController : ControllerBase
         SubtitleProviderRegistry providerRegistry,
         ISettingsAccess settingsAccess,
         SubtitleSearchOrchestrator orchestrator,
+        SubtitleQuotaStore quotaStore,
         SubtitleSearchQueueService queueService,
         SubtitlePinService pinService,
         SubtitleDownloadPipeline pipeline,
@@ -216,6 +227,7 @@ public class SubtitleSearchController : ControllerBase
         _providerRegistry = providerRegistry;
         _settingsAccess = settingsAccess;
         _orchestrator = orchestrator;
+        _quotaStore = quotaStore;
         _queueService = queueService;
         _pinService = pinService;
         _pipeline = pipeline;
@@ -714,7 +726,10 @@ public class SubtitleSearchController : ControllerBase
     /// per-source switch in one batched settings read (absent key =
     /// enabled — default-true rollout without a migration). A secret read
     /// that fails degrades that one source to credentialsConfigured=false;
-    /// the list itself never 500s over it.
+    /// the list itself never 500s over it. The quota pair (R3) is the
+    /// singleton <see cref="SubtitleQuotaStore"/>'s latest snapshot of the
+    /// source — in-memory, provider-captured, null for sources without a
+    /// verified quota contract.
     /// </summary>
     [HttpGet("providers")]
     public async Task<IActionResult> GetProviders()
@@ -730,6 +745,10 @@ public class SubtitleSearchController : ControllerBase
         {
             var key = SubtitleSourceSettingKeys.EnabledKey(entry.Provider.Provider);
             cooldowns.TryGetValue(entry.Provider.Provider, out var cooldown);
+            // R3 quota observability: the singleton store's latest snapshot
+            // of this source, when its provider captured one (OpenSubtitles
+            // today); every other source stays null and renders no badge.
+            var quota = _quotaStore.Find(entry.Provider.Provider);
             providers.Add(new SubtitleProviderResponse(
                 entry.Provider.Provider,
                 entry.Manifest?.DisplayName ?? entry.Provider.Provider,
@@ -739,7 +758,9 @@ public class SubtitleSearchController : ControllerBase
                 entry.Manifest?.Settings ?? [],
                 cooldown?.Until,
                 cooldown?.Reason,
-                !enabledMap.TryGetValue(key, out var stored) || SubtitleSourceSettingKeys.IsEnabled(stored)));
+                !enabledMap.TryGetValue(key, out var stored) || SubtitleSourceSettingKeys.IsEnabled(stored),
+                quota?.Remaining,
+                quota?.ResetUtc));
         }
 
         return Ok(providers);

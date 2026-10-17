@@ -4,7 +4,8 @@ using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
 /// <summary>
-/// Common plumbing of the seven v1 subtitle sources: provider key, the
+/// Common plumbing of the v1 subtitle sources (⑩ — seven since the 2026-10
+/// xunlei addition backfilled the dead-site removal): provider key, the
 /// named HttpClient ("subtitle-{provider}", tech design ②), the candidate
 /// cache, credential reads through <see cref="ISettingsAccess"/> (translation
 /// plugin precedent — values are re-read per call so credential changes

@@ -625,6 +625,11 @@ export interface ISubtitleHistoryResponse {
 /// `enabled` is the per-source switch (subtitle_{provider}_enabled, design
 /// ⑧ polish): false = aggregate/automated rounds skip the source. Optional
 /// because legacy payloads predate it — undefined reads as enabled.
+/// `quotaRemaining`/`quotaResetUtc` are the R3 quota observability pair:
+/// the source's own latest claim about its daily download quota (captured
+/// from /download response headers, kept in-memory server-side). Only
+/// sources with a verified quota contract ever set them (OpenSubtitles
+/// today); null/undefined means no quota state and renders no badge.
 export interface ISubtitleProviderHealthState {
     provider: string
     displayName: string
@@ -635,4 +640,6 @@ export interface ISubtitleProviderHealthState {
     cooldownUntil: string | null
     cooldownReason: string | null
     enabled?: boolean
+    quotaRemaining?: number | null
+    quotaResetUtc?: string | null
 }

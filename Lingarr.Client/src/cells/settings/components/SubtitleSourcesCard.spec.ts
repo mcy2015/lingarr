@@ -50,7 +50,7 @@ const i18n = createI18n({
 
 // 三源样本:opensubtitles(required secret 未配置,混入 url 字段;type 用
 // 契约示例的小写 'secret' 验证归一)、assrt(已配置的 'Secret' 源)、
-// podnapisi(无 secret 字段的紧凑行源)。默认全部健康(cooldown 字段 null)。
+// gestdown(无 secret 字段的紧凑行源)。默认全部健康(cooldown 字段 null)。
 const PROVIDERS: ISubtitleProviderHealthState[] = [
     {
         provider: 'opensubtitles',
@@ -98,14 +98,14 @@ const PROVIDERS: ISubtitleProviderHealthState[] = [
         cooldownReason: null
     },
     {
-        provider: 'podnapisi',
-        displayName: 'Podnapisi',
-        description: 'Indexing without an account.',
+        provider: 'gestdown',
+        displayName: 'Gestdown',
+        description: 'Addic7ed catalogue mirrored as an open API.',
         requiresAuth: false,
         credentialsConfigured: true,
         settings: [
             {
-                key: 'subtitle_podnapisi_base_url',
+                key: 'subtitle_gestdown_base_url',
                 label: 'Base URL',
                 type: 'Url',
                 required: false,
@@ -166,15 +166,15 @@ describe('SubtitleSourcesCard · 行渲染', () => {
     it('renders no-secret sources as compact rows: no form, no expand, no badge', async () => {
         const wrapper = await mountCard()
 
-        expect(wrapper.find('[data-test="subtitle-source-form-podnapisi"]').exists()).toBe(false)
-        expect(wrapper.find('[data-test="subtitle-source-toggle-podnapisi"]').exists()).toBe(false)
-        expect(wrapper.find('[data-test="subtitle-source-badge-podnapisi"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-form-gestdown"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-toggle-gestdown"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-badge-gestdown"]').exists()).toBe(false)
         // the url-only field never enters this round's UI
-        expect(wrapper.find('[data-test="subtitle-source-row-podnapisi"]').text()).not.toContain(
+        expect(wrapper.find('[data-test="subtitle-source-row-gestdown"]').text()).not.toContain(
             'Base URL'
         )
         // every source implements the health probe, so the test button stays
-        expect(wrapper.find('[data-test="subtitle-source-test-podnapisi"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="subtitle-source-test-gestdown"]').exists()).toBe(true)
     })
 
     it('renders only the secret field inside the expandable form (url filtered out)', async () => {
@@ -230,11 +230,11 @@ describe('SubtitleSourcesCard · 测试连接', () => {
         testConnectionMock.mockResolvedValueOnce({ ok: true, latencyMs: 123.4, message: 'reachable' })
         const wrapper = await mountCard()
 
-        await wrapper.find('[data-test="subtitle-source-test-podnapisi"]').trigger('click')
+        await wrapper.find('[data-test="subtitle-source-test-gestdown"]').trigger('click')
         await flushPromises()
 
-        expect(testConnectionMock).toHaveBeenCalledWith('podnapisi')
-        const line = wrapper.find('[data-test="subtitle-source-test-result-podnapisi"]')
+        expect(testConnectionMock).toHaveBeenCalledWith('gestdown')
+        const line = wrapper.find('[data-test="subtitle-source-test-result-gestdown"]')
         expect(line.exists()).toBe(true)
         expect(line.attributes('data-ok')).toBe('true')
         expect(line.text()).toContain(en.settings.subtitleSources.testOk)
@@ -431,7 +431,7 @@ describe('SubtitleSourcesCard · 冷却健康态(设计⑧)', () => {    it('ren
 
         // healthy sources render no chip at all
         expect(wrapper.find('[data-test="subtitle-source-cooldown-assrt"]').exists()).toBe(false)
-        expect(wrapper.find('[data-test="subtitle-source-cooldown-podnapisi"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-cooldown-gestdown"]').exists()).toBe(false)
     })
 
     it('renders the until-credentials label for the 401/403 sentinel instead of a year-9999 date', async () => {
@@ -480,6 +480,67 @@ describe('SubtitleSourcesCard · 冷却健康态(设计⑧)', () => {    it('ren
         // enum name on screen
         expect(chip.attributes('title')).toBe(en.settings.subtitleSources.cooldownReason.DailyLimit)
         expect(chip.text()).not.toContain('DailyLimit')
+    })
+})
+
+describe('SubtitleSourcesCard · 配额余量徽章(R3)', () => {
+    it('renders the quota badge with the remaining count and reset time when the source reports quota', async () => {
+        // dynamic future reset (stays in the future whenever the gate runs)
+        const futureReset = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString()
+        getProvidersMock.mockReset().mockResolvedValue([
+            { ...PROVIDERS[0], quotaRemaining: 7, quotaResetUtc: futureReset },
+            PROVIDERS[1],
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        const badge = wrapper.find('[data-test="subtitle-source-quota-opensubtitles"]')
+        expect(badge.exists()).toBe(true)
+        // the label interpolates both placeholders — a real count and a real
+        // HH:mm reset time (local timezone), no leftover template braces
+        expect(badge.text()).toContain('7')
+        expect(badge.text()).toMatch(/\d{1,2}:\d{2}/)
+        expect(badge.text()).not.toContain('{n}')
+        expect(badge.text()).not.toContain('{time}')
+        // the capture semantics ride the tooltip
+        expect(badge.attributes('title')).toBe(en.settings.subtitleSources.quotaHint)
+
+        // sources without a quota contract render no badge
+        expect(wrapper.find('[data-test="subtitle-source-quota-assrt"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-quota-gestdown"]').exists()).toBe(false)
+    })
+
+    it('renders no badge for missing quota, exhausted quota or a stale reset', async () => {
+        // null / absent fields, remaining 0 (exhausted — the cooldown chip
+        // carries that state) and a reset already in the past (stale
+        // snapshot) all hide the badge
+        const futureReset = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString()
+        getProvidersMock.mockReset().mockResolvedValue([
+            { ...PROVIDERS[0], quotaRemaining: 0, quotaResetUtc: futureReset },
+            { ...PROVIDERS[1], quotaRemaining: 5, quotaResetUtc: null },
+            { ...PROVIDERS[2], quotaRemaining: 5, quotaResetUtc: '2020-01-01T00:00:00Z' }
+        ])
+        const wrapper = await mountCard()
+
+        expect(wrapper.find('[data-test="subtitle-source-quota-opensubtitles"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-quota-assrt"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="subtitle-source-quota-gestdown"]').exists()).toBe(false)
+    })
+
+    it('labels the quota_exhausted cooldown reason (R3 406 circuit-breaker)', async () => {
+        getProvidersMock.mockReset().mockResolvedValue([
+            { ...PROVIDERS[0], cooldownUntil: '2026-10-18T00:00:00Z', cooldownReason: 'quota_exhausted' },
+            PROVIDERS[1],
+            PROVIDERS[2]
+        ])
+        const wrapper = await mountCard()
+
+        const chip = wrapper.find('[data-test="subtitle-source-cooldown-opensubtitles"]')
+        expect(chip.exists()).toBe(true)
+        // known reason names resolve through the label map — never the raw
+        // bucket string on screen
+        expect(chip.attributes('title')).toBe(en.settings.subtitleSources.cooldownReason.quotaExhausted)
+        expect(chip.text()).not.toContain('quota_exhausted')
     })
 })
 

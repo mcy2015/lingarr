@@ -10,6 +10,7 @@ using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
 using Lingarr.Server.Modules.SubtitleSearch.Telemetry;
 using Lingarr.Server.Modules.Translation;
 using Microsoft.AspNetCore.SignalR;
@@ -81,6 +82,7 @@ public sealed class SubtitleDownloadPipeline
     private readonly ISubtitleService _subtitleService;
     private readonly ITranslationRequestQueueService _translationQueue;
     private readonly ISettingService _settingService;
+    private readonly SubtitleSourceCooldownStore _cooldowns;
     private readonly SubtitleTelemetryService _telemetry;
     private readonly SubtitleCoverageRefresher _coverageRefresher;
     private readonly IHubContext<JobProgressHub> _hubContext;
@@ -94,6 +96,7 @@ public sealed class SubtitleDownloadPipeline
         ISubtitleService subtitleService,
         ITranslationRequestQueueService translationQueue,
         ISettingService settingService,
+        SubtitleSourceCooldownStore cooldowns,
         SubtitleTelemetryService telemetry,
         SubtitleCoverageRefresher coverageRefresher,
         IHubContext<JobProgressHub> hubContext,
@@ -106,6 +109,7 @@ public sealed class SubtitleDownloadPipeline
         _subtitleService = subtitleService;
         _translationQueue = translationQueue;
         _settingService = settingService;
+        _cooldowns = cooldowns;
         _telemetry = telemetry;
         _coverageRefresher = coverageRefresher;
         _hubContext = hubContext;
@@ -221,6 +225,16 @@ public sealed class SubtitleDownloadPipeline
             if (ex.Reason == SubtitleProviderFailureReason.InvalidResponse && ex.HttpStatus is null)
             {
                 await BlacklistCandidateAsync(candidate, ex.Message, cancellationToken);
+            }
+
+            // R3 quota circuit-breaker: a daily-quota-exhaustion verdict
+            // (OpenSubtitles 406 with remaining:0 — the DailyLimit bucket)
+            // cools the source down until its own reset moment, so the next
+            // rounds skip it instead of hammering a 406. Best effort: a
+            // cooldown write must never mask the history row of the attempt.
+            if (ex.Reason == SubtitleProviderFailureReason.DailyLimit)
+            {
+                await RecordQuotaCooldownSafeAsync(candidate.Provider, ex, cancellationToken);
             }
 
             return await RecordAsync(
@@ -447,6 +461,30 @@ public sealed class SubtitleDownloadPipeline
             _logger.LogWarning(ex,
                 "Could not blacklist {Provider}/{ExternalId} after a content-invalid failure.",
                 candidate.Provider, candidate.ExternalId);
+        }
+    }
+
+    /// <summary>
+    /// Quota-exhaustion cooldown recording must never fail the attempt's
+    /// history row — the store goes through the settings service; a settings
+    /// hiccup logs and moves on (the orchestrator's
+    /// RecordCooldownSafeAsync precedent, applied to the download side).
+    /// </summary>
+    private async Task RecordQuotaCooldownSafeAsync(
+        string provider, SubtitleProviderException exception, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _cooldowns.RecordQuotaExhaustedAsync(
+                provider, exception.QuotaResetUtc, exception.Message, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist the quota cooldown of {Provider}.", provider);
         }
     }
 

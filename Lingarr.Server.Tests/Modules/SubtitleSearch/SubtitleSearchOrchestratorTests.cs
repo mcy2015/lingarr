@@ -609,6 +609,65 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal(TimeSpan.Zero, cooldowns["daily"].Until.TimeOfDay);
     }
 
+    // --- R3 quota circuit-breaker: a DailyLimit verdict that carries the
+    // source's own reset moment (the OpenSubtitles 406 reset_time_utc shape)
+    // cools down until exactly that moment under the quota_exhausted bucket;
+    // the header-less 429 shape above keeps its enum-name reason and the
+    // midnight fallback untouched.
+
+    [Fact]
+    public async Task CooldownStore_QuotaExhaustedWithACapturedResetCoolsDownUntilIt()
+    {
+        var store = new SubtitleSourceCooldownStore(
+            _settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
+        var resetUtc = DateTimeOffset.UtcNow.AddHours(6);
+
+        await store.RecordFailureAsync("opensubtitles", SubtitleProviderException.ForDailyLimit(
+            "opensubtitles", httpStatus: 406, resetUtc: resetUtc));
+
+        var cooldown = (await store.GetActiveAsync())["opensubtitles"];
+        Assert.Equal(resetUtc, cooldown.Until);
+        Assert.Equal(SubtitleSourceCooldownStore.QuotaExhaustedReason, cooldown.Reason);
+        Assert.Contains("daily quota", cooldown.Error);
+    }
+
+    [Fact]
+    public async Task CooldownStore_QuotaExhaustedWithAStaleResetFallsBackToUtcMidnight()
+    {
+        // A reset moment already in the past (clock skew, stale header) must
+        // not un-block the source: the conservative midnight fallback applies.
+        var store = new SubtitleSourceCooldownStore(
+            _settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
+
+        await store.RecordQuotaExhaustedAsync("opensubtitles", DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var cooldown = (await store.GetActiveAsync())["opensubtitles"];
+        Assert.Equal(SubtitleSourceCooldownStore.QuotaExhaustedReason, cooldown.Reason);
+        Assert.Equal(TimeSpan.Zero, cooldown.Until.TimeOfDay);
+        Assert.Equal(cooldown.Until, new DateTimeOffset(cooldown.Until.UtcDateTime.Date, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public async Task Search_QuotaExhaustedVerdictCoolsDownUntilTheReportedReset()
+    {
+        // The search-side mirror of the R3 406 rule: the orchestrator's
+        // generic failure recording honors the exception-carried reset.
+        var resetUtc = DateTimeOffset.UtcNow.AddHours(6);
+        var exhausted = new ScriptedProvider(_ => throw SubtitleProviderException.ForDailyLimit(
+            "daily", httpStatus: 406, resetUtc: resetUtc))
+        { Provider = "daily" };
+        var orchestrator = Create(exhausted);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        var failure = Assert.Single(outcome.SourceOutcomes);
+        Assert.Equal(SubtitleProviderFailureReason.DailyLimit.ToString(), failure.Reason);
+
+        var cooldowns = await orchestrator.GetActiveCooldownsAsync();
+        Assert.Equal(resetUtc, cooldowns["daily"].Until);
+        Assert.Equal(SubtitleSourceCooldownStore.QuotaExhaustedReason, cooldowns["daily"].Reason);
+    }
+
     /// <summary>
     /// Direct telemetry regression pin: a null quota-remaining parameter
     /// used to throw "Value must be set" (raw null instead of DBNull.Value),

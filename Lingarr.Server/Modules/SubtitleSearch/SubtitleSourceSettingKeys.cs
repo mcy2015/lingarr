@@ -1,7 +1,9 @@
 namespace Lingarr.Server.Modules.SubtitleSearch;
 
 /// <summary>
-/// Settings keys of the seven v1 subtitle sources (tech design ⑩). The keys
+/// Settings keys of the v1 subtitle sources (tech design ⑩ — seven since
+/// the 2026-10 xunlei addition, which backfilled the dead-site removal).
+/// The keys
 /// are declared by the <c>Manifests/*PluginManifest</c> settings forms; the
 /// providers read them per call so credential changes apply without a
 /// restart (SettingUpdatesHub hot reload). Every source also exposes an
@@ -70,12 +72,6 @@ public static class SubtitleSourceSettingKeys
         public const string ProxyUrl = "subtitle_gestdown_proxy_url";
     }
 
-    public static class Podnapisi
-    {
-        public const string BaseUrl = "subtitle_podnapisi_base_url";
-        public const string ProxyUrl = "subtitle_podnapisi_proxy_url";
-    }
-
     public static class Assrt
     {
         public const string Token = "subtitle_assrt_token";
@@ -87,5 +83,16 @@ public static class SubtitleSourceSettingKeys
     {
         public const string BaseUrl = "subtitle_shooter_base_url";
         public const string ProxyUrl = "subtitle_shooter_proxy_url";
+    }
+
+    /// <summary>
+    /// Xunlei keys (batch R2, 2026-10): no secret — the endpoint is
+    /// unauthenticated; the base URL defaults to the code-side production
+    /// value and is overridable for the fake-source E2E round.
+    /// </summary>
+    public static class Xunlei
+    {
+        public const string BaseUrl = "subtitle_xunlei_base_url";
+        public const string ProxyUrl = "subtitle_xunlei_proxy_url";
     }
 }

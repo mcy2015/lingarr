@@ -18,8 +18,20 @@ namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 /// the query, search→detail file flattening, the status!=0 error envelope,
 /// missing token failing before any HTTP, and the failure buckets.
 /// </summary>
+[Collection("SubtitleHttpThrottle")]
 public class AssrtProviderTests
 {
+    // The request throttle (design ⑧) is process-wide static state — reset
+    // it before every test so each case starts with an immediate first
+    // request, then lift the assrt pacing (official 20/min) so the
+    // multi-round fan-out cases below stay fast; the interval itself is
+    // pinned by Search_TwoConsecutiveRequestsWaitForThePublishedLimit.
+    public AssrtProviderTests()
+    {
+        SubtitleHttp.ClearRequestThrottling();
+        SubtitleHttp.SetMinimumRequestInterval("assrt", TimeSpan.Zero);
+    }
+
     private static SubtitleCandidateCache NewCache() =>
         new(new MemoryCache(new MemoryCacheOptions()), NullLogger<SubtitleCandidateCache>.Instance);
 
@@ -164,6 +176,36 @@ public class AssrtProviderTests
 
         Assert.Equal(SubtitleProviderFailureReason.RateLimited, exception.Reason);
         Assert.Equal(TimeSpan.FromHours(1), exception.Cooldown);
+    }
+
+    [Fact]
+    public async Task Search_TwoConsecutiveRequestsWaitForThePublishedLimit()
+    {
+        // assrt's official window is 20 requests per minute with the quota
+        // shared between the token and the calling IP — the throttle table
+        // paces the source at one request per 3s. The per-source throttle
+        // waits instead of rejecting: the second request of a burst must
+        // sit out the window (tolerance: at least ~90% of the interval,
+        // bounded well below two intervals), same shape as the
+        // OpenSubtitles pacing case.
+        SubtitleHttp.SetMinimumRequestInterval("assrt", SubtitleHttp.AssrtRequestInterval);
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson("""{"status": 0, "sub": {"subs": []}}""")
+            .EnqueueJson("""{"status": 0, "sub": {"subs": []}}""");
+
+        var provider = Create(handler);
+        var firstStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        firstStopwatch.Stop();
+        var secondStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        secondStopwatch.Stop();
+
+        Assert.True(firstStopwatch.ElapsedMilliseconds < (int)(SubtitleHttp.AssrtRequestInterval.TotalMilliseconds * 0.9),
+            $"first request must leave immediately (took {firstStopwatch.ElapsedMilliseconds}ms)");
+        var minimum = (int)(SubtitleHttp.AssrtRequestInterval.TotalMilliseconds * 0.9);
+        var maximum = (int)(SubtitleHttp.AssrtRequestInterval.TotalMilliseconds * 2 + 300);
+        Assert.InRange((int)secondStopwatch.ElapsedMilliseconds, minimum, maximum);
     }
 
     [Fact]

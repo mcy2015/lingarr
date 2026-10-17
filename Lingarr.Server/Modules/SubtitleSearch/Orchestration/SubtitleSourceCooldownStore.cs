@@ -50,6 +50,16 @@ public sealed class SubtitleSourceCooldownStore
     public static readonly DateTimeOffset CredentialChangeHorizon =
         new(9999, 12, 31, 23, 59, 59, TimeSpan.Zero);
 
+    /// <summary>
+    /// Cooldown reason of the R3 quota circuit-breaker: the source's own
+    /// daily-quota-exhaustion verdict (OpenSubtitles 406 with
+    /// <c>remaining: 0</c>), as opposed to the rate-window DailyLimit bucket
+    /// (429 with <c>X-RateLimit-Remaining-Requests: 0</c>, which keeps the
+    /// enum-name reason and the midnight fallback). Distinct string so the
+    /// source card can label the two "quota" cooldowns differently.
+    /// </summary>
+    public const string QuotaExhaustedReason = "quota_exhausted";
+
     private static readonly JsonSerializerOptions Json = new()
     {
         // Round-trip dates in ISO-8601 with offset — DateTimeOffset default.
@@ -104,6 +114,15 @@ public sealed class SubtitleSourceCooldownStore
     /// cooldown) cools down until the next UTC midnight, when the source's
     /// daily counter resets — not a fixed span, so the source recovers the
     /// moment the quota window rolls over.
+    /// <para>
+    /// R3 refinement: a daily-limit verdict that carries the source's own
+    /// reset moment (<see cref="SubtitleProviderException.QuotaResetUtc"/>
+    /// — the OpenSubtitles <c>reset_time_utc</c> of the 406 response) cools
+    /// down until exactly that moment and persists the
+    /// <see cref="QuotaExhaustedReason"/> bucket; a stale (past) reset falls
+    /// back to the midnight rule, as does the header-less 429 shape, whose
+    /// reason stays the plain enum name.
+    /// </para>
     /// </summary>
     public Task RecordFailureAsync(
         string provider,
@@ -111,6 +130,12 @@ public sealed class SubtitleSourceCooldownStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(exception);
+
+        if (exception.Reason == SubtitleProviderFailureReason.DailyLimit
+            && exception.QuotaResetUtc is not null)
+        {
+            return PersistQuotaExhaustedAsync(provider, exception.QuotaResetUtc, exception.Message, cancellationToken);
+        }
 
         var until = exception.Reason switch
         {
@@ -125,6 +150,41 @@ public sealed class SubtitleSourceCooldownStore
         }
 
         return PersistAsync(provider, until.Value, exception.Reason.ToString(), exception.Message, cancellationToken);
+    }
+
+    /// <summary>
+    /// R3 quota circuit-breaker entry: records the
+    /// <see cref="QuotaExhaustedReason"/> cooldown for a source whose daily
+    /// download quota the source itself declared exhausted. The until is the
+    /// source-reported reset moment when it still lies in the future; a
+    /// missing, unparsable or stale (past) reset falls back to the next UTC
+    /// midnight — the official quota-window boundary. Explicit-until sibling
+    /// of <see cref="RecordFailureAsync"/> (additive overload; the existing
+    /// signature and its bucket table are untouched).
+    /// </summary>
+    public Task RecordQuotaExhaustedAsync(
+        string provider,
+        DateTimeOffset? resetUtc,
+        string? error = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        return PersistQuotaExhaustedAsync(provider, resetUtc, error, cancellationToken);
+    }
+
+    private Task PersistQuotaExhaustedAsync(
+        string provider,
+        DateTimeOffset? resetUtc,
+        string? error,
+        CancellationToken cancellationToken)
+    {
+        // Past reset = the window already rolled over (clock skew or a stale
+        // header): the conservative midnight fallback beats un-blocking a
+        // source that just answered 406.
+        var until = resetUtc is { } reset && reset > DateTimeOffset.UtcNow
+            ? reset
+            : NextUtcMidnight();
+        return PersistAsync(provider, until, QuotaExhaustedReason, error, cancellationToken);
     }
 
     /// <summary>

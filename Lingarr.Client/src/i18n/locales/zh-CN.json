@@ -847,13 +847,16 @@
             "toggleFailed": "源开关保存失败。",
             "cooldownUntil": "冷却中 · {time}",
             "cooldownUntilCredentials": "冷却中 · 凭证变更前",
+            "quotaRemaining": "今日剩余 {n}（{time} 重置）",
+            "quotaHint": "源自身上报的每日下载余量；配额窗口在 UTC 午夜重置。",
             "cooldownReason": {
                 "RateLimited": "触发限流(429)",
                 "Unauthorized": "凭证被拒绝(401/403)",
                 "ServerError": "源站故障(5xx)",
                 "Timeout": "源响应超时",
                 "NetworkError": "源不可达",
-                "DailyLimit": "每日配额耗尽(冷却至 UTC 午夜)"
+                "DailyLimit": "每日配额耗尽(冷却至 UTC 午夜)",
+                "quotaExhausted": "每日下载额度已用尽"
             }
         },
         "subtitleOutput": {

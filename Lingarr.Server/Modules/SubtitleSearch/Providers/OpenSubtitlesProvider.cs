@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Lingarr.Contracts.Settings;
 using Lingarr.Core;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
 using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
@@ -66,16 +68,34 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
             ["es"] = "spa"
         };
 
+    // ── Daily download quota observability (R3) ─────────────────────────
+    //
+    // The /download responses carry the quota state as three plain response
+    // headers (official contract): `requests` (counter), `remaining`
+    // (downloads left) and `reset_time_utc` (the UTC refill moment; the
+    // window rolls over at UTC midnight). Header-name lookup is
+    // case-insensitive by HttpHeaders contract, so real-world casings like
+    // `Remaining` resolve alike. The provider is transient (typed client,
+    // scoped settings) — the snapshot MUST live in the singleton
+    // SubtitleQuotaStore to be observable from the providers endpoint.
+
+    private const string QuotaRemainingHeader = "remaining";
+    private const string QuotaRequestsHeader = "requests";
+    private const string QuotaResetHeader = "reset_time_utc";
+
     private readonly ISettingsAccess _settings;
+    private readonly SubtitleQuotaStore _quotaStore;
 
     public OpenSubtitlesProvider(
         ISettingsAccess settings,
         SubtitleCandidateCache candidateCache,
+        SubtitleQuotaStore quotaStore,
         HttpClient httpClient,
         ILogger<OpenSubtitlesProvider> logger)
         : base("opensubtitles", httpClient, candidateCache, logger)
     {
         _settings = settings;
+        _quotaStore = quotaStore;
     }
 
     public string Provider => ProviderKey;
@@ -145,15 +165,19 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
             _settings, SubtitleSourceSettingKeys.OpenSubtitles.BaseUrl, ProductionBaseUrl, cancellationToken);
         var context = CandidateCache.Resolve<CandidateContext>(candidateRef, ProviderKey);
 
-        // Step 1: exchange the file id for a short-lived download link.
+        // Step 1: exchange the file id for a short-lived download link. The
+        // quota headers ride on THIS response (official /download contract);
+        // they are captured before the plumbing disposes the response, and a
+        // quota-exhaustion verdict (406 with remaining:0) is mirrored into the
+        // snapshot as remaining=0 before rethrowing — the providers endpoint
+        // then shows the stall alongside the cooldown chip.
         using var downloadRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/download")
         {
             Content = SubtitleHttp.JsonBody(new { file_id = context.FileId })
         };
         ApplyHeaders(downloadRequest, apiKey);
 
-        using var downloadDocument = await SubtitleHttp.SendForJsonAsync(
-            Http, downloadRequest, ProviderKey, cancellationToken);
+        using var downloadDocument = await SendDownloadDocumentAsync(downloadRequest, cancellationToken);
         var link = downloadDocument.RootElement.TryGetProperty("link", out var linkElement)
             && linkElement.ValueKind == JsonValueKind.String
                 ? linkElement.GetString()
@@ -196,6 +220,80 @@ public sealed class OpenSubtitlesProvider : SubtitleProviderBase, ISubtitleProvi
             true,
             $"OpenSubtitles reachable; daily download quota {DailyDownloadQuota}.");
     }
+
+    /// <summary>
+    /// Sends the <c>POST /download</c> exchange and captures the quota state
+    /// of its response. Success path: the three quota headers are read
+    /// (case-insensitively) into the singleton snapshot — a response without
+    /// any parseable quota header leaves the last snapshot untouched (partial
+    /// captures are fine: only the parseable parts update). Failure path: the
+    /// shared plumbing already maps a quota exhaustion (429/406 with a zero
+    /// remaining header) onto the DailyLimit exception carrying the parsed
+    /// <c>reset_time_utc</c>; the verdict is mirrored into the snapshot as
+    /// remaining=0 before the exception propagates to the caller.
+    /// </summary>
+    private async Task<JsonDocument> SendDownloadDocumentAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SubtitleHttp.SendForJsonAsync(
+                Http, request, ProviderKey, cancellationToken, onResponse: CaptureQuotaSnapshot);
+        }
+        catch (SubtitleProviderException ex) when (ex.Reason == SubtitleProviderFailureReason.DailyLimit)
+        {
+            _quotaStore.Record(ProviderKey, new SubtitleQuotaSnapshot(
+                Remaining: 0,
+                Total: null,
+                Requests: null,
+                ResetUtc: ex.QuotaResetUtc,
+                CapturedAtUtc: DateTimeOffset.UtcNow));
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Reads the /download quota headers into the singleton snapshot.
+    /// All-parse-failed (or absent) headers keep the previous snapshot —
+    /// garbage never wipes a good observation.
+    /// </summary>
+    private void CaptureQuotaSnapshot(HttpResponseMessage response)
+    {
+        var remaining = ReadHeaderInt(response, QuotaRemainingHeader);
+        var requests = ReadHeaderInt(response, QuotaRequestsHeader);
+        var resetUtc = ReadHeaderDateTimeOffset(response, QuotaResetHeader);
+        if (remaining is null && requests is null && resetUtc is null)
+        {
+            return;
+        }
+
+        _quotaStore.Record(ProviderKey, new SubtitleQuotaSnapshot(
+            remaining, Total: null, requests, resetUtc, DateTimeOffset.UtcNow));
+        if (Logger.IsEnabled(LogLevel.Debug))
+        {
+            Logger.LogDebug(
+                "OpenSubtitles quota snapshot: remaining={Remaining}, requests={Requests}, resets at {Reset}.",
+                remaining, requests, resetUtc);
+        }
+    }
+
+    /// <summary>First parseable integer of a response header, null when absent/unparsable.</summary>
+    private static int? ReadHeaderInt(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+           && int.TryParse(values.FirstOrDefault(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+
+    /// <summary>First parseable timestamp of a response header (naive values read as UTC), null when absent/unparsable.</summary>
+    private static DateTimeOffset? ReadHeaderDateTimeOffset(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+           && DateTimeOffset.TryParse(
+               values.FirstOrDefault(),
+               CultureInfo.InvariantCulture,
+               DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+               out var parsed)
+            ? parsed
+            : null;
 
     /// <summary>
     /// Flattens the <c>data[].attributes</c> entries into candidates, one

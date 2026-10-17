@@ -8,7 +8,7 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 /// a distinct DI service type. The translation <c>PluginRegistry</c> consumes
 /// <c>IEnumerable&lt;IPluginManifest&gt;</c> to render the translation plugin
 /// cards — registering subtitle manifests under that type would leak the
-/// seven sources onto the translation settings page. Deriving from the
+/// subtitle sources onto the translation settings page. Deriving from the
 /// contract keeps every rendering field (settings fields, secrets, defaults)
 /// reusable while the feeds stay disjoint.
 /// </summary>

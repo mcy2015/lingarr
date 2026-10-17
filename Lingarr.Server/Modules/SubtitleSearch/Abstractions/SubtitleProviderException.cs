@@ -67,6 +67,16 @@ public sealed class SubtitleProviderException : Exception
     /// <summary>HTTP status of the failing response when the failure came from one; null otherwise.</summary>
     public int? HttpStatus { get; }
 
+    /// <summary>
+    /// The quota-window reset moment the source reported alongside its
+    /// exhaustion verdict (the OpenSubtitles <c>reset_time_utc</c> response
+    /// header, R3) — the exact instant the daily quota refills, unlike
+    /// <see cref="RetryAfterSeconds"/> which describes the one-second
+    /// rate-limit window. Null on verdicts that carry no such header: the
+    /// cooldown store then falls back to the next UTC midnight.
+    /// </summary>
+    public DateTimeOffset? QuotaResetUtc { get; }
+
     /// <summary>Source key that failed ("opensubtitles"…).</summary>
     public string Provider { get; }
 
@@ -77,7 +87,8 @@ public sealed class SubtitleProviderException : Exception
         TimeSpan? cooldown = null,
         int? retryAfterSeconds = null,
         int? httpStatus = null,
-        Exception? inner = null)
+        Exception? inner = null,
+        DateTimeOffset? quotaResetUtc = null)
         : base(message, inner)
     {
         Provider = provider;
@@ -85,6 +96,7 @@ public sealed class SubtitleProviderException : Exception
         Cooldown = cooldown;
         RetryAfterSeconds = retryAfterSeconds;
         HttpStatus = httpStatus;
+        QuotaResetUtc = quotaResetUtc;
     }
 
     /// <summary>
@@ -137,24 +149,34 @@ public sealed class SubtitleProviderException : Exception
     /// Daily quota exhausted (⑧ same-day cooldown). Detected by the shared
     /// subtitle HTTP plumbing from the source's rate-limit response (429/406
     /// with <c>X-RateLimit-Remaining-Requests: 0</c> — the OpenSubtitles v1
-    /// shape). Deliberately carries no
+    /// shape — or the download-quota header pair <c>remaining: 0</c> +
+    /// <c>reset_time_utc</c>, R3). Deliberately carries no
     /// <see cref="Cooldown"/> span: the cooldown store maps this reason onto
     /// the next UTC midnight, not a fixed offset, so the source recovers the
     /// moment its daily counter resets. <paramref name="resetEpochSeconds"/>
     /// is the optional <c>X-RateLimit-Reset</c> epoch hint carried in the
-    /// message for diagnostics only.
+    /// message for diagnostics only — it describes the one-second rate
+    /// window, never the daily reset, and therefore never feeds
+    /// <see cref="QuotaResetUtc"/>. <paramref name="resetUtc"/> is the
+    /// parsed <c>reset_time_utc</c> of the download-quota shape: when
+    /// present, the cooldown store targets that exact moment instead of the
+    /// midnight fallback and persists the <c>quota_exhausted</c> reason.
     /// </summary>
     public static SubtitleProviderException ForDailyLimit(
         string provider,
         long? resetEpochSeconds = null,
-        int? httpStatus = null) => new(
+        int? httpStatus = null,
+        DateTimeOffset? resetUtc = null) => new(
         provider,
         SubtitleProviderFailureReason.DailyLimit,
-        resetEpochSeconds is { } reset
-            ? $"{provider} reports the daily quota exhausted (resets at {DateTimeOffset.FromUnixTimeSeconds(reset):u})."
-            : $"{provider} reports the daily quota exhausted (resets at the next UTC midnight).",
+        resetUtc is { } reset
+            ? $"{provider} reports the daily quota exhausted (resets at {reset:u})."
+            : resetEpochSeconds is { } epoch
+                ? $"{provider} reports the daily quota exhausted (resets at {DateTimeOffset.FromUnixTimeSeconds(epoch):u})."
+                : $"{provider} reports the daily quota exhausted (resets at the next UTC midnight).",
         cooldown: null,
-        httpStatus: httpStatus);
+        httpStatus: httpStatus,
+        quotaResetUtc: resetUtc);
 
     /// <summary>HttpClient timeout (TaskCanceledException without caller cancellation) — cooldown 10min per ⑧.</summary>
     public static SubtitleProviderException ForTimeout(string provider, Exception? inner = null) => new(

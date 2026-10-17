@@ -19,6 +19,13 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 /// Optional because only the shooter source consumes it; sources that cannot
 /// use it simply ignore it.
 /// </param>
+/// <param name="XunleiFileHash">
+/// Xunlei three-segment sampled SHA1 file hash (see
+/// <c>XunleiFileHasher</c>, uppercase hex), computed lazily by the request
+/// builder like the other file hashes (⑨). Null when the round does not
+/// query xunlei or the media file is under the algorithm's 0xF000 floor —
+/// files that small cannot be hash-matched and the source answers empty.
+/// </param>
 /// <param name="Query">
 /// Keyword override (locked API contract): when non-blank it replaces the
 /// derived title/keyword term of the query. Null keeps the library-derived
@@ -35,4 +42,5 @@ public sealed record SubtitleSearchRequest(
     string[] Languages,
     string? ImdbId,
     string? ShooterFileHash = null,
+    string? XunleiFileHash = null,
     string? Query = null);

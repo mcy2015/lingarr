@@ -311,8 +311,8 @@ public class StartupServiceTests : IDisposable
         (SubtitleSourceSettingKeys.Subdl.ProxyUrl, "subdl"),
         (SubtitleSourceSettingKeys.Gestdown.BaseUrl, "gestdown"),
         (SubtitleSourceSettingKeys.Gestdown.ProxyUrl, "gestdown"),
-        (SubtitleSourceSettingKeys.Podnapisi.BaseUrl, "podnapisi"),
-        (SubtitleSourceSettingKeys.Podnapisi.ProxyUrl, "podnapisi"),
+        (SubtitleSourceSettingKeys.Xunlei.BaseUrl, "xunlei"),
+        (SubtitleSourceSettingKeys.Xunlei.ProxyUrl, "xunlei"),
         (SubtitleSourceSettingKeys.Assrt.Token, "assrt"),
         (SubtitleSourceSettingKeys.Assrt.BaseUrl, "assrt"),
         (SubtitleSourceSettingKeys.Assrt.ProxyUrl, "assrt"),
@@ -322,7 +322,7 @@ public class StartupServiceTests : IDisposable
 
     private static readonly string[] SubtitleSourceNames =
     {
-        "opensubtitles", "subsource", "subdl", "gestdown", "podnapisi", "assrt", "shooter"
+        "opensubtitles", "subsource", "subdl", "gestdown", "xunlei", "assrt", "shooter"
     };
 
     public static IEnumerable<object[]> SubtitleSourceSeedData() =>

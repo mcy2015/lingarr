@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
 using Lingarr.Server.Modules.SubtitleSearch.Providers;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,8 +21,13 @@ namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 /// data[].attributes.files[], the failure buckets (429 with and without
 /// Retry-After, timeout, missing credentials) map onto
 /// <see cref="SubtitleProviderException"/>, and the two-step download
-/// returns the untouched payload.
+/// returns the untouched payload. R3 adds the /download quota-header
+/// contracts: the requests/remaining/reset_time_utc trio lands in the
+/// singleton snapshot store (case-insensitive header lookup), a 406
+/// quota-exhaustion verdict carries the parsed reset moment, and absent or
+/// garbled quota headers never wipe a good snapshot.
 /// </summary>
+[Collection("SubtitleHttpThrottle")]
 public class OpenSubtitlesProviderTests
 {
     // The request throttle (design ⑧) is process-wide static state — reset
@@ -42,7 +48,10 @@ public class OpenSubtitlesProviderTests
         new(new MemoryCache(new MemoryCacheOptions()), NullLogger<SubtitleCandidateCache>.Instance);
 
     private static OpenSubtitlesProvider Create(
-        StubHttpMessageHandler handler, string? apiKey = "test-key", string? baseUrl = null)
+        StubHttpMessageHandler handler,
+        SubtitleQuotaStore? quotaStore = null,
+        string? apiKey = "test-key",
+        string? baseUrl = null)
     {
         var secrets = apiKey is null
             ? null
@@ -58,7 +67,11 @@ public class OpenSubtitlesProviderTests
             };
         var access = SubtitleSettingsDouble.Create(settings, secrets);
         return new OpenSubtitlesProvider(
-            access.Object, NewCache(), handler.ToClient(), NullLogger<OpenSubtitlesProvider>.Instance);
+            access.Object,
+            NewCache(),
+            quotaStore ?? new SubtitleQuotaStore(),
+            handler.ToClient(),
+            NullLogger<OpenSubtitlesProvider>.Instance);
     }
 
     private static SubtitleSearchRequest MovieRequest(string? hash = null) => new(
@@ -234,6 +247,7 @@ public class OpenSubtitlesProviderTests
         var provider = new OpenSubtitlesProvider(
             SubtitleSettingsDouble.Create(secrets: secrets).Object,
             NewCache(),
+            new SubtitleQuotaStore(),
             handler.ToClient(timeout: TimeSpan.FromMilliseconds(100)),
             NullLogger<OpenSubtitlesProvider>.Instance);
 
@@ -317,6 +331,168 @@ public class OpenSubtitlesProviderTests
                 CancellationToken.None));
 
         Assert.Equal(SubtitleProviderFailureReason.NotFound, exception.Reason);
+    }
+
+    // --- R3: /download quota-header contracts (requests / remaining /
+    // reset_time_utc) — snapshot capture, the 406 exhaustion verdict, and
+    // the tolerant no-signal path.
+
+    /// <summary>A /download step-1 response with the given quota headers.</summary>
+    private static HttpResponseMessage DownloadLinkResponse(
+        string? remaining = null,
+        string? requests = null,
+        DateTimeOffset? resetUtc = null,
+        HttpStatusCode status = HttpStatusCode.OK)
+    {
+        var response = new HttpResponseMessage(status)
+        {
+            Content = new StringContent(DownloadFixture, Encoding.UTF8, "application/json")
+        };
+        if (remaining is not null)
+        {
+            response.Headers.Add("remaining", remaining);
+        }
+
+        if (requests is not null)
+        {
+            response.Headers.Add("requests", requests);
+        }
+
+        if (resetUtc is not null)
+        {
+            response.Headers.Add("reset_time_utc", resetUtc.Value.ToString("O"));
+        }
+
+        return response;
+    }
+
+    private static HttpResponseMessage PayloadResponse() => new(HttpStatusCode.OK)
+    {
+        Content = new ByteArrayContent("1\n00:00:01,000 --> 00:00:03,000\nHello\n"u8.ToArray())
+    };
+
+    [Fact]
+    public async Task Download_CapturesTheQuotaHeaderTrioIntoTheSnapshot()
+    {
+        // Official /download contract (R3): requests/remaining/reset_time_utc.
+        // Deliberately mixed casing — HttpHeaders lookup is case-insensitive
+        // and so must the capture be.
+        var resetUtc = new DateTimeOffset(2026, 10, 18, 0, 0, 0, TimeSpan.Zero);
+        var quotaStore = new SubtitleQuotaStore();
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SearchFixture)
+            .Enqueue(_ => DownloadLinkResponse("7", "33", resetUtc))
+            .Enqueue(_ => PayloadResponse());
+
+        var provider = Create(handler, quotaStore);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        await provider.DownloadAsync(
+            new SubtitleCandidateRef(search.Candidates[0].ExternalId), CancellationToken.None);
+
+        var snapshot = quotaStore.Find("opensubtitles");
+        Assert.NotNull(snapshot);
+        Assert.Equal(7, snapshot.Remaining);
+        Assert.Equal(33, snapshot.Requests);
+        Assert.Null(snapshot.Total); // the source sends no total header
+        Assert.Equal(resetUtc, snapshot.ResetUtc);
+        Assert.InRange(
+            snapshot.CapturedAtUtc,
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            DateTimeOffset.UtcNow.AddMinutes(1));
+    }
+
+    [Fact]
+    public async Task Download_QuotaExhausted406_ThrowsDailyLimitCarryingTheReportedReset()
+    {
+        // Official quota-exhaustion verdict: 406 with remaining: 0 plus the
+        // reset moment of the quota window. The exception must carry quota
+        // semantics (the DailyLimit bucket — same structural path as the
+        // 429-with-zero-remaining mapping) and the parsed reset, and the
+        // snapshot mirrors the stall as remaining=0.
+        var resetUtc = DateTimeOffset.UtcNow.AddHours(6);
+        var quotaStore = new SubtitleQuotaStore();
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SearchFixture)
+            .Enqueue(_ => DownloadLinkResponse(remaining: "0", resetUtc: resetUtc,
+                status: HttpStatusCode.NotAcceptable));
+
+        var provider = Create(handler, quotaStore);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<SubtitleProviderException>(
+            () => provider.DownloadAsync(
+                new SubtitleCandidateRef(search.Candidates[0].ExternalId), CancellationToken.None));
+
+        Assert.Equal(SubtitleProviderFailureReason.DailyLimit, exception.Reason);
+        // No fixed span: the cooldown store resolves the until (reset or the
+        // midnight fallback), never the exception itself.
+        Assert.Null(exception.Cooldown);
+        Assert.Equal(406, exception.HttpStatus);
+        Assert.Equal(resetUtc, exception.QuotaResetUtc);
+        Assert.Contains("daily quota", exception.Message);
+
+        var snapshot = quotaStore.Find("opensubtitles");
+        Assert.NotNull(snapshot);
+        Assert.Equal(0, snapshot.Remaining);
+        Assert.Equal(resetUtc, snapshot.ResetUtc);
+    }
+
+    [Fact]
+    public async Task Download_QuotaExhausted406WithoutResetHeader_CoolsDownToUtcMidnight()
+    {
+        // The 406 verdict without a (parseable) reset_time_utc: the exception
+        // carries no reset, and the cooldown falls back to the next UTC
+        // midnight — the official quota-window boundary — under the
+        // quota_exhausted reason (the pipeline's recording shape).
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SearchFixture)
+            .Enqueue(_ => DownloadLinkResponse(remaining: "0", status: HttpStatusCode.NotAcceptable));
+
+        var provider = Create(handler);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<SubtitleProviderException>(
+            () => provider.DownloadAsync(
+                new SubtitleCandidateRef(search.Candidates[0].ExternalId), CancellationToken.None));
+
+        Assert.Equal(SubtitleProviderFailureReason.DailyLimit, exception.Reason);
+        Assert.Null(exception.QuotaResetUtc);
+
+        var settings = new InMemorySettingService();
+        var store = new SubtitleSourceCooldownStore(
+            settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
+        await store.RecordQuotaExhaustedAsync("opensubtitles", exception.QuotaResetUtc, exception.Message);
+        var cooldown = (await store.GetActiveAsync())["opensubtitles"];
+        Assert.Equal(SubtitleSourceCooldownStore.QuotaExhaustedReason, cooldown.Reason);
+        // Exactly the next UTC day boundary (the DailyLimit fallback rule).
+        Assert.Equal(TimeSpan.Zero, cooldown.Until.TimeOfDay);
+        Assert.Equal(cooldown.Until, new DateTimeOffset(cooldown.Until.UtcDateTime.Date, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public async Task Download_WithoutUsableQuotaHeaders_KeepsTheLastGoodSnapshot()
+    {
+        // Absent headers never create a snapshot; a garbled value (here:
+        // remaining "soon") never wipes the last good observation — the
+        // download itself still succeeds either way.
+        var resetUtc = DateTimeOffset.UtcNow.AddHours(6);
+        var quotaStore = new SubtitleQuotaStore();
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SearchFixture)
+            .Enqueue(_ => DownloadLinkResponse("7", "33", resetUtc))
+            .Enqueue(_ => PayloadResponse())
+            .Enqueue(_ => DownloadLinkResponse(remaining: "soon"))
+            .Enqueue(_ => PayloadResponse());
+
+        var provider = Create(handler, quotaStore);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+        var candidateRef = new SubtitleCandidateRef(search.Candidates[0].ExternalId);
+        await provider.DownloadAsync(candidateRef, CancellationToken.None);
+        await provider.DownloadAsync(candidateRef, CancellationToken.None);
+
+        var snapshot = quotaStore.Find("opensubtitles");
+        Assert.NotNull(snapshot);
+        Assert.Equal(7, snapshot.Remaining);
+        Assert.Equal(33, snapshot.Requests);
+        Assert.Equal(resetUtc, snapshot.ResetUtc);
     }
 
     [Fact]

@@ -47,6 +47,7 @@ namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 /// dedicated 120s download clients (QA2 P2-4). Real SQLite because the
 /// pipeline writes history/telemetry through EF.
 /// </summary>
+[Collection("SubtitleHttpThrottle")]
 public class SubtitleDownloadPipelineTests
 {
     private const string SrtText = "1\r\n00:00:01,000 --> 00:00:02,000\r\nHello world\r\n";
@@ -175,6 +176,57 @@ public class SubtitleDownloadPipelineTests
 
         Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
         Assert.Equal(0, await fixture.DbContext.SubtitleSearchBlacklists.CountAsync());
+    }
+
+    // ── R3 quota circuit-breaker (the 406 mirror of the failure cases
+    // above): a daily-quota-exhaustion verdict cools the source down until
+    // the source's own reset moment (or the UTC-midnight fallback), never
+    // blacklists the candidate, and still lands the Failed history row.
+
+    [Fact]
+    public async Task Download_QuotaExhausted406_CoolsTheSourceDownUntilTheReportedReset()
+    {
+        var resetUtc = DateTimeOffset.UtcNow.AddHours(6);
+        using var fixture = new SubtitleEndpointFixture(new FailingProvider(
+            SubtitleProviderException.ForDailyLimit(
+                "fake", resetEpochSeconds: null, httpStatus: 406, resetUtc: resetUtc)));
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Auto,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
+        Assert.Contains("daily quota", outcome.Error);
+
+        var cooldowns = await fixture.Cooldowns.GetActiveAsync();
+        var cooldown = cooldowns["fake"];
+        // The source's own reset moment, under the quota_exhausted bucket.
+        Assert.Equal(resetUtc, cooldown.Until);
+        Assert.Equal(SubtitleSourceCooldownStore.QuotaExhaustedReason, cooldown.Reason);
+
+        // A quota verdict is a source state, never a candidate defect.
+        Assert.Equal(0, await fixture.DbContext.SubtitleSearchBlacklists.CountAsync());
+        Assert.Equal(1, await fixture.DbContext.SubtitleDownloads.CountAsync());
+    }
+
+    [Fact]
+    public async Task Download_QuotaExhausted406WithoutReset_CoolsDownToTheNextUtcMidnight()
+    {
+        using var fixture = new SubtitleEndpointFixture(new FailingProvider(
+            SubtitleProviderException.ForDailyLimit("fake", httpStatus: 406)));
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Auto,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
+
+        var cooldowns = await fixture.Cooldowns.GetActiveAsync();
+        var cooldown = cooldowns["fake"];
+        Assert.Equal(SubtitleSourceCooldownStore.QuotaExhaustedReason, cooldown.Reason);
+        // Midnight fallback: exactly the next UTC day boundary.
+        Assert.Equal(TimeSpan.Zero, cooldown.Until.TimeOfDay);
+        Assert.Equal(cooldown.Until, new DateTimeOffset(cooldown.Until.UtcDateTime.Date, TimeSpan.Zero));
     }
 
     [Fact]
@@ -402,15 +454,23 @@ public class SubtitleDownloadPipelineTests
     // --- SubtitleHttp payload cap (QA2 P2-5), exercised through the public
     // provider surface: assrt's download path streams via SendForBytesAsync.
 
-    private static AssrtProvider CreateAssrtProvider(StubHttpMessageHandler handler) => new(
-        SubtitleSettingsDouble.Create(secrets: new Dictionary<string, string>
-        {
-            [SubtitleSourceSettingKeys.Assrt.Token] = "test-token"
-        }).Object,
-        new SubtitleCandidateCache(
-            new MemoryCache(new MemoryCacheOptions()), NullLogger<SubtitleCandidateCache>.Instance),
-        handler.ToClient(),
-        NullLogger<AssrtProvider>.Instance);
+    private static AssrtProvider CreateAssrtProvider(StubHttpMessageHandler handler)
+    {
+        // The assrt request pacing (official 20/min) waits in real time
+        // between requests — lift it for these payload-cap cases so the
+        // four scripted rounds don't sleep 3s apart; the interval itself
+        // is pinned in AssrtProviderTests.
+        SubtitleHttp.SetMinimumRequestInterval("assrt", TimeSpan.Zero);
+        return new AssrtProvider(
+            SubtitleSettingsDouble.Create(secrets: new Dictionary<string, string>
+            {
+                [SubtitleSourceSettingKeys.Assrt.Token] = "test-token"
+            }).Object,
+            new SubtitleCandidateCache(
+                new MemoryCache(new MemoryCacheOptions()), NullLogger<SubtitleCandidateCache>.Instance),
+            handler.ToClient(),
+            NullLogger<AssrtProvider>.Instance);
+    }
 
     private static SubtitleSearchRequest MovieRequest() => new(
         "Movie", 2019, Season: null, Episode: null,
@@ -519,21 +579,29 @@ public class SubtitleDownloadPipelineTests
 /// file-path template, translation queue). Shared with the controller
 /// endpoint tests.
 /// </summary>
-internal sealed class SubtitleEndpointFixture : IDisposable
-{
-    internal readonly SqliteConnection Connection;
-    internal readonly LingarrDbContext DbContext;
-    internal readonly InMemorySettingService Settings = new();
-    internal readonly MemoryCache Cache = new(new MemoryCacheOptions());
-    internal readonly Mock<ISubtitleService> SubtitleService = new();
-    internal readonly Mock<ITranslationRequestQueueService> TranslationQueue = new();
-    internal readonly string MediaDirectory;
-    internal readonly SubtitleDownloadPipeline Pipeline;
-    internal readonly SubtitleSearchOrchestrator Orchestrator;
-    internal readonly SubtitleSearchQueueService QueueService;
-    internal readonly SubtitlePinService PinService;
-    internal readonly SubtitleSearchRequestBuilder RequestBuilder;
-    internal readonly SubtitleProviderRegistry Registry;
+    internal sealed class SubtitleEndpointFixture : IDisposable
+    {
+        internal readonly SqliteConnection Connection;
+        internal readonly LingarrDbContext DbContext;
+        internal readonly InMemorySettingService Settings = new();
+        internal readonly MemoryCache Cache = new(new MemoryCacheOptions());
+        internal readonly Mock<ISubtitleService> SubtitleService = new();
+        internal readonly Mock<ITranslationRequestQueueService> TranslationQueue = new();
+        internal readonly string MediaDirectory;
+        internal readonly SubtitleDownloadPipeline Pipeline;
+        internal readonly SubtitleSearchOrchestrator Orchestrator;
+        internal readonly SubtitleSearchQueueService QueueService;
+        internal readonly SubtitlePinService PinService;
+        internal readonly SubtitleSearchRequestBuilder RequestBuilder;
+        internal readonly SubtitleProviderRegistry Registry;
+
+        /// <summary>
+        /// Shared cooldown store of the pipeline and the orchestrator (R3):
+        /// quota-exhaustion verdicts recorded by the download side must be
+        /// visible to the orchestrator's round-skip reads — one store, one
+        /// persisted map, as in production DI (both scoped over one request).
+        /// </summary>
+        internal readonly SubtitleSourceCooldownStore Cooldowns;
 
     internal SubtitleEndpointFixture(params ISubtitleProvider[] providers)
     {
@@ -586,6 +654,8 @@ internal sealed class SubtitleEndpointFixture : IDisposable
 
         Registry = new SubtitleProviderRegistry(
             providers, Array.Empty<ISubtitleSourceManifest>(), NullLogger<SubtitleProviderRegistry>.Instance);
+        Cooldowns = new SubtitleSourceCooldownStore(
+            Settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
         Pipeline = new SubtitleDownloadPipeline(
             DbContext,
             Registry,
@@ -594,6 +664,7 @@ internal sealed class SubtitleEndpointFixture : IDisposable
             SubtitleService.Object,
             TranslationQueue.Object,
             Settings,
+            Cooldowns,
             new SubtitleTelemetryService(DbContext),
             new SubtitleCoverageRefresher(
                 DbContext, SubtitleService.Object, Settings, NullLogger<SubtitleCoverageRefresher>.Instance),
@@ -602,7 +673,7 @@ internal sealed class SubtitleEndpointFixture : IDisposable
         Orchestrator = new SubtitleSearchOrchestrator(
             Registry,
             new SubtitleMatchScorer(),
-            new SubtitleSourceCooldownStore(Settings, NullLogger<SubtitleSourceCooldownStore>.Instance),
+            Cooldowns,
             new SubtitleTelemetryService(DbContext),
             Cache,
             NullLogger<SubtitleSearchOrchestrator>.Instance);

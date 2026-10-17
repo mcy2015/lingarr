@@ -847,13 +847,16 @@
             "toggleFailed": "Could not save the source switch.",
             "cooldownUntil": "Cooldown · {time}",
             "cooldownUntilCredentials": "Cooldown · until credentials change",
+            "quotaRemaining": "{n} left today (resets {time})",
+            "quotaHint": "Remaining daily downloads as reported by the source itself; the quota window refills at UTC midnight.",
             "cooldownReason": {
                 "RateLimited": "Rate limited (429)",
                 "Unauthorized": "Credentials rejected (401/403)",
                 "ServerError": "Source server error (5xx)",
                 "Timeout": "Source timed out",
                 "NetworkError": "Source unreachable",
-                "DailyLimit": "Daily quota exhausted (until UTC midnight)"
+                "DailyLimit": "Daily quota exhausted (until UTC midnight)",
+                "quotaExhausted": "Daily download quota exhausted"
             }
         },
         "subtitleOutput": {

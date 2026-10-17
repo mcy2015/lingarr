@@ -179,7 +179,7 @@ public sealed class SubdlProvider : SubtitleProviderBase, ISubtitleProvider, ISu
             // joined onto the (possibly overridden) base URL so the
             // fake-source round downloads from the same origin it searched.
             // An absolute echo must not be re-prefixed ("https://base/https://…",
-            // QA1 P3) — same guard shape as Podnapisi.
+            // QA1 P3).
             Uri.TryCreate(subtitlePath, UriKind.RelativeOrAbsolute, out var subtitleUri);
             var downloadUrl = subtitleUri?.IsAbsoluteUri == true
                 ? subtitleUri.ToString()

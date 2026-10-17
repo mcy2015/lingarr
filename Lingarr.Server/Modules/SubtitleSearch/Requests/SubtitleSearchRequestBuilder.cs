@@ -13,11 +13,11 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Requests;
 /// Builds <see cref="SubtitleSearchRequest"/>s from library entities
 /// (tech design ②/⑤). Movies carry their own Year/ImdbId; episodes resolve
 /// everything through <c>Season→Show</c> in one Include (design point 1 —
-/// no per-episode redundancy, no N+1). The two file hashes are computed
+/// no per-episode redundancy, no N+1). The three file hashes are computed
 /// lazily through <see cref="LazyMediaHasher"/> and only when the round
 /// actually queries a source that consumes them (OpenSubtitles needs the
-/// moviehash, shooter the segmented filehash) — a round without those
-/// sources does zero hash IO.
+/// moviehash, shooter the segmented filehash, xunlei the sampled SHA1) — a
+/// round without those sources does zero hash IO.
 /// </summary>
 public sealed class SubtitleSearchRequestBuilder
 {
@@ -26,6 +26,9 @@ public sealed class SubtitleSearchRequestBuilder
 
     /// <summary>Source key whose query consumes the shooter segmented filehash.</summary>
     public const string ShooterProviderKey = "shooter";
+
+    /// <summary>Source key whose query consumes the xunlei sampled SHA1 filehash.</summary>
+    public const string XunleiProviderKey = "xunlei";
 
     private readonly LingarrDbContext _dbContext;
     private readonly ISettingService _settingService;
@@ -143,6 +146,9 @@ public sealed class SubtitleSearchRequestBuilder
         var shooterHash = ContainsKey(queryProviders, ShooterProviderKey)
             ? _hasher.ShooterHash(mediaFilePath)
             : null;
+        var xunleiHash = ContainsKey(queryProviders, XunleiProviderKey)
+            ? _hasher.XunleiHash(mediaFilePath)
+            : null;
 
         // QA "RequestBuilder 接 query" + R3b refinement: an explicit keyword
         // replaces the derived title as the search keyword (providers keyword
@@ -185,6 +191,7 @@ public sealed class SubtitleSearchRequestBuilder
                 [.. languages],
                 imdbId,
                 shooterHash,
+                xunleiHash,
                 Query: effectiveQuery),
             mediaFilePath);
     }

@@ -113,7 +113,7 @@ describe('SubtitleSearchHistoryPage', () => {
         getProvidersMock.mockReset().mockResolvedValue([
             { provider: 'opensubtitles' },
             { provider: 'assrt' },
-            { provider: 'podnapisi' }
+            { provider: 'gestdown' }
         ])
     })
 
@@ -201,7 +201,7 @@ describe('SubtitleSearchHistoryPage', () => {
         const providerValues = providerSelect
             .findAll('option')
             .map((option) => (option.element as HTMLOptionElement).value)
-        expect(providerValues).toEqual(['', 'opensubtitles', 'assrt', 'podnapisi'])
+        expect(providerValues).toEqual(['', 'opensubtitles', 'assrt', 'gestdown'])
 
         await providerSelect.setValue('assrt')
         await flushPromises()

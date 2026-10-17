@@ -10,8 +10,8 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Requests;
 /// <summary>
 /// Lazily computed per-file subtitle hashes (tech design ⑨: "hash computation
 /// lazy-computed — computed only when entering candidate scoring, never batch
-/// pre-computed"). Both hash algorithms need real file IO over the head and
-/// tail of the media file, so the results are cached in memory keyed on
+/// pre-computed"). All three hash algorithms need real file IO over the head
+/// and tail of the media file, so the results are cached in memory keyed on
 /// (path, mtime) — a file edit invalidates its entry, an untouched file never
 /// hashes twice. Singleton: the cache must survive the per-request scopes the
 /// builder lives in.
@@ -39,10 +39,12 @@ public sealed class LazyMediaHasher
 
     private readonly Func<string, string> _computeVideoHash;
     private readonly Func<string, string> _computeShooterHash;
+    private readonly Func<string, string> _computeXunleiHash;
     private readonly Func<string, string, Task>? _videoHashWriteBack;
     private readonly ILogger _logger;
     private readonly ConcurrentDictionary<CacheKey, string> _videoHashes = new();
     private readonly ConcurrentDictionary<CacheKey, string> _shooterHashes = new();
+    private readonly ConcurrentDictionary<CacheKey, string> _xunleiHashes = new();
 
     // Coarse overflow cap for the in-memory maps — see ComputeCached.
     private const int MaxEntries = 10_000;
@@ -50,11 +52,16 @@ public sealed class LazyMediaHasher
     public LazyMediaHasher(
         Func<string, string>? videoHashComputer = null,
         Func<string, string>? shooterHashComputer = null,
+        Func<string, string>? xunleiHashComputer = null,
         Func<string, string, Task>? videoHashWriteBack = null,
         ILogger<LazyMediaHasher>? logger = null)
     {
         _computeVideoHash = videoHashComputer ?? SubtitleHasher.Compute;
         _computeShooterHash = shooterHashComputer ?? ShooterFileHasher.Compute;
+        // The xunlei hasher answers null for files under its 0xF000 floor;
+        // the cache cannot hold nulls, so the sentinel round-trip is "" →
+        // null on the public surface (XunleiHash).
+        _computeXunleiHash = xunleiHashComputer ?? (path => XunleiFileHasher.Compute(path) ?? string.Empty);
         _videoHashWriteBack = videoHashWriteBack;
         _logger = (ILogger?)logger ?? NullLogger<LazyMediaHasher>.Instance;
     }
@@ -79,6 +86,15 @@ public sealed class LazyMediaHasher
     /// <summary>The shooter.cn segmented filehash, cached the same way (no persistent write-back — the column holds the moviehash).</summary>
     public string? ShooterHash(string? filePath)
         => ComputeCached(filePath, _shooterHashes, _computeShooterHash);
+
+    /// <summary>
+    /// The xunlei three-segment sampled SHA1, cached the same way. Null both
+    /// when the file is missing and when it is under the algorithm's 0xF000
+    /// floor (the "" cache sentinel normalizes back onto null) — a file that
+    /// small cannot be hash-matched and the source answers empty.
+    /// </summary>
+    public string? XunleiHash(string? filePath)
+        => ComputeCached(filePath, _xunleiHashes, _computeXunleiHash) is { Length: > 0 } hash ? hash : null;
 
     /// <summary>
     /// Fire-and-forget wrapper: the write-back must never delay or fail the
@@ -122,7 +138,7 @@ public sealed class LazyMediaHasher
     }
 
     /// <summary>Test/diagnostic hook: entries currently cached.</summary>
-    public int CachedEntryCount => _videoHashes.Count + _shooterHashes.Count;
+    public int CachedEntryCount => _videoHashes.Count + _shooterHashes.Count + _xunleiHashes.Count;
 
     /// <summary>
     /// Persists a computed moviehash into the owning movie/episode row's

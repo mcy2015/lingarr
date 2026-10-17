@@ -10,10 +10,11 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 /// mapping onto <see cref="SubtitleProviderException"/> (cooldown table of
 /// tech design ⑧), timeout discrimination (HttpClient timeout vs caller
 /// cancellation), the per-source request-rate throttle (design ⑧ polish:
-/// OpenSubtitles is capped at one request per second, every other source is
-/// currently unlimited — <see cref="SetMinimumRequestInterval"/> extends the
+/// OpenSubtitles is capped at one request per second and assrt at its
+/// published 20 requests per minute; every other source is currently
+/// unlimited — <see cref="SetMinimumRequestInterval"/> extends the
 /// table) and body access with a bounded snippet for error messages.
-/// Every provider HTTP call goes through here so the seven sources behave
+/// Every provider HTTP call goes through here so every source behaves
 /// identically on 429/5xx/timeout — the acceptance matrix of the M2 batch.
 /// <para>
 /// Two HTTP budgets (QA2 P2-4/P2-5): search JSON calls ride the source's
@@ -47,10 +48,18 @@ public static class SubtitleHttp
     /// OpenSubtitles' published burst limit: one request per second per API
     /// key (official v1 documentation — the API rejects sustained bursts
     /// with 429). The throttle makes Lingarr a polite client instead of a
-    /// banned one; other sources publish no per-second limit and stay
-    /// unlimited for now.
+    /// banned one; sources without a throttle-table entry stay unlimited.
     /// </summary>
     public static readonly TimeSpan OpenSubtitlesRequestInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// assrt's published request limit: 20 requests per minute with the
+    /// quota shared between the token and the calling IP (official v1
+    /// documentation — exceeding the window answers 429 and risks the
+    /// account). 60s / 20 = one request every three seconds, enforced as
+    /// the source's minimum interval by the throttle table below.
+    /// </summary>
+    public static readonly TimeSpan AssrtRequestInterval = TimeSpan.FromSeconds(3);
 
     /// <summary>
     /// Response header carrying the remaining requests of the current
@@ -64,6 +73,24 @@ public static class SubtitleHttp
     /// only — the daily-limit cooldown targets UTC midnight regardless.
     /// </summary>
     private const string RateLimitResetHeader = "X-RateLimit-Reset";
+
+    /// <summary>
+    /// Response header carrying the remaining downloads of the current
+    /// DAILY quota window (OpenSubtitles /download contract, R3 — a plain,
+    /// unprefixed header name distinct from the rate-limit family above).
+    /// Reading <c>0</c> on a 429/406 is the quota-exhaustion verdict.
+    /// </summary>
+    private const string DailyRemainingHeader = "remaining";
+
+    /// <summary>
+    /// Response header carrying the UTC moment the daily quota window
+    /// refills (OpenSubtitles /download contract, R3) — an ISO-8601
+    /// timestamp, not an epoch. Rides into the daily-limit exception as
+    /// <see cref="SubtitleProviderException.QuotaResetUtc"/> so the
+    /// cooldown can target the source's own reset instead of the midnight
+    /// fallback.
+    /// </summary>
+    private const string DailyResetHeader = "reset_time_utc";
 
     // ── Per-source request throttle (design ⑧) ───────────────────────────
     //
@@ -81,10 +108,12 @@ public static class SubtitleHttp
 
     static SubtitleHttp()
     {
-        // Default throttle table: only OpenSubtitles publishes a per-second
-        // limit today. SetMinimumRequestInterval extends/overrides entries;
+        // Default throttle table: OpenSubtitles publishes one request per
+        // second, assrt 20 per minute (token/IP shared).
+        // SetMinimumRequestInterval extends/overrides entries;
         // ClearRequestThrottling restores this default table (test hook).
         MinimumIntervals["opensubtitles"] = OpenSubtitlesRequestInterval;
+        MinimumIntervals["assrt"] = AssrtRequestInterval;
     }
 
     /// <summary>
@@ -115,13 +144,14 @@ public static class SubtitleHttp
     /// <summary>
     /// Test hook: forgets every reservation and restores the default
     /// interval table, so each test starts with a clean, immediate first
-    /// request and the documented OpenSubtitles limit.
+    /// request and the documented OpenSubtitles/assrt limits.
     /// </summary>
     public static void ClearRequestThrottling()
     {
         Throttles.Clear();
         MinimumIntervals.Clear();
         MinimumIntervals["opensubtitles"] = OpenSubtitlesRequestInterval;
+        MinimumIntervals["assrt"] = AssrtRequestInterval;
     }
 
     /// <summary>
@@ -214,8 +244,9 @@ public static class SubtitleHttp
         CancellationToken cancellationToken,
         HttpCompletionOption completionOption = HttpCompletionOption.ResponseContentRead)
     {
-        // Design ⑧ per-source pacing: rate-limited sources (OpenSubtitles,
-        // 1 req/s) WAIT here for their slot before the request leaves. The
+        // Design ⑧ per-source pacing: rate-limited sources (OpenSubtitles
+        // 1 req/s, assrt 20/min) WAIT here for their slot before the
+        // request leaves. The
         // caller's token interrupts the wait — the orchestrator's 10s budget
         // stays the outer bound, never the rate limiter.
         await ThrottleAsync(provider, cancellationToken);
@@ -274,19 +305,24 @@ public static class SubtitleHttp
 
     /// <summary>
     /// Detects the "daily quota exhausted" verdict of a rate-limit response.
-    /// Implemented shape (assumption, official OpenSubtitles v1 contract):
-    /// a 429 (or 406, the documented daily-download-limit status) whose
-    /// <c>X-RateLimit-Remaining-Requests</c> header reads 0. The optional
-    /// <c>X-RateLimit-Reset</c> epoch rides along into the message for
-    /// diagnostics; the cooldown itself targets the next UTC midnight
-    /// (SubtitleSourceCooldownStore's DailyLimit branch).
+    /// Two recognized header shapes: a 429 (or 406, the documented
+    /// daily-download-limit status) whose <c>X-RateLimit-Remaining-Requests</c>
+    /// header reads 0 (rate-limit family), and — R3 — a 406/429 whose plain
+    /// <c>remaining</c> download-quota header reads 0 (the OpenSubtitles
+    /// /download contract). The optional <c>X-RateLimit-Reset</c> epoch rides
+    /// along into the message for diagnostics only; the daily
+    /// <c>reset_time_utc</c> timestamp (when parseable) becomes
+    /// <see cref="SubtitleProviderException.QuotaResetUtc"/> so the cooldown
+    /// targets the source's own reset moment, with the next UTC midnight as
+    /// the fallback (SubtitleSourceCooldownStore's DailyLimit branch).
     /// </summary>
     private static bool TryReadDailyLimit(
         HttpResponseMessage response,
         string provider,
         out SubtitleProviderException exception)
     {
-        if (TryGetHeaderLong(response, RemainingRequestsHeader) is not 0)
+        if (TryGetHeaderLong(response, RemainingRequestsHeader) is not 0
+            && TryGetHeaderLong(response, DailyRemainingHeader) is not 0)
         {
             exception = null!;
             return false;
@@ -295,7 +331,8 @@ public static class SubtitleHttp
         exception = SubtitleProviderException.ForDailyLimit(
             provider,
             resetEpochSeconds: TryGetHeaderLong(response, RateLimitResetHeader),
-            httpStatus: (int)response.StatusCode);
+            httpStatus: (int)response.StatusCode,
+            resetUtc: TryGetHeaderDateTimeOffset(response, DailyResetHeader));
         return true;
     }
 
@@ -306,14 +343,40 @@ public static class SubtitleHttp
             ? parsed
             : null;
 
-    /// <summary>GET/POST returning a parsed JSON document (disposes the response).</summary>
+    /// <summary>
+    /// First parseable timestamp of a response header, null when
+    /// absent/unparsable. Header-name lookup is case-insensitive
+    /// (<see cref="HttpHeaders"/> compares ordinally ignoring case), so
+    /// <c>Reset_Time_Utc</c> and <c>reset_time_utc</c> resolve alike; the
+    /// value accepts ISO-8601 with or without an explicit offset (naive
+    /// values read as UTC per the header's contract).
+    /// </summary>
+    private static DateTimeOffset? TryGetHeaderDateTimeOffset(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+           && DateTimeOffset.TryParse(
+               values.FirstOrDefault(),
+               System.Globalization.CultureInfo.InvariantCulture,
+               System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+               out var parsed)
+            ? parsed
+            : null;
+
+    /// <summary>
+    /// GET/POST returning a parsed JSON document (disposes the response).
+    /// <paramref name="onResponse"/> — when set — observes the live response
+    /// right after the status check and before the body is consumed and the
+    /// response disposed: the one window in which response headers are
+    /// readable (R3 quota capture; the callback must not read the body).
+    /// </summary>
     public static async Task<JsonDocument> SendForJsonAsync(
         HttpClient httpClient,
         HttpRequestMessage request,
         string provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<HttpResponseMessage>? onResponse = null)
     {
         using var response = await SendCheckedAsync(httpClient, request, provider, cancellationToken);
+        onResponse?.Invoke(response);
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         try
         {

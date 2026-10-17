@@ -13,7 +13,7 @@ public sealed record SubtitleProviderTestOutcome(bool Ok, string Message);
 /// <summary>
 /// Health probe of one subtitle source (M2): one real lightweight request —
 /// a minimal search or a source-appropriate ping — never a fake ping.
-/// Implemented by the seven v1 sources; registry entries that do not
+/// Implemented by the v1 sources; registry entries that do not
 /// implement it keep answering 501 on the test endpoint so the M1 skeleton
 /// contract stays observable.
 /// </summary>

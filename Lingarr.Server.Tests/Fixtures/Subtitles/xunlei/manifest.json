@@ -1,0 +1,8 @@
+{
+  "provider": "xunlei",
+  "endpoint": "GET {base}/subxl/{hash}.json (sub.xmp.xunlei.com:8000, plain HTTP)",
+  "recorded": "2026-10-17",
+  "recording": "Hand-shaped from the xunlei endpoint's public response: {sublist:[{scid,sname,language,rate,svote,surl,roffset}]}. Covers simplified/traditional/bilingual language values, an unknown-language value, a GBK-mangled language (\\uFFFD体), percent-encoded sname forms (%3A%5C and UTF-8 %E7%AE%80…), an sname-less entry and the empty-sublist shape. The file hash (three-segment sampled SHA1, uppercase hex) is covered by the golden vectors in XunleiProviderTests with independently derived constants. Values are synthetic.",
+  "license": "Clean-room implementation per the R2 protocol spec; no upstream code consulted.",
+  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/xunlei/subxl/*.json)"
+}

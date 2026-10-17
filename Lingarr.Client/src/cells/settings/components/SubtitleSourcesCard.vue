@@ -94,6 +94,16 @@
                     :data-test="`subtitle-source-cooldown-${row.provider}`">
                     {{ cooldownLabel(row) }}
                 </span>
+                <!-- 配额余量徽章(R3):源自身上报的每日下载配额快照(仅
+                     opensubtitles 有值);余量>0 且重置时刻在未来才渲染,
+                     耗尽态由冷却 chip 表达(remaining=0 / 重置已过 → 不渲染) -->
+                <span
+                    v-if="quotaBadgeLabel(row)"
+                    class="mono border-line/60 text-secondary-content inline-flex flex-none items-center rounded border px-1 py-px text-[10px]"
+                    :title="quotaBadgeTitle()"
+                    :data-test="`subtitle-source-quota-${row.provider}`">
+                    {{ quotaBadgeLabel(row) }}
+                </span>
                 <span
                     v-if="row.description"
                     class="text-secondary-content min-w-0 flex-1 truncate text-xs"
@@ -197,6 +207,8 @@ interface ISubtitleSourceRow {
     formManifest: IPluginManifest
     cooldownUntil: string | null
     cooldownReason: string | null
+    quotaRemaining: number | null
+    quotaResetUtc: string | null
 }
 
 const rows = computed<ISubtitleSourceRow[]>(() =>
@@ -224,7 +236,10 @@ const rows = computed<ISubtitleSourceRow[]>(() =>
             },
             // 冷却健康态(设计⑧):`?? null` 让旧载荷(无此字段)按健康渲染
             cooldownUntil: source.cooldownUntil ?? null,
-            cooldownReason: source.cooldownReason ?? null
+            cooldownReason: source.cooldownReason ?? null,
+            // 配额可观测(R3):旧载荷/无配额契约的源无此二字段 → null
+            quotaRemaining: source.quotaRemaining ?? null,
+            quotaResetUtc: source.quotaResetUtc ?? null
         }
     })
 )
@@ -259,7 +274,9 @@ const COOLDOWN_REASON_LABELS: Record<string, string> = {
     ServerError: 'settings.subtitleSources.cooldownReason.ServerError',
     Timeout: 'settings.subtitleSources.cooldownReason.Timeout',
     NetworkError: 'settings.subtitleSources.cooldownReason.NetworkError',
-    DailyLimit: 'settings.subtitleSources.cooldownReason.DailyLimit'
+    DailyLimit: 'settings.subtitleSources.cooldownReason.DailyLimit',
+    // R3 406 熔断分桶(源自身上报的每日配额耗尽,区别于限流窗口的 DailyLimit)
+    quota_exhausted: 'settings.subtitleSources.cooldownReason.quotaExhausted'
 }
 
 function cooldownReasonLabel(reason: string): string {
@@ -282,6 +299,42 @@ function cooldownLabel(row: ISubtitleSourceRow): string {
 /// 原因经 title 提示补全(悬停可见失败分桶)。
 function cooldownTitle(row: ISubtitleSourceRow): string {
     return row.cooldownReason ? cooldownReasonLabel(row.cooldownReason) : ''
+}
+
+// ── 配额余量徽章(R3)─────────────────────────────────────────────
+/// 渲染条件:余量>0 且重置时刻在未来。余量 0/无快照(含无配额契约的源)
+/// 或重置已过(陈旧快照,冷却 chip 已表达耗尽态)都不渲染 —— 数字必须
+/// 真实可算,不摆装饰徽章。
+function quotaBadgeVisible(row: ISubtitleSourceRow): boolean {
+    if (row.quotaRemaining === null || row.quotaRemaining <= 0) return false
+    if (!row.quotaResetUtc) return false
+    const resetAt = Date.parse(row.quotaResetUtc)
+    return Number.isFinite(resetAt) && resetAt > Date.now()
+}
+
+/// 「今日剩余 N(HH:mm 重置)」:重置时刻换算本地时区、24 小时制时分。
+function quotaBadgeLabel(row: ISubtitleSourceRow): string | null {
+    if (!quotaBadgeVisible(row)) return null
+    if (row.quotaRemaining === null || !row.quotaResetUtc) return null
+    return t('settings.subtitleSources.quotaRemaining', {
+        n: row.quotaRemaining,
+        time: formatQuotaResetTime(row.quotaResetUtc)
+    })
+}
+
+/// 悬停补全:快照捕获说明(数字来自源自身上报,非本地计数)。
+function quotaBadgeTitle(): string {
+    return t('settings.subtitleSources.quotaHint')
+}
+
+/// 重置时刻 → 本地时区 HH:mm(24 小时制,与 date.ts 的 formatTime 同规约
+/// 但不带秒 —— 徽章内空间只容时分)。
+function formatQuotaResetTime(resetUtc: string): string {
+    return new Date(resetUtc).toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+    })
 }
 
 async function fetchProviders(): Promise<void> {

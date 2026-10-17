@@ -17,7 +17,7 @@ or settings store) to the printed value, e.g.:
     subtitle_subsource_base_url     = http://127.0.0.1:8799/subsource/api
     subtitle_subdl_base_url         = http://127.0.0.1:8799/subdl
     subtitle_gestdown_base_url      = http://127.0.0.1:8799/gestdown
-    subtitle_podnapisi_base_url     = http://127.0.0.1:8799/podnapisi
+    subtitle_xunlei_base_url        = http://127.0.0.1:8799/xunlei
     subtitle_assrt_base_url         = http://127.0.0.1:8799/assrt/v1
     subtitle_shooter_base_url       = http://127.0.0.1:8799/shooter
 
@@ -34,6 +34,24 @@ Fault injection (any endpoint, query parameter controlled)
                               per-source timeout) then answer 200
 
 Example: curl 'http://127.0.0.1:8799/gestdown/subtitles/get/x/1/2/en?_fault=429'
+
+Xunlei response shaping (/xunlei/subxl/{hash}.json)
+---------------------------------------------------
+Besides ?_fault=empty (empty sublist), the xunlei route switches its body on
+query parameter or hash literals so the parser's tolerance cases can be
+driven from a hash-only client (the provider has no keyword or parameter
+surface to attach query strings to):
+
+    ?_sublist=empty   (or hash containing "EMPTY")   -> {"sublist": []}
+    ?_sublist=garbage (or hash containing "GARBAGE") -> truncated, unparseable JSON
+    default                                            -> the normal mixed sublist
+                       (简体 / 繁体 / 简体&英语 / unknown-language /
+                        GBK-mangled entries + percent-encoded sname, mirroring
+                        the xunlei fixture)
+
+The real endpoint answers unknown hashes with a hot-list fallback, so the
+normal body for any hash (including the 40-zero probe of TestConnection) is
+faithful behaviour.
 """
 
 from __future__ import annotations
@@ -139,19 +157,6 @@ GESTDOWN_SUBTITLES = {
     ],
 }
 
-PODNAPISI_XML = """<?xml version="1.0" encoding="UTF-8"?>
-<subtitles>
-  <subtitle id="4123456"
-            title="Movie 2019"
-            release="Movie.2019.WEBDL-1080p"
-            link="/subtitles/download/4123456"
-            language="en"
-            format="zip"
-            hearing-impaired="0"
-            uploader="fixture-uploader"/>
-</subtitles>
-"""
-
 ASSRT_SEARCH_RESPONSE = {
     "status": 0,
     "sub": {
@@ -188,6 +193,65 @@ SHOOTER_TEMPLATE = [
         ],
     }
 ]
+
+# Mirrors Lingarr.Server.Tests/Fixtures/Subtitles/xunlei/search.json: the
+# observed language vocabulary (including the garbage entries the provider
+# must drop) plus the percent-encoded sname shapes. surl placeholders are
+# rewritten per request (see _send_json_selfrewritten).
+XUNLEI_TEMPLATE = {
+    "sublist": [
+        {
+            "scid": "63001",
+            "sname": "Movie.2019.WEBDL-1080p.chs.srt",
+            "language": "简体",
+            "rate": "10",
+            "svote": 3,
+            "surl": "http://SELF/xunlei/file.srt",
+            "roffset": 0,
+        },
+        {
+            "scid": "63002",
+            "sname": "%E7%94%B5%E5%BD%B1%3A%5CMovie.2019.cht.ass",
+            "language": "繁体",
+            "rate": "8",
+            "svote": 1,
+            "surl": "http://SELF/xunlei/file.srt",
+            "roffset": 0,
+        },
+        {
+            "scid": "63003",
+            "sname": "Movie.2019.WEBDL-1080p.chs&eng.srt",
+            "language": "简体&英语",
+            "rate": "10",
+            "svote": 5,
+            "surl": "http://SELF/xunlei/file.srt",
+            "roffset": 0,
+        },
+        {
+            "scid": "63005",
+            "sname": "Movie.2019.gbk-mangled.srt",
+            "language": "\ufffd体",
+            "rate": "1",
+            "svote": 0,
+            "surl": "http://SELF/xunlei/file.srt",
+            "roffset": 0,
+        },
+        {
+            "scid": "63006",
+            "sname": "Movie.2019.unknown-lang.srt",
+            "language": "未知语言",
+            "rate": "1",
+            "svote": 0,
+            "surl": "http://SELF/xunlei/file.srt",
+            "roffset": 0,
+        },
+    ]
+}
+
+XUNLEI_EMPTY = {"sublist": []}
+
+# Deliberately truncated mid-string: the malformed-JSON tolerance case.
+XUNLEI_GARBAGE = b'{"sublist":[{"scid":"63001","sname":"truncated mid-'
 
 SRT_BYTES = SRT_BODY.encode("utf-8")
 
@@ -299,10 +363,10 @@ class FakeSourcesHandler(BaseHTTPRequestHandler):
                 self._route_subdl(path, query)
             elif path.startswith("/gestdown/"):
                 self._route_gestdown(path, query)
-            elif path.startswith("/podnapisi/"):
-                self._route_podnapisi(path, query)
             elif path.startswith("/assrt/"):
                 self._route_assrt(path, query)
+            elif path.startswith("/xunlei/"):
+                self._route_xunlei(path, query)
             elif path.startswith("/shooter/"):
                 self._route_shooter(path, query)
             else:
@@ -382,19 +446,6 @@ class FakeSourcesHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-    def _route_podnapisi(self, path, query):
-        if "/subtitles/search" in path:
-            if self._empty(query):
-                self._send_bytes(b"<?xml version='1.0' encoding='UTF-8'?>\n<subtitles>\n</subtitles>\n", "application/xml")
-            else:
-                self._send_bytes(PODNAPISI_XML.encode("utf-8"), "application/xml")
-        elif "/subtitles/download/" in path:
-            payload = zip_bytes({"4123456.srt": SRT_BYTES})
-            self._send_bytes(payload, "application/zip", "4123456.zip")
-        else:
-            self.send_response(404)
-            self.end_headers()
-
     def _route_assrt(self, path, query):
         token = (query.get("token") or [""])[0]
         if not token:
@@ -425,6 +476,28 @@ class FakeSourcesHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+    def _route_xunlei(self, path, query):
+        # GET /subxl/{hash}.json — hash-only lookup, no parameters upstream.
+        # Response shaping switches on ?_sublist= or hash literals (see the
+        # module docstring): the provider cannot attach query strings, so the
+        # hash-literal forms exist for curl-driven rounds and the default
+        # body mirrors the real endpoint's unknown-hash hot-list fallback.
+        match = re.search(r"/subxl/([^/.]+)\.json$", path)
+        if match:
+            hash_name = match.group(1)
+            shape = query.get("_sublist", [None])[0]
+            if self._empty(query) or shape == "empty" or "EMPTY" in hash_name.upper():
+                self._send_json(XUNLEI_EMPTY)
+            elif shape == "garbage" or "GARBAGE" in hash_name.upper():
+                self._send_bytes(XUNLEI_GARBAGE, "application/json")
+            else:
+                self._send_json_selfrewritten(XUNLEI_TEMPLATE)
+        elif "/file" in path:
+            self._send_bytes(SRT_BYTES, "application/octet-stream", "file.srt")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Lingarr fake subtitle-source server")
@@ -441,7 +514,7 @@ def main():
         "subsource/api",
         "subdl",
         "gestdown",
-        "podnapisi",
+        "xunlei",
         "assrt/v1",
         "shooter",
     ]:

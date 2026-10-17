@@ -333,6 +333,8 @@ public class SubtitleSearchJobTests
                 new LanguageCodeService(),
                 Settings);
 
+            var cooldowns = new SubtitleSourceCooldownStore(
+                Settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
             var pipeline = new SubtitleDownloadPipeline(
                 DbContext,
                 registry,
@@ -341,6 +343,7 @@ public class SubtitleSearchJobTests
                 subtitleService,
                 TranslationQueue.Object,
                 Settings,
+                cooldowns,
                 new SubtitleTelemetryService(DbContext),
                 new SubtitleCoverageRefresher(
                     DbContext, subtitleService, Settings, NullLogger<SubtitleCoverageRefresher>.Instance),
@@ -349,7 +352,7 @@ public class SubtitleSearchJobTests
             var orchestrator = new SubtitleSearchOrchestrator(
                 registry,
                 new SubtitleMatchScorer(),
-                new SubtitleSourceCooldownStore(Settings, NullLogger<SubtitleSourceCooldownStore>.Instance),
+                cooldowns,
                 new SubtitleTelemetryService(DbContext),
                 Cache,
                 NullLogger<SubtitleSearchOrchestrator>.Instance);

@@ -19,7 +19,8 @@ namespace Lingarr.Server.Modules.SubtitleSearch;
 /// <summary>
 /// Subtitle search &amp; download (docs/subtitle-search-tech-design.zh-CN.md):
 /// provider ABI, registry, orchestration, download pipeline and history.
-/// The M2 batch adds the seven v1 sources (tech design ⑩), the match scorer
+/// The M2 batch adds the v1 sources (tech design ⑩ — seven since the
+/// 2026-10 xunlei addition backfilled the dead-site removal), the match scorer
 /// (③) and the candidate cache backing the download refs; M3/M4 add the
 /// request builder, priority queue, orchestrator, automated job and the
 /// download pipeline.
@@ -74,7 +75,8 @@ public static class SubtitleSearchModule
             },
             logger: provider.GetRequiredService<ILogger<LazyMediaHasher>>()));
 
-        // The seven v1 sources (⑩) as typed clients on their named
+        // The v1 sources (⑩ — seven since the 2026-10 xunlei addition
+        // backfilled the dead-site removal) as typed clients on their named
         // HttpClients ("subtitle-opensubtitles"…, ②). Providers are
         // transient — they resolve scoped ISettingsAccess per call — so the
         // registry is scoped to avoid a captive dependency.
@@ -82,7 +84,7 @@ public static class SubtitleSearchModule
         AddSource<SubSourceProvider>(services);
         AddSource<SubdlProvider>(services);
         AddSource<GestdownProvider>(services);
-        AddSource<PodnapisiProvider>(services);
+        AddSource<XunleiProvider>(services);
         AddSource<AssrtProvider>(services);
         AddSource<ShooterProvider>(services);
 
@@ -98,7 +100,7 @@ public static class SubtitleSearchModule
         services.AddSingleton<ISubtitleSourceManifest, SubSourcePluginManifest>();
         services.AddSingleton<ISubtitleSourceManifest, SubdlPluginManifest>();
         services.AddSingleton<ISubtitleSourceManifest, GestdownPluginManifest>();
-        services.AddSingleton<ISubtitleSourceManifest, PodnapisiPluginManifest>();
+        services.AddSingleton<ISubtitleSourceManifest, XunleiPluginManifest>();
         services.AddSingleton<ISubtitleSourceManifest, AssrtPluginManifest>();
         services.AddSingleton<ISubtitleSourceManifest, ShooterPluginManifest>();
 
@@ -111,6 +113,10 @@ public static class SubtitleSearchModule
         // Hangfire-activated without a DI registration (StatisticsJob
         // precedent) — the activator builds it from scoped services.
         services.AddScoped<SubtitleSourceCooldownStore>();
+        // R3 quota observability: singleton because providers are transient
+        // (typed clients over scoped settings) — the snapshot must survive
+        // the scope that captured it to reach the providers endpoint.
+        services.AddSingleton<SubtitleQuotaStore>();
         services.AddScoped<SubtitleTelemetryService>();
         services.AddScoped<SubtitleSearchRequestBuilder>();
         services.AddScoped<SubtitleSearchQueueService>();

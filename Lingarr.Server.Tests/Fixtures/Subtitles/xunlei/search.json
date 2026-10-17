@@ -1,0 +1,66 @@
+{
+  "sublist": [
+    {
+      "scid": "63001",
+      "sname": "Movie.2019.WEBDL-1080p.chs.srt",
+      "language": "简体",
+      "rate": "10",
+      "svote": 3,
+      "surl": "http://files.fixture.xunlei.com/subtitle/63001.srt",
+      "roffset": 0
+    },
+    {
+      "scid": "63002",
+      "sname": "%E7%94%B5%E5%BD%B1%3A%5CMovie.2019.cht.ass",
+      "language": "繁体",
+      "rate": "8",
+      "svote": 1,
+      "surl": "http://files.fixture.xunlei.com/subtitle/63002.ass",
+      "roffset": 0
+    },
+    {
+      "scid": "63003",
+      "sname": "Movie.2019.WEBDL-1080p.chs&eng.srt",
+      "language": "简体&英语",
+      "rate": "10",
+      "svote": 5,
+      "surl": "http://files.fixture.xunlei.com/subtitle/63003.srt",
+      "roffset": 0
+    },
+    {
+      "scid": "63004",
+      "sname": "Movie.2019.WEBDL-1080p.%E7%AE%80%E4%BD%93%E5%8F%8C%E8%AF%AD.srt",
+      "language": "简体",
+      "rate": "9",
+      "svote": 2,
+      "surl": "http://files.fixture.xunlei.com/subtitle/63004.srt",
+      "roffset": 0
+    },
+    {
+      "scid": "63005",
+      "sname": "Movie.2019.gbk-mangled.srt",
+      "language": "\uFFFD体",
+      "rate": "1",
+      "svote": 0,
+      "surl": "http://files.fixture.xunlei.com/subtitle/63005.srt",
+      "roffset": 0
+    },
+    {
+      "scid": "63006",
+      "sname": "Movie.2019.unknown-lang.srt",
+      "language": "未知语言",
+      "rate": "1",
+      "svote": 0,
+      "surl": "http://files.fixture.xunlei.com/subtitle/63006.srt",
+      "roffset": 0
+    },
+    {
+      "scid": "63007",
+      "language": "简体",
+      "rate": "7",
+      "svote": 1,
+      "surl": "http://files.fixture.xunlei.com/subtitle/63007.ass",
+      "roffset": 0
+    }
+  ]
+}

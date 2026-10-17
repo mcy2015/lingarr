@@ -1,8 +1,0 @@
-{
-  "provider": "podnapisi",
-  "endpoint": "GET {base}/subtitles/search/?keywords=&language= (podnapisi.net, XML)",
-  "recorded": "2026-10-15",
-  "recording": "Hand-shaped after the XML search protocol behaviour documented by the subliminal project (MIT) — the cleanest-licensed reference implementation (tech design 10/13). Element/attribute names here are the fixture-pinned contract consumed by PodnapisiProvider. Values are synthetic.",
-  "license": "subliminal (MIT) referenced for protocol behaviour only; no code copied.",
-  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/podnapisi/*)"
-}

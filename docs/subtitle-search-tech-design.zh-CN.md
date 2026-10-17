@@ -7,7 +7,7 @@
 
 ## 交付现状（2026-10-16 对照 cc656db）
 
-- **已交付**：M1–M5+M7 的 webhook 半边——ABI/注册器、七源 Provider、优先级队列（backlog/pin）、下载管线（search/download/test 端点）、Radarr 侧 webhook 高优入队；前端搜索弹层与源卡设置组。实现过程叠加了 QA 修复链的**超集契约**（⑭补录）——**按本文旧契约回退实现会丢修复，回退前必读⑭**。
+- **已交付**：M1–M5+M7 的 webhook 半边——ABI/注册器、七源 Provider（2026-10-17 移除站点已死的一源后由 xunlei 补位复为七源，见⑩）、优先级队列（backlog/pin）、下载管线（search/download/test 端点）、Radarr 侧 webhook 高优入队；前端搜索弹层与源卡设置组。实现过程叠加了 QA 修复链的**超集契约**（⑭补录）——**按本文旧契约回退实现会丢修复，回退前必读⑭**。
 - **主要漂移**：迁移槽位 M0006/M0007→**M0008/M0009**；无 DelegatingHandler 链（SubtitleHttp 单发分类+SubtitleSourceCooldownStore）；search 端点 provider 必填；providers 端点=manifest+auth 标志（健康态未合入）；history/kpi 端点未交付（R7 批次交付中，未合入 cc656db）；Sonarr webhook 加成未合入（R6 批次交付中）；M7 水位化零实现（coverage_checked_at/coverage_daily 零读写）。
 - 正文就地标注 `> 现状（2026-10-16）：…`，原文保留供考古。
 
@@ -137,21 +137,22 @@ ORDER BY priority_rank, next_attempt_at LIMIT @batchLimit;  -- 命中 ix_subtitl
 
 > 现状（2026-10-16）：🔧性能套件未按本表执行（10w 冒烟 ❌，种子规模实际 **2000** 行，SubtitleSearchQueueServiceTests）。逐项修正：**「批内并发 8」未实现**——自动轮为串行 `foreach`（SubtitleSearchJob，媒体间串行；单媒体内源间 Task.WhenAll 并行），「200/8×≤10s×3 源≈12.5min 上界」算式失效，≤30min 预算无实测背书；**哈希缓存为进程内 (path,mtime)**（`LazyMediaHasher` ConcurrentDictionary，重启即失）——不写回 `media_hash` 列做持久缓存；**「测试断言每轮 SQL 条数防 N+1」未做**（出队 EXPLAIN QUERY PLAN 断言已在单测覆盖，全量 SQL 计数断言无）；迁移门禁 ✅（按 M0008/M0009 同步）。
 
-## ⑩ v1 源实现要点（设计点 6/10 · 2026-10-15 扩充为 7 源，全 API 型免注册）
+## ⑩ v1 源实现要点（设计点 6/10 · 2026-10-15 扩充为 7 源 · 2026-10-17 移除站点已死的一源后由 xunlei 补位复为 7 源，全 API 型免注册）
 
 - **OpenSubtitles**（`Providers/OpenSubtitlesProvider.cs`）：官方 v1 REST `api.opensubtitles.com/api/v1`，头 `Api-Key`+自述 User-Agent；`GET /subtitles?movie_hashes=&languages=&imdb_id=`；下载两步 `POST /download`→`link` 重定向取文件。**配额常量：免费 API-key 40 downloads/日，写死为 `const int` 并注释官方文档 URL**（数值写进 quota_limit 列供前端水位展示，只展示不熔断——PM 定稿）。
 - **SubSource**：JSON API，免 key；电影+剧集英文与多语言补充，POST 搜索。
 - **SubDL**：`api.subdl.com`，免费 key（可内置公共值——OpenSubtitles 同款先例）；电影见长。
 - **Gestdown**：`gestdown.info` HTTP API，免 key；Addic7ed 目录的 API 化镜像，**剧集 EN 专项**（以 TVDB/标题+季集查询），绕开账号源限制。
-- **Podnapisi**：老牌 XML 接口，免 key；**上游 subliminal(MIT) 有完整实现，协议细节可直接参考移植**（许可最干净的一个）。
+- **已移除源**（2026-10-17）：老牌 XML 接口、免 key，上游 subliminal(MIT) 有完整实现；站点已死——域名 DNS 不存在，Bazarr 上游 2026-06-29 同步移除。存量 `subtitle_*_base_url`/`subtitle_*_proxy_url` 设置行**无害残留，不做迁移**——registry 忽略未知 key，与 enabled 开关「缺省即启用」同哲学。
 - **assrt**：`api.assrt.net/v1`，token 认证；`/sub/search?q=`→`/sub/detail?id=`（取文件列表）→`/sub/download`；响应含配额余量，写 `quota_remaining`。中文字幕主力。
 
 > 现状（2026-10-16）：🔧assrt `quota_remaining` **未采集**——TelemetryService 统一以 quotaRemaining=null 写 `provider_quota_usage`（仅 OpenSubtitles 写死常量 quota_limit=40），配额水位无数据来源（呼应⑧「日限额触发未接」）。
 - **shooter**：`POST shooter.cn/api/subtitle.php`，filehash 为分段 MD5 摘要算法（按官方公开算法实现，注释标出处）；响应 JSON 数组直接给下载 URL。中文哈希兜底。
+- **xunlei**（2026-10-17 补位第 7 源）：`GET sub.xmp.xunlei.com:8000/subxl/{hash}.json`（明文 HTTP，免认证）；filehash 为三段采样 SHA1——≥0xF000 的文件取 offset 0 / ⌊size/3⌋ / size−0x5000 三段各 0x5000 字节按序拼接后 SHA1，大写十六进制输出；`sublist[].language` 取值简体/繁体/简体&英语映射 zh/zh-TW/zh（双语直命中免翻译），无法识别即丢弃。中文哈希直命中源。
 
-跨源规则：候选去重键=(Language, 规范化 ReleaseInfo, Size)；并列消解=站点优先级（默认序 OpenSubtitles>assrt>SubSource>SubDL>Gestdown>Podnapisi>shooter，设置可调）×双语>单语×格式偏好。除 OpenSubtitles/assrt 已注明外，其余源实现细节以各源官方/社区文档为准，subliminal(MIT) 的 Podnapisi/TheSubDB 实现可作协议参照；subliminal_patch 的对应代码仅作行为观察、严禁搬运。v2 观察池：xunlei（CID 哈希）/a4k（非官方镜像）/TheSubDB（哈希免 key，库小）/BSplayer（哈希免 key，须按观察到的协议重实现）。
+跨源规则：候选去重键=(Language, 规范化 ReleaseInfo, Size)；并列消解=站点优先级（默认序 OpenSubtitles>assrt>SubSource>SubDL>Gestdown>xunlei>shooter，设置可调）×双语>单语×格式偏好。除 OpenSubtitles/assrt 已注明外，其余源实现细节以各源官方/社区文档为准，subliminal(MIT) 的 TheSubDB 实现可作协议参照；subliminal_patch 的对应代码仅作行为观察、严禁搬运。v2 观察池：~~xunlei（CID 哈希）~~（已于 2026-10 转正，实为三段采样 SHA1）/a4k（非官方镜像）/TheSubDB（哈希免 key，库小）/BSplayer（哈希免 key，须按观察到的协议重实现）。
 
-> 现状（2026-10-16）：🔧并列消解简化——实际排序=分数降序→hashMatch→**注册序**（即默认站点优先级，**不可设置**）；**「双语>单语」「格式偏好」加权未实现**。七源本体全部交付（含 shooter 分段哈希）。
+> 现状（2026-10-16）：🔧并列消解简化——实际排序=分数降序→hashMatch→**注册序**（即默认站点优先级，**不可设置**）；**「双语>单语」「格式偏好」加权未实现**。七源本体全部交付（含 shooter 分段哈希；2026-10-17 移除站点已死的一源后由 xunlei 补位复为 7 源，见⑩）。
 
 配额 upsert 时机：每次 `SearchAsync`/`DownloadAsync` 返回后同批事务 `INSERT ON CONFLICT(date,provider) DO UPDATE searches/downloads=+1`。
 
@@ -173,7 +174,7 @@ ORDER BY priority_rank, next_attempt_at LIMIT @batchLimit;  -- 命中 ix_subtitl
 
 - 回滚三层：总开关 `subtitle_search_enabled=false`（即刻停，无需重启——SettingUpdatesHub 已有热更通路）；M0006/M0007 Down 完整（删表/删列/删设置行，M0004 Down 先例）；已落盘字幕为普通外挂文件，功能移除后无残留副作用，`subtitle_downloads` 历史随表删除即清理。
 - 风险：10w 级同步内存（流式反序列化缓解，M1 即做）；OpenSubtitles 配额政策变动（常量单一落点可调）；shooter 接口无 SLA（冷却机制兜底，源可单独停用）。
-- 技术债登记：xunlei/a4k v2 接口扩展点即 `ISubtitleProvider`，不预留半成品。
+- 技术债登记：a4k 等 v2 接口扩展点即 `ISubtitleProvider`，不预留半成品（xunlei 已于 2026-10 转正进 v1，见⑩）。
 
 ## ⑬ 许可合规
 
@@ -199,7 +200,14 @@ subliminal(MIT)/CSF(MIT) 可移植代码注明版权+许可；bazarr(GPL) 只借
 1. **「字幕升级」= 有意不做**（显式裁决，替代 PRD「P2 复评」悬置）：库内已有目标语言字幕即视为完成（AlreadyExistsSkipped），不寻找"更好版本"、不重下载替换——与"永不覆盖用户文件"的既有裁决同源。bazarr 的 upgrade 机制不纳入。若未来需求翻案，须先推翻「(1) 后缀永不覆盖」语义。
 2. **M0010 已删⑦的死列**：`removed_at`/`replaced_by_download_id` 不再存在（替换语义随上文裁决出局）；blacklist 表补 `external_id` 键列+索引——写侧（内容无效类下载失败，90 天窗口）与读侧（Dedupe 前精确过滤）均已启用。
 3. **M0011 新列与新索引**：`video_hash`（movies/episodes 专用，视频哈希写回归宿——`media_hash` 完全归属翻译管线的字幕哈希）；`media_title_fts`（FTS5 虚表，**ASCII 搜索语义从任意子串改为词前缀匹配**，非 ASCII 查询回退 LIKE；维护=DbContext save hook+搜索时计数漂移重建）。
-4. **设计⑧四件已落地**：每源 `subtitle_{source}_enabled` 停用开关（缺键=启用）、OpenSubtitles 1 req/s 令牌桶+日限额当日 UTC 午夜冷却、每源/全局代理（重启生效）；批上限 50–2000 钳制、assrt quota_remaining 采集、双语>单语与 srt>ass>vtt 并列裁决同步交付。
+4. **设计⑧四件已落地**：每源 `subtitle_{source}_enabled` 停用开关（缺键=启用）、OpenSubtitles 1 req/s 令牌桶+日限额当日 UTC 午夜冷却、每源/全局代理（重启生效）；批上限 50–2000 钳制、assrt quota_remaining 采集、双语>单语与 srt>ass>vtt 并列裁决同步交付。assrt 请求限速 2026-10-17 对齐官方口径（20 次/分钟，token 与 IP 共享配额 → 最小间隔 3s，`SubtitleHttp.AssrtRequestInterval`；注意与单源 10s 预算的交互——detail 扇出约 3 轮后被预算截断，已积累候选保留）。
+
+## ⑯ 补录（2026-10-17 R3）：OpenSubtitles 配额可观测 + 406 熔断
+
+1. **快照存储**：`Orchestration/SubtitleQuotaStore`（singleton，模块注册）——providers 是 transient（typed client + scoped ISettingsAccess），实例字段存配额快照跨 scope 不可见，故按 provider 名存"最新快照"（remaining/total/requests/resetUtc + 捕获时刻）于进程级单例。**内存态、无迁移**：重启即失，首个成功下载后重新捕获（R3 已定决策）。`OpenSubtitlesProvider.DownloadAsync` 的 `POST /download` 成功路径大小写不敏感捕 `requests`/`remaining`/`reset_time_utc` 三响应头写入（头缺失/格式坏不崩、不全则不更新快照）。
+2. **406 → `quota_exhausted` 冷却**：官方额度尽响应（406 + `remaining: 0`）经 `SubtitleHttp.EnsureSuccess` 的 DailyLimit 同构路径（429-with-zero-remaining 先例）抛 `SubtitleProviderException.ForDailyLimit`，携带解析出的 `reset_time_utc`（新属性 `QuotaResetUtc`；解析失败/缺失为 null）。下载管线捕获 DailyLimit 分桶后调 `SubtitleSourceCooldownStore.RecordQuotaExhaustedAsync`（新增显式-until 重载，原 `RecordFailureAsync` 签名与既有分桶表不变）：**Until = reset_time_utc（过去时刻兜底下一个 UTC 午夜，官方口径）**，reason=`quota_exhausted`（区别于限流窗口族的 `DailyLimit` 枚举名——搜索侧 429-zero 路径行为零变化）。
+3. **providers 端点聚合**：`SubtitleProviderResponse` 增可选 `quotaRemaining`/`quotaResetUtc`（仅 opensubtitles 有值，无值 null——WhenWritingNull 下不出现）；源卡行在 **remaining>0 且 reset 在未来** 时渲染「今日剩余 N（HH:mm 重置）」徽章（本地时区、24h 制），余量 0/重置已过不渲染（冷却 chip 已表达耗尽态）。`quota_exhausted` 冷却原因新增卡面标签键。
+4. **SubDL 明确未做**：其响应头是否携带配额信息**未查证**，留待实测证据再立项（本批零改动）；其他源未来可复用同一 `SubtitleQuotaStore`。
 
 ---
 

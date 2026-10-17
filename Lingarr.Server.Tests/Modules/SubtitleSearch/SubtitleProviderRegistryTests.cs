@@ -154,7 +154,7 @@ public class SubtitleProviderRegistryTests
             typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.SubSourceProvider),
             typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.SubdlProvider),
             typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.GestdownProvider),
-            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.PodnapisiProvider),
+            typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.XunleiProvider),
             typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.AssrtProvider),
             typeof(Lingarr.Server.Modules.SubtitleSearch.Providers.ShooterProvider)
         };
@@ -164,7 +164,7 @@ public class SubtitleProviderRegistryTests
         // silently orphan a source.
         var expectedNames = new[]
         {
-            "opensubtitles", "subsource", "subdl", "gestdown", "podnapisi", "assrt", "shooter"
+            "opensubtitles", "subsource", "subdl", "gestdown", "xunlei", "assrt", "shooter"
         };
         for (var i = 0; i < providerTypes.Length; i++)
         {
@@ -174,8 +174,9 @@ public class SubtitleProviderRegistryTests
             Assert.Equal(expectedNames[i], attribute!.Name);
         }
 
-        // Then the full registry: seven sources in the ⑩ default site order,
-        // each linked to its manifest.
+        // Then the full registry: seven sources in the module registration
+        // order (xunlei slotted after gestdown before assrt, batch R2), each
+        // linked to its manifest.
         var cache = new SubtitleCandidateCache(
             new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
@@ -183,15 +184,17 @@ public class SubtitleProviderRegistryTests
         var settings = SubtitleSettingsDouble.Create().Object;
         var httpClient = new System.Net.Http.HttpClient();
         // Concrete ctor signature is (ISettingsAccess, SubtitleCandidateCache,
-        // HttpClient, ILogger<T>) — the cache parameter is the concrete type,
-        // so reflection-by-object[] cannot match it. Construct explicitly.
+        // [SubtitleQuotaStore — OpenSubtitles only], HttpClient, ILogger<T>) —
+        // the cache parameter is the concrete type, so reflection-by-object[]
+        // cannot match it. Construct explicitly.
+        var quotaStore = new Lingarr.Server.Modules.SubtitleSearch.Orchestration.SubtitleQuotaStore();
         var providers = new ISubtitleProvider[]
         {
-            new Lingarr.Server.Modules.SubtitleSearch.Providers.OpenSubtitlesProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.OpenSubtitlesProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.OpenSubtitlesProvider(settings, cache, quotaStore, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.OpenSubtitlesProvider>.Instance),
             new Lingarr.Server.Modules.SubtitleSearch.Providers.SubSourceProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.SubSourceProvider>.Instance),
             new Lingarr.Server.Modules.SubtitleSearch.Providers.SubdlProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.SubdlProvider>.Instance),
             new Lingarr.Server.Modules.SubtitleSearch.Providers.GestdownProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.GestdownProvider>.Instance),
-            new Lingarr.Server.Modules.SubtitleSearch.Providers.PodnapisiProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.PodnapisiProvider>.Instance),
+            new Lingarr.Server.Modules.SubtitleSearch.Providers.XunleiProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.XunleiProvider>.Instance),
             new Lingarr.Server.Modules.SubtitleSearch.Providers.AssrtProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.AssrtProvider>.Instance),
             new Lingarr.Server.Modules.SubtitleSearch.Providers.ShooterProvider(settings, cache, httpClient, NullLogger<Lingarr.Server.Modules.SubtitleSearch.Providers.ShooterProvider>.Instance)
         };
@@ -201,7 +204,7 @@ public class SubtitleProviderRegistryTests
             new Lingarr.Server.Modules.SubtitleSearch.Manifests.SubSourcePluginManifest(),
             new Lingarr.Server.Modules.SubtitleSearch.Manifests.SubdlPluginManifest(),
             new Lingarr.Server.Modules.SubtitleSearch.Manifests.GestdownPluginManifest(),
-            new Lingarr.Server.Modules.SubtitleSearch.Manifests.PodnapisiPluginManifest(),
+            new Lingarr.Server.Modules.SubtitleSearch.Manifests.XunleiPluginManifest(),
             new Lingarr.Server.Modules.SubtitleSearch.Manifests.AssrtPluginManifest(),
             new Lingarr.Server.Modules.SubtitleSearch.Manifests.ShooterPluginManifest()
         };
@@ -209,18 +212,18 @@ public class SubtitleProviderRegistryTests
         var registry = CreateRegistry(providers.ToArray(), manifests);
 
         Assert.Equal(
-            ["opensubtitles", "subsource", "subdl", "gestdown", "podnapisi", "assrt", "shooter"],
+            ["opensubtitles", "subsource", "subdl", "gestdown", "xunlei", "assrt", "shooter"],
             registry.All.Select(entry => entry.Provider.Provider).ToArray());
         Assert.All(registry.All, entry => Assert.NotNull(entry.Manifest));
         Assert.All(registry.All, entry => Assert.Equal(entry.Provider.Provider, entry.Manifest!.Provider));
         // requiresAuth: OpenSubtitles and assrt declare credentials; the
-        // other five are keyless (⑩).
+        // other five are keyless (⑩ + R2's xunlei).
         Assert.True(registry.Find("opensubtitles")!.RequiresAuth);
         Assert.True(registry.Find("assrt")!.RequiresAuth);
         Assert.False(registry.Find("subsource")!.RequiresAuth);
         Assert.False(registry.Find("subdl")!.RequiresAuth);
         Assert.False(registry.Find("gestdown")!.RequiresAuth);
-        Assert.False(registry.Find("podnapisi")!.RequiresAuth);
+        Assert.False(registry.Find("xunlei")!.RequiresAuth);
         Assert.False(registry.Find("shooter")!.RequiresAuth);
     }
 
