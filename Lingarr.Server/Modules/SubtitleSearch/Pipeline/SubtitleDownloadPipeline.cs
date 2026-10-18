@@ -4,6 +4,7 @@ using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
@@ -358,6 +359,13 @@ public sealed class SubtitleDownloadPipeline
             // The file is on disk; the daily scan re-syncs the flags anyway.
             _logger.LogWarning(ex, "Coverage refresh failed for {MediaType} {MediaId}.", mediaType, mediaId);
         }
+
+        // The Files card caches directory scans for a short TTL — drop the
+        // directory that just received the file, or the detail page's
+        // immediate refetch (the search modal's downloaded event) keeps
+        // serving the pre-download list (TranslationJob writeback
+        // precedent).
+        MediaController.InvalidateSubtitleFileCache(Path.GetDirectoryName(finalPath));
 
         try
         {

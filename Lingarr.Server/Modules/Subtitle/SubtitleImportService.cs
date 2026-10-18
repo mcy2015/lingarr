@@ -1,5 +1,6 @@
 using System.Text;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Controllers;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Models.Api;
 using Microsoft.EntityFrameworkCore;
@@ -194,6 +195,12 @@ public class SubtitleImportService : ISubtitleImportService
             var savedPath = UniquePath(targetDirectory, SanitizeFileName(fileName));
             await File.WriteAllBytesAsync(savedPath, utf8Bytes);
             result.SavedPath = savedPath;
+
+            // The Files card caches directory scans for a short TTL — drop
+            // the directory that just received the file, or a media-bound
+            // import stays invisible on the detail page until the TTL
+            // expires (TranslationJob writeback precedent).
+            MediaController.InvalidateSubtitleFileCache(targetDirectory);
 
             if (translate)
             {

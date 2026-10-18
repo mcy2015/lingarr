@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
@@ -322,6 +323,40 @@ public class SubtitleDownloadPipelineTests
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<int?>(), It.IsAny<MediaType>(), It.IsAny<string?>(), It.IsAny<bool>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task Download_Success_DropsTheDetailPageSubtitleFileCache()
+    {
+        // Regression: the search modal closes with a downloaded event and
+        // the detail page refetches /media/{type}/{id}/subtitles right
+        // away; that endpoint serves a short-TTL cache of directory scans,
+        // so the landed file must drop its directory's cached scan or the
+        // Files card keeps showing the pre-download list until the TTL
+        // expires.
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+
+        var scans = 0;
+        fixture.SubtitleService
+            .Setup(service => service.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>())
+            .Callback(() => scans++);
+
+        // Only _dbContext + _subtitleService are touched on the movie path
+        // of the endpoint, so the unused collaborators stay null.
+        var controller = new MediaController(
+            null!, null!, fixture.SubtitleService.Object, null!, null!, fixture.DbContext);
+        await controller.GetMediaSubtitles(MediaType.Movie, fixture.MovieId);
+        Assert.Equal(1, scans); // the first view scans and primes the cache
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        var afterDownload = scans; // whatever the coverage refresher scanned
+
+        await controller.GetMediaSubtitles(MediaType.Movie, fixture.MovieId);
+        Assert.Equal(afterDownload + 1, scans); // entry dropped → rescanned
     }
 
     [Fact]

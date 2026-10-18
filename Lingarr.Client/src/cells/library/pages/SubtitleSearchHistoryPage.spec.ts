@@ -55,6 +55,7 @@ const firstPage: ISubtitleHistoryResponse = {
             id: 2,
             mediaType: 'Episode',
             mediaId: 3,
+            showId: 5,
             mediaTitle: 'Silo S01E02 The Common',
             provider: 'assrt',
             language: 'en',
@@ -162,13 +163,45 @@ describe('SubtitleSearchHistoryPage', () => {
         expect(router.currentRoute.value.name).toBe('media-detail-movie')
         expect(router.currentRoute.value.path).toBe('/library/movie/7')
 
-        // the episode row of the same page targets the show detail route
+        // the episode row of the same page targets the show detail route via
+        // the OWNING SHOW id — never the episode id (the 4087-vs-200 jump bug)
         const episodeLink = wrapper.find('[data-test="sub-history-media-2"]')
-        expect(episodeLink.attributes('href')).toBe('/library/show/3')
+        expect(episodeLink.attributes('href')).toBe('/library/show/5')
         await episodeLink.trigger('click')
         await flushPromises()
         expect(router.currentRoute.value.name).toBe('media-detail-show')
-        expect(router.currentRoute.value.path).toBe('/library/show/3')
+        expect(router.currentRoute.value.path).toBe('/library/show/5')
+    })
+
+    it('never routes an episode row with its episode id, and drops the link when the show is gone', async () => {
+        historyMock.mockResolvedValue({
+            items: [
+                historyItem({
+                    id: 9,
+                    mediaType: 'Episode',
+                    mediaId: 4087,
+                    showId: 200,
+                    mediaTitle: 'Some Show S02E07'
+                }),
+                historyItem({
+                    id: 10,
+                    mediaType: 'Episode',
+                    mediaId: 4088,
+                    showId: null,
+                    mediaTitle: 'Orphan Episode S01E01'
+                })
+            ],
+            nextCursor: null
+        })
+        const { wrapper } = await mountHistoryPage()
+
+        // the production bug shape: episode id 4087 must link to show 200
+        const link = wrapper.find('[data-test="sub-history-media-9"]')
+        expect(link.attributes('href')).toBe('/library/show/200')
+        expect(link.attributes('href')).not.toContain('4087')
+
+        // titled episode whose show no longer resolves → no dead-id link
+        expect(wrapper.find('[data-test="sub-history-media-10"]').exists()).toBe(false)
     })
 
     it('renders removed media rows without a link', async () => {

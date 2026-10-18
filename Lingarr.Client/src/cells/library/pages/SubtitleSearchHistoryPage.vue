@@ -113,8 +113,8 @@
                                  孤儿行退化为纯文本,不伪装成链接 -->
                             <td class="max-w-[300px] truncate px-3 py-2">
                                 <router-link
-                                    v-if="item.mediaTitle"
-                                    :to="detailRoute(item)"
+                                    v-if="item.mediaTitle && detailRoute(item)"
+                                    :to="detailRoute(item)!"
                                     class="hover:text-accent"
                                     :data-test="`sub-history-media-${item.id}`"
                                     :title="item.mediaTitle">
@@ -236,12 +236,16 @@ function sourceLabel(source: SUBTITLE_HISTORY_SOURCE): string {
     return key ? t(key) : source
 }
 
-/// 标题链接进媒体详情:episode 行走 show 详情路由(剧集详情以剧为主档)。
-function detailRoute(item: ISubtitleHistoryItem): { name: string; params: { id: number } } {
-    return {
-        name: item.mediaType === 'Episode' ? 'media-detail-show' : 'media-detail-movie',
-        params: { id: item.mediaId }
+/// 标题链接进媒体详情:episode 行走 show 详情路由(剧集详情以剧为主档),
+/// 且必须用后端解析出的归属剧 id —— mediaId 是集 id,直接进 show 路由会
+/// 落到 /library/show/<集id>(404 或错剧)。解析不出目标的行不渲染链接。
+function detailRoute(
+    item: ISubtitleHistoryItem
+): { name: string; params: { id: number } } | null {
+    if (item.mediaType === 'Episode') {
+        return item.showId ? { name: 'media-detail-show', params: { id: item.showId } } : null
     }
+    return { name: 'media-detail-movie', params: { id: item.mediaId } }
 }
 
 // ── 取数:首页(筛选变化后)整体替换,续页追加 ───────────────────

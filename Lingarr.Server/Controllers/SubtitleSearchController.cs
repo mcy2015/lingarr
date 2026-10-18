@@ -161,6 +161,10 @@ public sealed record SubtitleProviderResponse(
 /// <param name="MediaType">"Movie" or "Episode".</param>
 /// <param name="MediaId">Library id of the owning movie/episode.</param>
 /// <param name="MediaTitle">Resolved title; null for removed media.</param>
+/// <param name="ShowId">Episode rows: the owning show's library id — the
+/// detail route for an episode is the SHOW page, and routing with
+/// <paramref name="MediaId"/> lands on /library/show/&lt;episodeId&gt;. Null for
+/// movie rows and for episodes whose show no longer exists.</param>
 /// <param name="Provider">Source key ("opensubtitles"…).</param>
 /// <param name="Language">Normalized language code of the track.</param>
 /// <param name="Source">How the attempt started — Manual/Auto/Webhook.</param>
@@ -173,6 +177,7 @@ public sealed record SubtitleHistoryEntryResponse(
     string MediaType,
     int MediaId,
     string? MediaTitle,
+    int? ShowId,
     string Provider,
     string Language,
     string Source,
@@ -577,12 +582,18 @@ public class SubtitleSearchController : ControllerBase
             page.RemoveAt(limit);
         }
 
-        var titles = await ResolveMediaTitlesAsync(page, cancellationToken);
+        var (titles, showIds) = await ResolveMediaTitlesAsync(page, cancellationToken);
         var items = page.Select(row => new SubtitleHistoryEntryResponse(
             row.Id,
             row.MediaType.ToString(),
             row.MediaId,
             titles.TryGetValue((row.MediaType, row.MediaId), out var title) ? title : null,
+            // Episode rows link into the SHOW detail route — hand the client
+            // the owning show's id so it does not route to /library/show/<episodeId>
+            row.MediaType == MediaType.Episode
+            && showIds.TryGetValue(row.MediaId, out var showId)
+                ? showId
+                : null,
             row.Provider,
             row.Language,
             row.Source.ToString(),
@@ -618,10 +629,11 @@ public class SubtitleSearchController : ControllerBase
     /// season→show and render as "Show S01E02 Episode"). Media rows that
     /// no longer exist simply stay absent — the caller renders null.
     /// </summary>
-    private async Task<Dictionary<(MediaType, int), string>> ResolveMediaTitlesAsync(
-        IReadOnlyList<SubtitleHistoryRow> page, CancellationToken cancellationToken)
+    private async Task<(Dictionary<(MediaType, int), string> Titles, Dictionary<int, int> ShowIds)>
+        ResolveMediaTitlesAsync(IReadOnlyList<SubtitleHistoryRow> page, CancellationToken cancellationToken)
     {
         var titles = new Dictionary<(MediaType, int), string>();
+        var showIds = new Dictionary<int, int>();
 
         var movieIds = new List<int>();
         var episodeIds = new List<int>();
@@ -658,7 +670,8 @@ public class SubtitleSearchController : ControllerBase
                              episode.Title,
                              episode.EpisodeNumber,
                              episode.Season.SeasonNumber,
-                             ShowTitle = episode.Season.Show.Title
+                             ShowTitle = episode.Season.Show.Title,
+                             OwningShowId = episode.Season.Show.Id
                          })
                          .ToListAsync(cancellationToken))
             {
@@ -666,10 +679,11 @@ public class SubtitleSearchController : ControllerBase
                 // history row reads like every other episode reference.
                 titles[(MediaType.Episode, pair.Id)] =
                     $"{pair.ShowTitle} S{pair.SeasonNumber:D2}E{pair.EpisodeNumber:D2} {pair.Title}";
+                showIds[pair.Id] = pair.OwningShowId;
             }
         }
 
-        return titles;
+        return (titles, showIds);
     }
 
     /// <summary>

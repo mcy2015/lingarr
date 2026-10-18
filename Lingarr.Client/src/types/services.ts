@@ -606,6 +606,9 @@ export interface ISubtitleHistoryItem {
     mediaType: 'Movie' | 'Episode'
     mediaId: number
     mediaTitle: string | null
+    /// Episode rows: the owning show's library id — episode detail links go
+    /// to the SHOW route and must not route with mediaId (an episode id).
+    showId?: number | null
     provider: string
     language: string
     source: SUBTITLE_HISTORY_SOURCE

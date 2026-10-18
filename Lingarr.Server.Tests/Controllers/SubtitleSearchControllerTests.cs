@@ -890,7 +890,7 @@ public class SubtitleSearchControllerTests
     /// Seeds one show/season/episode chain and returns the episode id —
     /// history episode titles resolve through season→show.
     /// </summary>
-    private static async Task<int> SeedEpisodeAsync(LingarrDbContext db)
+    private static async Task<(int EpisodeId, int ShowId)> SeedEpisodeAsync(LingarrDbContext db)
     {
         var show = new Show
         {
@@ -912,7 +912,7 @@ public class SubtitleSearchControllerTests
         db.Seasons.Add(season);
         db.Episodes.Add(episode);
         await db.SaveChangesAsync();
-        return episode.Id;
+        return (episode.Id, show.Id);
     }
 
     /// <summary>
@@ -951,7 +951,7 @@ public class SubtitleSearchControllerTests
     public async Task History_ReturnsNewestFirstWithLibraryTitlesAndFilterCombos()
     {
         using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
-        var episodeId = await SeedEpisodeAsync(fixture.DbContext);
+        var (episodeId, showId) = await SeedEpisodeAsync(fixture.DbContext);
         var now = DateTimeOffset.UtcNow;
         fixture.DbContext.SubtitleDownloads.AddRange(
             DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
@@ -989,10 +989,16 @@ public class SubtitleSearchControllerTests
         var episodeRow = page.Items[1];
         Assert.Equal("Episode", episodeRow.MediaType);
         Assert.Equal("Silo S01E02 The Common", episodeRow.MediaTitle);
+        // the owning show's library id rides along — the client routes
+        // episode rows into the SHOW page and must not use the episode id
+        Assert.Equal(showId, episodeRow.ShowId);
         Assert.Equal("Auto", episodeRow.Source);
         Assert.Equal("Failed", episodeRow.Result);
         Assert.Equal("assrt rejected the request", episodeRow.Error);
         Assert.Null(episodeRow.FileName); // nothing landed
+
+        // movie rows never carry a show id
+        Assert.Null(newest.ShowId);
 
         Assert.Null(page.Items[4].MediaTitle); // removed media → null
 
