@@ -52,8 +52,10 @@ public class GestdownProviderTests
         var result = await provider.SearchAsync(EpisodeRequest(), CancellationToken.None);
 
         // The fixture lists "Other Show" first — the exact title match
-        // ("Show", uuid e3c8…) must win.
-        Assert.Contains("shows/search?search=Show", handler.Requests[0].RequestUri!.ToString());
+        // ("Show", id e3c8…) must win. R4 hotfix: the search term travels
+        // as a path segment (the ?search= query form answers 404 upstream)
+        // and the answer wraps the list in a shows object with id keys.
+        Assert.Contains("shows/search/Show", handler.Requests[0].RequestUri!.ToString());
         Assert.Contains("/e3c8ec3c-5e4c-5b83-cb1f-34a3d6b2b234/1/2/en",
             handler.Requests[1].RequestUri!.ToString());
 
@@ -139,6 +141,21 @@ public class GestdownProviderTests
             () => provider.SearchAsync(EpisodeRequest(), CancellationToken.None));
 
         Assert.Equal(SubtitleProviderFailureReason.Timeout, exception.Reason);
+    }
+
+    [Fact]
+    public async Task TestConnection_ProbesThePathSegmentSearchRoute()
+    {
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("gestdown", "shows-search.json"));
+
+        var provider = Create(handler);
+        var outcome = await provider.TestConnectionAsync(CancellationToken.None);
+
+        Assert.True(outcome.Ok);
+        // R4 hotfix: the probe must use the path-parameter form — the old
+        // /shows/search?search=lingarr query form answers 404 upstream.
+        Assert.EndsWith("/shows/search/lingarr", handler.SingleRequestUri!.ToString());
     }
 
     [Fact]

@@ -9,12 +9,17 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 /// Gestdown source (tech design ⑩): <c>gestdown.info</c> HTTP API, free, no
 /// key — an API-fronted mirror of the Addic7ed catalogue and therefore an
 /// episode-only EN specialist. The lookup path follows the public API:
-/// resolve the series by title search (<c>/shows/search</c>, exact name
-/// preferred), then fetch one season/episode/language page
-/// (<c>/subtitles/get/{showId}/{season}/{episode}/{language}</c> — HTTP 404
-/// means "no subtitles for that episode", a legitimate empty result). Movie
-/// requests return empty: the catalogue has none. Download follows the
-/// short-lived <c>/subtitles/download/{id}</c> link to the raw srt.
+/// resolve the series by title search
+/// (<c>/shows/search/{title}</c> — the title as a URI-escaped path segment;
+/// the old <c>?search=</c> query-parameter form was retired upstream in the
+/// 2026-10 API drift, R4 hotfix), then fetch one season/episode/language
+/// page (<c>/subtitles/get/{showId}/{season}/{episode}/{language}</c> —
+/// HTTP 404 means "no subtitles for that episode", a legitimate empty
+/// result). The search answer wraps the show list in a
+/// <c>{"shows":[…]}</c> object (a bare root array is tolerated as the
+/// legacy shape). Movie requests return empty: the catalogue has none.
+/// Download follows the short-lived <c>/subtitles/download/{id}</c> link
+/// to the raw srt.
 /// </summary>
 [SubtitleProvider("gestdown")]
 public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, ISubtitleProviderHealth
@@ -110,7 +115,7 @@ public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, 
         var baseUrl = await ResolveBaseUrlAsync(
             _settings, SubtitleSourceSettingKeys.Gestdown.BaseUrl, ProductionBaseUrl, cancellationToken);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/shows/search?search=lingarr");
+        using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/shows/search/lingarr");
         request.Headers.Add("Accept", "application/json");
 
         using var _ = await SubtitleHttp.SendCheckedAsync(Http, request, ProviderKey, cancellationToken);
@@ -137,22 +142,38 @@ public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, 
 
     /// <summary>
     /// Resolves the series id: exact (case-insensitive) name match first,
-    /// otherwise the first hit. Null when the search yields nothing.
+    /// otherwise the first hit. Null when the search yields nothing. The
+    /// search term travels as a URI-escaped path segment
+    /// (<c>/shows/search/{title}</c>, the current API) and the answer wraps
+    /// the show list in a <c>shows</c> array (a bare root array — the legacy
+    /// shape — still parses).
     /// </summary>
     private async Task<string?> FindShowIdAsync(string baseUrl, string title, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(
-            HttpMethod.Get, $"{baseUrl}/shows/search?search={Uri.EscapeDataString(title)}");
+            HttpMethod.Get, $"{baseUrl}/shows/search/{Uri.EscapeDataString(title)}");
         request.Headers.Add("Accept", "application/json");
 
         using var document = await SubtitleHttp.SendForJsonAsync(Http, request, ProviderKey, cancellationToken);
-        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        JsonElement shows;
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
         {
-            throw SubtitleProviderException.ForInvalidResponse(ProviderKey, "show search did not return an array.");
+            shows = document.RootElement;
+        }
+        else if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("shows", out var wrapped)
+            && wrapped.ValueKind == JsonValueKind.Array)
+        {
+            shows = wrapped;
+        }
+        else
+        {
+            throw SubtitleProviderException.ForInvalidResponse(
+                ProviderKey, "show search did not return a shows array.");
         }
 
         JsonElement best = default;
-        foreach (var show in document.RootElement.EnumerateArray())
+        foreach (var show in shows.EnumerateArray())
         {
             if (show.ValueKind != JsonValueKind.Object)
             {

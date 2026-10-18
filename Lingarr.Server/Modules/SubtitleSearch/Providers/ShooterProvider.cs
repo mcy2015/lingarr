@@ -5,12 +5,16 @@ using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
 /// <summary>
-/// shooter.cn source (tech design ⑩): <c>POST shooter.cn/api/subtitle.php</c>
+/// shooter.cn source (tech design ⑩): <c>POST shooter.cn/api/subapi.php</c>
 /// with the segmented-MD5 <c>filehash</c> (<see cref="ShooterFileHasher"/>,
-/// the source's publicly documented algorithm), the file name and a
-/// <c>lang</c> filter (<c>chn</c>/<c>eng</c>) — the Chinese hash-based
+/// the source's publicly documented algorithm), the file name
+/// (<c>pathinfo</c>, the parameter name of the reference implementations)
+/// and a <c>lang</c> filter (<c>chn</c>/<c>eng</c>) — the Chinese hash-based
 /// fallback of the v1 source list. The response is a JSON array whose
 /// entries each list <c>Files[]</c> with direct download <c>Link</c>s. The
+/// endpoint was renamed from <c>api/subtitle.php</c> to
+/// <c>api/subapi.php</c> upstream (R4 hotfix, 2026-10: the old path stopped
+/// answering). The
 /// hash is computed lazily by the request builder (⑨) and travels in
 /// <see cref="SubtitleSearchRequest.ShooterFileHash"/>; without it the
 /// source cannot be queried honestly and answers empty rather than
@@ -66,8 +70,8 @@ public sealed class ShooterProvider : SubtitleProviderBase, ISubtitleProvider, I
             try
             {
                 var mapped = LanguageMap.TryGetValue(language, out var code) ? code : null;
-                var query = $"api/subtitle.php?filehash={Uri.EscapeDataString(request.ShooterFileHash!)}"
-                    + $"&path={Uri.EscapeDataString(request.ReleaseName ?? request.Title)}"
+                var query = $"api/subapi.php?filehash={Uri.EscapeDataString(request.ShooterFileHash!)}"
+                    + $"&pathinfo={Uri.EscapeDataString(request.ReleaseName ?? request.Title)}"
                     + "&format=json"
                     + (mapped is null ? string.Empty : $"&lang={mapped}");
 
@@ -112,7 +116,7 @@ public sealed class ShooterProvider : SubtitleProviderBase, ISubtitleProvider, I
         // filehash: any HTTP 200 JSON answer proves the endpoint is alive
         // (an empty result list is expected and fine).
         using var request = new HttpRequestMessage(
-            HttpMethod.Post, baseUrl + "/api/subtitle.php?filehash=00000000000000000000000000000000&format=json");
+            HttpMethod.Post, baseUrl + "/api/subapi.php?filehash=00000000000000000000000000000000&format=json");
         request.Headers.Add("Accept", "application/json");
 
         using var _ = await SubtitleHttp.SendCheckedAsync(Http, request, ProviderKey, cancellationToken);

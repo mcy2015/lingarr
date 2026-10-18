@@ -304,6 +304,7 @@ public class StartupServiceTests : IDisposable
         (SubtitleSourceSettingKeys.OpenSubtitles.ApiKey, "opensubtitles"),
         (SubtitleSourceSettingKeys.OpenSubtitles.BaseUrl, "opensubtitles"),
         (SubtitleSourceSettingKeys.OpenSubtitles.ProxyUrl, "opensubtitles"),
+        (SubtitleSourceSettingKeys.SubSource.ApiKey, "subsource"),
         (SubtitleSourceSettingKeys.SubSource.BaseUrl, "subsource"),
         (SubtitleSourceSettingKeys.SubSource.ProxyUrl, "subsource"),
         (SubtitleSourceSettingKeys.Subdl.ApiKey, "subdl"),

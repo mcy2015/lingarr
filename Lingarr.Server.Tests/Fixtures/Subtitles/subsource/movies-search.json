@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "data": [
+    {
+      "movieId": "sub-movie-1",
+      "title": "Other Movie",
+      "releaseYear": 2019,
+      "alternateTitle": null
+    },
+    {
+      "movieId": "sub-movie-2",
+      "title": "Movie",
+      "releaseYear": 2019,
+      "alternateTitle": "Movie: An Alternate Retitling"
+    }
+  ]
+}

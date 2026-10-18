@@ -1,4 +1,6 @@
-[
-  { "uuid": "d2b7db2b-4d3b-4a72-ba0f-23f2c5a1a123", "name": "Other Show" },
-  { "uuid": "e3c8ec3c-5e4c-5b83-cb1f-34a3d6b2b234", "name": "Show" }
-]
+{
+  "shows": [
+    { "id": "d2b7db2b-4d3b-4a72-ba0f-23f2c5a1a123", "name": "Other Show", "nbSeasons": 1 },
+    { "id": "e3c8ec3c-5e4c-5b83-cb1f-34a3d6b2b234", "name": "Show", "nbSeasons": 12 }
+  ]
+}

@@ -1,8 +1,8 @@
 {
   "provider": "subsource",
-  "endpoint": "POST {base}/api/searchMovie | /api/searchSeason | /api/getSub (api.subsource.net)",
-  "recorded": "2026-10-15",
-  "recording": "Hand-shaped from SubSource's public JSON API conventions (POST search with queryName/showName+season+episode, subs[] with releaseName/linkName/lang). Values are synthetic.",
+  "endpoint": "GET {base}/api/v1/movies/search?searchType= | GET {base}/api/v1/subtitles?language=&movieId= | GET {base}/api/v1/subtitles/{id}/download (api.subsource.net, api_key query parameter required)",
+  "recorded": "2026-10-18",
+  "recording": "Hand-shaped from SubSource's v1 JSON API (R4 hotfix: the keyless legacy POST routes were retired upstream): movies/search answers {success, data[] with movieId/title/releaseYear/alternateTitle}, subtitles answers {success, data[] with subtitleId/language/releaseInfo[]/foreignParts/hearingImpaired/contributors[]}, download serves the raw subtitle file bytes. The French entry exercises the defensive cross-language drop. Values are synthetic.",
   "license": "Public API shape reference; no upstream code copied.",
-  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/subsource/api/*)"
+  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/subsource/api/* — legacy routes only, needs the v1 mirror update)"
 }

@@ -1,8 +1,8 @@
 {
   "provider": "gestdown",
-  "endpoint": "GET {base}/shows/search and /subtitles/get/{show}/{season}/{episode}/{lang} (api.gestdown.info)",
-  "recorded": "2026-10-15",
-  "recording": "Hand-shaped from Gestdown's public HTTP API: show search returns a JSON array (uuid/name), the subtitles page returns episode + subtitles[] with Addic7ed-style version strings. Values are synthetic. Note the exact-name match is NOT first in the list — the provider must pick it over the first hit.",
+  "endpoint": "GET {base}/shows/search/{title} and /subtitles/get/{show}/{season}/{episode}/{lang} (api.gestdown.info)",
+  "recorded": "2026-10-18",
+  "recording": "Hand-shaped from Gestdown's public HTTP API (R4 hotfix: the search term moved from the ?search= query parameter to a path segment, and the answer now wraps the list in a shows object with id keys): show search returns {shows:[{id,name,…}]}, the subtitles page returns episode + subtitles[] with Addic7ed-style version strings. Values are synthetic. Note the exact-name match is NOT first in the list — the provider must pick it over the first hit.",
   "license": "Public API shape reference; no upstream code copied.",
-  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/gestdown/*)"
+  "mirrored_by": "scripts/dev/fake-subtitle-sources.py (/gestdown/* — search route still mirrors the legacy query-parameter form, needs the path-segment update)"
 }

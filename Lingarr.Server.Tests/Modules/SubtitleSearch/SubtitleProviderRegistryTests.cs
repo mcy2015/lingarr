@@ -216,11 +216,12 @@ public class SubtitleProviderRegistryTests
             registry.All.Select(entry => entry.Provider.Provider).ToArray());
         Assert.All(registry.All, entry => Assert.NotNull(entry.Manifest));
         Assert.All(registry.All, entry => Assert.Equal(entry.Provider.Provider, entry.Manifest!.Provider));
-        // requiresAuth: OpenSubtitles and assrt declare credentials; the
-        // other five are keyless (⑩ + R2's xunlei).
+        // requiresAuth: OpenSubtitles, assrt and subsource declare
+        // credentials (subsource since the R4 v1 migration made its API key
+        // mandatory); the other four are keyless (⑩ + R2's xunlei + R4).
         Assert.True(registry.Find("opensubtitles")!.RequiresAuth);
         Assert.True(registry.Find("assrt")!.RequiresAuth);
-        Assert.False(registry.Find("subsource")!.RequiresAuth);
+        Assert.True(registry.Find("subsource")!.RequiresAuth);
         Assert.False(registry.Find("subdl")!.RequiresAuth);
         Assert.False(registry.Find("gestdown")!.RequiresAuth);
         Assert.False(registry.Find("xunlei")!.RequiresAuth);

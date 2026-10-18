@@ -155,9 +155,9 @@
 | 5 | StatisticsJob 水位化 | P1；P0 只做缺口计算索引化分页 | P0 控范围；水位化受益全产品，单列性能批次 |
 | 6 | Webhook 高优入队 | P1 | 依赖队列基建成熟；MVP 以手动验证价值；指标①相应 P1 起承诺 |
 | 7 | 低置信处理 | 自动跳过+历史态，历史屏筛选后手动重搜 | 10w 级人工审批队列不可扩展；重搜兜底闭环 |
-| 8 | v1 源清单 | **7 源**（2026-10-15 用户反馈"有点少"扩充至 7 源；2026-10-17 移除站点已死的一源并由 xunlei 补位）：OpenSubtitles+SubSource+SubDL+Gestdown+assrt+xunlei+shooter，全部 API 型免注册 | 英文侧广覆盖直接支撑「无中文→下英文→翻译」主路径 B；中文侧 xunlei 哈希直命中（简繁双语免翻译）；v2 池=a4k/TheSubDB/BSplayer（xunlei 已于 2026-10 转正）；zimuku/subhd/addic7ed 账号源仍不做 |
+| 8 | v1 源清单 | **7 源**（2026-10-15 用户反馈"有点少"扩充至 7 源；2026-10-17 移除站点已死的一源并由 xunlei 补位；2026-10-18 R4 热修对齐三源线上 API 漂移）：OpenSubtitles+SubSource+SubDL+Gestdown+assrt+xunlei+shooter，API 型免注册——其中 **3 源需自有 key/token**（OpenSubtitles/assrt/subsource，subsource 于 R4 随上游 v1 迁移强制 API key），其余 4 源免认证 | 英文侧广覆盖直接支撑「无中文→下英文→翻译」主路径 B；中文侧 xunlei 哈希直命中（简繁双语免翻译）；v2 池=a4k/TheSubDB/BSplayer（xunlei 已于 2026-10 转正）；zimuku/subhd/addic7ed 账号源仍不做 |
 
-> 现状（2026-10-16）逐条对照：**#1 ✅**（单源 10s/逐源并发/聚合口径兑现；实现为前端分源并发，未用 SSE）。**#2 ⚠️**（默认 75 落库生效于自动轮；「0–100 可配」的 UI 入口无，弹层线硬编码）。**#3 ✅**（默认开落库+弹层双按钮语义）。**#4 ✅**（实体口径按库实现，SceneName 落为 FileName，见 AC12 标注）。**#5 ⏸**（StatisticsJob 水位化零实现：coverage_checked_at/coverage_daily 零读写，仍全量，维持 P1）。**#6 ✅**（Radarr 侧 webhook 高优入队已交付且真加成——QA 修复后；Sonarr 侧 R6 批次交付中）。**#7 ⚠️**（自动跳过+历史态已落；「历史屏筛选后手动重搜」闭环缺后半，随 R7）。**#8 ✅**（七源全交付——2026-10-17 移除站点已死的一源后由 xunlei 同日补位；SubtitleSourcesCard 凭据入口已上屏）。
+> 现状（2026-10-16）逐条对照：**#1 ✅**（单源 10s/逐源并发/聚合口径兑现；实现为前端分源并发，未用 SSE）。**#2 ⚠️**（默认 75 落库生效于自动轮；「0–100 可配」的 UI 入口无，弹层线硬编码）。**#3 ✅**（默认开落库+弹层双按钮语义）。**#4 ✅**（实体口径按库实现，SceneName 落为 FileName，见 AC12 标注）。**#5 ⏸**（StatisticsJob 水位化零实现：coverage_checked_at/coverage_daily 零读写，仍全量，维持 P1）。**#6 ✅**（Radarr 侧 webhook 高优入队已交付且真加成——QA 修复后；Sonarr 侧 R6 批次交付中）。**#7 ⚠️**（自动跳过+历史态已落；「历史屏筛选后手动重搜」闭环缺后半，随 R7）。**#8 ✅**（七源全交付——2026-10-17 移除站点已死的一源后由 xunlei 同日补位；SubtitleSourcesCard 凭据入口已上屏；2026-10-18 R4 热修对齐三源线上 API 漂移——shooter 端点改名 subapi.php、Gestdown 搜索改路径参数、SubSource 迁 v1 并强制 API key，需 key 源变 3 个）。
 
 ## ⑧ 分期
 

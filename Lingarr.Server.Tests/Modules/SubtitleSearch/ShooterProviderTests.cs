@@ -45,8 +45,9 @@ public class ShooterProviderTests
         var result = await provider.SearchAsync(Request(["zh"]), CancellationToken.None);
 
         var url = handler.SingleRequestUri!.ToString();
-        Assert.Contains("api/subtitle.php", url);
+        Assert.Contains("api/subapi.php", url); // R4 hotfix: the endpoint was renamed upstream
         Assert.Contains("filehash=" + Uri.EscapeDataString(FileHash), url);
+        Assert.Contains("pathinfo=Movie.2019.WEBDL-1080p", url); // parameter renamed from path=
         Assert.Contains("format=json", url);
         Assert.Contains("lang=chn", url); // zh -> chn
         Assert.Equal(HttpMethod.Post, handler.SingleRequest.Method);
@@ -128,6 +129,23 @@ public class ShooterProviderTests
             () => provider.SearchAsync(Request(["zh"]), CancellationToken.None));
 
         Assert.Equal(SubtitleProviderFailureReason.Timeout, exception.Reason);
+    }
+
+    [Fact]
+    public async Task TestConnection_ProbesTheSubapiEndpoint()
+    {
+        var handler = new StubHttpMessageHandler().EnqueueJson("[]");
+
+        var provider = Create(handler);
+        var outcome = await provider.TestConnectionAsync(CancellationToken.None);
+
+        Assert.True(outcome.Ok);
+        // R4 hotfix: the probe must hit the renamed api/subapi.php route —
+        // the old api/subtitle.php answers 404/TLS hang upstream.
+        var url = handler.SingleRequestUri!.ToString();
+        Assert.Contains("api/subapi.php", url);
+        Assert.Contains("filehash=00000000000000000000000000000000", url);
+        Assert.Equal(HttpMethod.Post, handler.SingleRequest.Method);
     }
 
     [Fact]

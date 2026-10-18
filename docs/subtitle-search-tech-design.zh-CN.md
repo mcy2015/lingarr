@@ -137,20 +137,25 @@ ORDER BY priority_rank, next_attempt_at LIMIT @batchLimit;  -- 命中 ix_subtitl
 
 > 现状（2026-10-16）：🔧性能套件未按本表执行（10w 冒烟 ❌，种子规模实际 **2000** 行，SubtitleSearchQueueServiceTests）。逐项修正：**「批内并发 8」未实现**——自动轮为串行 `foreach`（SubtitleSearchJob，媒体间串行；单媒体内源间 Task.WhenAll 并行），「200/8×≤10s×3 源≈12.5min 上界」算式失效，≤30min 预算无实测背书；**哈希缓存为进程内 (path,mtime)**（`LazyMediaHasher` ConcurrentDictionary，重启即失）——不写回 `media_hash` 列做持久缓存；**「测试断言每轮 SQL 条数防 N+1」未做**（出队 EXPLAIN QUERY PLAN 断言已在单测覆盖，全量 SQL 计数断言无）；迁移门禁 ✅（按 M0008/M0009 同步）。
 
-## ⑩ v1 源实现要点（设计点 6/10 · 2026-10-15 扩充为 7 源 · 2026-10-17 移除站点已死的一源后由 xunlei 补位复为 7 源，全 API 型免注册）
+## ⑩ v1 源实现要点（设计点 6/10 · 2026-10-15 扩充为 7 源 · 2026-10-17 移除站点已死的一源后由 xunlei 补位复为 7 源 · 2026-10-18 R4 热修三源端点漂移后 3 源需自有 key/其余 4 源免认证）
 
 - **OpenSubtitles**（`Providers/OpenSubtitlesProvider.cs`）：官方 v1 REST `api.opensubtitles.com/api/v1`，头 `Api-Key`+自述 User-Agent；`GET /subtitles?movie_hashes=&languages=&imdb_id=`；下载两步 `POST /download`→`link` 重定向取文件。**配额常量：免费 API-key 40 downloads/日，写死为 `const int` 并注释官方文档 URL**（数值写进 quota_limit 列供前端水位展示，只展示不熔断——PM 定稿）。
-- **SubSource**：JSON API，免 key；电影+剧集英文与多语言补充，POST 搜索。
+- **SubSource**：`api.subsource.net/api/v1`，**需 API key**（每个请求带 `api_key` 查询参数，无 key 401；R4 热修 2026-10-18：上游整体迁 v1 命名空间并强制认证，免 key 旧 POST 路由已死）；两步流 `GET /movies/search?searchType=imdb|text`（有 IMDb id 优先 imdb、未命中回退 text）→ `GET /subtitles?language=&limit=100&movieId=[&seasonNumber=&episodeNumber=]`（language 用源自己的语言名小写，如 english/chinese_bg_code），`success=false` 按 0 结果处理；下载 `GET /subtitles/{id}/download` 直出字幕文件字节（不再有 getSub 的 JSON 字符串包装）。电影+剧集多语言覆盖。
 - **SubDL**：`api.subdl.com`，免费 key（可内置公共值——OpenSubtitles 同款先例）；电影见长。
-- **Gestdown**：`gestdown.info` HTTP API，免 key；Addic7ed 目录的 API 化镜像，**剧集 EN 专项**（以 TVDB/标题+季集查询），绕开账号源限制。
+- **Gestdown**：`gestdown.info` HTTP API，免 key；Addic7ed 目录的 API 化镜像，**剧集 EN 专项**（以 TVDB/标题+季集查询），绕开账号源限制。剧集搜索为路径参数 `GET /shows/search/{title}`（R4 热修 2026-10-18：旧 `?search=` 查询参数形式已被上游下线，404），响应为 `{"shows":[…]}` 包裹（兼容旧裸数组）。
 - **已移除源**（2026-10-17）：老牌 XML 接口、免 key，上游 subliminal(MIT) 有完整实现；站点已死——域名 DNS 不存在，Bazarr 上游 2026-06-29 同步移除。存量 `subtitle_*_base_url`/`subtitle_*_proxy_url` 设置行**无害残留，不做迁移**——registry 忽略未知 key，与 enabled 开关「缺省即启用」同哲学。
 - **assrt**：`api.assrt.net/v1`，token 认证；`/sub/search?q=`→`/sub/detail?id=`（取文件列表）→`/sub/download`；响应含配额余量，写 `quota_remaining`。中文字幕主力。
 
 > 现状（2026-10-16）：🔧assrt `quota_remaining` **未采集**——TelemetryService 统一以 quotaRemaining=null 写 `provider_quota_usage`（仅 OpenSubtitles 写死常量 quota_limit=40），配额水位无数据来源（呼应⑧「日限额触发未接」）。
-- **shooter**：`POST shooter.cn/api/subtitle.php`，filehash 为分段 MD5 摘要算法（按官方公开算法实现，注释标出处）；响应 JSON 数组直接给下载 URL。中文哈希兜底。
+- **shooter**：`POST shooter.cn/api/subapi.php`（R4 热修 2026-10-18：原 `api/subtitle.php` 端点已死，上游改名 subapi.php；文件名参数对齐参考实现用 `pathinfo`），filehash 为分段 MD5 摘要算法（按官方公开算法实现，注释标出处）；响应 JSON 数组（Desc/Files[]{Ext,Link}）直接给下载 URL。中文哈希兜底。
 - **xunlei**（2026-10-17 补位第 7 源）：`GET sub.xmp.xunlei.com:8000/subxl/{hash}.json`（明文 HTTP，免认证）；filehash 为三段采样 SHA1——≥0xF000 的文件取 offset 0 / ⌊size/3⌋ / size−0x5000 三段各 0x5000 字节按序拼接后 SHA1，大写十六进制输出；`sublist[].language` 取值简体/繁体/简体&英语映射 zh/zh-TW/zh（双语直命中免翻译），无法识别即丢弃。中文哈希直命中源。
 
-跨源规则：候选去重键=(Language, 规范化 ReleaseInfo, Size)；并列消解=站点优先级（默认序 OpenSubtitles>assrt>SubSource>SubDL>Gestdown>xunlei>shooter，设置可调）×双语>单语×格式偏好。除 OpenSubtitles/assrt 已注明外，其余源实现细节以各源官方/社区文档为准，subliminal(MIT) 的 TheSubDB 实现可作协议参照；subliminal_patch 的对应代码仅作行为观察、严禁搬运。v2 观察池：~~xunlei（CID 哈希）~~（已于 2026-10 转正，实为三段采样 SHA1）/a4k（非官方镜像）/TheSubDB（哈希免 key，库小）/BSplayer（哈希免 key，须按观察到的协议重实现）。
+> **三源端点变更记录（R4 热修，2026-10-18，线上 API 漂移实测）**：
+> 1. **shooter** `api/subtitle.php` → **`api/subapi.php`**（同参数；文件名参数 `path` → `pathinfo` 对齐参考实现；响应形状 Desc/Files[]{Ext,Link} 不变）；
+> 2. **Gestdown** 剧集搜索 `GET /shows/search?search={title}`（404 已死）→ **`GET /shows/search/{title}`**（title 为 URI 转义路径段），响应改为 `{"shows":[{id,name,…}]}` 包裹；`/subtitles/get/{showId}/{season}/{episode}/{lang}` 与 download 链接未变；
+> 3. **SubSource** 整体迁 **`/api/v1/`** 命名空间并**强制 API key**（查询参数，无 key 401）：搜索 `GET /api/v1/movies/search?searchType=imdb|text`、列表 `GET /api/v1/subtitles?language=&movieId=`、下载 `GET /api/v1/subtitles/{id}/download`（原始字节）；旧 POST searchMovie/searchSeason/getSub 全部废弃。凭证化连锁：`RequiresAuth=true`、manifest 增 secret 字段 `subtitle_subsource_api_key`（StartupService seed 同步）。需 key 源由 2 个（OpenSubtitles/assrt）变 **3 个**（+subsource）。
+
+跨源规则：候选去重键=(Language, 规范化 ReleaseInfo, Size)；并列消解=站点优先级（默认序 OpenSubtitles>assrt>SubSource>SubDL>Gestdown>xunlei>shooter，设置可调）×双语>单语×格式偏好。除 OpenSubtitles/assrt/subsource 已注明外，其余源实现细节以各源官方/社区文档为准，subliminal(MIT) 的 TheSubDB 实现可作协议参照；subliminal_patch 的对应代码仅作行为观察、严禁搬运。v2 观察池：~~xunlei（CID 哈希）~~（已于 2026-10 转正，实为三段采样 SHA1）/a4k（非官方镜像）/TheSubDB（哈希免 key，库小）/BSplayer（哈希免 key，须按观察到的协议重实现）。
 
 > 现状（2026-10-16）：🔧并列消解简化——实际排序=分数降序→hashMatch→**注册序**（即默认站点优先级，**不可设置**）；**「双语>单语」「格式偏好」加权未实现**。七源本体全部交付（含 shooter 分段哈希；2026-10-17 移除站点已死的一源后由 xunlei 补位复为 7 源，见⑩）。
 

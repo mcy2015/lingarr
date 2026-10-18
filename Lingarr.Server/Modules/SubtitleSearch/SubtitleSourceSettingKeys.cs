@@ -53,8 +53,14 @@ public static class SubtitleSourceSettingKeys
         public const string ProxyUrl = "subtitle_opensubtitles_proxy_url";
     }
 
+    /// <summary>
+    /// SubSource keys (R4 hotfix 2026-10): the upstream v1 migration made the
+    /// API key mandatory (401 without one) — the key rides every request as
+    /// the <c>api_key</c> query parameter.
+    /// </summary>
     public static class SubSource
     {
+        public const string ApiKey = "subtitle_subsource_api_key";
         public const string BaseUrl = "subtitle_subsource_base_url";
         public const string ProxyUrl = "subtitle_subsource_proxy_url";
     }

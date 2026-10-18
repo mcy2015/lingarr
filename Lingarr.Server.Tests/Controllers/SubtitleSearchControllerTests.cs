@@ -127,7 +127,7 @@ public class SubtitleSearchControllerTests
         public override string Provider => "opensubtitles";
     }
 
-    [SubtitleProvider("subsource")]
+    [SubtitleProvider("subsource", requiresAuth: true)]
     private sealed class FakeSubSourceProvider : FakeProvider
     {
         public override string Provider => "subsource";
@@ -361,7 +361,7 @@ public class SubtitleSearchControllerTests
     }
 
     [Fact]
-    public async Task GetProviders_RequiresAuthOnlyForTheTwoKeyedSources()
+    public async Task GetProviders_RequiresAuthOnlyForTheThreeKeyedSources()
     {
         var controller = CreateController(SevenSources(), RealManifests());
 
@@ -374,6 +374,7 @@ public class SubtitleSearchControllerTests
             {
                 "opensubtitles" => true,
                 "assrt" => true,
+                "subsource" => true, // R4: the v1 API made the key mandatory
                 _ => false
             };
             Assert.Equal(expected, card.GetProperty("requiresAuth").GetBoolean());

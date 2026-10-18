@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "data": [
+    {
+      "subtitleId": "sub-sub-1",
+      "language": "English",
+      "releaseInfo": ["Movie.2019.WEBDL-1080p"],
+      "foreignParts": false,
+      "hearingImpaired": false,
+      "uploaderId": "sub-user-1",
+      "contributors": [
+        { "id": "sub-user-1", "displayname": "fixture-author" }
+      ]
+    },
+    {
+      "subtitleId": "sub-sub-2",
+      "language": "French",
+      "releaseInfo": ["Movie.2019.WEBDL-1080p.FRENCH"],
+      "foreignParts": false,
+      "hearingImpaired": false,
+      "uploaderId": "sub-user-2",
+      "contributors": [
+        { "id": "sub-user-2", "displayname": "fixture-author-fr" }
+      ]
+    },
+    {
+      "subtitleId": "sub-sub-3",
+      "language": "English",
+      "releaseInfo": ["Movie.2019.WEBDL-1080p", "Movie.2019.WEBDL-1080p.HI"],
+      "foreignParts": true,
+      "hearingImpaired": true,
+      "uploaderId": "sub-user-1",
+      "contributors": [
+        { "id": "sub-user-1", "displayname": "fixture-author" }
+      ]
+    }
+  ]
+}
