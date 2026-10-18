@@ -1,6 +1,11 @@
 <template>
     <!-- ═══ pb-head(原型下钻屏页头):返回 · 标题 + mono 副行 · 动作组 ═══ -->
+    <!-- scrollable: the column (episode table + subtitle files + history)
+         exceeds one viewport on a 1080p screen, and an overflow-hidden page
+         made everything below the fold unreachable — the whole column
+         scrolls instead, mirroring the authentication page form. -->
     <DrillDownPage
+        scrollable
         :back-to="{ name: 'library' }"
         :back-label="t('mediaDetail.back')"
         :title="item?.title ?? t('common.loading')"
@@ -290,7 +295,7 @@
              results (F2b: text tracks with recognized language and uncovered target language have a translate entry; graphic tracks
              such as PGS are marked non-translatable and have no entry) ═══ -->
         <div
-            class="border-line bg-secondary flex max-h-[240px] min-h-0 flex-col rounded-md border"
+            class="border-line bg-secondary flex min-h-0 flex-col rounded-md border"
             data-test="subtitle-files-card">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">

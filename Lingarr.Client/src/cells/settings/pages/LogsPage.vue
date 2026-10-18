@@ -105,6 +105,7 @@ import { useI18n } from 'vue-i18n'
 import { ILogEntry, IFilterOptions } from '@/types'
 import { logsService } from '@/cells/settings/services/logsService'
 import { formatDate, formatTime } from '@/cells/app/utils/date'
+import { writeClipboard } from '@/cells/app/utils/clipboard'
 import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import ToggleButton from '@/cells/kernel/components/ToggleButton.vue'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -258,32 +259,6 @@ const exportLogs = () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-}
-
-const writeClipboard = async (text: string): Promise<void> => {
-    // The async clipboard API can be missing (plain HTTP over a LAN IP is
-    // not a secure context) or reject (permission denied in embedded
-    // webviews). The execCommand path covers both while the click's
-    // user-gesture context is still active.
-    try {
-        if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text)
-            return
-        }
-    } catch {
-        // fall through to the execCommand fallback
-    }
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.style.position = 'fixed'
-    textarea.style.opacity = '0'
-    document.body.appendChild(textarea)
-    textarea.select()
-    try {
-        if (!document.execCommand('copy')) throw new Error('execCommand copy returned false')
-    } finally {
-        document.body.removeChild(textarea)
-    }
 }
 
 const copyLogs = async () => {

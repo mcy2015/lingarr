@@ -54,10 +54,14 @@ public class SonarrService : ISonarrService
     /// <inheritdoc />
     public async Task<List<SonarrEpisode>?> GetEpisodes(int seriesNumber, int seasonNumber)
     {
-        // includeImages omitted: the episode resources embed episodeFile already and
-        // image blobs were never consumed here — they only inflated the payload 2-5x.
+        // includeImages omitted (image blobs were never consumed here — they
+        // only inflated the payload 2-5x). includeEpisodeFile=true is NOT
+        // optional: Sonarr's list endpoint defaults the flag to false, which
+        // serves episodes without their episodeFile resource (hasFile is an
+        // independent scalar and stays true) — every path, dateAdded and
+        // mediaInfo.audioLanguages would silently deserialize to null.
         return await _integrationService.GetApiResponse<List<SonarrEpisode>>(
-            $"/api/v3/episode?seriesId={seriesNumber}&seasonNumber={seasonNumber}",
+            $"/api/v3/episode?seriesId={seriesNumber}&seasonNumber={seasonNumber}&includeEpisodeFile=true",
             new IntegrationSettingKeys
             {
                 Url = "sonarr_url",

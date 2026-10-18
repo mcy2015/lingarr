@@ -298,7 +298,9 @@ const search = ref(queryString(route.query.q))
 const stateFilter = ref(queryString(route.query.state))
 const targetFilter = ref(queryString(route.query.target))
 const pagination = reactive({
-    pageNumber: 1,
+    // restored from the query so a history back re-enters the page the
+    // user left, not page 1
+    pageNumber: Math.max(1, Number.parseInt(String(route.query.page ?? '1'), 10) || 1),
     searchQuery: '',
     sortBy: 'Title',
     isAscending: true
@@ -413,7 +415,8 @@ watch(targetFilter, () => {
 // empty matrix. When the reset actually changes the page number, this
 // watcher re-fires and the fetch below then runs once with page 1 — only
 // the page number changing on its own (pagination controls) fetches
-// directly.
+// directly. The current page also lands in the query so a history back
+// from a detail page restores the exact page the user left.
 watch(
     [type, stateFilter, targetFilter, () => pagination.pageNumber],
     ([newType, newState, newTarget], [oldType, oldState, oldTarget]) => {
@@ -423,6 +426,7 @@ watch(
             pagination.pageNumber = 1
             return
         }
+        syncQuery({ page: pagination.pageNumber > 1 ? String(pagination.pageNumber) : undefined })
         void fetchLibrary()
     }
 )

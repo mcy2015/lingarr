@@ -117,6 +117,7 @@ import { authService } from '@/cells/app/api/authService'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
 import { maskSecret } from '@/cells/kernel/utils/string'
+import { writeClipboard } from '@/cells/app/utils/clipboard'
 import { useToastStore } from '@/cells/app/stores/toast'
 
 const settingsStore = useSettingStore()
@@ -188,7 +189,7 @@ const copyApiKey = async () => {
     const value = sessionKeyValue.value ?? ''
     if (value === '') return
     try {
-        await navigator.clipboard.writeText(value)
+        await writeClipboard(value)
         toastStore.push({ message: t('settings.apiKey.copied'), type: 'success' })
     } catch {
         toastStore.push({ message: t('settings.apiKey.copyFailed'), type: 'error' })

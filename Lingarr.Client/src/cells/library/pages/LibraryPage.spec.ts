@@ -291,6 +291,33 @@ describe('LibraryPage', () => {
         )
     })
 
+    it('writes the current page into the route query when paginating', async () => {
+        // only rendered past the first page — fake a larger library
+        libraryMock.mockResolvedValueOnce({ ...libraryPage, totalCount: 60 })
+        const { wrapper, router } = await mountLibraryPage()
+
+        const pagination = wrapper.findComponent(PaginationComponent)
+        pagination.vm.$emit('update:modelValue', {
+            pageNumber: 2,
+            searchQuery: '',
+            sortBy: 'Title',
+            isAscending: true
+        })
+        await settle()
+
+        expect(router.currentRoute.value.query.page).toBe('2')
+    })
+
+    it('restores the page number from the route query on mount', async () => {
+        // a history back from a detail page re-enters the page the user
+        // left, not page 1
+        await mountLibraryPage('/library?page=3')
+
+        expect(libraryMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({ pageNumber: 3 })
+        )
+    })
+
     it('returns to the first page when a filter changes', async () => {
         // QA6 P2-7: page 3 of the previous list is usually past the end of
         // the narrowed one — switching a filter there used to request the

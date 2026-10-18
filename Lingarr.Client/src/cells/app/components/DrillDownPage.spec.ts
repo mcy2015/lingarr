@@ -71,10 +71,10 @@ describe('DrillDownPage (drill-down skeleton)', () => {
         const content = wrapper.find('[data-test="dd-content"]')
         expect(content.classes()).toEqual([
             'flex',
-            'min-h-0',
-            'flex-1',
             'flex-col',
-            'gap-3.5'
+            'gap-3.5',
+            'min-h-0',
+            'flex-1'
         ])
         expect(content.find('[data-test="slot-body"]').exists()).toBe(true)
         expect(root.find('[data-test="slot-body"]').exists()).toBe(true)
@@ -87,5 +87,12 @@ describe('DrillDownPage (drill-down skeleton)', () => {
         expect(classes).toContain('shell-scroll')
         expect(classes).toContain('overflow-y-auto')
         expect(classes).not.toContain('overflow-hidden')
+
+        // a scrolling column sizes its content area to the natural card
+        // flow: min-h-0/flex-1 would clamp it back to the viewport and the
+        // page would never overflow into its own scrollbar
+        const content = wrapper.find('[data-test="dd-content"]').classes()
+        expect(content).not.toContain('min-h-0')
+        expect(content).not.toContain('flex-1')
     })
 })

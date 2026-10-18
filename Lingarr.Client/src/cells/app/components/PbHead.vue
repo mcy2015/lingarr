@@ -31,6 +31,7 @@
 <script setup lang="ts">
 import { type RouteLocationRaw, useRouter } from 'vue-router'
 import Icon from '@/cells/kernel/components/icons/Icon.vue'
+import { previousRoute } from '@/cells/app/router'
 
 const props = defineProps<{
     /** Route target of the「← 来源屏」back button; omit to hide it. */
@@ -44,7 +45,18 @@ const props = defineProps<{
 
 const router = useRouter()
 
+// A plain push to backTo drops the caller's query — coming back from a
+// drill-down then reset the source screen to its defaults (library page 1,
+// no filters) instead of the state the user left. When the previous history
+// entry IS the backTo route, history back restores that entry's full URL
+// (query included) and its scroll position; a deep-linked entry (no
+// qualifying history) still pushes the target.
 const goBack = (): void => {
+    const previous = previousRoute.value
+    if (previous?.name && previous.name === router.resolve(props.backTo!).name) {
+        router.back()
+        return
+    }
     router.push(props.backTo!)
 }
 </script>

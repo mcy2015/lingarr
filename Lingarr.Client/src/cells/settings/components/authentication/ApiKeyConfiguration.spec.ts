@@ -247,6 +247,32 @@ describe('ApiKeyConfiguration · e) 复制写入完整 key(已取值会话)', ()
         expect(empty.wrapper.find('[data-test="apikey-copy"]').exists()).toBe(false)
         expect(writeTextMock).not.toHaveBeenCalled()
     })
+
+    it('falls back to execCommand when the async clipboard API is unavailable (plain HTTP)', async () => {
+        // LAN deployments over http:// have no navigator.clipboard at all —
+        // the bare writeText call failed before it could even reject and the
+        // copy button always toasted「密钥复制失败」
+        Object.defineProperty(navigator, 'clipboard', {
+            value: undefined,
+            configurable: true
+        })
+        // happy-dom ships no execCommand implementation — install a stub
+        const execCommandMock = vi.fn().mockReturnValue(true)
+        ;(document as unknown as { execCommand: unknown }).execCommand = execCommandMock
+        const { wrapper, pinia } = await mountCard(true)
+        await revealKey(wrapper)
+        const toastStore = useToastStore(pinia)
+
+        await wrapper.find('[data-test="apikey-copy"]').trigger('click')
+        await flushPromises()
+
+        expect(execCommandMock).toHaveBeenCalledWith('copy')
+        // the fallback textarea carried the full key into the gesture
+        const callTextarea = document.querySelector('textarea')
+        expect(callTextarea).toBeNull() // cleaned up after the copy
+        expect(toastStore.toasts[0].message).toBe(en.settings.apiKey.copied)
+        delete (document as unknown as { execCommand?: unknown }).execCommand
+    })
 })
 
 describe('ApiKeyConfiguration · f) 生成/吊销零回归', () => {

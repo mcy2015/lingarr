@@ -14,7 +14,10 @@
                 <slot name="actions"></slot>
             </template>
         </PbHead>
-        <div class="flex min-h-0 flex-1 flex-col gap-3.5" data-test="dd-content">
+        <div
+            class="flex flex-col gap-3.5"
+            :class="scrollable ? '' : 'min-h-0 flex-1'"
+            data-test="dd-content">
             <slot></slot>
         </div>
     </div>

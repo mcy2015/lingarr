@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, RouteLocationNormalized, RouteLocationRaw, RouteRecordRaw } from 'vue-router'
+import { shallowRef } from 'vue'
 import { useInstanceStore } from '@/cells/app/stores/instance'
 import { baseUrl } from '@/cells/app/utils/baseUrl'
 
@@ -260,5 +261,15 @@ const router = createRouter({
 })
 
 router.beforeEach(authGuard)
+
+/// The route the user navigated FROM, tracked so back buttons can tell
+/// "came from the nominal source screen" (history back restores its full
+/// query and scroll) apart from a deep link (push the target instead).
+/// vue-router's history.state.back only exists under web history, which
+/// would make the distinction untestable under memory history.
+export const previousRoute = shallowRef<RouteLocationNormalized | null>(null)
+router.afterEach((_to, from) => {
+    previousRoute.value = from
+})
 
 export default router

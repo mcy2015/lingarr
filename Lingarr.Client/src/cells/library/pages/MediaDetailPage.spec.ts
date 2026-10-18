@@ -328,6 +328,22 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
         expect([...(root.element.parentElement?.children ?? [])].indexOf(root.element)).toBe(0)
     })
 
+    it('scrolls the whole column instead of clipping it below the viewport', async () => {
+        // the episode table + subtitle files + history cards exceed one
+        // 1080p viewport; an overflow-hidden page made everything below the
+        // fold unreachable (user-visible: subtitle file rows impossible to
+        // see) — the column must scroll
+        const { wrapper } = await mountDetail('show', '/library/show/7')
+
+        const root = wrapper.find('[data-test="dd-page"]')
+        expect(root.classes()).toContain('overflow-y-auto')
+
+        // the subtitle files card no longer caps at 240px with a ~100px
+        // inner scroll port: its rows live on the page scroll
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        expect(card.classes().join(' ')).not.toContain('max-h-[240px]')
+    })
+
     it('renders the pb-head with the back link, language pair and import action', async () => {
         const { wrapper } = await mountDetail('movie', '/library/movie/7')
 

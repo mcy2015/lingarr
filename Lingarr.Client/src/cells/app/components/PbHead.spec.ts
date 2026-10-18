@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { type RouteLocationRaw } from 'vue-router'
+import { type RouteLocationNormalized, type RouteLocationRaw } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import PbHead from '@/cells/app/components/PbHead.vue'
+import { previousRoute } from '@/cells/app/router'
 
 interface HeadProps {
     backTo?: RouteLocationRaw
@@ -65,6 +66,63 @@ describe('PbHead (drill-down page header)', () => {
             title: 'Detail'
         })
 
+        await wrapper.find('[data-test="pb-back"]').trigger('click')
+        await flushPromises()
+
+        expect(router.currentRoute.value.name).toBe('queue')
+    })
+
+    it('goes back in history when the previous entry is the back target, keeping its query', async () => {
+        const router = createRouter({
+            history: createMemoryHistory(),
+            routes: [
+                { path: '/', name: 'home', component: { template: '<div />' } },
+                { path: '/library', name: 'library', component: { template: '<div />' } },
+                { path: '/detail/:id', name: 'detail', component: { template: '<div />' } }
+            ]
+        })
+        await router.push('/library?type=show&state=missing')
+        await router.push('/detail/7')
+        await router.isReady()
+        // simulate the app router's afterEach tracker having recorded the
+        // library entry (the route the user came from before the detail)
+        previousRoute.value = {
+            name: 'library',
+            path: '/library',
+            fullPath: '/library?type=show&state=missing',
+            query: { type: 'show', state: 'missing' },
+            params: {},
+            hash: '',
+            matched: [],
+            meta: {},
+            redirectedFrom: undefined
+        } as RouteLocationNormalized
+
+        const i18n = createI18n({ legacy: false, locale: 'en', messages: { en: {} } })
+        const wrapper = mount(PbHead, {
+            props: { backTo: { name: 'library' }, backLabel: 'Library', title: 'Detail' },
+            global: { plugins: [router, i18n] }
+        })
+
+        await wrapper.find('[data-test="pb-back"]').trigger('click')
+        await flushPromises()
+
+        // history back restores the library entry WITH its query — a plain
+        // push to {name:'library'} would have dropped type and state
+        expect(router.currentRoute.value.name).toBe('library')
+        expect(router.currentRoute.value.query.type).toBe('show')
+        expect(router.currentRoute.value.query.state).toBe('missing')
+    })
+
+    it('pushes the back target when history has no qualifying previous entry (deep link)', async () => {
+        previousRoute.value = null
+        const { wrapper, router } = await mountHead({
+            backTo: { name: 'queue' },
+            backLabel: 'Queue',
+            title: 'Detail'
+        })
+
+        expect(router.currentRoute.value.name).toBe('home')
         await wrapper.find('[data-test="pb-back"]').trigger('click')
         await flushPromises()
 

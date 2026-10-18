@@ -119,4 +119,32 @@ public class SonarrServiceTests
         await Assert.ThrowsAsync<HttpRequestException>(
             () => new SonarrService(integrationMock.Object).GetShows());
     }
+
+    /// <summary>
+    /// Sonarr's episode list endpoint defaults includeEpisodeFile to false and
+    /// then serves episodes WITHOUT their episodeFile resource (hasFile is an
+    /// independent scalar and stays true) — every path, dateAdded and
+    /// mediaInfo.audioLanguages silently deserialized to null, which left all
+    /// episodes without file paths and the embedded-track scan nothing to
+    /// probe. The URL must opt in explicitly.
+    /// </summary>
+    [Fact]
+    public async Task GetEpisodes_RequestsEpisodeFilesExplicitly()
+    {
+        var integrationMock = new Mock<IIntegrationService>();
+        integrationMock
+            .Setup(s => s.GetApiResponse<List<SonarrEpisode>>(
+                It.IsAny<string>(),
+                It.IsAny<IntegrationSettingKeys>()))
+            .ReturnsAsync(new List<SonarrEpisode>());
+
+        await new SonarrService(integrationMock.Object).GetEpisodes(29, 1);
+
+        integrationMock.Verify(
+            s => s.GetApiResponse<List<SonarrEpisode>>(
+                "/api/v3/episode?seriesId=29&seasonNumber=1&includeEpisodeFile=true",
+                It.Is<IntegrationSettingKeys>(keys =>
+                    keys.Url == "sonarr_url" && keys.ApiKey == "sonarr_api_key")),
+            Times.Once);
+    }
 }
