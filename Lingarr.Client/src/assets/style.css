@@ -335,12 +335,18 @@
     width: 0.5rem;
 }
 
-/* standard properties so Safari/Firefox also draw a visible thin scrollbar —
-   macOS overlay scrollbars otherwise hide the affordance entirely and the
-   card looks like its rows simply end (walk-through finding) */
-.shell-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: var(--line) transparent;
+/* Standard properties ONLY for engines without the webkit pseudo-element:
+   per spec (and Chrome 121+ behavior) scrollbar-width/scrollbar-color
+   OVERRIDE the ::-webkit-scrollbar styling, and 'thin' renders as a macOS
+   OVERLAY scrollbar — invisible until actively scrolling, which is exactly
+   the "rows simply end" walk-through complaint the classic pseudo-element
+   scrollbar prevents. Chromium/WebKit must keep the classic always-visible
+   bar; Firefox alone gets the standard thin form. */
+@supports not selector(::-webkit-scrollbar) {
+    .shell-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: var(--line) transparent;
+    }
 }
 
 .shell-scroll::-webkit-scrollbar-track {
