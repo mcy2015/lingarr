@@ -85,8 +85,8 @@ public class EpisodeSync : IEpisodeSync
     /// PRD card A trust chain: mediaInfo.audioLanguages (ffprobe truth,
     /// "english / chi") outranks the episodeFile languages aggregate, which in
     /// turn outranks the episode-level mirror. Returns null when no source
-    /// carries a recognized code — the column then stays null ("unknown") so the
-    /// embedded-scan ffprobe piggyback can fill it later.
+    /// carries a recognized code — the column then stays null ("unknown") so
+    /// the embedded-scan ffprobe piggyback can fill it later.
     /// </summary>
     private static List<string>? ResolveAudioLanguages(SonarrEpisode episode)
     {
@@ -95,9 +95,11 @@ public class EpisodeSync : IEpisodeSync
         {
             // An empty-but-present file-level list still falls through to the
             // episode-level mirror — only actual entries count as a source.
+            // Null ELEMENTS are real payloads (includeEpisodeFile=true serves
+            // [null] for unknown languages) and must never reach .Name.
             IEnumerable<string?> names = episode.EpisodeFile?.Languages is { Count: > 0 } fileLanguages
-                ? fileLanguages.Select(language => language.Name)
-                : episode.Languages?.Select(language => language.Name) ?? [];
+                ? fileLanguages.Where(language => language != null).Select(language => language!.Name)
+                : episode.Languages?.Where(language => language != null).Select(language => language!.Name) ?? [];
             codes = EmbeddedTrackService.NormalizeLanguageNames(names);
         }
 

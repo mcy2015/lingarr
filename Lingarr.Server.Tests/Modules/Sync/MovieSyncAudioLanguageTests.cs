@@ -100,6 +100,22 @@ public class MovieSyncAudioLanguageTests : IDisposable
     }
 
     [Fact]
+    public async Task NullLanguageElements_SurviveTheFallbackWithoutThrowing()
+    {
+        // *arr serves [null] elements for unknown languages; the fallback
+        // chain must skip them instead of dereferencing .Name
+        var languages = new List<IntegrationLanguage>
+        {
+            null!,
+            new IntegrationLanguage { Id = 1, Name = "Chinese" }
+        };
+
+        var stored = await SyncAndReloadAsync(Movie(languages: languages));
+
+        Assert.Equal(["zh"], stored.AudioLanguages);
+    }
+
+    [Fact]
     public async Task EmptyOrUndPayload_LeavesTheColumnNull()
     {
         var stored = await SyncAndReloadAsync(Movie(mediaInfoAudioLanguages: "und", languages: Names("Unknown")));

@@ -103,6 +103,36 @@ public class ShowSyncServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncShows_NullLanguageElementsInEpisodeFilePayload_DoNotThrow()
+    {
+        // includeEpisodeFile=true (the 0.0.54 fix) surfaced Sonarr's null
+        // ELEMENTS in the languages aggregate ([null] for unknown) — the
+        // fallback chain dereferenced .Name and killed the whole SyncShowJob.
+        var show = SonarrShow(1, "Show", 1);
+        var withNulls = SonarrEpisode(10, 1, "/tv/Show/Season 1/Show.S01E10.mkv");
+        withNulls.EpisodeFile!.Languages =
+        [
+            null!, // the production payload shape that crashed
+            new IntegrationLanguage { Id = 1, Name = "Chinese" }
+        ];
+        var allNulls = SonarrEpisode(11, 1, "/tv/Show/Season 1/Show.S01E11.mkv");
+        allNulls.EpisodeFile!.Languages = [null!];
+        SetupEpisodes(1, 1, withNulls, allNulls);
+
+        // the whole run must complete instead of aborting on a null element
+        await _service.SyncShows(new List<SonarrShow> { show }, defaultInclude: true);
+
+        var synced = await _context.Episodes.AsNoTracking()
+            .Where(e => e.Season.ShowId == 1)
+            .ToDictionaryAsync(e => e.SonarrId);
+        // the real entry survives the null neighbours
+        Assert.Equal(["zh"], synced[10].AudioLanguages);
+        // nothing recognizable → the column stays null ("unknown") for the
+        // embedded-scan ffprobe piggyback to fill later
+        Assert.Null(synced[11].AudioLanguages);
+    }
+
+    [Fact]
     public async Task SyncShows_FetchesEpisodeListOncePerSeason()
     {
         // One season previously triggered one fetch for the season path, one for the

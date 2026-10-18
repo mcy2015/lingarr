@@ -119,8 +119,11 @@ public class MovieSync : IMovieSync
         var codes = EmbeddedTrackService.ParseAudioLanguageString(movieFile?.MediaInfo?.AudioLanguages);
         if (codes.Count == 0)
         {
+            // null ELEMENTS are a real payload shape (*arr serves [null] for
+            // unknown languages) and must never reach .Name
             codes = EmbeddedTrackService.NormalizeLanguageNames(
-                movieFile?.Languages?.Select(language => language.Name) ?? []);
+                (movieFile?.Languages ?? []).Where(language => language != null)
+                    .Select(language => language!.Name));
         }
 
         return codes.Count > 0 ? codes : null;
