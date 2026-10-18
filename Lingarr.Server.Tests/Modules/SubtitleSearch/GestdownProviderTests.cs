@@ -99,6 +99,22 @@ public class GestdownProviderTests
     }
 
     [Fact]
+    public async Task Search_ShowSearch404_IsAnEmptyResultNotAnError()
+    {
+        // The API answers "no such show" with HTTP 404 instead of an empty
+        // list — a title miss must stay a miss, not fail the source into
+        // cooldown (R4b hotfix).
+        var handler = new StubHttpMessageHandler()
+            .EnqueueStatus(HttpStatusCode.NotFound);
+
+        var provider = Create(handler);
+        var result = await provider.SearchAsync(EpisodeRequest(), CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
     public async Task Search_EpisodeMiss404_IsAnEmptyResultNotAnError()
     {
         var handler = new StubHttpMessageHandler()
@@ -144,18 +160,19 @@ public class GestdownProviderTests
     }
 
     [Fact]
-    public async Task TestConnection_ProbesThePathSegmentSearchRoute()
+    public async Task TestConnection_ProbesTheApplicationInfoRoute()
     {
         var handler = new StubHttpMessageHandler()
-            .EnqueueJson(SubtitleFixtures.Read("gestdown", "shows-search.json"));
+            .EnqueueJson("""{"applicationVersion":"5.2.0"}""");
 
         var provider = Create(handler);
         var outcome = await provider.TestConnectionAsync(CancellationToken.None);
 
         Assert.True(outcome.Ok);
-        // R4 hotfix: the probe must use the path-parameter form — the old
-        // /shows/search?search=lingarr query form answers 404 upstream.
-        Assert.EndsWith("/shows/search/lingarr", handler.SingleRequestUri!.ToString());
+        // R4b hotfix: a show-search probe 404s whenever the probe term
+        // matches no show ("lingarr" never does) — the info route is the
+        // only term-independent 200 the API guarantees.
+        Assert.EndsWith("/application/info", handler.SingleRequestUri!.ToString());
     }
 
     [Fact]

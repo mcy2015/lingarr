@@ -446,7 +446,11 @@ class FakeSourcesHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def _route_gestdown(self, path, query):
-        if "/shows/search/" in path:
+        if "/application/info" in path:
+            # R4b hotfix: the test-connection probe — a show-search probe
+            # would 404 for any probe term that matches no show.
+            self._send_json({"applicationVersion": "fake-1.0.0"})
+        elif "/shows/search/" in path:
             # Path-segment form (R4 hotfix): /shows/search/{title} — the
             # title rides in the path; the old ?search= query parameter was
             # retired upstream.

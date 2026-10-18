@@ -115,7 +115,12 @@ public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, 
         var baseUrl = await ResolveBaseUrlAsync(
             _settings, SubtitleSourceSettingKeys.Gestdown.BaseUrl, ProductionBaseUrl, cancellationToken);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/shows/search/lingarr");
+        // Liveness probe against the documented application-info route —
+        // a show-search probe would 404 whenever the probe term matches no
+        // show (gestdown answers "no such show" with HTTP 404, not an
+        // empty list), so /application/info is the only term-independent
+        // 200 the API guarantees.
+        using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/application/info");
         request.Headers.Add("Accept", "application/json");
 
         using var _ = await SubtitleHttp.SendCheckedAsync(Http, request, ProviderKey, cancellationToken);
@@ -142,11 +147,13 @@ public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, 
 
     /// <summary>
     /// Resolves the series id: exact (case-insensitive) name match first,
-    /// otherwise the first hit. Null when the search yields nothing. The
-    /// search term travels as a URI-escaped path segment
-    /// (<c>/shows/search/{title}</c>, the current API) and the answer wraps
-    /// the show list in a <c>shows</c> array (a bare root array — the legacy
-    /// shape — still parses).
+    /// otherwise the first hit. Null when the search yields nothing —
+    /// including an HTTP 404 answer, which the API uses for "no such show"
+    /// instead of an empty list (a title miss must not fail the source
+    /// into cooldown). The search term travels as a URI-escaped path
+    /// segment (<c>/shows/search/{title}</c>, the current API) and the
+    /// answer wraps the show list in a <c>shows</c> array (a bare root
+    /// array — the legacy shape — still parses).
     /// </summary>
     private async Task<string?> FindShowIdAsync(string baseUrl, string title, CancellationToken cancellationToken)
     {
@@ -154,7 +161,11 @@ public sealed class GestdownProvider : SubtitleProviderBase, ISubtitleProvider, 
             HttpMethod.Get, $"{baseUrl}/shows/search/{Uri.EscapeDataString(title)}");
         request.Headers.Add("Accept", "application/json");
 
-        using var document = await SubtitleHttp.SendForJsonAsync(Http, request, ProviderKey, cancellationToken);
+        using var document = await SendForJsonToleratingEpisodeMissAsync(request, cancellationToken);
+        if (document is null)
+        {
+            return null;
+        }
         JsonElement shows;
         if (document.RootElement.ValueKind == JsonValueKind.Array)
         {
