@@ -199,6 +199,27 @@ public class IntegrationServiceStreamingTests
         Assert.Equal(0, count);
     }
 
+    // ── failure status codes must ride on the exception ────────────────
+
+    /// <summary>
+    /// Integration request failures carry the HTTP status code so callers'
+    /// <c>catch … when (ex.StatusCode == NotFound)</c> guards can fire — a
+    /// message-only construction left every 404 (a deleted movie/episode in
+    /// *arr, a benign reconcile-later case) logged as a hard error.
+    /// </summary>
+    [Fact]
+    public async Task FailedResponse_ThrowsWithTheStatusCode()
+    {
+        var handler = new FixedResponseHandler(
+            "not found".Select(c => (byte)c).ToArray(), HttpStatusCode.NotFound);
+        var service = CreateService(handler, out _);
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(
+            () => service.GetApiResponse<List<SonarrEpisode>>("/api/v3/episode/123", RadarrKeys));
+
+        Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
+    }
+
     private sealed class FixedResponseHandler : HttpMessageHandler
     {
         private readonly Func<Stream> _streamFactory;

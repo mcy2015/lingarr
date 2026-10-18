@@ -29,7 +29,10 @@ public class IntegrationService : IIntegrationService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException($"Integration request failed: {response.StatusCode}: {errorContent}");
+            throw new HttpRequestException(
+                $"Integration request failed: {response.StatusCode}: {errorContent}",
+                inner: null,
+                statusCode: response.StatusCode);
         }
 
         await using var responseStream = await response.Content.ReadAsStreamAsync();
@@ -64,7 +67,10 @@ public class IntegrationService : IIntegrationService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"Integration request failed: {response.StatusCode}: {errorContent}");
+            throw new HttpRequestException(
+                $"Integration request failed: {response.StatusCode}: {errorContent}",
+                inner: null,
+                statusCode: response.StatusCode);
         }
 
         await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
