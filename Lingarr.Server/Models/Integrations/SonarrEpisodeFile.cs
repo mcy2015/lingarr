@@ -20,4 +20,15 @@ public class SonarrEpisodeFile
     /// <summary>ffprobe-derived container truth (audioLanguages slash string).</summary>
     [JsonPropertyName("mediaInfo")]
     public IntegrationMediaInfo? MediaInfo { get; set; }
+
+    /// <summary>
+    /// Quality wrapper — same shape as Radarr's movieFile.quality; the name
+    /// feeds episodes.quality (the episode table's 质量 column).
+    /// </summary>
+    [JsonPropertyName("quality")]
+    public RadarrMovieFileQuality? Quality { get; set; }
+
+    /// <summary>File size in bytes, stored on episodes.size_bytes.</summary>
+    [JsonPropertyName("size")]
+    public long? Size { get; set; }
 }

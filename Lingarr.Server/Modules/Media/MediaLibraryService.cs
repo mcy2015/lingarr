@@ -596,6 +596,7 @@ public class MediaLibraryService : IMediaLibraryService
             var show = await _dbContext.Shows
                 .Include(s => s.Seasons)
                 .ThenInclude(season => season.Episodes)
+                .Include(s => s.Images)
                 .FirstOrDefaultAsync(s => s.Id == id);
             if (show is not null)
             {
@@ -611,6 +612,8 @@ public class MediaLibraryService : IMediaLibraryService
                     Year = show.Year,
                     ImdbId = show.ImdbId,
                     ImdbRating = show.ImdbRating,
+                    Overview = show.Overview,
+                    PosterPath = show.Images.FirstOrDefault(image => image.Type == "poster")?.Path,
                     SeasonCount = show.Seasons.Count,
                     EpisodeCount = episodeCount,
                     Tracks = BuildTracks(
@@ -645,6 +648,7 @@ public class MediaLibraryService : IMediaLibraryService
             {
                 var movie = await _dbContext.Movies
                     .AsNoTracking()
+                    .Include(m => m.Images)
                     .FirstOrDefaultAsync(m => m.Id == id);
                 if (movie is not null)
                 {
@@ -660,6 +664,15 @@ public class MediaLibraryService : IMediaLibraryService
                         Quality = movie.Quality,
                         SizeBytes = movie.SizeBytes,
                         ImdbRating = movie.ImdbRating,
+                        Overview = movie.Overview,
+                        PosterPath = movie.Images.FirstOrDefault(image => image.Type == "poster")?.Path,
+                        FileName = movie.FileName,
+                        Path = movie.Path,
+                        VideoCodec = movie.VideoCodec,
+                        AudioCodec = movie.AudioCodec,
+                        AudioChannels = movie.AudioChannels,
+                        Resolution = movie.Resolution,
+                        RuntimeMinutes = movie.RuntimeMinutes,
                         SeasonCount = 0,
                         EpisodeCount = 1,
                     Tracks = BuildTracks(

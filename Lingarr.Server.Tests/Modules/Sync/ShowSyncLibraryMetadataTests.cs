@@ -79,6 +79,24 @@ public class ShowSyncLibraryMetadataTests : IDisposable
         Assert.Equal(9.4, stored.ImdbRating);
     }
 
+    // ── media-file detail batch: series overview (简介 block) ──
+
+    [Fact]
+    public async Task Overview_PersistsOnInsertAndStaysAuthoritative()
+    {
+        var stored = await SyncAndReloadAsync(Show());
+        Assert.Null(stored.Overview);
+
+        var withOverview = Show();
+        withOverview.Overview = "Nine noble families fight for the throne.";
+        var updated = await SyncAndReloadAsync(withOverview);
+        Assert.Equal("Nine noble families fight for the throne.", updated.Overview);
+
+        // a later payload without the field clears it (B2 authority rule)
+        var cleared = await SyncAndReloadAsync(Show());
+        Assert.Null(cleared.Overview);
+    }
+
     [Fact]
     public async Task MissingBlocks_PersistNullOnInsert()
     {

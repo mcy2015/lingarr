@@ -32,11 +32,12 @@ public class MigrationTests
             // embedded-track, consume-embedded, performance-index,
             // audio-and-language-cache, subtitle-search,
             // subtitle-search-telemetry, subtitle-search-schema-cleanup,
-            // video-hash-and-title-fts and
-            // suggested-language-and-manual-audio migrations are applied.
-            Assert.Equal(12L, await ExecuteScalarAsync(connection,
+            // video-hash-and-title-fts,
+            // suggested-language-and-manual-audio and media-file-info
+            // migrations are applied.
+            Assert.Equal(13L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(12L, await ExecuteScalarAsync(connection,
+            Assert.Equal(13L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
@@ -526,13 +527,18 @@ public class MigrationTests
                     // stays owned by the translation pipeline).
                     "video_hash",
                     // M0012: TMdb original-language guess + manual provenance.
-                    "suggested_language", "audio_languages_manual"],
+                    "suggested_language", "audio_languages_manual",
+                    // M0013 media-file detail: overview + mediaInfo facts.
+                    "overview", "video_codec", "audio_codec", "audio_channels", "resolution",
+                    "runtime_minutes"],
                 ["shows"] = ["id", "sonarr_id", "title", "path", "date_added", "translation_age_threshold",
                     "created_at", "updated_at", "include_in_translation", "subtitle_coverage_json",
                     // M0008: series-level year/imdb (design point 1) + B2 rating.
                     "year", "imdb_id", "imdb_rating",
                     // M0012: series-level original-language guess.
-                    "suggested_language"],
+                    "suggested_language",
+                    // M0013 media-file detail: series overview.
+                    "overview"],
                 ["seasons"] = ["id", "season_number", "path", "show_id", "created_at", "updated_at",
                     "include_in_translation"],
                 ["episodes"] = ["id", "sonarr_id", "episode_number", "title", "file_name", "path", "media_hash",
@@ -544,7 +550,10 @@ public class MigrationTests
                     "video_hash",
                     // M0012: manual/identified audio provenance (episodes are
                     // the rows the sync actually writes).
-                    "audio_languages_manual"],
+                    "audio_languages_manual",
+                    // M0013 media-file detail: per-episode file facts.
+                    "quality", "size_bytes", "video_codec", "audio_codec", "audio_channels",
+                    "resolution", "runtime_minutes"],
                 ["images"] = ["id", "type", "path", "show_id", "movie_id"],
                 ["path_mappings"] = ["id", "source_path", "destination_path", "media_type", "created_at", "updated_at"],
                 ["translation_requests"] = ["id", "job_id", "media_id", "title", "source_language", "target_language",

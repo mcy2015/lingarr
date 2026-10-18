@@ -337,3 +337,130 @@ public class EpisodeSyncTests : IDisposable
         Assert.Equal(["zh"], stored.AudioLanguages);
     }
 }
+
+// ── media-file detail batch: episodeFile quality/size/mediaInfo columns ──
+
+public class EpisodeSyncMediaFileTests : IDisposable
+{
+    private readonly SqliteConnection _connection;
+    private readonly LingarrDbContext _context;
+    private readonly EpisodeSync _episodeSync;
+
+    public EpisodeSyncMediaFileTests()
+    {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+        _context = new LingarrDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
+            .UseSqlite(_connection)
+            .Options);
+        _context.Database.EnsureCreated();
+        _episodeSync = new EpisodeSync(new PathConversionService(_context));
+    }
+
+    public void Dispose()
+    {
+        _context.Dispose();
+        _connection.Dispose();
+    }
+
+    private static SonarrEpisode MediaInfoEpisode(int id) => new()
+    {
+        Id = id,
+        EpisodeNumber = id,
+        Title = $"Episode {id}",
+        SeasonNumber = 1,
+        HasFile = true,
+        EpisodeFile = new SonarrEpisodeFile
+        {
+            Path = "/tv/Show/Season 1/Show.S01E10.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            Quality = new RadarrMovieFileQuality
+            {
+                Quality = new RadarrQualityItem { Id = 7, Name = "WEBDL-1080p" }
+            },
+            Size = 4_600_000_000,
+            MediaInfo = new IntegrationMediaInfo
+            {
+                AudioLanguages = "english",
+                VideoCodec = "h264",
+                AudioCodec = "eac3",
+                AudioChannels = 5.1,
+                Resolution = "1920x1080",
+                RunTime = "43:12"
+            }
+        }
+    };
+
+    /// <summary>One show/season for the whole test: both sync rounds run
+    /// against the same season so the second round exercises the UPDATE
+    /// branch, not a second insert.</summary>
+    private async Task<Season> SeedSeasonAsync()
+    {
+        var show = new Show
+        {
+            SonarrId = 1,
+            Title = "Show",
+            Path = "/tv/Show",
+            DateAdded = DateTimeOffset.UtcNow
+        };
+        var season = new Season { SeasonNumber = 1, Show = show };
+        show.Seasons.Add(season);
+        _context.Shows.Add(show);
+        await _context.SaveChangesAsync();
+        return season;
+    }
+
+    private async Task SyncRoundAsync(Season season, params SonarrEpisode[] episodes)
+    {
+        await _episodeSync.SyncEpisodes(season, episodes);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+    }
+
+    private Task<Episode> StoredAsync() =>
+        _context.Episodes.AsNoTracking().SingleAsync();
+
+    [Fact]
+    public async Task EpisodeFileFacts_PersistOnInsertAndStayAuthoritative()
+    {
+        var season = await SeedSeasonAsync();
+        await SyncRoundAsync(season, MediaInfoEpisode(10));
+
+        var stored = await StoredAsync();
+        Assert.Equal("WEBDL-1080p", stored.Quality);
+        Assert.Equal(4_600_000_000L, stored.SizeBytes);
+        Assert.Equal("h264", stored.VideoCodec);
+        Assert.Equal("eac3", stored.AudioCodec);
+        Assert.Equal(5.1, stored.AudioChannels);
+        Assert.Equal("1920x1080", stored.Resolution);
+        // Sonarr's "43:12" (mm:ss) folds into 43 minutes
+        Assert.Equal(43, stored.RuntimeMinutes);
+
+        // re-sync without the file facts clears them (payload-authoritative,
+        // mirroring the movie B2 metadata rule); the season reloads with its
+        // episodes so the round takes the UPDATE branch
+        var reloaded = await _context.Seasons
+            .Include(s => s.Episodes)
+            .SingleAsync();
+        await SyncRoundAsync(
+            reloaded,
+            new SonarrEpisode
+            {
+                Id = 10,
+                EpisodeNumber = 10,
+                Title = "Episode 10",
+                SeasonNumber = 1,
+                HasFile = true,
+                EpisodeFile = new SonarrEpisodeFile { Path = "/tv/Show/Season 1/Show.S01E10.mkv" }
+            });
+
+        var cleared = await StoredAsync();
+        Assert.Null(cleared.Quality);
+        Assert.Null(cleared.SizeBytes);
+        Assert.Null(cleared.VideoCodec);
+        Assert.Null(cleared.AudioCodec);
+        Assert.Null(cleared.AudioChannels);
+        Assert.Null(cleared.Resolution);
+        Assert.Null(cleared.RuntimeMinutes);
+    }
+}

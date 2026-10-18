@@ -89,6 +89,47 @@ public class MediaLibraryItem
     /// </summary>
     public double? ImdbRating { get; init; }
 
+    /// <summary>
+    /// TMDb plot summary (media-file batch): movies carry movie.overview,
+    /// shows the series overview. The detail page's 简介 block; null when
+    /// the payload carried none.
+    /// </summary>
+    public string? Overview { get; init; }
+
+    /// <summary>
+    /// Poster path (media-file batch): the *arr MediaCover URL path of the
+    /// synced "poster" image; the client loads it through the
+    /// /api/image/{movie|show} proxy. Null when no poster was synced.
+    /// </summary>
+    public string? PosterPath { get; init; }
+
+    /// <summary>
+    /// Video file name without extension (media-file batch, movies only —
+    /// the entity's storage convention). The file card's 文件名 line.
+    /// </summary>
+    public string? FileName { get; init; }
+
+    /// <summary>
+    /// Directory the video file lives in (media-file batch, movies only).
+    /// The file card's 所在目录 line.
+    /// </summary>
+    public string? Path { get; init; }
+
+    /// <summary>Video codec ("h264"); movies only (episode rows carry their own).</summary>
+    public string? VideoCodec { get; init; }
+
+    /// <summary>Audio codec ("eac3"); movies only.</summary>
+    public string? AudioCodec { get; init; }
+
+    /// <summary>Audio channel count (5.1); movies only.</summary>
+    public double? AudioChannels { get; init; }
+
+    /// <summary>Container pixel size ("1920x1080"); movies only.</summary>
+    public string? Resolution { get; init; }
+
+    /// <summary>Runtime in minutes; movies only.</summary>
+    public int? RuntimeMinutes { get; init; }
+
     /// <summary>Populated for shows: seasons with episodes for the inline detail.</summary>
     public Show? Show { get; init; }
 

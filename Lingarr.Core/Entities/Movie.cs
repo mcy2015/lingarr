@@ -99,6 +99,25 @@ public class Movie : BaseEntity, IMedia
     /// </summary>
     public double? ImdbRating { get; set; }
 
+    /// <summary>TMDb plot summary from Radarr (movie.overview); the detail
+    /// page's 简介 block. Null when the payload carries none.</summary>
+    public string? Overview { get; set; }
+
+    /// <summary>Video codec from movieFile.mediaInfo.videoCodec ("h264").</summary>
+    public string? VideoCodec { get; set; }
+
+    /// <summary>Audio codec from movieFile.mediaInfo.audioCodec ("eac3").</summary>
+    public string? AudioCodec { get; set; }
+
+    /// <summary>Audio channel count from movieFile.mediaInfo.audioChannels (5.1).</summary>
+    public double? AudioChannels { get; set; }
+
+    /// <summary>Container pixel size from movieFile.mediaInfo.resolution ("1920x1080").</summary>
+    public string? Resolution { get; set; }
+
+    /// <summary>Runtime in minutes, parsed from movieFile.mediaInfo.runTime ("1:57:00").</summary>
+    public int? RuntimeMinutes { get; set; }
+
     /// <summary>
     /// Coverage watermark (M0009): when the statistics scan last computed
     /// this movie's language coverage. Written by the M7 watermark batch;

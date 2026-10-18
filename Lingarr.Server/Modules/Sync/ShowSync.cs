@@ -41,6 +41,7 @@ public class ShowSync : IShowSync
                 Year = sonarrShow.Year,
                 ImdbId = sonarrShow.ImdbId,
                 ImdbRating = ResolveImdbRating(sonarrShow.Ratings),
+                Overview = sonarrShow.Overview,
                 // option B: series original language as the guess-level hint
                 SuggestedLanguage = sonarrShow.OriginalLanguage is { } original
                     ? EmbeddedTrackService.NormalizeLanguage(original.Name)
@@ -59,6 +60,7 @@ public class ShowSync : IShowSync
             showEntity.Year = sonarrShow.Year;
             showEntity.ImdbId = sonarrShow.ImdbId;
             showEntity.ImdbRating = ResolveImdbRating(sonarrShow.Ratings);
+            showEntity.Overview = sonarrShow.Overview;
             showEntity.SuggestedLanguage = sonarrShow.OriginalLanguage is { } original
                 ? EmbeddedTrackService.NormalizeLanguage(original.Name)
                 : null;

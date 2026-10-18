@@ -23,6 +23,10 @@ public class SonarrShow
     [JsonPropertyName("originalLanguage")]
     public IntegrationLanguage? OriginalLanguage { get; set; }
 
+    /// <summary>TMDb/TVDb series summary; feeds shows.overview (detail-page 简介 block).</summary>
+    [JsonPropertyName("overview")]
+    public string? Overview { get; set; }
+
     [JsonPropertyName("seasons")]
     public List<SonarrSeason> Seasons { get; set; } = new();
     [JsonPropertyName("images")]

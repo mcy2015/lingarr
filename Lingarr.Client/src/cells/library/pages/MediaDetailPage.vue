@@ -64,6 +64,29 @@
             </button>
         </template>
 
+        <!-- ═══ 媒体文件批次:海报 + 简介(*arr 详情页口径)—— 两者皆无时整块不渲染 ═══ -->
+        <div
+            v-if="overviewBlockVisible"
+            class="border-line bg-secondary flex shrink-0 gap-4 rounded-md border p-4"
+            data-test="media-overview-card">
+            <img
+                v-if="posterSrc"
+                :src="posterSrc"
+                class="border-line h-[252px] w-[168px] shrink-0 rounded-md border object-cover"
+                :alt="item?.title ?? ''"
+                loading="lazy"
+                decoding="async"
+                data-test="media-poster" />
+            <div class="shell-scroll max-h-[252px] min-w-0 flex-1 overflow-y-auto">
+                <p
+                    v-if="item?.overview"
+                    class="text-secondary-content text-[13px] leading-relaxed whitespace-pre-line"
+                    data-test="media-overview-text">
+                    {{ item.overview }}
+                </p>
+            </div>
+        </div>
+
         <!-- ═══ 工具栏:季段选(剧集)· 语言 chips · 最近活动 ═══ -->
         <div class="flex shrink-0 flex-wrap items-center gap-2">
             <div
@@ -119,7 +142,7 @@
                     :items="seasonEpisodes"
                     :item-height="40"
                     :overscan="5"
-                    :colspan="6"
+                    :colspan="8"
                     :label="t('mediaDetail.episodeTitle')"
                     :key-of="(ep: EpisodeRow) => ep.id">
                     <template #header>
@@ -127,6 +150,12 @@
                             <tr>
                                 <th :class="thClass" class="w-11">#</th>
                                 <th :class="thClass">{{ t('mediaDetail.episodeTitle') }}</th>
+                                <th :class="thClass" class="w-24">
+                                    {{ t('mediaDetail.mediaFile.quality') }}
+                                </th>
+                                <th :class="thClass" class="w-16">
+                                    {{ t('mediaDetail.mediaFile.size') }}
+                                </th>
                                 <th :class="thClass">{{ t('library.table.tracks') }}</th>
                                 <th :class="thClass">{{ t('library.table.status') }}</th>
                                 <th :class="thClass">{{ t('library.table.lastActivity') }}</th>
@@ -145,6 +174,21 @@
                                 <b class="truncate font-semibold" :title="ep.title">
                                     {{ ep.title }}
                                 </b>
+                            </td>
+                            <td :class="tdClass">
+                                <span
+                                    class="mono text-secondary-content text-[11px]"
+                                    :title="episodeSpecTooltip(ep)"
+                                    data-test="episode-quality">
+                                    {{ ep.quality ?? '—' }}
+                                </span>
+                            </td>
+                            <td :class="tdClass">
+                                <span
+                                    class="mono text-secondary-content text-[11px]"
+                                    data-test="episode-size">
+                                    {{ ep.sizeBytes ? formatBytes(ep.sizeBytes) : '—' }}
+                                </span>
                             </td>
                             <td :class="tdClass">
                                 <div class="flex flex-wrap gap-1">
@@ -287,6 +331,60 @@
                         </button>
                     </template>
                 </div>
+            </div>
+        </div>
+
+        <!-- ═══ 媒体文件批次:电影媒体文件卡(Sonarr/Radarr 文件块口径)——
+             文件名 · 所在目录 · 规格 chips(质量/分辨率/编码/声道) · 大小 · 时长 · 添加日期;
+             只有真实存在的字段才渲染行(禁静态装饰) ═══ -->
+        <div
+            v-if="movieFileCardVisible"
+            class="border-line bg-secondary flex shrink-0 flex-col gap-2 rounded-md border p-4"
+            data-test="media-file-card">
+            <div class="flex flex-wrap items-center gap-2.5">
+                <h2 class="text-[13px] font-semibold">
+                    {{ t('mediaDetail.mediaFile.title') }}
+                </h2>
+                <span
+                    v-if="movieSpecChips.length"
+                    class="flex flex-wrap gap-1"
+                    data-test="media-file-specs">
+                    <span
+                        v-for="chip in movieSpecChips"
+                        :key="chip"
+                        class="mono border-line bg-tertiary text-primary-content rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold">
+                        {{ chip }}
+                    </span>
+                </span>
+                <span
+                    v-if="item?.sizeBytes"
+                    class="mono text-secondary-content ml-auto text-xs"
+                    data-test="media-file-size">
+                    {{ formatBytes(item.sizeBytes) }}
+                </span>
+            </div>
+            <div
+                class="mono text-primary-content text-[12.5px] break-all"
+                data-test="media-file-name">
+                {{ item?.fileName }}
+            </div>
+            <div
+                v-if="item?.path"
+                class="mono text-secondary-content text-[11.5px] break-all"
+                :title="item.path"
+                data-test="media-file-directory">
+                {{ item.path }}
+            </div>
+            <div
+                v-if="item?.runtimeMinutes || item?.dateAdded"
+                class="text-secondary-content flex flex-wrap gap-x-4 text-xs">
+                <span v-if="runtimeLabel(item?.runtimeMinutes)" data-test="media-file-runtime">
+                    {{ t('mediaDetail.mediaFile.runtime') }}:
+                    {{ runtimeLabel(item?.runtimeMinutes) }}
+                </span>
+                <span v-if="dateLabel(item?.dateAdded)" data-test="media-file-added">
+                    {{ t('mediaDetail.mediaFile.added') }}: {{ dateLabel(item?.dateAdded) }}
+                </span>
             </div>
         </div>
 
@@ -663,6 +761,13 @@ interface EpisodeRow {
     episodeNumber: number
     title: string
     fileName: string
+    quality?: string | null
+    sizeBytes?: number | null
+    videoCodec?: string | null
+    audioCodec?: string | null
+    audioChannels?: number | null
+    resolution?: string | null
+    runtimeMinutes?: number | null
     season: ISeason
 }
 
@@ -703,6 +808,13 @@ const seasonEpisodes = computed<EpisodeRow[]>(() => {
         episodeNumber: ep.episodeNumber,
         title: ep.title,
         fileName: ep.fileName ?? '',
+        quality: ep.quality,
+        sizeBytes: ep.sizeBytes,
+        videoCodec: ep.videoCodec,
+        audioCodec: ep.audioCodec,
+        audioChannels: ep.audioChannels,
+        resolution: ep.resolution,
+        runtimeMinutes: ep.runtimeMinutes,
         season: season as ISeason
     }))
 })
@@ -1034,9 +1146,13 @@ function languageLabel(code: string): string {
 
 function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '—'
+    const mb = 1024 * 1024
     if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    if (bytes < mb) return `${(bytes / 1024).toFixed(1)} KB`
+    // 媒体文件批次:视频文件普遍 GB 级,超 MB 加 GB/TB 档(字幕文件不受影响)。
+    if (bytes < mb * 1024) return `${(bytes / mb).toFixed(1)} MB`
+    if (bytes < mb * 1024 * 1024) return `${(bytes / (mb * 1024)).toFixed(1)} GB`
+    return `${(bytes / (mb * 1024 * 1024)).toFixed(1)} TB`
 }
 
 async function loadSeasonSubtitles(season: ISeason): Promise<void> {
@@ -1583,5 +1699,90 @@ function formatTime(value: string | Date): string {
         hour: '2-digit',
         minute: '2-digit'
     })
+}
+
+/// 媒体文件批次:*arr mediaInfo.resolution ("1920x1080") → 高度短标
+/// ("1080p",Sonarr/Radarr 文件块的显示口径);非 WxH 形态原样返回。
+function resolutionLabel(resolution?: string | null): string {
+    if (!resolution) return ''
+    const match = /^(\d+)\s*[x×]\s*(\d+)$/i.exec(resolution.trim())
+    if (!match) return resolution
+    return `${match[2]}p`
+}
+
+/// 媒体文件批次:声道数显示为 *arr 口径的一位小数 ("5.1"/"2.0")。
+function channelsLabel(channels?: number | null): string {
+    return Number.isFinite(channels) && channels !== null
+        ? (channels as number).toFixed(1)
+        : ''
+}
+
+/// 媒体文件批次:分钟 → 本地化 "X 小时 Y 分" / "X 分钟"。
+function runtimeLabel(minutes?: number | null): string {
+    if (!minutes || minutes <= 0) return ''
+    const hours = Math.floor(minutes / 60)
+    const rest = minutes % 60
+    if (hours <= 0) return t('mediaDetail.mediaFile.minutes', { minutes: rest })
+    return rest === 0
+        ? t('mediaDetail.mediaFile.hours', { hours })
+        : t('mediaDetail.mediaFile.hoursAndMinutes', { hours, minutes: rest })
+}
+
+/// 媒体文件批次:详情页电影规格 chips(有值才进数组,禁静态装饰)。
+const movieSpecChips = computed<string[]>(() => {
+    if (!item.value || isShow.value) return []
+    const chips: string[] = []
+    if (item.value.quality) chips.push(item.value.quality)
+    const resolution = resolutionLabel(item.value.resolution)
+    if (resolution) chips.push(resolution)
+    if (item.value.videoCodec) chips.push(item.value.videoCodec)
+    if (item.value.audioCodec || item.value.audioChannels) {
+        const channels = channelsLabel(item.value.audioChannels)
+        chips.push(
+            [item.value.audioCodec, channels].filter(Boolean).join(' ')
+        )
+    }
+    return chips
+})
+
+/// 媒体文件批次:海报走既有 /api/image 代理(cookie 认证随 <img> 自动携带)。
+const posterSrc = computed<string | null>(() => {
+    if (!item.value?.posterPath) return null
+    return `/api/image/${isShow.value ? 'show' : 'movie'}${item.value.posterPath}`
+})
+
+/// 媒体文件批次:海报与简介都不存在时整块不渲染(禁静态装饰文案)。
+const overviewBlockVisible = computed<boolean>(
+    () => Boolean(posterSrc.value || item.value?.overview)
+)
+
+/// 媒体文件批次:电影媒体文件卡 —— 文件名非空才渲染(空路径电影是 *arr
+/// 异常载荷的折叠形态,空壳卡是纯装饰)。
+const movieFileCardVisible = computed<boolean>(
+    () => Boolean(item.value?.fileName) && !isShow.value
+)
+
+/// 媒体文件批次:添加日期(日期口径,不带时刻)。
+function dateLabel(value?: string | null): string {
+    if (!value) return ''
+    return new Date(value).toLocaleDateString(locale.value, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    })
+}
+
+/// 媒体文件批次:剧集行质量列的悬浮详情(编码/分辨率/声道/时长,有值才拼)。
+function episodeSpecTooltip(ep: EpisodeRow): string {
+    const parts: string[] = []
+    if (ep.quality) parts.push(ep.quality)
+    const resolution = resolutionLabel(ep.resolution)
+    if (resolution) parts.push(resolution)
+    if (ep.videoCodec) parts.push(ep.videoCodec)
+    const channels = channelsLabel(ep.audioChannels)
+    if (ep.audioCodec || channels) parts.push([ep.audioCodec, channels].filter(Boolean).join(' '))
+    const runtime = runtimeLabel(ep.runtimeMinutes)
+    if (runtime) parts.push(runtime)
+    return parts.join(' · ')
 }
 </script>

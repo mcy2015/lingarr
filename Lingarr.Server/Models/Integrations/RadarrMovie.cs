@@ -33,6 +33,10 @@ public class RadarrMovie
     [JsonPropertyName("originalLanguage")]
     public IntegrationLanguage? OriginalLanguage { get; set; }
 
+    /// <summary>TMDb plot summary; feeds movies.overview (detail-page 简介 block).</summary>
+    [JsonPropertyName("overview")]
+    public string? Overview { get; set; }
+
     [JsonPropertyName("movieFile")]
     public RadarrMovieFile MovieFile { get; set; } = new();
     [JsonPropertyName("images")]

@@ -72,6 +72,12 @@ public class MovieSync : IMovieSync
                 Quality = movie.MovieFile?.Quality?.Quality?.Name,
                 SizeBytes = movie.MovieFile?.Size,
                 ImdbRating = ResolveImdbRating(movie.Ratings),
+                Overview = movie.Overview,
+                VideoCodec = movie.MovieFile?.MediaInfo?.VideoCodec,
+                AudioCodec = movie.MovieFile?.MediaInfo?.AudioCodec,
+                AudioChannels = movie.MovieFile?.MediaInfo?.AudioChannels,
+                Resolution = movie.MovieFile?.MediaInfo?.Resolution,
+                RuntimeMinutes = movie.MovieFile?.MediaInfo?.RuntimeMinutes,
                 SuggestedLanguage = suggested
             };
             // The setter folds an empty result back to null — the column
@@ -103,6 +109,14 @@ public class MovieSync : IMovieSync
             movieEntity.Quality = movie.MovieFile?.Quality?.Quality?.Name;
             movieEntity.SizeBytes = movie.MovieFile?.Size;
             movieEntity.ImdbRating = ResolveImdbRating(movie.Ratings);
+            // Media-file detail batch: overview + mediaInfo facts follow the
+            // same payload-authoritative rule.
+            movieEntity.Overview = movie.Overview;
+            movieEntity.VideoCodec = movie.MovieFile?.MediaInfo?.VideoCodec;
+            movieEntity.AudioCodec = movie.MovieFile?.MediaInfo?.AudioCodec;
+            movieEntity.AudioChannels = movie.MovieFile?.MediaInfo?.AudioChannels;
+            movieEntity.Resolution = movie.MovieFile?.MediaInfo?.Resolution;
+            movieEntity.RuntimeMinutes = movie.MovieFile?.MediaInfo?.RuntimeMinutes;
         }
 
         _logger.LogInformation("Syncing movie: {MovieId} with Path: {Path}", movie.Id, movieEntity.Path);

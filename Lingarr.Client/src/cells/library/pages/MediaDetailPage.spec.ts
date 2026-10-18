@@ -1565,3 +1565,164 @@ describe('MediaDetailPage · P2 打磨(缺口豁免/IMDb/弹层 props)', () => {
         expect(modal.props('existingLanguages')).toEqual([])
     })
 })
+
+// ── 媒体文件批次:海报 + 简介 + 电影文件卡 + 剧集表质量/大小列 ──────
+describe('MediaDetailPage · 媒体文件详情(媒体文件批次)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        translateSubtitleMock.mockResolvedValue({ jobId: 55 })
+        translateEmbeddedTrackMock.mockResolvedValue({ jobId: 91 })
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    const mediaMovieItem = {
+        ...movieItem,
+        fileName: 'Dune.Part.Two.2024.2160p.WEB-DL',
+        path: '/media/movies/Dune Part Two (2024)',
+        quality: 'WEBDL-2160p',
+        sizeBytes: 24_841_132_442,
+        overview: 'Paul Atreides unites with the Fremen.',
+        posterPath: '/MediaCover/7/poster.jpg',
+        videoCodec: 'h265',
+        audioCodec: 'truehd',
+        audioChannels: 7.1,
+        resolution: '3840x2160',
+        runtimeMinutes: 166,
+        dateAdded: '2026-09-01T08:00:00Z'
+    } as unknown as IMediaLibraryItem
+
+    it('renders the poster and overview block for a movie carrying both', async () => {
+        libraryMock.mockResolvedValue({
+            items: [mediaMovieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="media-overview-card"]')
+        expect(card.exists()).toBe(true)
+        const poster = card.find('[data-test="media-poster"]')
+        expect(poster.exists()).toBe(true)
+        // poster rides the existing /api/image proxy with the movie segment
+        expect(poster.attributes('src')).toBe('/api/image/movie/MediaCover/7/poster.jpg')
+        expect(card.find('[data-test="media-overview-text"]').text()).toBe(
+            'Paul Atreides unites with the Fremen.'
+        )
+    })
+
+    it('renders the movie file card with spec chips, size and runtime', async () => {
+        libraryMock.mockResolvedValue({
+            items: [mediaMovieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="media-file-card"]')
+        expect(card.exists()).toBe(true)
+        expect(card.find('[data-test="media-file-name"]').text()).toBe(
+            'Dune.Part.Two.2024.2160p.WEB-DL'
+        )
+        expect(card.find('[data-test="media-file-directory"]').text()).toBe(
+            '/media/movies/Dune Part Two (2024)'
+        )
+        // spec chips: quality · derived 2160p · video codec · audio codec + channels
+        const chips = card
+            .find('[data-test="media-file-specs"]')
+            .findAll('span')
+            .map((chip) => chip.text())
+        expect(chips).toEqual(['WEBDL-2160p', '2160p', 'h265', 'truehd 7.1'])
+        // 166 min → "2 h 46 min" (en locale of the spec harness)
+        expect(card.find('[data-test="media-file-runtime"]').text()).toContain('2 h 46 min')
+        expect(card.find('[data-test="media-file-size"]').text()).toBe('23.1 GB')
+    })
+
+    it('omits the overview block entirely when the payload carries neither poster nor overview', async () => {
+        libraryMock.mockResolvedValue({
+            items: [movieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        expect(wrapper.find('[data-test="media-overview-card"]').exists()).toBe(false)
+    })
+
+    it('renders the show overview through the show image segment', async () => {
+        libraryMock.mockResolvedValue({
+            items: [
+                {
+                    ...showItem,
+                    overview: 'In feudal Japan, an English sailor becomes a pawn.',
+                    posterPath: '/MediaCover/3/poster.jpg'
+                }
+            ],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('show', '/library/show/3')
+
+        const card = wrapper.find('[data-test="media-overview-card"]')
+        expect(card.exists()).toBe(true)
+        expect(card.find('[data-test="media-poster"]').attributes('src')).toBe(
+            '/api/image/show/MediaCover/3/poster.jpg'
+        )
+        expect(card.find('[data-test="media-overview-text"]').text()).toContain('feudal Japan')
+        // the movie file card never renders on a show page
+        expect(wrapper.find('[data-test="media-file-card"]').exists()).toBe(false)
+    })
+
+    it('shows per-episode quality and size columns with the spec tooltip', async () => {
+        const enrichedShow = {
+            ...showItem,
+            show: {
+                ...showItem.show!,
+                seasons: [
+                    {
+                        ...showItem.show!.seasons[0],
+                        episodes: showItem.show!.seasons[0].episodes.map((ep, index) => ({
+                            ...ep,
+                            quality: index === 0 ? 'WEBDL-1080p' : null,
+                            sizeBytes: index === 0 ? 4_600_000_000 : null,
+                            videoCodec: 'h264',
+                            audioCodec: 'eac3',
+                            audioChannels: 5.1,
+                            resolution: '1920x1080',
+                            runtimeMinutes: 58
+                        }))
+                    }
+                ]
+            }
+        } as unknown as IMediaLibraryItem
+        libraryMock.mockResolvedValue({
+            items: [enrichedShow],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('show', '/library/show/3')
+
+        const qualities = wrapper.findAll('[data-test="episode-quality"]')
+        const sizes = wrapper.findAll('[data-test="episode-size"]')
+        expect(qualities[0].text()).toBe('WEBDL-1080p')
+        expect(sizes[0].text()).toBe('4.3 GB')
+        // absent facts render the muted dash, not an empty cell
+        expect(qualities[1].text()).toBe('—')
+        expect(sizes[1].text()).toBe('—')
+        // the tooltip carries the full *arr mediaInfo fact set
+        expect(qualities[0].attributes('title')).toBe(
+            'WEBDL-1080p · 1080p · h264 · eac3 5.1 · 58 min'
+        )
+    })
+})

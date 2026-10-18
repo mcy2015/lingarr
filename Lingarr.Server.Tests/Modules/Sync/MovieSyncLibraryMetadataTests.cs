@@ -163,4 +163,76 @@ public class MovieSyncLibraryMetadataTests : IDisposable
 
         Assert.Null(stored.ImdbRating);
     }
+
+    // ── media-file detail batch: overview + movieFile.mediaInfo facts ──
+
+    private static RadarrMovie MediaInfoMovie(string? runTime = "1:57:00") => new()
+    {
+        Id = 1,
+        Title = "Movie",
+        Path = "/movies/Movie",
+        RootFolderPath = "/movies",
+        Added = "2026-01-01T00:00:00Z",
+        HasFile = true,
+        Overview = "A movie about tests.",
+        MovieFile = new RadarrMovieFile
+        {
+            Path = "/movies/Movie/Movie.mkv",
+            Quality = new RadarrMovieFileQuality
+            {
+                Quality = new RadarrQualityItem { Id = 1, Name = "WEBDL-1080p" }
+            },
+            Size = 2_500_000_000,
+            MediaInfo = new IntegrationMediaInfo
+            {
+                AudioLanguages = "english",
+                VideoCodec = "h264",
+                AudioCodec = "dts-hd ma",
+                AudioChannels = 5.1,
+                Resolution = "1920x1080",
+                RunTime = runTime
+            }
+        },
+        Images = new List<IntegrationImage>()
+    };
+
+    [Fact]
+    public async Task MediaInfoAndOverview_PersistOnInsertAndStayAuthoritative()
+    {
+        var stored = await SyncAndReloadAsync(MediaInfoMovie());
+
+        Assert.Equal("A movie about tests.", stored.Overview);
+        Assert.Equal("h264", stored.VideoCodec);
+        Assert.Equal("dts-hd ma", stored.AudioCodec);
+        Assert.Equal(5.1, stored.AudioChannels);
+        Assert.Equal("1920x1080", stored.Resolution);
+        // "1:57:00" (h:mm:ss) folds into 117 minutes
+        Assert.Equal(117, stored.RuntimeMinutes);
+
+        // re-sync: the payload stays authoritative, a missing mediaInfo block
+        // clears the facts (no lower-trust local source exists)
+        var cleared = await SyncAndReloadAsync(Movie());
+
+        Assert.Null(cleared.VideoCodec);
+        Assert.Null(cleared.AudioCodec);
+        Assert.Null(cleared.AudioChannels);
+        Assert.Null(cleared.Resolution);
+        Assert.Null(cleared.RuntimeMinutes);
+        Assert.Null(cleared.Overview);
+    }
+
+    [Fact]
+    public async Task RunTimeFormats_ParseLargestUnitFirst()
+    {
+        // Radarr serves "1:57:00" (h:mm:ss) → 117; Sonarr-style "43:12"
+        // (mm:ss) → 43; garbage → null, never an exception.
+        var radarr = await SyncAndReloadAsync(MediaInfoMovie(runTime: "1:57:00"));
+        Assert.Equal(117, radarr.RuntimeMinutes);
+
+        var sonarrStyle = await SyncAndReloadAsync(MediaInfoMovie(runTime: "43:12"));
+        Assert.Equal(43, sonarrStyle.RuntimeMinutes);
+
+        var garbage = await SyncAndReloadAsync(MediaInfoMovie(runTime: "about an hour"));
+        Assert.Null(garbage.RuntimeMinutes);
+    }
 }

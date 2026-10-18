@@ -47,6 +47,7 @@ public class EpisodeSync : IEpisodeSync
     {
         var episodeEntity = season.Episodes.FirstOrDefault(se => se.SonarrId == episode.Id);
         var audioLanguages = ResolveAudioLanguages(episode);
+        var file = episode.EpisodeFile;
         if (episodeEntity == null)
         {
             episodeEntity = new Episode
@@ -58,7 +59,14 @@ public class EpisodeSync : IEpisodeSync
                 Path = Path.GetDirectoryName(episodePath),
                 Season = season,
                 DateAdded = dateAdded,
-                IncludeInTranslation = defaultInclude
+                IncludeInTranslation = defaultInclude,
+                Quality = file?.Quality?.Quality?.Name,
+                SizeBytes = file?.Size,
+                VideoCodec = file?.MediaInfo?.VideoCodec,
+                AudioCodec = file?.MediaInfo?.AudioCodec,
+                AudioChannels = file?.MediaInfo?.AudioChannels,
+                Resolution = file?.MediaInfo?.Resolution,
+                RuntimeMinutes = file?.MediaInfo?.RuntimeMinutes
             };
             // The setter folds an empty result back to null — the column never
             // stores "[]" (unknown is null).
@@ -72,6 +80,15 @@ public class EpisodeSync : IEpisodeSync
             episodeEntity.FileName = Path.GetFileNameWithoutExtension(episodePath);
             episodeEntity.Path = Path.GetDirectoryName(episodePath);
             episodeEntity.DateAdded = dateAdded;
+            // Media-file detail batch: payload-authoritative like the movie
+            // B2 metadata — no lower-trust local source to protect.
+            episodeEntity.Quality = file?.Quality?.Quality?.Name;
+            episodeEntity.SizeBytes = file?.Size;
+            episodeEntity.VideoCodec = file?.MediaInfo?.VideoCodec;
+            episodeEntity.AudioCodec = file?.MediaInfo?.AudioCodec;
+            episodeEntity.AudioChannels = file?.MediaInfo?.AudioChannels;
+            episodeEntity.Resolution = file?.MediaInfo?.Resolution;
+            episodeEntity.RuntimeMinutes = file?.MediaInfo?.RuntimeMinutes;
             // A payload without a recognized code never clears the column — an
             // ffprobe-filled value survives until *arr has real data; a
             // manual/identified value outranks the payload entirely.

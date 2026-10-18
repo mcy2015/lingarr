@@ -1105,6 +1105,16 @@
                 "queuedFailed": "发起翻译失败：{message}"
             }
         },
+        "mediaFile": {
+            "title": "媒体文件",
+            "quality": "质量",
+            "size": "大小",
+            "runtime": "时长",
+            "added": "添加日期",
+            "minutes": "{minutes} 分钟",
+            "hours": "{hours} 小时",
+            "hoursAndMinutes": "{hours} 小时 {minutes} 分"
+        },
         "lang": {
             "zh": "简体中文",
             "zh-TW": "繁体中文",

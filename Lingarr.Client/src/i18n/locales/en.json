@@ -1105,6 +1105,16 @@
                 "queuedFailed": "Queueing translation failed: {message}"
             }
         },
+        "mediaFile": {
+            "title": "Media file",
+            "quality": "Quality",
+            "size": "Size",
+            "runtime": "Runtime",
+            "added": "Added",
+            "minutes": "{minutes} min",
+            "hours": "{hours} h",
+            "hoursAndMinutes": "{hours} h {minutes} min"
+        },
         "lang": {
             "zh": "Simplified Chinese",
             "zh-TW": "Traditional Chinese",

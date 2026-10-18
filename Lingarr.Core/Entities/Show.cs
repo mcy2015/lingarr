@@ -39,6 +39,10 @@ public class Show : BaseEntity
     /// </summary>
     public double? ImdbRating { get; set; }
 
+    /// <summary>TMDb series summary from Sonarr (series.overview); the detail
+    /// page's 简介 block. Null when the payload carries none.</summary>
+    public string? Overview { get; set; }
+
     /// <summary>
     /// Language -> subtitle coverage, written by the statistics scan; null
     /// until the first scan after the coverage migration.

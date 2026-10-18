@@ -76,4 +76,26 @@ public class Episode : BaseEntity, IMedia
     /// </summary>
     public DateTimeOffset? CoverageCheckedAt { get; set; }
 
+    /// <summary>Release quality label from episodeFile.quality.quality.name
+    /// ("HDTV-720p") — the episode table's 质量 column (media-file batch).</summary>
+    public string? Quality { get; set; }
+
+    /// <summary>File size in bytes from episodeFile.size.</summary>
+    public long? SizeBytes { get; set; }
+
+    /// <summary>Video codec from episodeFile.mediaInfo.videoCodec.</summary>
+    public string? VideoCodec { get; set; }
+
+    /// <summary>Audio codec from episodeFile.mediaInfo.audioCodec.</summary>
+    public string? AudioCodec { get; set; }
+
+    /// <summary>Audio channel count from episodeFile.mediaInfo.audioChannels.</summary>
+    public double? AudioChannels { get; set; }
+
+    /// <summary>Container pixel size from episodeFile.mediaInfo.resolution.</summary>
+    public string? Resolution { get; set; }
+
+    /// <summary>Runtime in minutes, parsed from episodeFile.mediaInfo.runTime.</summary>
+    public int? RuntimeMinutes { get; set; }
+
 }

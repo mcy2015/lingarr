@@ -183,6 +183,15 @@ export interface IEpisode extends IBaseEntity {
     /// subtitle-need rule judged this episode as not needing subtitles.
     /// Absent on legacy payloads reads as false.
     noSubtitleNeeded?: boolean
+    /// Media-file detail batch (episodeFile payload): the episode table's
+    /// 质量/大小 columns. Absent on legacy payloads → column shows "—".
+    quality?: string | null
+    sizeBytes?: number | null
+    videoCodec?: string | null
+    audioCodec?: string | null
+    audioChannels?: number | null
+    resolution?: string | null
+    runtimeMinutes?: number | null
 }
 
 export interface IPagedResult<T> {
@@ -300,6 +309,22 @@ export interface IMediaLibraryItem {
     sizeBytes?: number | null
     /// Library B2: IMDb user rating; null when *arr has no real score.
     imdbRating?: number | null
+    /// Media-file detail batch: TMDb plot summary (*arr movie/series
+    /// overview) for the detail page's 简介 block.
+    overview?: string | null
+    /// Media-file detail batch: *arr MediaCover path of the synced poster;
+    /// loaded via /api/image/{movie|show}{path}. Null when none was synced.
+    posterPath?: string | null
+    /// Media-file detail batch: video file name without extension and its
+    /// directory (movie rows only) — the file card's 文件名/所在目录 lines.
+    fileName?: string | null
+    path?: string | null
+    /// Media-file detail batch: movie-file mediaInfo facts (movie rows only).
+    videoCodec?: string | null
+    audioCodec?: string | null
+    audioChannels?: number | null
+    resolution?: string | null
+    runtimeMinutes?: number | null
 }
 
 export interface ITranslationEstimate {
