@@ -826,7 +826,8 @@
             "mappingHint": "{count} 条映射",
             "manage": "管理",
             "edit": "编辑",
-            "mappingUnreachable": "{count} 个媒体路径不可达"
+            "mappingUnreachable": "{count} 个媒体路径不可达",
+            "webhookKeyMissing": "URL 里已带 API key,直接整段粘贴;key 在 设置→认证 生成"
         },
         "subtitleSources": {
             "title": "字幕源",

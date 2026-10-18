@@ -92,16 +92,20 @@
                     class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]"
                     data-test="webhook-url-radarr">
                     <b class="flex-none font-semibold">Radarr</b>
-                    <CodeSnippet class="mono min-w-0 flex-1 overflow-x-auto text-xs">
-                        {{ radarrWebhookUrl }}
+                    <CodeSnippet
+                        class="mono min-w-0 flex-1 overflow-x-auto text-xs"
+                        :title="webhookApiKey ? '' : t('settings.sources.webhookKeyMissing')">
+                        {{ withKey(radarrWebhookUrl) }}
                     </CodeSnippet>
                 </div>
                 <div
                     class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]"
                     data-test="webhook-url-sonarr">
                     <b class="flex-none font-semibold">Sonarr</b>
-                    <CodeSnippet class="mono min-w-0 flex-1 overflow-x-auto text-xs">
-                        {{ sonarrWebhookUrl }}
+                    <CodeSnippet
+                        class="mono min-w-0 flex-1 overflow-x-auto text-xs"
+                        :title="webhookApiKey ? '' : t('settings.sources.webhookKeyMissing')">
+                        {{ withKey(sonarrWebhookUrl) }}
                     </CodeSnippet>
                 </div>
             </div>
@@ -206,6 +210,7 @@ import {
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { mediaService } from '@/cells/app/api/mediaService'
+import { authService } from '@/cells/app/api/authService'
 import { settingService } from '@/cells/app/api/settingService'
 import { scheduleService } from '@/cells/settings/services/scheduleService'
 import { useMappingStore } from '@/cells/settings/stores/mapping'
@@ -221,6 +226,7 @@ const settingStore = useSettingStore()
 const toastStore = useToastStore()
 const mappingStore = useMappingStore()
 const mediaApi = mediaService(axios)
+const authApi = authService(axios)
 const settingApi = settingService(axios)
 const scheduleApi = scheduleService(axios)
 
@@ -228,6 +234,26 @@ const radarrWebhookUrl = resolveUrl('/api/webhook/radarr')
 const sonarrWebhookUrl = resolveUrl('/api/webhook/sonarr')
 
 const webhookOpen = ref(false)
+/// Radarr/Sonarr 的 webhook 表单没有自定义请求头一栏,URL 里的 ?apikey=
+/// 是唯一能携带密钥的通道(服务端按 *arr 惯例接受该参数)。折叠区第一次
+/// 展开时才取已生成的密钥(reveal 端点仅浏览器会话可读),未生成则回退
+/// 成不含 key 的裸 URL + 提示。
+const webhookApiKey = ref<string | null>(null)
+const webhookKeyLoaded = ref(false)
+watch(webhookOpen, (open) => {
+    if (!open || webhookKeyLoaded.value) return
+    webhookKeyLoaded.value = true
+    authApi
+        .getApiKey()
+        .then((response) => {
+            webhookApiKey.value = response.apiKey || null
+        })
+        .catch(() => {
+            webhookApiKey.value = null
+        })
+})
+const withKey = (url: string) =>
+    webhookApiKey.value ? `${url}?apikey=${webhookApiKey.value}` : url
 const editing = ref<'radarr' | 'sonarr' | null>(null)
 const syncing = reactive<{ radarr: boolean; sonarr: boolean }>({ radarr: false, sonarr: false })
 

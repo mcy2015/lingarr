@@ -48,17 +48,27 @@ public class LingarrAccessHandler : IAuthorizationHandler
         }
 
         // Fallback for transports where the API-key scheme did not run.
+        // Query spelling included: webhook senders cannot set headers (the
+        // *arr webhook forms have no header field — the URL is their only
+        // key transport).
+        var candidateKeys = new List<string>();
         if (httpContext.Request.Headers.TryGetValue(ApiKeyAuthenticationHandler.HeaderName, out var apiKeyHeader))
         {
-            var apiKey = apiKeyHeader.FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(apiKey))
+            candidateKeys.AddRange(apiKeyHeader);
+        }
+
+        if (httpContext.Request.Query.TryGetValue(ApiKeyAuthenticationHandler.QueryName, out var apiKeyQuery))
+        {
+            candidateKeys.AddRange(apiKeyQuery);
+        }
+
+        var authService = httpContext.RequestServices.GetRequiredService<IAuthService>();
+        foreach (var apiKey in candidateKeys)
+        {
+            if (!string.IsNullOrWhiteSpace(apiKey) && await authService.ValidateApiKey(apiKey))
             {
-                var authService = httpContext.RequestServices.GetRequiredService<IAuthService>();
-                if (await authService.ValidateApiKey(apiKey))
-                {
-                    context.Succeed(requirement);
-                    return;
-                }
+                context.Succeed(requirement);
+                return;
             }
         }
 

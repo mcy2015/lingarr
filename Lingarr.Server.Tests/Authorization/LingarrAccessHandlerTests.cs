@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Lingarr.Core.Configuration;
@@ -22,13 +23,20 @@ public class LingarrAccessHandlerTests
 
     private async Task<AuthorizationHandlerContext> HandleAsync(
         ClaimsPrincipal? user = null,
-        string? apiKeyHeader = null)
+        string? apiKeyHeader = null,
+        string? apiKeyQuery = null)
     {
         var httpContext = new DefaultHttpContext { User = user ?? new ClaimsPrincipal() };
         httpContext.RequestServices = new StubServiceProvider(_settings.Object, _authService.Object);
         if (apiKeyHeader != null)
         {
             httpContext.Request.Headers[ApiKeyAuthenticationHandler.HeaderName] = apiKeyHeader;
+        }
+
+        if (apiKeyQuery != null)
+        {
+            httpContext.Request.QueryString = QueryString.Create(
+                ApiKeyAuthenticationHandler.QueryName, apiKeyQuery);
         }
 
         var requirement = new LingarrAccessRequirement();
@@ -50,6 +58,30 @@ public class LingarrAccessHandlerTests
         var context = await HandleAsync(); // anonymous
 
         Assert.True(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task Succeeds_ForApiKeyQueryParameter()
+    {
+        // *arr webhook forms cannot set headers — the ?apikey= URL parameter
+        // is their only key transport and must authenticate the same way
+        AuthEnabled("true");
+        _authService.Setup(a => a.ValidateApiKey("k-query")).ReturnsAsync(true);
+
+        var context = await HandleAsync(apiKeyQuery: "k-query");
+
+        Assert.True(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task Fails_ForInvalidApiKeyQueryParameter()
+    {
+        AuthEnabled("true");
+        _authService.Setup(a => a.ValidateApiKey(It.IsAny<string>())).ReturnsAsync(false);
+
+        var context = await HandleAsync(apiKeyQuery: "wrong");
+
+        Assert.False(context.HasSucceeded);
     }
 
     [Fact]

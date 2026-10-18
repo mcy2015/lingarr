@@ -826,7 +826,8 @@
             "mappingHint": "{count} mapping | {count} mappings",
             "manage": "Manage",
             "edit": "Edit",
-            "mappingUnreachable": "{count} media paths unreachable"
+            "mappingUnreachable": "{count} media paths unreachable",
+            "webhookKeyMissing": "The URL already carries the API key — paste it whole; generate the key under Settings → Authentication"
         },
         "subtitleSources": {
             "title": "Subtitle sources",

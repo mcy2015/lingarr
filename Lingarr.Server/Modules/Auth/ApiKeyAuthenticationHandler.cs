@@ -6,14 +6,22 @@ using Microsoft.Extensions.Options;
 namespace Lingarr.Server.Modules.Auth;
 
 /// <summary>
-/// Authenticates requests carrying a valid <c>X-Api-Key</c> header. Paired with
-/// the cookie scheme in the <c>LingarrAccess</c> policy so API clients and
-/// browser sessions share one authorization pipeline.
+/// Authenticates requests carrying a valid <c>X-Api-Key</c> header or — the
+/// *arr convention — an <c>?apikey=</c> query parameter. The query form is
+/// what webhook senders use: Radarr/Sonarr webhook forms have no
+/// custom-header field, so their URL
+/// (<c>http://lingarr/api/webhook/radarr?apikey=…</c>) is the only key
+/// transport available. Paired with the cookie scheme in the
+/// <c>LingarrAccess</c> policy so API clients and browser sessions share one
+/// authorization pipeline.
 /// </summary>
 public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
     public const string SchemeName = "Lingarr.ApiKey";
     public const string HeaderName = "X-Api-Key";
+
+    /// <summary>Query-parameter key spelling, matching the *arr APIs.</summary>
+    public const string QueryName = "apikey";
 
     private readonly IAuthService _authService;
 
@@ -29,13 +37,22 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (!Request.Headers.TryGetValue(HeaderName, out var values))
+        string? apiKey = null;
+        if (Request.Headers.TryGetValue(HeaderName, out var values))
+        {
+            apiKey = values.FirstOrDefault();
+        }
+        else if (Request.Query.TryGetValue(QueryName, out var queryValues))
+        {
+            apiKey = queryValues.FirstOrDefault();
+        }
+
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             return AuthenticateResult.NoResult();
         }
 
-        var apiKey = values.FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(apiKey) || !await _authService.ValidateApiKey(apiKey))
+        if (!await _authService.ValidateApiKey(apiKey))
         {
             return AuthenticateResult.Fail("Invalid API key.");
         }
