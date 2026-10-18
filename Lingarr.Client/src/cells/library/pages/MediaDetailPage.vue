@@ -295,7 +295,7 @@
              results (F2b: text tracks with recognized language and uncovered target language have a translate entry; graphic tracks
              such as PGS are marked non-translatable and have no entry) ═══ -->
         <div
-            class="border-line bg-secondary flex min-h-0 flex-col rounded-md border"
+            class="border-line bg-secondary flex max-h-[min(50vh,400px)] min-h-0 flex-col rounded-md border"
             data-test="subtitle-files-card">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">
@@ -339,6 +339,20 @@
                         class="text-secondary-content/70 text-xs"
                         data-test="audio-languages-unknown">
                         {{ t('mediaDetail.audio.unknown') }}
+                    </span>
+                    <!-- 手动标记的持久徽章:标记存在(任一方向)就必须一直可见,
+                         「清除标记」是唯一移除途径 -->
+                    <span
+                        v-if="item?.audioOverride === true"
+                        class="mono rounded-[3px] border border-accent/50 bg-accent/15 px-1.5 py-px text-[10.5px] font-bold text-accent"
+                        data-test="audio-marked-needed-badge">
+                        {{ t('mediaDetail.audio.markedBadge') }}
+                    </span>
+                    <span
+                        v-else-if="item?.audioOverride === false"
+                        class="mono border-success/40 bg-success/10 rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold text-success"
+                        data-test="audio-marked-not-needed-badge">
+                        {{ t('mediaDetail.audio.notNeededBadge') }}
                     </span>
                     <!-- 覆盖说明只在音轨确实覆盖了某目标语言时出现(否则文案失真) -->
                     <span
@@ -484,7 +498,9 @@
         </div>
 
         <!-- ═══ 翻译历史(请求列表形态;行内详情 → queue-detail) ═══ -->
-        <div class="border-line bg-secondary flex min-h-[160px] flex-1 flex-col rounded-md border">
+        <div
+            class="border-line bg-secondary flex max-h-[min(50vh,400px)] min-h-[160px] flex-col rounded-md border"
+            data-test="history-card">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">{{ t('mediaDetail.history') }}</h2>
                 <span class="mono text-secondary-content ml-auto text-xs">
@@ -666,35 +682,37 @@ const audioContainsTarget = computed<boolean>(() => {
     )
 })
 
-/// The audio row's single toggle. 「标记需要字幕」(needed=true) pulls an
-/// exempt item back into the needing pool — it overrides the automatic
-/// target-covering exemption (AC5 reversible) and confirms unknown-audio
-/// items;「取消标记」(needed=false) lifts the mark so the exemption
-/// re-applies. Known audio without the target has nothing to toggle — no
-/// entry renders there. The button shows the SHORT label (C1: row space is
-/// tight); `title`/`aria-label` keep the full sentence for hover/SR.
-const subtitleNeedAction = computed<{ label: string; title: string; needed: boolean } | null>(
-    () => {
-        const media = item.value
-        if (!media) return null
-        const markNeeded = {
-            label: t('mediaDetail.audio.markNeeded'),
-            title: t('mediaDetail.audio.markNeeded'),
-            needed: true
-        }
-        const cancelMark = {
-            label: t('mediaDetail.audio.cancelMarkShort'),
-            title: t('mediaDetail.audio.cancelMark'),
-            needed: false
-        }
-        if (media.needsNoSubtitles) {
-            return audioContainsTarget.value ? markNeeded : cancelMark
-        }
-        if (audioLanguages.value === null) return markNeeded
-        if (audioContainsTarget.value) return cancelMark
-        return null
+/// The audio row's single toggle, driven by the persisted audioOverride
+/// mark. With a mark in EITHER direction the only action is「清除标记」—
+/// it clears the mark so the automatic audio rule applies again (the badge
+/// disappears with it). Without a mark:「标记需要字幕」pulls an exempt or
+/// audio-unknown item into the needing pool (AC5 reversible); known audio
+/// without the target already needs subtitles automatically — no entry.
+/// The button shows the SHORT label (C1: row space is tight);
+/// `title`/`aria-label` keep the full sentence for hover/SR.
+const subtitleNeedAction = computed<
+    { label: string; title: string; needed: boolean | null } | null
+>(() => {
+    const media = item.value
+    if (!media) return null
+    const markNeeded = {
+        label: t('mediaDetail.audio.markNeeded'),
+        title: t('mediaDetail.audio.markNeeded'),
+        needed: true as boolean | null
     }
-)
+    const cancelMark = {
+        label: t('mediaDetail.audio.cancelMarkShort'),
+        title: t('mediaDetail.audio.cancelMark'),
+        needed: null
+    }
+    if (media.audioOverride !== null && media.audioOverride !== undefined) {
+        return cancelMark
+    }
+    if (media.needsNoSubtitles) return markNeeded
+    if (audioLanguages.value === null) return markNeeded
+    if (audioContainsTarget.value) return markNeeded
+    return null
+})
 
 const subtitleNeedBusy = ref(false)
 
@@ -1162,12 +1180,12 @@ async function translateEmbeddedTrack(
     }
 }
 
-/// 「标记需要字幕/取消标记」(需求卡 A/B): the response carries the resulting
-/// effective needsNoSubtitles state — apply it in place (the list-derived
-/// row object is the same reference), toast, then refresh just the subtitle
-/// card so the audio row re-renders from a fresh payload. Never a full
-/// page reload.
-async function toggleSubtitleNeed(needed: boolean): Promise<void> {
+/// 「标记需要字幕/清除标记」(需求卡 A/B): the response carries the resulting
+/// effective state and the persisted override — both apply in place (the
+/// list-derived row object is the same reference), toast, then refresh just
+/// the subtitle card so the audio row re-renders from a fresh payload.
+/// Never a full page reload.
+async function toggleSubtitleNeed(needed: boolean | null): Promise<void> {
     const media = item.value
     if (!media || subtitleNeedBusy.value) return
     subtitleNeedBusy.value = true
@@ -1178,10 +1196,14 @@ async function toggleSubtitleNeed(needed: boolean): Promise<void> {
             needed
         )
         media.needsNoSubtitles = result.needsNoSubtitles
+        media.audioOverride = result.audioOverride ?? null
         toastStore.push({
-            message: needed
-                ? t('mediaDetail.audio.markedToast')
-                : t('mediaDetail.audio.unmarkedToast'),
+            message:
+                needed === null
+                    ? t('mediaDetail.audio.unmarkedToast')
+                    : needed
+                      ? t('mediaDetail.audio.markedToast')
+                      : t('mediaDetail.audio.notNeededToast'),
             type: 'success'
         })
         try {

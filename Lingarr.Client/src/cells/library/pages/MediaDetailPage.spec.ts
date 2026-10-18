@@ -1133,7 +1133,11 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
     })
 
     it('states the unknown audio honestly and marks the media as needing subtitles', async () => {
-        subtitleNeedMock.mockResolvedValue({ needsNoSubtitles: true })
+        subtitleNeedMock.mockResolvedValue({
+            needsNoSubtitles: false,
+            needsTranslation: true,
+            audioOverride: true
+        })
         const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
 
         const card = wrapper.find('[data-test="subtitle-files-card"]')
@@ -1166,11 +1170,15 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
         expect(toastStore.toasts[0].type).toBe('success')
         // in-place refresh: only the subtitle card is re-fetched (no reload)
         expect(mediaSubtitlesMock).toHaveBeenCalledTimes(2)
-        // the response's effective state drives the toggle's new SHORT label
-        // (C1); the full sentence moves to the hover title
+        // the response's persisted override drives the toggle's new SHORT
+        // label (C1); the full sentence moves to the hover title — and the
+        // persistent badge makes the manual mark visible on the page
         const after = wrapper.find('[data-test="subtitle-need-toggle"]')
         expect(after.text()).toBe(en.mediaDetail.audio.cancelMarkShort)
         expect(after.attributes('title')).toBe(en.mediaDetail.audio.cancelMark)
+        const badge = wrapper.find('[data-test="audio-marked-needed-badge"]')
+        expect(badge.exists()).toBe(true)
+        expect(badge.text()).toBe(en.mediaDetail.audio.markedBadge)
     })
 
     it('lists the mono audio codes and offers the override for target-covering audio', async () => {
@@ -1181,7 +1189,11 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
             pageSize: 20
         })
         mediaSubtitlesMock.mockResolvedValue(subtitlesPayload({ audioLanguages: ['en', 'zh'] }))
-        subtitleNeedMock.mockResolvedValue({ needsNoSubtitles: false })
+        subtitleNeedMock.mockResolvedValue({
+            needsNoSubtitles: false,
+            needsTranslation: true,
+            audioOverride: true
+        })
         const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
 
         const row = wrapper.find('[data-test="audio-languages-row"]')
@@ -1203,10 +1215,45 @@ describe('MediaDetailPage · 音轨行与字幕需求标记(需求卡 B · 电�
         expect(subtitleNeedMock).toHaveBeenCalledWith('Movie', 7, true)
         expect(toastStore.toasts[0].type).toBe('success')
         // reversible (AC5): with the override active the entry flips to the
-        // short clear-mark label (C1)
+        // short clear-mark label (C1) and the badge marks it on the page
         expect(wrapper.find('[data-test="subtitle-need-toggle"]').text()).toBe(
             en.mediaDetail.audio.cancelMarkShort
         )
+        expect(wrapper.find('[data-test="audio-marked-needed-badge"]').exists()).toBe(true)
+    })
+
+    it('shows the not-needed badge for a persisted mark and clears it back to automatic', async () => {
+        // the mark persisted earlier (override=false) must stay VISIBLE —
+        // a badge on the page, not just a flipped button — and clearing it
+        // sends needed:null so the automatic audio rule applies again
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem, needsNoSubtitles: true, audioOverride: false }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        subtitleNeedMock.mockResolvedValue({
+            needsNoSubtitles: true,
+            needsTranslation: false,
+            audioOverride: null
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const row = wrapper.find('[data-test="audio-languages-row"]')
+        const badge = row.find('[data-test="audio-marked-not-needed-badge"]')
+        expect(badge.exists()).toBe(true)
+        expect(badge.text()).toBe(en.mediaDetail.audio.notNeededBadge)
+
+        const toggle = row.find('[data-test="subtitle-need-toggle"]')
+        expect(toggle.text()).toBe(en.mediaDetail.audio.cancelMarkShort)
+
+        await toggle.trigger('click')
+        await settle()
+
+        expect(subtitleNeedMock).toHaveBeenCalledWith('Movie', 7, null)
+        expect(toastStore.toasts[0].message).toBe(en.mediaDetail.audio.unmarkedToast)
+        // mark cleared: the badge disappears with it
+        expect(wrapper.find('[data-test="audio-marked-not-needed-badge"]').exists()).toBe(false)
     })
 
     it('renders no entry when known audio simply lacks the target language', async () => {
@@ -1329,11 +1376,11 @@ describe('MediaDetailPage · 搜索字幕入口与音轨判定(QA6)', () => {
 
         const row = wrapper.find('[data-test="audio-languages-row"]')
         expect(row.find('[data-test="audio-languages-value"]').text()).toBe('zh')
-        // known audio covering a target → the short clear-mark override with
-        // the full sentence kept on the title (C1)
+        // known audio covering a target is auto-exempt; without a manual
+        // mark the entry offers to override it BACK into the needing pool —
+        // canceling only ever appears once a mark exists
         const toggle = row.find('[data-test="subtitle-need-toggle"]')
-        expect(toggle.text()).toBe(en.mediaDetail.audio.cancelMarkShort)
-        expect(toggle.attributes('title')).toBe(en.mediaDetail.audio.cancelMark)
+        expect(toggle.text()).toBe(en.mediaDetail.audio.markNeeded)
         expect(row.find('[data-test="audio-coverage-note"]').text()).toContain(
             'Audio track already covers zh'
         )

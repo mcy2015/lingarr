@@ -45,6 +45,14 @@ public class MediaLibraryItem
     public bool NeedsNoSubtitles { get; init; }
 
     /// <summary>
+    /// The manual subtitle-need mark: true = forced "needs subtitles",
+    /// false = forced "not needed", null = automatic (audio rule decides).
+    /// Shows aggregate over their episodes (uniform mark → that value).
+    /// Drives the detail page's persistent badge and its cancel action.
+    /// </summary>
+    public bool? AudioOverride { get; init; }
+
+    /// <summary>
     /// Release year from *arr (library B2/M0008). Shows carry the series
     /// year; movies the release year. Null when the payload had none.
     /// </summary>

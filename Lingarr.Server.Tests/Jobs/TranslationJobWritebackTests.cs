@@ -150,6 +150,7 @@ public class TranslationJobWritebackTests : IDisposable
         new Mock<IMediaService>().Object,
         new Mock<IMediaLibraryService>().Object,
         _subtitleService,
+        new Mock<ISettingService>().Object,
         _dbContext);
 
     private static MediaSubtitlesResponse FilesOf(ActionResult<MediaSubtitlesResponse> action) =>

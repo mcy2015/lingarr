@@ -83,6 +83,7 @@
         },
         "table": {
             "title": "Title",
+            "audio": "Audio",
             "tracks": "Subtitle tracks",
             "status": "Status",
             "lastActivity": "Last activity",
@@ -1108,7 +1109,10 @@
             "cancelMarkShort": "Clear mark",
             "markedToast": "Marked as needing subtitles",
             "unmarkedToast": "Subtitle-need mark cancelled",
-            "failedToast": "Updating the subtitle need failed: {message}"
+            "failedToast": "Updating the subtitle need failed: {message}",
+            "markedBadge": "Marked: needs subtitles",
+            "notNeededBadge": "Marked: no subtitles needed",
+            "notNeededToast": "Marked as not needing subtitles"
         },
         "openSubtitleSearch": "Search Subtitles",
         "openImdb": "Open the IMDb page"

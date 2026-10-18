@@ -83,6 +83,7 @@
         },
         "table": {
             "title": "标题",
+            "audio": "音轨",
             "tracks": "字幕轨",
             "status": "状态",
             "lastActivity": "最近活动",
@@ -1108,7 +1109,10 @@
             "cancelMarkShort": "清除标记",
             "markedToast": "已标记需要字幕",
             "unmarkedToast": "已取消标记",
-            "failedToast": "更新字幕需求失败：{message}"
+            "failedToast": "更新字幕需求失败：{message}",
+            "markedBadge": "已标记需要字幕",
+            "notNeededBadge": "已标记无需字幕",
+            "notNeededToast": "已标记无需字幕"
         },
         "openSubtitleSearch": "🔍 搜索字幕",
         "openImdb": "打开 IMDb 页面"

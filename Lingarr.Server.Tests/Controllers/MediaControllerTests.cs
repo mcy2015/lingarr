@@ -11,6 +11,7 @@ using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,9 @@ namespace Lingarr.Server.Tests.Controllers;
 public class MediaControllerTests
 {
     private readonly Mock<ISubtitleService> _subtitleService = new();
+    /// Backs the subtitle-need rule's target resolution; defaults to no
+    /// configured targets (conservative: nothing auto-exempts).
+    private readonly Mock<ISettingService> _settingService = new();
     private readonly LingarrDbContext _dbContext;
 
     public MediaControllerTests()
@@ -37,12 +41,16 @@ public class MediaControllerTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         _dbContext = new LingarrDbContext(options);
+        _settingService
+            .Setup(service => service.GetSettingAsJson<TargetLanguage>(It.IsAny<string>()))
+            .ReturnsAsync([]);
     }
 
     private MediaController CreateController(Mock<IMediaLibraryService>? library = null) => new(
         new Mock<IMediaService>().Object,
         (library ?? new Mock<IMediaLibraryService>()).Object,
         _subtitleService.Object,
+        _settingService.Object,
         _dbContext);
 
     private static Movie NewMovie(int id, string path, string fileName, string[]? audioLanguages = null) => new()
@@ -413,6 +421,7 @@ public class MediaControllerTests
             media.Object,
             new Mock<IMediaLibraryService>().Object,
             _subtitleService.Object,
+            _settingService.Object,
             _dbContext);
 
         await controller.GetMovies(null, null, ascending: true, pageSize: 5000, pageNumber: 0);
@@ -609,6 +618,38 @@ public class MediaControllerTests
         Assert.False(stored.AudioOverride);
         Assert.False(stored.NeedsTranslation);
         Assert.True(stored.NoSubtitleNeeded); // the previously-missing write
+    }
+
+    [Fact]
+    public async Task SetSubtitleNeed_NullClearsTheMark_AndTheAudioRuleTakesOverAgain()
+    {
+        // needed:null is the third state — clear the manual mark so the
+        // automatic audio rule decides: zh audio + zh target → auto-exempt
+        _settingService
+            .Setup(service => service.GetSettingAsJson<TargetLanguage>(It.IsAny<string>()))
+            .ReturnsAsync([new TargetLanguage { Code = "zh", Name = "Chinese" }]);
+        var movie = NewMovie(45, "/movies/clear", "clear.mkv", ["zh"]);
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+
+        // mark needed first (override=true, un-exempted)
+        await CreateController().SetSubtitleNeed(MediaType.Movie, 45, new SubtitleNeedRequest { Needed = true });
+        var marked = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 45);
+        Assert.True(marked.AudioOverride);
+        Assert.True(marked.NeedsTranslation);
+
+        // clear: null returns the item to the automatic rule — zh audio
+        // covers the zh target, so the exemption re-applies
+        var action = await CreateController().SetSubtitleNeed(MediaType.Movie, 45, new SubtitleNeedRequest { Needed = null });
+        var payload = Assert.IsType<SubtitleNeedResponse>(Assert.IsType<OkObjectResult>(action.Result).Value!);
+        Assert.Null(payload.AudioOverride);
+        Assert.True(payload.NeedsNoSubtitles);
+        Assert.False(payload.NeedsTranslation);
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 45);
+        Assert.Null(stored.AudioOverride);
+        Assert.False(stored.NeedsTranslation);
+        Assert.True(stored.NoSubtitleNeeded);
     }
 
     [Fact]

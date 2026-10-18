@@ -77,6 +77,7 @@
                                 @change="toggleSelectAll" />
                         </th>
                         <th :class="thClass">{{ t('library.table.title') }}</th>
+                        <th :class="thClass">{{ t('library.table.audio') }}</th>
                         <th :class="thClass">{{ t('library.table.tracks') }}</th>
                         <th :class="thClass">{{ t('library.table.status') }}</th>
                         <th :class="thClass">{{ t('library.table.lastActivity') }}</th>
@@ -85,7 +86,7 @@
                 </thead>
                 <tbody>
                     <tr v-if="items.length === 0">
-                        <td :class="tdClass" colspan="6">
+                        <td :class="tdClass" colspan="7">
                             <span class="text-secondary-content/60 text-xs">{{ loading ? t('common.loading') : t('library.empty') }}</span>
                         </td>
                     </tr>
@@ -126,6 +127,18 @@
                                         {{ metaChips(item) }}
                                     </span>
                                 </div>
+                            </td>
+                            <td :class="tdClass">
+                                <!-- 音轨列:归一化语言码大写点隔;null/缺失=未知
+                                     (与详情页音轨行同一约定) -->
+                                <span
+                                    v-if="item.audioLanguages?.length"
+                                    class="mono text-primary-content text-[11.5px]"
+                                    :title="t('library.table.audio')"
+                                    data-test="audio-languages-cell">
+                                    {{ audioCellText(item) }}
+                                </span>
+                                <span v-else class="text-secondary-content/50 text-[11.5px]">—</span>
                             </td>
                             <td :class="tdClass">
                                 <div class="flex max-w-[340px] flex-wrap gap-1">
@@ -627,6 +640,14 @@ function trackLabel(track: ISubtitleTrackSummary): string {
     if (track.state === 'complete') return `${lang} ✓`
     if (track.state === 'partial') return `${lang} ◐ ${track.have}/${track.total}`
     return `${lang} ·`
+}
+
+/// 音轨列文本:归一化码大写、「·」点隔("zh" → "ZH · EN"),与详情页
+/// 音轨行的 join(' · ') 同一形态
+function audioCellText(item: IMediaLibraryItem): string {
+    return (item.audioLanguages ?? [])
+        .map((code) => code.toUpperCase())
+        .join(' · ')
 }
 
 function trackTitle(track: ISubtitleTrackSummary): string {

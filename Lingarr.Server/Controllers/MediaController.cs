@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Translation;
 
@@ -21,6 +23,7 @@ public class MediaController : ControllerBase
     private readonly IMediaService _mediaService;
     private readonly IMediaLibraryService _mediaLibraryService;
     private readonly ISubtitleService _subtitleService;
+    private readonly ISettingService _settingService;
     private readonly LingarrDbContext _dbContext;
 
     // ── subtitle file cache (audit P1-5) ───────────────────────────
@@ -61,11 +64,13 @@ public class MediaController : ControllerBase
         IMediaService mediaService,
         IMediaLibraryService mediaLibraryService,
         ISubtitleService subtitleService,
+        ISettingService settingService,
         LingarrDbContext dbContext)
     {
         _mediaService = mediaService;
         _mediaLibraryService = mediaLibraryService;
         _subtitleService = subtitleService;
+        _settingService = settingService;
         _dbContext = dbContext;
     }
 
@@ -212,15 +217,14 @@ public class MediaController : ControllerBase
 
     /// <summary>
     /// Manually marks whether a media item needs subtitles (PRD card A):
-    /// writes the reversible audio_override and flips needs_translation
-    /// immediately — with an override set, the need rule short-circuits to
-    /// its value, so the new state takes effect on the next selection run
-    /// without waiting for the statistics scan. Shows apply the mark to
-    /// every episode.
+    /// writes the reversible audio_override and recomputes the effective
+    /// flags through the shared <see cref="SubtitleNeedRule"/> so every state
+    /// (marked needed / marked not needed / mark cleared back to automatic)
+    /// lands exactly where the nightly statistics scan would put it.
     /// </summary>
     /// <param name="mediaType">Movie, Episode or Show (shows cascade to episodes).</param>
     /// <param name="id">Movie/episode id, or the show id for shows.</param>
-    /// <param name="request">The needed flag to persist.</param>
+    /// <param name="request">The needed flag to persist; null clears the mark.</param>
     /// <response code="200">The media's new subtitle-need state.</response>
     /// <response code="404">Unknown media id (or unsupported media type).</response>
     [HttpPost("{mediaType}/{id}/subtitle-need")]
@@ -229,6 +233,12 @@ public class MediaController : ControllerBase
         int id,
         [FromBody] SubtitleNeedRequest request)
     {
+        var targets = (await _settingService.GetSettingAsJson<TargetLanguage>(
+                           SettingKeys.Translation.TargetLanguages)
+                       ?? [])
+            .Select(language => language.Code)
+            .ToList();
+
         switch (mediaType)
         {
             case MediaType.Movie:
@@ -236,8 +246,10 @@ public class MediaController : ControllerBase
                 var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == id);
                 if (movie == null) return NotFound();
                 movie.AudioOverride = request.Needed;
-                movie.NeedsTranslation = request.Needed;
-                movie.NoSubtitleNeeded = !request.Needed;
+                movie.NeedsTranslation = SubtitleNeedRule.NeedsTranslation(
+                    movie.AudioOverride, movie.AudioLanguages, CoveredLanguages(movie.SubtitleCoverageJson), targets);
+                movie.NoSubtitleNeeded = SubtitleNeedRule.NoSubtitleNeeded(
+                    movie.AudioOverride, movie.AudioLanguages, targets);
                 await _dbContext.SaveChangesAsync();
                 return Ok(new SubtitleNeedResponse
                 {
@@ -252,15 +264,14 @@ public class MediaController : ControllerBase
             {
                 var episode = await _dbContext.Episodes.FirstOrDefaultAsync(e => e.Id == id);
                 if (episode == null) return NotFound();
-                // all three flags persist, matching the Movie branch: a stale
-                // NoSubtitleNeeded column would flip the mark right back in
-                // the library aggregate (episodes.All(NoSubtitleNeeded)) and
-                // keep the gap fill's SQL gate
-                // (needs_translation=1 AND no_subtitle_needed=0) from ever
-                // picking the episode up again
+                // episodes carry no per-episode coverage snapshot — the rule
+                // runs on audio/override alone (conservative) and the next
+                // statistics scan refines needs from the real subtitle files
                 episode.AudioOverride = request.Needed;
-                episode.NeedsTranslation = request.Needed;
-                episode.NoSubtitleNeeded = !request.Needed;
+                episode.NeedsTranslation = SubtitleNeedRule.NeedsTranslation(
+                    episode.AudioOverride, episode.AudioLanguages, null, targets);
+                episode.NoSubtitleNeeded = SubtitleNeedRule.NoSubtitleNeeded(
+                    episode.AudioOverride, episode.AudioLanguages, targets);
                 await _dbContext.SaveChangesAsync();
                 return Ok(new SubtitleNeedResponse
                 {
@@ -280,11 +291,11 @@ public class MediaController : ControllerBase
                     .ToListAsync();
                 foreach (var episode in episodes)
                 {
-                    // same three-flag write as the single-episode branch, so a
-                    // show-level mark survives the aggregate recomputation too
                     episode.AudioOverride = request.Needed;
-                    episode.NeedsTranslation = request.Needed;
-                    episode.NoSubtitleNeeded = !request.Needed;
+                    episode.NeedsTranslation = SubtitleNeedRule.NeedsTranslation(
+                        episode.AudioOverride, episode.AudioLanguages, null, targets);
+                    episode.NoSubtitleNeeded = SubtitleNeedRule.NoSubtitleNeeded(
+                        episode.AudioOverride, episode.AudioLanguages, targets);
                 }
                 await _dbContext.SaveChangesAsync();
                 return Ok(new SubtitleNeedResponse
@@ -293,8 +304,8 @@ public class MediaController : ControllerBase
                     // needs subtitles exactly when the mark says so; an
                     // episode-less show has neither need nor exemption (its
                     // vacuous aggregate is not "native", matching the list)
-                    NeedsNoSubtitles = episodes.Count > 0 && !request.Needed,
-                    NeedsTranslation = episodes.Count > 0 && request.Needed,
+                    NeedsNoSubtitles = episodes.Count > 0 && episodes.All(e => !e.NeedsTranslation),
+                    NeedsTranslation = episodes.Count > 0 && episodes.Any(e => e.NeedsTranslation),
                     AudioLanguages = MediaLibraryService.AggregateAudioLanguages(
                         episodes.Select(e => e.AudioLanguages)),
                     // an episode-less show has no row to persist the mark on
@@ -304,6 +315,31 @@ public class MediaController : ControllerBase
 
             default:
                 return NotFound();
+        }
+    }
+
+    /// <summary>
+    /// Languages the media already carries subtitle files in, read from the
+    /// statistics snapshot's per-language keys. Empty when nothing is stored
+    /// — the rule treats that as "nothing covered".
+    /// </summary>
+    private static List<string> CoveredLanguages(string? subtitleCoverageJson)
+    {
+        if (string.IsNullOrWhiteSpace(subtitleCoverageJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(subtitleCoverageJson);
+            return document.RootElement.EnumerateObject()
+                .Select(property => property.Name)
+                .ToList();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
         }
     }
 
@@ -482,8 +518,12 @@ public class MediaController : ControllerBase
 /// <summary>Body of POST api/media/{mediaType}/{id}/subtitle-need (PRD card A).</summary>
 public class SubtitleNeedRequest
 {
-    /// <summary>True marks the media as needing subtitles; false as not needing them.</summary>
-    public bool Needed { get; set; }
+    /// <summary>
+    /// True marks the media as needing subtitles; false as not needing
+    /// them; null clears the manual mark so the automatic audio rule
+    /// applies again (the three-state audio_override column).
+    /// </summary>
+    public bool? Needed { get; set; }
 }
 
 /// <summary>

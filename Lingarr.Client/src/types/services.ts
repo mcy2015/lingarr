@@ -91,7 +91,7 @@ export interface IMediaService {
     /// item (needed=true → needs subtitles, needed=false → lifts the mark
     /// and re-exempts). The response carries the resulting effective state
     /// (see ISubtitleNeedResponse).
-    subtitleNeed<T>(mediaType: MediaType, id: number, needed: boolean): Promise<T>
+    subtitleNeed<T>(mediaType: MediaType, id: number, needed: boolean | null): Promise<T>
 }
 
 /// One external subtitle file next to a media item; languages carries every
@@ -136,6 +136,11 @@ export interface IMediaSubtitlesResponse {
 ///「无需字幕」state after applying the requested「需要字幕」mark.
 export interface ISubtitleNeedResponse {
     needsNoSubtitles: boolean
+    needsTranslation?: boolean
+    audioLanguages?: string[] | null
+    /// The persisted manual mark after the write: true = forced needed,
+    /// false = forced not needed, null = mark cleared (automatic).
+    audioOverride?: boolean | null
 }
 
 export interface ISettingService {

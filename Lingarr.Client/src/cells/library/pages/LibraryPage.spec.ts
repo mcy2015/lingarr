@@ -291,6 +291,24 @@ describe('LibraryPage', () => {
         )
     })
 
+    it('renders the audio languages column with codes or a dash when unknown', async () => {
+        libraryMock.mockResolvedValueOnce({
+            ...libraryPage,
+            items: [
+                { ...libraryPage.items[0], title: 'Zh Movie', audioLanguages: ['zh', 'en'] },
+                { ...libraryPage.items[0], title: 'Unknown Movie', audioLanguages: null }
+            ]
+        })
+        const { wrapper } = await mountLibraryPage()
+
+        const header = wrapper.findAll('th').map(th => th.text())
+        expect(header).toContain('library.table.audio')
+
+        const cells = wrapper.findAll('[data-test="audio-languages-cell"]')
+        expect(cells).toHaveLength(1)
+        expect(cells[0].text()).toBe('ZH · EN')
+    })
+
     it('writes the current page into the route query when paginating', async () => {
         // only rendered past the first page — fake a larger library
         libraryMock.mockResolvedValueOnce({ ...libraryPage, totalCount: 60 })

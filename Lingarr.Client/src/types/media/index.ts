@@ -282,6 +282,10 @@ export interface IMediaLibraryItem {
     /// already covers the target language or the user marked it so. Absent
     /// (undefined) reads as false: no exemption.
     needsNoSubtitles?: boolean
+    /// Requirement card A: the manual subtitle-need mark. true = forced
+    /// "needs subtitles", false = forced "not needed", null/undefined =
+    /// automatic (the audio rule decides). Drives the detail page badge.
+    audioOverride?: boolean | null
     /// Library B2: release year from *arr. Shows carry the series year.
     year?: number | null
     /// Library B2: IMDb id ("tt…"); null when the payload had none.

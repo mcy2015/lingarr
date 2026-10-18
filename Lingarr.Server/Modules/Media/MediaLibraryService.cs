@@ -617,6 +617,16 @@ public class MediaLibraryService : IMediaLibraryService
                     TranslationAgeThreshold = show.TranslationAgeThreshold,
                     AudioLanguages = AggregateAudioLanguages(episodes.Select(e => e.AudioLanguages)),
                     NeedsNoSubtitles = episodes.Count > 0 && episodes.All(e => e.NoSubtitleNeeded),
+                    // show-level mark: uniform across episodes → that value,
+                    // mixed/unmarked → null (automatic), matching the toggle
+                    // which writes every episode at once
+                    AudioOverride = episodeCount == 0
+                        ? null
+                        : episodes.All(e => e.AudioOverride == true)
+                            ? true
+                            : episodes.All(e => e.AudioOverride == false)
+                                ? false
+                                : null,
                     Show = show
                 };
             }
@@ -654,7 +664,8 @@ public class MediaLibraryService : IMediaLibraryService
                     IncludeInTranslation = movie.IncludeInTranslation,
                     TranslationAgeThreshold = movie.TranslationAgeThreshold,
                     AudioLanguages = movie.AudioLanguages,
-                    NeedsNoSubtitles = movie.NoSubtitleNeeded
+                    NeedsNoSubtitles = movie.NoSubtitleNeeded,
+                    AudioOverride = movie.AudioOverride
                 };
             }
         }

@@ -335,6 +335,14 @@
     width: 0.5rem;
 }
 
+/* standard properties so Safari/Firefox also draw a visible thin scrollbar —
+   macOS overlay scrollbars otherwise hide the affordance entirely and the
+   card looks like its rows simply end (walk-through finding) */
+.shell-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+}
+
 .shell-scroll::-webkit-scrollbar-track {
     background: transparent;
 }
