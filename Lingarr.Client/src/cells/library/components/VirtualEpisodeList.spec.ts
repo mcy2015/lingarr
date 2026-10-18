@@ -103,6 +103,32 @@ describe('VirtualEpisodeList', () => {
         expect(wrapper.findAll('[data-test="virtual-row"]').length).toBe(15)
     })
 
+    it('re-reads the viewport on updates after a transient mount measurement', async () => {
+        // production defect: the mount-time clientHeight caught the flex
+        // layout mid-settle (558px viewport measured as ~273px) and the
+        // window rendered half the rows it should — dead space inside the
+        // card. The viewport is now re-read on every update, so a late
+        // layout must widen the rendered window by itself.
+        const { wrapper } = await mountList(makeRows(500), { itemHeight: 20 })
+
+        // mount sees clientHeight 0 → fallback 480 → 29 rows
+        expect(wrapper.findAll('[data-test="virtual-row"]').length).toBe(29)
+
+        // the layout settles and the real height becomes readable; any
+        // reactive update (here: a scroll event) picks it up
+        const scroller = wrapper.find('[data-test="virtual-scroll-container"]')
+        Object.defineProperty(scroller.element, 'clientHeight', {
+            configurable: true,
+            get: () => 900
+        })
+        scroller.element.scrollTop = 0
+        await scroller.trigger('scroll')
+        await nextTick()
+
+        // 900/20 = 45 visible + 5 overscan at the top-clamped start = 50
+        expect(wrapper.findAll('[data-test="virtual-row"]').length).toBe(50)
+    })
+
     it('keeps row interactions working through the slot (button fires with its row)', async () => {
         const onAction = vi.fn()
         const { wrapper } = await mountList(makeRows(3), { onAction })

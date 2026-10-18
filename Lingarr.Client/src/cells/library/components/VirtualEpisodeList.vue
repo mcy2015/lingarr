@@ -125,6 +125,11 @@ const padBottom = computed(
 
 const onScroll = (): void => {
     scrollTop.value = scrollEl.value?.scrollTop ?? 0
+    // the mount measurement may have caught a transient layout height; every
+    // scroll gesture re-reads the viewport so the window self-corrects even
+    // when scrollTop itself did not change (guarded — no extra render when
+    // the height is stable)
+    measure()
 }
 
 const itemKey = (item: T, index: number): string | number =>
@@ -151,11 +156,26 @@ const remeasure = (): void => {
     measureRows()
 }
 
+// The mount-time clientHeight can catch a transient flex-layout height
+// (production: a 558px viewport measured as 273px → the window rendered
+// half the rows it should and left dead space inside the card). The
+// scroller therefore reports its own size changes through a
+// ResizeObserver, and every update re-reads the viewport alongside the
+// row height — both guarded by the value-change checks in measure().
+let viewportObserver: ResizeObserver | undefined
+
 onMounted(() => {
     measure()
     measureRows()
     window.addEventListener('resize', remeasure)
+    if (typeof ResizeObserver !== 'undefined' && scrollEl.value) {
+        viewportObserver = new ResizeObserver(remeasure)
+        viewportObserver.observe(scrollEl.value)
+    }
 })
-onUnmounted(() => window.removeEventListener('resize', remeasure))
-onUpdated(measureRows)
+onUnmounted(() => {
+    window.removeEventListener('resize', remeasure)
+    viewportObserver?.disconnect()
+})
+onUpdated(remeasure)
 </script>
