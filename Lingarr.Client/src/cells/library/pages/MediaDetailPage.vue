@@ -113,7 +113,7 @@
             <!-- C4:卡高度内容自适应(短季不留大片空白),max-h 上限内滚动(长季
                  仍可滚);剩余空间交给下方 Translation history 卡 -->
             <div
-                class="border-line bg-secondary flex max-h-[min(70vh,560px)] min-h-0 flex-col rounded-md border"
+                class="border-line bg-secondary flex max-h-[1600px] min-h-0 flex-col rounded-md border"
                 data-test="episode-list-card">
                 <VirtualEpisodeList
                     :items="seasonEpisodes"
@@ -295,7 +295,7 @@
              results (F2b: text tracks with recognized language and uncovered target language have a translate entry; graphic tracks
              such as PGS are marked non-translatable and have no entry) ═══ -->
         <div
-            class="border-line bg-secondary flex max-h-[min(50vh,400px)] min-h-0 flex-col rounded-md border"
+            class="border-line bg-secondary flex max-h-[760px] min-h-0 flex-col rounded-md border"
             data-test="subtitle-files-card">
             <div class="border-line flex shrink-0 items-center gap-2.5 border-b px-4 py-3">
                 <h2 class="text-[13px] font-semibold">
