@@ -4,6 +4,15 @@ namespace Lingarr.Core.Entities;
 
 public class Show : BaseEntity
 {
+    /// <summary>
+    /// The series' original language (TMDb via Sonarr series originalLanguage),
+    /// a GUESS for episodes whose containers carry no language tag — shown as
+    /// a muted「推测」hint, never written into episode audio_languages (the
+    /// ffprobe piggyback keeps its room). Null when the payload has none.
+    /// </summary>
+    public string? SuggestedLanguage { get; set; }
+
+
     public required int SonarrId { get; set; }
     public required string Title { get; set; }
     public required string Path { get; set; }

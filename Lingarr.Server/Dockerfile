@@ -54,8 +54,10 @@ WORKDIR /app
 # is the pragmatic multi-arch source (official repo serves amd64 and arm64),
 # and only the probe runs, never a transcode. Deployments without Docker can
 # instead install ffmpeg themselves or set LINGARR_FFPROBE_PATH.
+# mkvtoolnix ships mkvpropedit, the metadata-only tag writer of the audio
+# identification write-back (option D, off by default) — ~15 MB.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg mkvtoolnix \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=publish /app/publish .
 

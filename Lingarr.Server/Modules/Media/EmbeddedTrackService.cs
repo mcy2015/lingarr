@@ -332,9 +332,11 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     /// Pure parser counterpart of <see cref="ParseFFprobeOutput"/> for the
     /// audio streams of the same report: the distinct normalized languages in
     /// stream order ("chi" + "english" → ["zh","en"]). Streams without a
-    /// language tag and unrecognized/und tags contribute nothing, so an empty
-    /// result means "probed, still unknown" — callers keep the column null
-    /// instead of storing an empty array.
+    /// language tag and unrecognized/und tags fall back to the track TITLE
+    /// vocabulary (国语/粤语/Japanese… — muxers often title tracks they leave
+    /// untagged); still-nothing streams contribute nothing, so an empty result
+    /// means "probed, still unknown" — callers keep the column null instead of
+    /// storing an empty array.
     /// </summary>
     public static List<string> ParseAudioLanguages(string json)
     {
@@ -354,7 +356,16 @@ public class EmbeddedTrackService : IEmbeddedTrackService
                 continue;
             }
 
-            var normalized = NormalizeLanguage(ReadLanguageTag(stream));
+            string? title = null;
+            if (stream.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Object
+                && tags.TryGetProperty("title", out var titleElement)
+                && titleElement.ValueKind == JsonValueKind.String)
+            {
+                title = titleElement.GetString();
+            }
+
+            var normalized = NormalizeLanguage(ReadLanguageTag(stream))
+                ?? LanguageFromTrackTitle(title);
             if (normalized != null && !languages.Contains(normalized, StringComparer.OrdinalIgnoreCase))
             {
                 languages.Add(normalized);
@@ -362,6 +373,77 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         }
 
         return languages;
+    }
+
+    /// <summary>
+    /// Track-title vocabulary for audio streams whose language tag is absent
+    /// or unrecognized (walk-through option A): muxers routinely title tracks
+    /// ("国语 5.1", "Cantonese AAC") while leaving language=und. Chinese keys
+    /// match by substring (they never appear as latin tokens), latin keys by
+    /// whole word so "Engagement" does not read as English. Cantonese folds
+    /// onto zh, matching the chi/zho folding of container tags.
+    /// </summary>
+    private static readonly (string Keyword, string Code)[] TrackTitleVocabulary =
+    [
+        ("国语", "zh"), ("国配", "zh"), ("普通话", "zh"), ("中文", "zh"), ("汉语", "zh"),
+        ("mandarin", "zh"), ("chinese", "zh"), ("cantonese", "zh"), ("粤语", "zh"),
+        ("english", "en"), ("japanese", "ja"), ("korean", "ko"),
+        ("french", "fr"), ("german", "de"), ("spanish", "es"), ("italian", "it"),
+        ("russian", "ru"), ("thai", "th"), ("vietnamese", "vi"), ("hindi", "hi"),
+        ("portuguese", "pt"), ("dutch", "nl"), ("polish", "pl"), ("arabic", "ar")
+    ];
+
+    /// <summary>First vocabulary hit inside one track title, or null.</summary>
+    public static string? LanguageFromTrackTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return null;
+        }
+
+        foreach (var (keyword, code) in TrackTitleVocabulary)
+        {
+            var hit = ContainsAsciiInsensitive(title, keyword);
+            if (hit)
+            {
+                return code;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Substring test that stays case-insensitive for latin keywords without
+    /// lowering the CJK text: CJK culture-aware lowering is a no-op anyway,
+    /// but ordinal compare keeps the check allocation-cheap and predictable.
+    /// Latin keywords additionally require word characters on both sides so
+    /// "French" inside "Frenchify" cannot hit — titles pack tokens, so a
+    /// space/punctuation boundary suffices.
+    /// </summary>
+    private static bool ContainsAsciiInsensitive(string title, string keyword)
+    {
+        if (keyword.Any(char.IsAscii))
+        {
+            var haystack = title.ToLowerInvariant();
+            var needle = keyword.ToLowerInvariant();
+            var index = haystack.IndexOf(needle, StringComparison.Ordinal);
+            while (index >= 0)
+            {
+                var beforeOk = index == 0 || !char.IsLetterOrDigit(haystack[index - 1]);
+                var afterIndex = index + needle.Length;
+                var afterOk = afterIndex >= haystack.Length || !char.IsLetterOrDigit(haystack[afterIndex]);
+                if (beforeOk && afterOk)
+                {
+                    return true;
+                }
+                index = haystack.IndexOf(needle, index + 1, StringComparison.Ordinal);
+            }
+
+            return false;
+        }
+
+        return title.Contains(keyword, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -977,7 +1059,7 @@ public class EmbeddedTrackService : IEmbeddedTrackService
     private static readonly string[] VideoExtensions =
         [".mkv", ".mp4", ".m4v", ".avi", ".mov", ".wmv", ".mpg", ".mpeg", ".ts", ".m2ts"];
 
-    private static string ResolveFilePath(string? directory, string? fileName, out bool noPath)
+    public static string ResolveFilePath(string? directory, string? fileName, out bool noPath)
     {
         noPath = string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(fileName);
         if (noPath)

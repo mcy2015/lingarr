@@ -16,6 +16,13 @@ public class SonarrShow
     public required bool SeasonFolder { get; set; }
     [JsonPropertyName("rootFolderPath")]
     public string? RootFolderPath { get; set; } 
+    /// <summary>
+    /// The series' original language ({id, name}) — TVDB/TMDb metadata via
+    /// Sonarr (walk-through option B). A guess stored as suggested_language.
+    /// </summary>
+    [JsonPropertyName("originalLanguage")]
+    public IntegrationLanguage? OriginalLanguage { get; set; }
+
     [JsonPropertyName("seasons")]
     public List<SonarrSeason> Seasons { get; set; } = new();
     [JsonPropertyName("images")]

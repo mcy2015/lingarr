@@ -137,6 +137,7 @@ public class MediaLibraryService : IMediaLibraryService
                 s.IncludeInTranslation,
                 s.TranslationAgeThreshold,
                 s.SubtitleCoverageJson,
+                s.SuggestedLanguage,
                 s.Year,
                 s.ImdbId,
                 s.ImdbRating,
@@ -156,6 +157,7 @@ public class MediaLibraryService : IMediaLibraryService
                 IncludeInTranslation = r.IncludeInTranslation,
                 TranslationAgeThreshold = r.TranslationAgeThreshold,
                 SubtitleCoverageJson = r.SubtitleCoverageJson,
+                SuggestedLanguage = r.SuggestedLanguage,
                 Year = r.Year,
                 ImdbId = r.ImdbId,
                 ImdbRating = r.ImdbRating,
@@ -178,6 +180,7 @@ public class MediaLibraryService : IMediaLibraryService
                 m.IncludeInTranslation,
                 m.TranslationAgeThreshold,
                 m.SubtitleCoverageJson,
+                m.SuggestedLanguage,
                 m.AudioLanguages,
                 m.NeedsTranslation,
                 m.NoSubtitleNeeded,
@@ -198,6 +201,7 @@ public class MediaLibraryService : IMediaLibraryService
                 IncludeInTranslation = r.IncludeInTranslation,
                 TranslationAgeThreshold = r.TranslationAgeThreshold,
                 SubtitleCoverageJson = r.SubtitleCoverageJson,
+                SuggestedLanguage = r.SuggestedLanguage,
                 AudioLanguages = r.AudioLanguages,
                 Year = r.Year,
                 ImdbId = r.ImdbId,
@@ -295,6 +299,7 @@ public class MediaLibraryService : IMediaLibraryService
             var scan = showQuery.Select(s => new ShowScanRow
             {
                 Id = s.Id,
+                SuggestedLanguage = s.SuggestedLanguage,
                 Title = s.Title,
                 DateAdded = s.DateAdded,
                 IncludeInTranslation = s.IncludeInTranslation,
@@ -314,6 +319,7 @@ public class MediaLibraryService : IMediaLibraryService
             {
                 Id = r.Id,
                 MediaType = MediaType.Show,
+                SuggestedLanguage = r.SuggestedLanguage,
                 Title = r.Title,
                 DateAdded = r.DateAdded,
                 IncludeInTranslation = r.IncludeInTranslation,
@@ -333,6 +339,7 @@ public class MediaLibraryService : IMediaLibraryService
             var scan = movieQuery.Select(m => new MovieScanRow
             {
                 Id = m.Id,
+                SuggestedLanguage = m.SuggestedLanguage,
                 Title = m.Title,
                 DateAdded = m.DateAdded,
                 IncludeInTranslation = m.IncludeInTranslation,
@@ -352,6 +359,7 @@ public class MediaLibraryService : IMediaLibraryService
             {
                 Id = r.Id,
                 MediaType = MediaType.Movie,
+                SuggestedLanguage = r.SuggestedLanguage,
                 Title = r.Title,
                 DateAdded = r.DateAdded,
                 IncludeInTranslation = r.IncludeInTranslation,
@@ -616,6 +624,7 @@ public class MediaLibraryService : IMediaLibraryService
                     IncludeInTranslation = show.IncludeInTranslation,
                     TranslationAgeThreshold = show.TranslationAgeThreshold,
                     AudioLanguages = AggregateAudioLanguages(episodes.Select(e => e.AudioLanguages)),
+                    SuggestedAudioLanguage = show.SuggestedLanguage,
                     NeedsNoSubtitles = episodes.Count > 0 && episodes.All(e => e.NoSubtitleNeeded),
                     // show-level mark: uniform across episodes → that value,
                     // mixed/unmarked → null (automatic), matching the toggle
@@ -664,6 +673,7 @@ public class MediaLibraryService : IMediaLibraryService
                     IncludeInTranslation = movie.IncludeInTranslation,
                     TranslationAgeThreshold = movie.TranslationAgeThreshold,
                     AudioLanguages = movie.AudioLanguages,
+                    SuggestedAudioLanguage = movie.SuggestedLanguage,
                     NeedsNoSubtitles = movie.NoSubtitleNeeded,
                     AudioOverride = movie.AudioOverride
                 };
@@ -846,6 +856,7 @@ public class MediaLibraryService : IMediaLibraryService
                     .Select(episode => episode.AudioLanguages))
                 : row.AudioLanguages,
             NeedsNoSubtitles = row.NeedsNoSubtitles,
+            SuggestedAudioLanguage = row.SuggestedLanguage,
             Show = show
         };
     }
@@ -1062,6 +1073,7 @@ public class MediaLibraryService : IMediaLibraryService
         public int SeasonCount { get; init; }
         public int EpisodeCount { get; init; }
         public string[]? AudioLanguages { get; init; }
+        public string? SuggestedLanguage { get; init; }
         public bool NeedsNoSubtitles { get; init; }
         public MediaStatusSummary? Status { get; set; }
         public List<SubtitleTrackSummary> Tracks { get; set; } = [];
@@ -1075,6 +1087,7 @@ public class MediaLibraryService : IMediaLibraryService
     /// </summary>
     private sealed class ShowScanRow
     {
+        public string? SuggestedLanguage { get; set; }
         public int Id { get; set; }
         public string Title { get; set; } = string.Empty;
         public DateTimeOffset? DateAdded { get; set; }
@@ -1092,6 +1105,7 @@ public class MediaLibraryService : IMediaLibraryService
     /// <summary>Movie counterpart of <see cref="ShowScanRow"/>.</summary>
     private sealed class MovieScanRow
     {
+        public string? SuggestedLanguage { get; set; }
         public int Id { get; set; }
         public string Title { get; set; } = string.Empty;
         public DateTimeOffset? DateAdded { get; set; }

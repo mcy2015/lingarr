@@ -4,10 +4,12 @@
     <div class="grid grid-cols-1 items-stretch gap-3 px-4">
         <MediaSourcesCard />
         <SubtitleSourcesCard />
+        <AudioIdCard />
     </div>
 </template>
 
 <script setup lang="ts">
 import MediaSourcesCard from '@/cells/settings/components/MediaSourcesCard.vue'
 import SubtitleSourcesCard from '@/cells/settings/components/SubtitleSourcesCard.vue'
+import AudioIdCard from '@/cells/settings/components/AudioIdCard.vue'
 </script>

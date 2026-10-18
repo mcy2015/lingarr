@@ -24,6 +24,7 @@ public class MediaController : ControllerBase
     private readonly IMediaLibraryService _mediaLibraryService;
     private readonly ISubtitleService _subtitleService;
     private readonly ISettingService _settingService;
+    private readonly AudioLanguageService _audioLanguageService;
     private readonly LingarrDbContext _dbContext;
 
     // ── subtitle file cache (audit P1-5) ───────────────────────────
@@ -65,12 +66,14 @@ public class MediaController : ControllerBase
         IMediaLibraryService mediaLibraryService,
         ISubtitleService subtitleService,
         ISettingService settingService,
+        AudioLanguageService audioLanguageService,
         LingarrDbContext dbContext)
     {
         _mediaService = mediaService;
         _mediaLibraryService = mediaLibraryService;
         _subtitleService = subtitleService;
         _settingService = settingService;
+        _audioLanguageService = audioLanguageService;
         _dbContext = dbContext;
     }
 
@@ -319,6 +322,63 @@ public class MediaController : ControllerBase
     }
 
     /// <summary>
+    /// Identifies the spoken language of the media's first audio track via
+    /// the configured remote ASR (walk-through option C): a 30-second clip
+    /// is extracted locally, sent to the service, and the detected language
+    /// stored with the manual provenance flag (sync payloads never overwrite
+    /// it). With the write-back setting on, the tag is also written into the
+    /// MKV container (option D).
+    /// </summary>
+    /// <response code="200">The identified languages and scope.</response>
+    /// <response code="404">Unknown media id.</response>
+    /// <response code="409">Identification not configured or the file is missing.</response>
+    [HttpPost("{mediaType}/{id}/identify-audio")]
+    public async Task<IActionResult> IdentifyAudio(MediaType mediaType, int id)
+    {
+        try
+        {
+            var result = await _audioLanguageService.IdentifyAsync(mediaType, id);
+            return Ok(new
+            {
+                languages = result.Languages,
+                source = result.Source,
+                target = result.TargetDescription,
+                writeBack = result.WriteBack
+            });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not configured"))
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Manually sets the audio languages of one media item (walk-through
+    /// option E); shows cascade to every episode. An empty list resets the
+    /// values (and the manual flag) back to automatic/unknown.
+    /// </summary>
+    [HttpPut("{mediaType}/{id}/audio-languages")]
+    public async Task<IActionResult> SetAudioLanguages(
+        MediaType mediaType,
+        int id,
+        [FromBody] AudioLanguagesRequest request)
+    {
+        try
+        {
+            var result = await _audioLanguageService.SetManualAsync(mediaType, id, request.Languages ?? []);
+            return Ok(new { languages = result.Languages, source = result.Source, target = result.TargetDescription });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Languages the media already carries subtitle files in, read from the
     /// statistics snapshot's per-language keys. Empty when nothing is stored
     /// — the rule treats that as "nothing covered".
@@ -513,6 +573,13 @@ public class MediaController : ControllerBase
         var value = await _mediaService.Threshold(request.MediaType, request.Id, request.Hours);
         return Ok(value);
     }
+}
+
+/// <summary>Body of PUT api/media/{mediaType}/{id}/audio-languages (option E).</summary>
+public class AudioLanguagesRequest
+{
+    /// <summary>Language codes to store ("zh", "en"…); empty resets to unknown.</summary>
+    public string[]? Languages { get; set; }
 }
 
 /// <summary>Body of POST api/media/{mediaType}/{id}/subtitle-need (PRD card A).</summary>

@@ -100,6 +100,34 @@ public class MovieSyncAudioLanguageTests : IDisposable
     }
 
     [Fact]
+    public async Task OriginalLanguage_IsStoredAsTheSuggestion()
+    {
+        var movie = Movie();
+        movie.OriginalLanguage = new IntegrationLanguage { Id = 17, Name = "Chinese" };
+
+        var stored = await SyncAndReloadAsync(movie);
+
+        // option B: TMDb original language lands as the separate guess-level
+        // hint, never inside audio_languages
+        Assert.Null(stored.AudioLanguages);
+        Assert.Equal("zh", stored.SuggestedLanguage);
+    }
+
+    [Fact]
+    public async Task ManualAudioLanguages_SurviveAPayloadWithCodes()
+    {
+        var first = await SyncAndReloadAsync(Movie(mediaInfoAudioLanguages: "english"));
+        first.AudioLanguagesManual = true;
+        _context.Entry(first).State = EntityState.Modified;
+        await _context.SaveChangesAsync();
+
+        var second = await SyncAndReloadAsync(Movie(mediaInfoAudioLanguages: "japanese"));
+
+        Assert.Equal(["en"], second.AudioLanguages);
+        Assert.True(second.AudioLanguagesManual);
+    }
+
+    [Fact]
     public async Task NullLanguageElements_SurviveTheFallbackWithoutThrowing()
     {
         // *arr serves [null] elements for unknown languages; the fallback

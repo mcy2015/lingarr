@@ -339,6 +339,13 @@
                         class="text-secondary-content/70 text-xs"
                         data-test="audio-languages-unknown">
                         {{ t('mediaDetail.audio.unknown') }}
+                        <span
+                            v-if="item?.suggestedAudioLanguage"
+                            class="text-secondary-content/50"
+                            :title="t('mediaDetail.audio.suggestedTitle')"
+                            data-test="audio-suggested-hint">
+                            · {{ t('mediaDetail.audio.suggested', { code: item.suggestedAudioLanguage.toUpperCase() }) }}
+                        </span>
                     </span>
                     <!-- 手动标记的持久徽章:标记存在(任一方向)就必须一直可见,
                          「清除标记」是唯一移除途径 -->
@@ -368,7 +375,7 @@
                     <button
                         v-if="subtitleNeedAction"
                         type="button"
-                        class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
                         :disabled="subtitleNeedBusy"
                         :title="subtitleNeedAction.title"
                         :aria-label="subtitleNeedAction.title"
@@ -376,6 +383,70 @@
                         @click="toggleSubtitleNeed(subtitleNeedAction.needed)">
                         {{ subtitleNeedAction.label }}
                     </button>
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50"
+                        :disabled="identifyBusy"
+                        :title="t('mediaDetail.audio.identifyTitle')"
+                        data-test="identify-audio"
+                        @click="identifyAudio">
+                        {{ t('mediaDetail.audio.identify') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
+                        :title="t('mediaDetail.audio.editTitle')"
+                        data-test="edit-audio-languages"
+                        @click="toggleAudioEditor">
+                        {{ t('mediaDetail.audio.edit') }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- E:手动指定音轨语言 —— 常用语言码多选 + 保存/重置 -->
+            <div
+                v-if="audioEditorOpen"
+                class="shrink-0 px-4 pb-3"
+                data-test="audio-editor">
+                <div
+                    class="border-line bg-tertiary/40 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2.5">
+                    <span class="text-secondary-content mr-1 text-xs">
+                        {{ t('mediaDetail.audio.editorLabel') }}
+                    </span>
+                    <button
+                        v-for="code in audioEditorCodes"
+                        :key="code"
+                        type="button"
+                        class="mono rounded-[3px] border px-1.5 py-px text-[11px] font-bold transition-colors"
+                        :class="
+                            audioEditorSelected.has(code)
+                                ? 'border-accent/60 bg-accent/15 text-accent'
+                                : 'border-line bg-secondary text-secondary-content hover:text-primary-content'
+                        "
+                        :aria-pressed="audioEditorSelected.has(code)"
+                        :data-test="`audio-editor-code-${code}`"
+                        @click="toggleAudioEditorCode(code)">
+                        {{ code.toUpperCase() }}
+                    </button>
+                    <span class="ml-auto flex gap-1.5">
+                        <button
+                            type="button"
+                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:opacity-50"
+                            :disabled="audioEditorBusy"
+                            data-test="audio-editor-save"
+                            @click="saveAudioLanguages">
+                            {{ t('common.save') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="border-line text-secondary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:opacity-50"
+                            :disabled="audioEditorBusy"
+                            :title="t('mediaDetail.audio.resetTitle')"
+                            data-test="audio-editor-reset"
+                            @click="resetAudioLanguages">
+                            {{ t('mediaDetail.audio.reset') }}
+                        </button>
+                    </span>
                 </div>
             </div>
             <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
@@ -1225,6 +1296,145 @@ async function toggleSubtitleNeed(needed: boolean | null): Promise<void> {
     } finally {
         subtitleNeedBusy.value = false
     }
+}
+
+// ── 音轨语言确认(走查 A-E 批次:C 远程识别 + E 手动指定) ──────────
+
+/// Editor vocabulary: the codes the track-title parser and the ASR name map
+/// both know — anything a user picks round-trips through the server's
+/// normalizer, unknown picks simply drop out.
+const AUDIO_EDITOR_CODES = [
+    'zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'it', 'ru', 'th', 'vi', 'hi', 'pt'
+] as const
+
+const identifyBusy = ref(false)
+const audioEditorOpen = ref(false)
+const audioEditorBusy = ref(false)
+const audioEditorSelected = ref<Set<string>>(new Set())
+const audioEditorCodes = computed(() => {
+    const current = (audioLanguages.value ?? []).map((code) => code.toLowerCase())
+    return [...new Set([...current, ...AUDIO_EDITOR_CODES])]
+})
+
+function toggleAudioEditor(): void {
+    audioEditorOpen.value = !audioEditorOpen.value
+    if (audioEditorOpen.value) {
+        audioEditorSelected.value = new Set((audioLanguages.value ?? []).map((c) => c.toLowerCase()))
+    }
+}
+
+function toggleAudioEditorCode(code: string): void {
+    const next = new Set(audioEditorSelected.value)
+    if (next.has(code)) {
+        next.delete(code)
+    } else {
+        next.add(code)
+    }
+    audioEditorSelected.value = next
+}
+
+/// After any audio-language write the subtitle payload is refreshed so the
+/// audio row re-renders from the same source that loaded it.
+async function refreshAudioRow(): Promise<void> {
+    try {
+        subtitlePayload.value = await mediaApi.mediaSubtitles<IMediaSubtitlesResponse>(
+            isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE,
+            item.value!.id
+        )
+    } catch {
+        subtitlePayload.value = null
+    }
+}
+
+async function identifyAudio(): Promise<void> {
+    const media = item.value
+    if (!media || identifyBusy.value) return
+    identifyBusy.value = true
+    try {
+        const result = await mediaApi.identifyAudio<{
+            languages: string[]
+            target: string
+            writeBack?: string | null
+        }>(isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE, media.id)
+        media.audioLanguages = result.languages
+        toastStore.push({
+            message: t('mediaDetail.audio.identifyDone', {
+                langs: result.languages.map((c) => c.toUpperCase()).join(' · '),
+                target: result.target
+            }) + (result.writeBack ? ` · ${result.writeBack}` : ''),
+            type: 'success'
+        })
+        await refreshAudioRow()
+    } catch (error) {
+        toastStore.push({
+            message: t('mediaDetail.audio.identifyFailed', { message: errorMessage(error) }),
+            type: 'error'
+        })
+    } finally {
+        identifyBusy.value = false
+    }
+}
+
+async function saveAudioLanguages(): Promise<void> {
+    const media = item.value
+    if (!media || audioEditorBusy.value) return
+    audioEditorBusy.value = true
+    try {
+        const result = await mediaApi.setAudioLanguages<{ languages: string[] }>(
+            isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE,
+            media.id,
+            [...audioEditorSelected.value]
+        )
+        media.audioLanguages = result.languages.length > 0 ? result.languages : null
+        audioEditorOpen.value = false
+        toastStore.push({
+            message:
+                result.languages.length > 0
+                    ? t('mediaDetail.audio.editDone', {
+                          langs: result.languages.map((c) => c.toUpperCase()).join(' · ')
+                      })
+                    : t('mediaDetail.audio.unknown'),
+            type: 'success'
+        })
+        await refreshAudioRow()
+    } catch (error) {
+        toastStore.push({
+            message: t('mediaDetail.audio.identifyFailed', { message: errorMessage(error) }),
+            type: 'error'
+        })
+    } finally {
+        audioEditorBusy.value = false
+    }
+}
+
+async function resetAudioLanguages(): Promise<void> {
+    const media = item.value
+    if (!media || audioEditorBusy.value) return
+    audioEditorBusy.value = true
+    try {
+        await mediaApi.setAudioLanguages<{ languages: string[] }>(
+            isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE,
+            media.id,
+            []
+        )
+        media.audioLanguages = null
+        audioEditorOpen.value = false
+        toastStore.push({ message: t('mediaDetail.audio.editDone', { langs: '—' }), type: 'success' })
+        await refreshAudioRow()
+    } catch (error) {
+        toastStore.push({
+            message: t('mediaDetail.audio.identifyFailed', { message: errorMessage(error) }),
+            type: 'error'
+        })
+    } finally {
+        audioEditorBusy.value = false
+    }
+}
+
+function errorMessage(error: unknown): string {
+    return axios.isAxiosError(error)
+        ? ((error.response?.data as { message?: string } | undefined)?.message ?? error.message)
+        : String(error)
 }
 
 /// Screen button + topbar CTA (shared action): queue every episode of the

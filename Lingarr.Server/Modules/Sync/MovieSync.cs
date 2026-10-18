@@ -51,6 +51,11 @@ public class MovieSync : IMovieSync
         );
 
         var audioLanguages = ResolveAudioLanguages(movie.MovieFile);
+        // option B: TMDb original language as a guess-level hint — name→code
+        // via the shared normalizer (the id is *arr-internal, not ISO)
+        var suggested = movie.OriginalLanguage is { } original
+            ? EmbeddedTrackService.NormalizeLanguage(original.Name)
+            : null;
 
         if (movieEntity == null)
         {
@@ -66,7 +71,8 @@ public class MovieSync : IMovieSync
                 ImdbId = movie.ImdbId,
                 Quality = movie.MovieFile?.Quality?.Quality?.Name,
                 SizeBytes = movie.MovieFile?.Size,
-                ImdbRating = ResolveImdbRating(movie.Ratings)
+                ImdbRating = ResolveImdbRating(movie.Ratings),
+                SuggestedLanguage = suggested
             };
             // The setter folds an empty result back to null — the column
             // never stores "[]" (unknown is null).
@@ -80,11 +86,13 @@ public class MovieSync : IMovieSync
             movieEntity.FileName = Path.GetFileNameWithoutExtension(moviePath);
             movieEntity.Path = Path.GetDirectoryName(moviePath) ?? string.Empty;
             // A payload without a recognized code never clears the column —
-            // an ffprobe-filled value survives until *arr has real data.
-            if (audioLanguages != null)
+            // an ffprobe-filled value survives until *arr has real data; a
+            // manual/identified value outranks the payload entirely.
+            if (audioLanguages != null && movieEntity.AudioLanguagesManual != true)
             {
                 movieEntity.AudioLanguages = audioLanguages?.ToArray();
             }
+            movieEntity.SuggestedLanguage = suggested;
 
             // B2/M0008 metadata: Radarr always carries these fields on a
             // hasFile movie, so the payload is authoritative on re-sync —

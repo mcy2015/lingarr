@@ -40,6 +40,13 @@ public class Episode : BaseEntity, IMedia
     public string[]? AudioLanguages { get; set; }
 
     /// <summary>
+    /// The manual language editor / remote identification action wrote the
+    /// current AudioLanguages — a later sync payload without a recognized
+    /// code never clears it (audio_override precedent).
+    /// </summary>
+    public bool? AudioLanguagesManual { get; set; }
+
+    /// <summary>
     /// Manual, reversible override of the subtitle-need rule (PRD card A):
     /// true forces "needs translation" even when audio/coverage say otherwise,
     /// false marks the episode as not needing subtitles. Null = decide from

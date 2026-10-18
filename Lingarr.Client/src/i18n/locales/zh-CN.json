@@ -132,7 +132,8 @@
         "nativeBadge": "原生音轨",
         "nativeBadgeTitle": "容器音轨已覆盖目标语言 —— 无需字幕",
         "audioUnknownBadge": "音轨未知",
-        "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理，详见详情页标记入口"
+        "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理，详见详情页标记入口",
+        "audioSuggestedTitle": "TMDB 原始语言推测，仅供参考"
     },
     "version": {
         "development": "开发版",
@@ -876,6 +877,18 @@
             "authOff": "未启用",
             "apiKeyIssued": "API Key 已发放",
             "manage": "管理"
+        },
+        "audioId": {
+            "title": "音轨识别",
+            "meta": "远程 ASR · OpenAI 兼容接口",
+            "url": "服务地址",
+            "urlPlaceholder": "https://api.siliconflow.cn/v1",
+            "apiKey": "API Key",
+            "keyPlaceholder": "粘贴 API key",
+            "keySet": "已配置（留空保持不变）",
+            "model": "模型",
+            "writeback": "识别后把语言标签写回 MKV 文件",
+            "writebackHint": "使用 mkvpropedit 仅改元数据（秒级）；*arr / Plex 等将直接读到正确语言"
         }
     },
     "translations": {
@@ -1112,7 +1125,19 @@
             "failedToast": "更新字幕需求失败：{message}",
             "markedBadge": "已标记需要字幕",
             "notNeededBadge": "已标记无需字幕",
-            "notNeededToast": "已标记无需字幕"
+            "notNeededToast": "已标记无需字幕",
+            "suggested": "推测 {code}",
+            "suggestedTitle": "来自 TMDB 原始语言的推测，仅供参考；实际以容器标签或识别结果为准",
+            "identify": "🔍 识别音轨",
+            "identifyTitle": "抽取 30 秒音频发送到识别服务，检测实际口语语言",
+            "identifyDone": "识别完成：{langs}（{target}）",
+            "identifyFailed": "音轨识别失败：{message}",
+            "edit": "编辑",
+            "editTitle": "手动指定音轨语言",
+            "editorLabel": "音轨语言：",
+            "editDone": "音轨语言已更新：{langs}",
+            "reset": "重置",
+            "resetTitle": "清除手动指定，恢复自动识别"
         },
         "openSubtitleSearch": "🔍 搜索字幕",
         "openImdb": "打开 IMDb 页面"

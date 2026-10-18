@@ -45,6 +45,14 @@ public class MediaLibraryItem
     public bool NeedsNoSubtitles { get; init; }
 
     /// <summary>
+    /// The work's original language (TMDb via *arr) — a GUESS shown as a
+    /// muted「推测」hint when the real audio languages are unknown. Never
+    /// merged into <see cref="AudioLanguages"/> (the ffprobe backfill keeps
+    /// its room). Null when the payload carried none.
+    /// </summary>
+    public string? SuggestedAudioLanguage { get; init; }
+
+    /// <summary>
     /// The manual subtitle-need mark: true = forced "needs subtitles",
     /// false = forced "not needed", null = automatic (audio rule decides).
     /// Shows aggregate over their episodes (uniform mark → that value).

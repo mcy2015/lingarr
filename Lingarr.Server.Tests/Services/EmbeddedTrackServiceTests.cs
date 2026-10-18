@@ -163,6 +163,45 @@ public class EmbeddedTrackServiceTests
         Assert.Empty(EmbeddedTrackService.ParseAudioLanguages("""{ "streams": null }"""));
     }
 
+    // ── walk-through option A: track-title vocabulary for untagged audio ──
+
+    [Fact]
+    public void ParseAudioLanguages_TrackTitleVocabulary_FillsUntaggedAudio()
+    {
+        // muxers routinely title tracks they leave untagged — the Chinese
+        // releases almost always carry 国语/粤语 style titles
+        var json = WrapStreams(
+            """{ "index": 1, "codec_type": "audio", "tags": { "title": "国语 5.1" } }""",
+            """{ "index": 2, "codec_type": "audio", "tags": { "language": "und", "title": "Cantonese AAC" } }""",
+            """{ "index": 3, "codec_type": "audio", "tags": { "title": "Japanese 5.1" } }""");
+
+        var languages = EmbeddedTrackService.ParseAudioLanguages(json);
+
+        // Cantonese folds onto zh, matching the chi/zho container folding
+        Assert.Equal(["zh", "ja"], languages);
+    }
+
+    [Fact]
+    public void ParseAudioLanguages_LatinTitles_RequireWordBoundaries()
+    {
+        var json = WrapStreams(
+            // "Engagement" must not read as English, "Frenchify" not as French
+            """{ "index": 1, "codec_type": "audio", "tags": { "title": "Engagement Track" } }""",
+            """{ "index": 2, "codec_type": "audio", "tags": { "title": "Frenchify Commentary" } }""",
+            """{ "index": 3, "codec_type": "audio", "tags": { "title": "Commentary by the director" } }""");
+
+        Assert.Empty(EmbeddedTrackService.ParseAudioLanguages(json));
+    }
+
+    [Fact]
+    public void ParseAudioLanguages_RealLanguageTag_OutranksTheTitle()
+    {
+        var json = WrapStreams(
+            """{ "index": 1, "codec_type": "audio", "tags": { "language": "kor", "title": "国语配音" } }""");
+
+        Assert.Equal(["ko"], EmbeddedTrackService.ParseAudioLanguages(json));
+    }
+
     [Fact]
     public void ParseAudioLanguageString_SplitsTheSlashJoinedArrTruthString()
     {

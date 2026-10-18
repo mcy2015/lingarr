@@ -24,6 +24,21 @@ public static class SettingKeys
         public const string ProviderRates = "provider_rates";
     }
 
+    /// <summary>
+    /// Remote audio-language identification (walk-through option C): an
+    /// OpenAI-compatible transcription endpoint consulted on demand from
+    /// the media detail page; the detected spoken language fills
+    /// audio_languages for containers without language tags.
+    /// </summary>
+    public static class AudioIdentification
+    {
+        public const string BaseUrl = "audio_id_url";
+        public const string ApiKey = "audio_id_api_key";
+        public const string Model = "audio_id_model";
+        /// <summary>mkvpropedit tag write-back switch (option D), off by default.</summary>
+        public const string Writeback = "audio_id_writeback";
+    }
+
     public static class Translation
     {
         public const string ServiceType = "service_type";

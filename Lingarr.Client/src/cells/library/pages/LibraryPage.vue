@@ -138,6 +138,13 @@
                                     data-test="audio-languages-cell">
                                     {{ audioCellText(item) }}
                                 </span>
+                                <span
+                                    v-else-if="item.suggestedAudioLanguage"
+                                    class="text-secondary-content/60 text-[11.5px]"
+                                    :title="t('library.audioSuggestedTitle')"
+                                    data-test="audio-suggested-cell">
+                                    {{ item.suggestedAudioLanguage.toUpperCase() }}?
+                                </span>
                                 <span v-else class="text-secondary-content/50 text-[11.5px]">—</span>
                             </td>
                             <td :class="tdClass">

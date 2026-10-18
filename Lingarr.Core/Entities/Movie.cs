@@ -38,6 +38,22 @@ public class Movie : BaseEntity, IMedia
     public string[]? AudioLanguages { get; set; }
 
     /// <summary>
+    /// The work's original language (TMDb spoken language via
+    /// Radarr.movie.originalLanguage), a GUESS for files whose container
+    /// carries no language tag. Kept apart from <see cref="AudioLanguages"/>
+    /// so it never blocks the ffprobe backfill; the UI shows it as a muted
+    /// 「推测」hint. Null when the payload carries none.
+    /// </summary>
+    public string? SuggestedLanguage { get; set; }
+
+    /// <summary>
+    /// The manual language editor / remote identification action wrote the
+    /// current <see cref="AudioLanguages"/> — a later sync payload without a
+    /// recognized code never clears it (audio_override precedent).
+    /// </summary>
+    public bool? AudioLanguagesManual { get; set; }
+
+    /// <summary>
     /// Manual, reversible override of the subtitle-need rule (PRD card A):
     /// true forces "needs translation" even when audio/coverage say otherwise,
     /// false marks the media as not needing subtitles. Null = decide from

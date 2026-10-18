@@ -1,6 +1,7 @@
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Helpers;
+using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Sync;
 using Lingarr.Server.Models.Integrations;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +40,11 @@ public class ShowSync : IShowSync
                 IncludeInTranslation = defaultInclude,
                 Year = sonarrShow.Year,
                 ImdbId = sonarrShow.ImdbId,
-                ImdbRating = ResolveImdbRating(sonarrShow.Ratings)
+                ImdbRating = ResolveImdbRating(sonarrShow.Ratings),
+                // option B: series original language as the guess-level hint
+                SuggestedLanguage = sonarrShow.OriginalLanguage is { } original
+                    ? EmbeddedTrackService.NormalizeLanguage(original.Name)
+                    : null
             };
             _dbContext.Shows.Add(showEntity);
         }
@@ -54,6 +59,9 @@ public class ShowSync : IShowSync
             showEntity.Year = sonarrShow.Year;
             showEntity.ImdbId = sonarrShow.ImdbId;
             showEntity.ImdbRating = ResolveImdbRating(sonarrShow.Ratings);
+            showEntity.SuggestedLanguage = sonarrShow.OriginalLanguage is { } original
+                ? EmbeddedTrackService.NormalizeLanguage(original.Name)
+                : null;
         }
 
         if (sonarrShow.Images?.Any() == true)

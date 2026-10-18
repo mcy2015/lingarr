@@ -94,6 +94,22 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
             .get(`${resource}/${mediaType}/${id}/subtitles`)
             .then((response) => response.data)
     },
+    /// Option C: identify the spoken language of the first audio track via
+    /// the configured remote ASR (30s clip); the response carries the
+    /// detected codes, the scope they were applied to, and the optional
+    /// mkvpropedit write-back note.
+    identifyAudio<T>(mediaType: MediaType, id: number): Promise<T> {
+        return http
+            .post(`${resource}/${mediaType}/${id}/identify-audio`)
+            .then((response) => response.data)
+    },
+    /// Option E: hand-set the audio languages; shows cascade to episodes.
+    /// An empty array resets to automatic/unknown.
+    setAudioLanguages<T>(mediaType: MediaType, id: number, languages: string[]): Promise<T> {
+        return http
+            .put(`${resource}/${mediaType}/${id}/audio-languages`, { languages })
+            .then((response) => response.data)
+    },
     /// Requirement card A/B: set the manual「需要字幕」override — true marks
     /// needed, false marks not needed, null clears the mark so the automatic
     /// audio rule applies again. The response carries the resulting

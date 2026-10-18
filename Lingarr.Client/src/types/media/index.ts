@@ -286,6 +286,9 @@ export interface IMediaLibraryItem {
     /// "needs subtitles", false = forced "not needed", null/undefined =
     /// automatic (the audio rule decides). Drives the detail page badge.
     audioOverride?: boolean | null
+    /// Option B: the work's original language (TMDb via *arr) — a guess
+    /// shown as a muted hint while the real audio languages are unknown.
+    suggestedAudioLanguage?: string | null
     /// Library B2: release year from *arr. Shows carry the series year.
     year?: number | null
     /// Library B2: IMDb id ("tt…"); null when the payload had none.

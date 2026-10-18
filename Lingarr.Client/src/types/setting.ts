@@ -3,6 +3,9 @@ import { ITheme } from '@/types/store'
 
 export const SETTINGS = {
     RADARR_URL: 'radarr_url',
+    AUDIO_ID_URL: 'audio_id_url',
+    AUDIO_ID_MODEL: 'audio_id_model',
+    AUDIO_ID_WRITEBACK: 'audio_id_writeback',
     SONARR_URL: 'sonarr_url',
     SOURCE_LANGUAGES: 'source_languages',
     TARGET_LANGUAGES: 'target_languages',
@@ -75,6 +78,9 @@ export const SETTINGS = {
 export interface ISettings {
     radarr_url: string
     sonarr_url: string
+    audio_id_url: string
+    audio_id_model: string
+    audio_id_writeback: string
     service_type: string
     libretranslate_url: string
     show_schedule: string
@@ -155,7 +161,8 @@ export const ENCRYPTED_SETTINGS = {
     XAI_API_KEY: 'xai_api_key',
     DEEPL_API_KEY: 'deepl_api_key',
     LIBRETRANSLATE_API_KEY: 'libretranslate_api_key',
-    LOCAL_AI_API_KEY: 'local_ai_api_key'
+    LOCAL_AI_API_KEY: 'local_ai_api_key',
+    AUDIO_ID_API_KEY: 'audio_id_api_key'
 } as const
 
 export interface IEncryptedSettingStates {
@@ -171,6 +178,7 @@ export interface IEncryptedSettingStates {
     deepl_api_key: boolean
     libretranslate_api_key: boolean
     local_ai_api_key: boolean
+    audio_id_api_key: boolean
 }
 
 export const SERVICE_TYPE = {

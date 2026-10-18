@@ -73,8 +73,9 @@ public class EpisodeSync : IEpisodeSync
             episodeEntity.Path = Path.GetDirectoryName(episodePath);
             episodeEntity.DateAdded = dateAdded;
             // A payload without a recognized code never clears the column — an
-            // ffprobe-filled value survives until *arr has real data.
-            if (audioLanguages != null)
+            // ffprobe-filled value survives until *arr has real data; a
+            // manual/identified value outranks the payload entirely.
+            if (audioLanguages != null && episodeEntity.AudioLanguagesManual != true)
             {
                 episodeEntity.AudioLanguages = audioLanguages?.ToArray();
             }

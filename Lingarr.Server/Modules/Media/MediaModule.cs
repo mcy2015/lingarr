@@ -13,5 +13,6 @@ public static class MediaModule
         services.AddScoped<IMediaSubtitleProcessor, MediaSubtitleProcessor>();
         services.AddScoped<IEmbeddedTrackService, EmbeddedTrackService>();
         services.AddScoped<IMappingService, MappingService>();
+        services.AddScoped<AudioLanguageService>();
     }
 }

@@ -92,6 +92,8 @@ export interface IMediaService {
     /// and re-exempts). The response carries the resulting effective state
     /// (see ISubtitleNeedResponse).
     subtitleNeed<T>(mediaType: MediaType, id: number, needed: boolean | null): Promise<T>
+    identifyAudio<T>(mediaType: MediaType, id: number): Promise<T>
+    setAudioLanguages<T>(mediaType: MediaType, id: number, languages: string[]): Promise<T>
 }
 
 /// One external subtitle file next to a media item; languages carries every

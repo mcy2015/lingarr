@@ -81,6 +81,7 @@ public class StartupService : IHostedService
         }
 
         await SeedSubtitleSourceSettings(dbContext);
+        await SeedAudioIdentificationSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -208,6 +209,50 @@ public class StartupService : IHostedService
     }
 
     /// <summary>
+    /// <summary>
+    /// Seeds the Settings rows backing the audio-identification wiring
+    /// (walk-through option C): <c>SetSetting</c> only updates existing rows,
+    /// so without the seed the settings card could never save its first
+    /// value on an upgraded database. Rows carry no provider (orphan-safe)
+    /// and existing values always win. The API key row is seeded empty —
+    /// encrypted values only ever leave through the reveal endpoint.
+    /// </summary>
+    private async Task SeedAudioIdentificationSettings(LingarrDbContext dbContext)
+    {
+        string[] keys =
+        [
+            SettingKeys.AudioIdentification.BaseUrl,
+            SettingKeys.AudioIdentification.ApiKey,
+            SettingKeys.AudioIdentification.Model,
+            SettingKeys.AudioIdentification.Writeback
+        ];
+
+        var existingKeys = (await dbContext.Settings
+                .Where(setting => keys.Contains(setting.Key))
+                .Select(setting => setting.Key)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = keys.Where(key => !existingKeys.Contains(key)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var key in missing)
+        {
+            dbContext.Settings.Add(new Setting
+            {
+                Key = key,
+                Value = string.Empty,
+                Provider = null
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation("Seeded {Count} audio-identification setting rows.", missing.Count);
+    }
+
     /// Seeds empty Settings rows for every subtitle-source key that does not exist
     /// yet, so <c>SetSetting</c> can update them afterwards. Existing rows are never
     /// overwritten — stored values and their provider ownership always win. The

@@ -51,6 +51,11 @@ public class MediaControllerTests
         (library ?? new Mock<IMediaLibraryService>()).Object,
         _subtitleService.Object,
         _settingService.Object,
+        new AudioLanguageService(
+            _dbContext,
+            _settingService.Object,
+            NullHttpClientFactory.Instance,
+            NullLogger<AudioLanguageService>.Instance),
         _dbContext);
 
     private static Movie NewMovie(int id, string path, string fileName, string[]? audioLanguages = null) => new()
@@ -422,6 +427,11 @@ public class MediaControllerTests
             new Mock<IMediaLibraryService>().Object,
             _subtitleService.Object,
             _settingService.Object,
+            new AudioLanguageService(
+                _dbContext,
+                _settingService.Object,
+                NullHttpClientFactory.Instance,
+                NullLogger<AudioLanguageService>.Instance),
             _dbContext);
 
         await controller.GetMovies(null, null, ascending: true, pageSize: 5000, pageNumber: 0);

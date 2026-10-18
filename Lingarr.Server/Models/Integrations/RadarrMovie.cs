@@ -25,6 +25,14 @@ public class RadarrMovie
     /// <summary>Ratings block; only the imdb child is mapped (B2: movies.imdb_rating).</summary>
     [JsonPropertyName("ratings")]
     public RadarrRatings? Ratings { get; set; }
+    /// <summary>
+    /// The work's original language ({id, name}) — TMDb spoken language via
+    /// Radarr's metadata cache (walk-through option B). A guess for untagged
+    /// files, stored as the separate suggested_language hint.
+    /// </summary>
+    [JsonPropertyName("originalLanguage")]
+    public IntegrationLanguage? OriginalLanguage { get; set; }
+
     [JsonPropertyName("movieFile")]
     public RadarrMovieFile MovieFile { get; set; } = new();
     [JsonPropertyName("images")]
