@@ -206,13 +206,17 @@ public class PathConversionService
     private async Task<List<string>> ComputeMediaRootsAsync(CancellationToken cancellationToken)
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // One link-answer memo per computation: resolving a root now reads
+        // the filesystem (one readlink per path segment), and the roots of a
+        // library share most of their prefixes.
+        var linkMemo = new Dictionary<string, string?>();
         var mappingRoots = await _context.PathMappings
             .Where(m => m.DestinationPath != string.Empty)
             .Select(m => m.DestinationPath)
             .ToListAsync(cancellationToken);
         foreach (var root in mappingRoots)
         {
-            AddRoot(roots, root);
+            AddRoot(roots, root, linkMemo);
         }
 
         // Always union the library-derived roots with the mapping targets: a
@@ -231,9 +235,20 @@ public class PathConversionService
             .Select(e => e.Path!)
             .ToListAsync(cancellationToken);
 
+        // R15: roots resolve through symlinks now, which costs filesystem
+        // reads. Collapse the parents lexically first — thousands of episode
+        // rows share a handful of parents — so a cache miss stays
+        // proportional to the library's directory breadth, not row count,
+        // and the shared memo deduplicates the prefixes those parents have
+        // in common ("/media", "/media/tv", …).
+        var lexicalParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var libraryPath in moviePaths.Concat(showPaths).Concat(episodePaths))
         {
-            AddRoot(roots, Path.GetDirectoryName(NormalizeRoot(libraryPath)));
+            lexicalParents.Add(Path.GetDirectoryName(NormalizeRoot(libraryPath)));
+        }
+        foreach (var parent in lexicalParents)
+        {
+            AddRoot(roots, parent, linkMemo);
         }
 
         return roots.ToList();
@@ -270,10 +285,18 @@ public class PathConversionService
         // resolved too). Paths GetFullPath rejects — invalid characters,
         // malformed input — are treated as outside so they never reach the
         // filesystem.
+        //
+        // R15 fix (symlink escape): GetFullPath is purely lexical, so a
+        // symlink inside a whitelisted root but pointing elsewhere still
+        // passed the prefix test. Both the candidate and the roots now
+        // resolve through symbolic links as well (see
+        // <see cref="ResolvePathWithLinks"/>); within one validation the
+        // per-segment link answers are memoized, so the hot path costs one
+        // readlink per path segment, once.
         string resolved;
         try
         {
-            resolved = ResolveFullPath(NormalizeRoot(path));
+            resolved = ResolvePathWithLinks(NormalizeRoot(path), new Dictionary<string, string?>());
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -290,14 +313,18 @@ public class PathConversionService
         return $"Path '{path}' is outside the library media roots ({sample}{ellipsis}). Server path scanning is limited to library directories.";
     }
 
-    private void AddRoot(HashSet<string> roots, string? root)
+    private void AddRoot(HashSet<string> roots, string? root, Dictionary<string, string?> linkMemo)
     {
         // Roots are stored resolved: candidates are only ever compared in
         // resolved form (see ValidatePathInsideMediaRootsAsync), so a root
-        // kept lexical would never match its own resolved candidates.
+        // kept lexical would never match its own resolved candidates. Since
+        // R15 "resolved" includes symbolic links — a root that is itself a
+        // symlink counts as its real target, so a request spelled through
+        // the link and one spelled through the real directory both match
+        // the same stored root. Runs only on roots-cache misses (30s TTL).
         try
         {
-            var resolved = ResolveFullPath(NormalizeRoot(root));
+            var resolved = ResolvePathWithLinks(NormalizeRoot(root), linkMemo);
             if (resolved.Length > 0)
             {
                 roots.Add(resolved);
@@ -330,6 +357,163 @@ public class PathConversionService
         }
 
         return NormalizeRoot(Path.GetFullPath(path));
+    }
+
+    // ── symlink resolution (R15) ───────────────────────────────────
+    // FileSystemInfo.ResolveLinkTarget only answers for the final path
+    // component, so a link hiding in a *middle* segment stayed invisible to
+    // the whitelist: the prefix check compared lexical strings and waved
+    // "<root>/linked-season/episode.srt" through even when the link pointed
+    // outside the library. Resolving every accumulated prefix from the
+    // filesystem root down closes that hole on both sides of the comparison
+    // — the request path and the whitelist roots themselves (a root that is
+    // a link counts as its real target).
+
+    /// <summary>
+    /// Maximum symlink hops followed per path, matching the customary
+    /// SYMLOOP_MAX (40). Beyond it the OS itself refuses the path (ELOOP),
+    /// so the walk falls back to the lexical form instead of looping.
+    /// </summary>
+    private const int MaxLinkHops = 40;
+
+    /// <summary>
+    /// <see cref="ResolveFullPath"/> plus symbolic-link resolution: every
+    /// accumulated path prefix from the root down is checked for being a
+    /// link and replaced by its target, so the result names the location the
+    /// OS would actually open. Symlink resolution and ".." folding must
+    /// interleave — "<root>/link/../x" with link→"/a/b" is "/a/x", not
+    /// "<root>/x" — which is why the segments are walked with a stack
+    /// instead of pre-folding ".." lexically. Each followed link re-seeds
+    /// the target's segments through the same loop — absolute targets
+    /// replace the whole accumulated path, relative targets are anchored at
+    /// the link's directory first — so chains and ".." inside target
+    /// strings keep OS semantics at one hop per link. When resolution
+    /// cannot complete — missing segments, permission errors, exhausted
+    /// hops — the walk keeps the segment it has, so a path that does not
+    /// exist gets exactly the pre-R15 lexical verdict (no extra grants, no
+    /// extra rejections). TODO(R15): Windows mount points/junctions beyond
+    /// what ResolveLinkTarget covers are untested; deployment is Linux.
+    /// </summary>
+    /// <param name="path">
+    /// Normalized ("/"-separated) path; may be relative, which anchors to
+    /// the current directory like GetFullPath always did.
+    /// </param>
+    /// <param name="linkMemo">
+    /// Per-request memo of accumulated prefix → link target (null = not a
+    /// link), so shared prefixes cost one readlink per batch, not per path.
+    /// </param>
+    private static string ResolvePathWithLinks(string path, Dictionary<string, string?> linkMemo)
+    {
+        // Lexical form first: it anchors relative inputs (as before) and is
+        // the fallback when link resolution bails out (missing paths keep
+        // their old verdicts).
+        var lexical = ResolveFullPath(path);
+        if (lexical.Length == 0)
+        {
+            return lexical; // "/" and "" are never usable entries here
+        }
+
+        var pending = new Stack<string>();
+        var source = path.StartsWith('/') ? path : lexical;
+        foreach (var segment in source.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse())
+        {
+            pending.Push(segment);
+        }
+
+        var resolvedSegments = new List<string>();
+        var hops = 0;
+        while (pending.Count > 0)
+        {
+            var segment = pending.Pop();
+            if (segment == ".")
+            {
+                continue;
+            }
+            if (segment == "..")
+            {
+                if (resolvedSegments.Count > 0)
+                {
+                    resolvedSegments.RemoveAt(resolvedSegments.Count - 1);
+                }
+                continue;
+            }
+
+            resolvedSegments.Add(segment);
+            var candidate = "/" + string.Join("/", resolvedSegments);
+            var target = TryGetLinkTarget(candidate, linkMemo);
+            if (target is null)
+            {
+                continue;
+            }
+
+            if (++hops > MaxLinkHops)
+            {
+                // ELOOP territory: the OS cannot open this path either; keep
+                // the verdict the lexical form would have produced.
+                return lexical;
+            }
+
+            // Follow the hop by re-seeding the target's segments through
+            // the same loop, which keeps ".." in later segments interleaved
+            // with resolution exactly like the OS does it. An absolute
+            // target ("" is the normalized filesystem root "/") replaces
+            // the whole accumulated path — the OS resolves a link to "/x"
+            // as "/x", never "<dir>/x" — while a relative target is
+            // anchored at the link's directory.
+            resolvedSegments.RemoveAt(resolvedSegments.Count - 1);
+            if (target.Length == 0 || target[0] == '/')
+            {
+                resolvedSegments.Clear();
+            }
+            else
+            {
+                target = "/" + string.Join("/", resolvedSegments) + "/" + target;
+            }
+
+            if (target.Length > 0)
+            {
+                foreach (var targetSegment in target.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse())
+                {
+                    pending.Push(targetSegment);
+                }
+            }
+        }
+
+        return NormalizeRoot("/" + string.Join("/", resolvedSegments));
+    }
+
+    /// <summary>
+    /// Single-hop link target of an accumulated prefix, in canonical "/"
+    /// form, or null when the prefix is not a link or cannot be inspected
+    /// (missing prefix, permission error) — the caller then keeps the
+    /// segment as-is, matching the behaviour for non-existent paths. The
+    /// final-target-chasing overload is deliberately not used: hop-by-hop
+    /// re-seeding keeps ".." folding under the walk's control and bounds
+    /// runaway chains itself.
+    /// </summary>
+    private static string? TryGetLinkTarget(string candidate, Dictionary<string, string?> linkMemo)
+    {
+        if (linkMemo.TryGetValue(candidate, out var memoized))
+        {
+            return memoized;
+        }
+
+        string? target = null;
+        try
+        {
+            // DirectoryInfo works for directory and file links alike (the
+            // underlying check is a readlink / reparse-point open, both
+            // type-agnostic).
+            var resolved = new DirectoryInfo(candidate).ResolveLinkTarget(returnFinalTarget: false);
+            target = resolved is null ? null : NormalizeRoot(resolved.FullName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            target = null;
+        }
+
+        linkMemo[candidate] = target;
+        return target;
     }
 
     /// <summary>NormalizePath + trailing-slash trim; "/" and "" yield "" (not a usable root).</summary>
