@@ -167,19 +167,35 @@ public static class InfrastructureModule
         configuration
             .UseSimpleAssemblyNameTypeSerializer()
             .UseRecommendedSerializerSettings()
-            .UseSQLiteStorage(sqliteDbPath, new SQLiteStorageOptions
-            {
-                // Clean up expired jobs more often
-                JobExpirationCheckInterval = TimeSpan.FromHours(1),
+            // The path-based UseSQLiteStorage hardcodes BusyTimeout=10s on
+            // every pooled connection (SQLiteStorage.cs of 0.4.3). Under a
+            // write storm (webhook burst + scheduler + distributed-lock
+            // heartbeats) waits exceed that and every enqueue fails with
+            // "database is locked" → HTTP 500 on all job-creating endpoints
+            // (NAS incident 2026-10-19). The public factory constructor keeps
+            // the storage's own flags but stretches the busy wait to two
+            // minutes, riding out storms instead of hard-failing.
+            .UseStorage(new SQLiteStorage(
+                new SQLiteDbConnectionFactory(() => new SQLite.SQLiteConnection(
+                    sqliteDbPath,
+                    SQLite.SQLiteOpenFlags.ReadWrite | SQLite.SQLiteOpenFlags.Create | SQLite.SQLiteOpenFlags.NoMutex,
+                    storeDateTimeAsTicks: true)
+                {
+                    BusyTimeout = TimeSpan.FromSeconds(120)
+                }),
+                new SQLiteStorageOptions
+                {
+                    // Clean up expired jobs more often
+                    JobExpirationCheckInterval = TimeSpan.FromHours(1),
 
-                // Reduce writes by increasing the aggregation counters
-                CountersAggregateInterval = TimeSpan.FromMinutes(5),
+                    // Reduce writes by increasing the aggregation counters
+                    CountersAggregateInterval = TimeSpan.FromMinutes(5),
 
-                // Reduced database polling
-                QueuePollInterval = TimeSpan.FromSeconds(15),
+                    // Reduced database polling
+                    QueuePollInterval = TimeSpan.FromSeconds(15),
 
-                // Job recovery timeout if worker crashes
-                InvisibilityTimeout = TimeSpan.FromMinutes(jobTimeoutMinutes)
-            });
+                    // Job recovery timeout if worker crashes
+                    InvisibilityTimeout = TimeSpan.FromMinutes(jobTimeoutMinutes)
+                }));
     }
 }
