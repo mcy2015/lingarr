@@ -111,15 +111,22 @@ const outcome = (cacheKey: string, candidates: ISubtitleCandidate[]) => ({
     sourceOutcomes: []
 })
 
+/// The backend answer also carries filesLanded (season-pack fan-out: N when
+/// one download landed a file next to every episode of the season); the
+/// shared wire-shape mirror in types/services predates it, so the spec
+/// extends it locally.
+type DownloadResponse = ISubtitleDownloadResponse & { filesLanded?: number }
+
 const downloadResponse = (
-    overrides: Partial<ISubtitleDownloadResponse> = {}
-): ISubtitleDownloadResponse => ({
+    overrides: Partial<DownloadResponse> = {}
+): DownloadResponse => ({
     historyId: 1,
     filePath: '/media/dune/dune.zh.srt',
     result: 'Downloaded',
     error: null,
     translationRequestId: null,
     translationDuplicate: false,
+    filesLanded: 1,
     ...overrides
 })
 
@@ -358,6 +365,33 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
         await clickButton(en.subSearch.downloadOnly)
         expect(toast.toasts[0].message).toBe(
             en.subSearch.downloaded.replace('{file}', '/media/dune/dune.zh.srt')
+        )
+    })
+
+    it('toasts the matched-episode count when a whole-season archive landed', async () => {
+        // Season-pack fan-out: filesLanded > 1 replaces the single-file
+        // toast with the matched-count one (the downloaded event still
+        // carries the initiating episode's file).
+        downloadMock.mockResolvedValue(downloadResponse({ filesLanded: 8 }))
+        const { toast, wrapper } = await mountModal()
+
+        await clickButton(en.subSearch.downloadOnly)
+        expect(toast.toasts[0].message).toBe(
+            en.subSearch.downloadedSeasonPack.replace('{count}', '8')
+        )
+        expect(toast.toasts[0].type).toBe('success')
+        expect(wrapper.emitted('downloaded')).toEqual([['/media/dune/dune.zh.srt']])
+    })
+
+    it('keeps the single-file toast when exactly one file landed', async () => {
+        downloadMock.mockResolvedValue(
+            downloadResponse({ filesLanded: 1, translationRequestId: 55 })
+        )
+        const { toast } = await mountModal()
+
+        await clickButton(en.subSearch.downloadAndTranslate)
+        expect(toast.toasts[0].message).toBe(
+            en.subSearch.downloadedAndQueued.replace('{file}', '/media/dune/dune.zh.srt')
         )
     })
 

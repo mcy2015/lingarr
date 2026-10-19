@@ -112,6 +112,21 @@ public class SubtitleDownloadPipelineTests
                 "fake", "Movie.2019.WEBDL-1080p.srt", "srt", []));
     }
 
+    /// <summary>Provider double serving a prebuilt archive payload (season packs).</summary>
+    internal sealed class ArchiveProvider(string fileName, byte[] archive) : ISubtitleProvider
+    {
+        public string Provider => "fake";
+
+        public Task<SubtitleSearchResult> SearchAsync(
+            SubtitleSearchRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(SubtitleSearchResult.Empty);
+
+        public Task<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload> DownloadAsync(
+            SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
+            => Task.FromResult(new Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload(
+                "fake", fileName, "zip", archive));
+    }
+
     // ── Blacklist write side (P2 data batch): content-invalid failures
     // blacklist the (provider, external_id) pair for 90 days; transport
     // failures never do.
@@ -413,6 +428,267 @@ public class SubtitleDownloadPipelineTests
         Assert.True(File.Exists(outcome.FilePath));
         var history = await fixture.DbContext.SubtitleDownloads.SingleAsync();
         Assert.Equal(SubtitleDownloadResult.Succeeded, history.Result);
+    }
+
+    // ── Season-pack fan-out: subtitle sources habitually answer an episode
+    // search with a whole-season archive; the single-entry pick used to
+    // land one (often wrong-numbered) file next to the initiating episode.
+    // Every entry that parses to an episode number of the initiating
+    // season now lands next to its own sibling episode.
+
+    private static string SrtOf(string marker) =>
+        $"1\r\n00:00:01,000 --> 00:00:02,000\r\nHello {marker}\r\n";
+
+    private static string PackEntry(int seasonNumber, int episodeNumber) =>
+        $"6ixtynin9.The.Series.S{seasonNumber:D2}E{episodeNumber:D2}.720p.NF.WEBRip.x264-GalaxyTV.srt";
+
+    /// <summary>The output name the naming template derives from the episode's video file (CreateFilePath mocked to the passthrough).</summary>
+    private static string SubtitleNameOf(SubtitleEndpointFixture.EpisodeRef episode) =>
+        episode.VideoFileName[..^".mkv".Length] + ".srt";
+
+    private static byte[] ZipOf(params (string Name, string Text)[] entries)
+    {
+        using var buffer = new MemoryStream();
+        using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, text) in entries)
+            {
+                WriteEntry(archive, name, text);
+            }
+        }
+
+        return buffer.ToArray();
+    }
+
+    [Fact]
+    public async Task Download_SeasonPack_LandsEveryEntryNextToItsOwnEpisode()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "6ixtynin9.The.Series.S01.THAI.720p.NF.WEBRip.x264-GalaxyTV.zip",
+            ZipOf(
+                (PackEntry(1, 1), SrtOf("episode one")),
+                (PackEntry(1, 2), SrtOf("episode two")),
+                (PackEntry(1, 3), SrtOf("episode three")))));
+        var episode1 = fixture.SeedEpisode(1, 1);
+        var episode2 = fixture.SeedEpisode(1, 2);
+        var episode3 = fixture.SeedEpisode(1, 3);
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Episode, episode2.Id, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(3, outcome.FilesLanded);
+        // the history/broadcast path is the initiating episode's own file
+        Assert.Equal(Path.Combine(episode2.Directory, SubtitleNameOf(episode2)), outcome.FilePath);
+
+        Assert.Contains("episode one", File.ReadAllText(Path.Combine(episode1.Directory, SubtitleNameOf(episode1))));
+        Assert.Contains("episode two", File.ReadAllText(Path.Combine(episode2.Directory, SubtitleNameOf(episode2))));
+        Assert.Contains("episode three", File.ReadAllText(Path.Combine(episode3.Directory, SubtitleNameOf(episode3))));
+
+        // one history row for the whole pack, pointing at E02's file
+        var history = await fixture.DbContext.SubtitleDownloads.SingleAsync();
+        Assert.Equal(SubtitleDownloadResult.Succeeded, history.Result);
+        Assert.Equal(outcome.FilePath, history.FilePath);
+    }
+
+    [Fact]
+    public async Task Download_SeasonPackWithoutTheInitiatingEntry_FallsBackToTheSinglePickForIt()
+    {
+        // E01+E03 pack initiated from E02: both entries home in on their own
+        // episodes, and the initiating episode keeps the original
+        // single-pick behaviour — the largest entry, same selection rules
+        // as before the fan-out existed (never empty-handed).
+        var largestEntry = SrtOf("episode three")
+            + "2\r\n00:00:03,000 --> 00:00:04,000\r\nThe largest payload of the pack wins the single pick\r\n";
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "pack.zip",
+            ZipOf(
+                (PackEntry(1, 1), SrtOf("episode one")),
+                (PackEntry(1, 3), largestEntry))));
+        var episode1 = fixture.SeedEpisode(1, 1);
+        var episode2 = fixture.SeedEpisode(1, 2);
+        var episode3 = fixture.SeedEpisode(1, 3);
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Episode, episode2.Id, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(3, outcome.FilesLanded);
+        Assert.Contains("episode one", File.ReadAllText(Path.Combine(episode1.Directory, SubtitleNameOf(episode1))));
+        Assert.Contains("episode three", File.ReadAllText(Path.Combine(episode3.Directory, SubtitleNameOf(episode3))));
+        // the fallback single pick (largest entry = E03) landed next to E02
+        Assert.Contains("episode three", File.ReadAllText(Path.Combine(episode2.Directory, SubtitleNameOf(episode2))));
+    }
+
+    [Fact]
+    public async Task Download_PackWithoutEpisodeNumbers_KeepsTheSingleEntryBehaviour()
+    {
+        // No entry parses to an episode number → the fan-out never triggers
+        // and the download behaves exactly as before: one picked entry
+        // (largest payload) next to the initiating episode, nothing else.
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "pack.zip",
+            ZipOf(
+                ("Show.pack.a.srt", SrtOf("alpha")),
+                ("Show.pack.b.srt", SrtOf("beta the larger entry of this pack")))));
+        var episode1 = fixture.SeedEpisode(1, 1);
+        var episode2 = fixture.SeedEpisode(1, 2);
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Episode, episode2.Id, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(1, outcome.FilesLanded);
+        Assert.Equal(Path.Combine(episode2.Directory, SubtitleNameOf(episode2)), outcome.FilePath);
+        Assert.Contains("beta the larger entry", File.ReadAllText(outcome.FilePath!));
+        Assert.Empty(Directory.GetFiles(episode1.Directory));
+    }
+
+    [Fact]
+    public async Task Download_SeasonPack_IgnoresCrossSeasonEntries()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "pack.zip",
+            ZipOf(
+                (PackEntry(1, 1), SrtOf("season one episode one")),
+                (PackEntry(1, 2), SrtOf("season one episode two")),
+                (PackEntry(2, 1), SrtOf("season two episode one")))));
+        var seasonOneEpisode1 = fixture.SeedEpisode(1, 1);
+        var seasonOneEpisode2 = fixture.SeedEpisode(1, 2);
+        var seasonTwoEpisode1 = fixture.SeedEpisode(2, 1);
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Episode, seasonOneEpisode1.Id, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(2, outcome.FilesLanded);
+        Assert.True(File.Exists(Path.Combine(seasonOneEpisode1.Directory, SubtitleNameOf(seasonOneEpisode1))));
+        Assert.True(File.Exists(Path.Combine(seasonOneEpisode2.Directory, SubtitleNameOf(seasonOneEpisode2))));
+        // S02E01 is a different season's file — never homed in on this one
+        Assert.Empty(Directory.GetFiles(seasonTwoEpisode1.Directory));
+    }
+
+    [Fact]
+    public async Task Download_SeasonPackOfANonTargetLanguage_EnqueuesOneImportRequestPerFile()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "pack.zip",
+            ZipOf(
+                (PackEntry(1, 1), SrtOf("episode one")),
+                (PackEntry(1, 2), SrtOf("episode two")),
+                (PackEntry(1, 3), SrtOf("episode three")))));
+        // One target language so the per-file count reads 1:1 — with the
+        // default zh+ja pair the multi-target contract (one request per
+        // target per file) would double the calls.
+        fixture.Settings.SetSetting(
+            Lingarr.Core.Configuration.SettingKeys.Translation.TargetLanguages,
+            System.Text.Json.JsonSerializer.Serialize(new List<TargetLanguage>
+            {
+                new() { Name = "Chinese", Code = "zh" }
+            })).GetAwaiter().GetResult();
+        var episode1 = fixture.SeedEpisode(1, 1);
+        var episode2 = fixture.SeedEpisode(1, 2);
+        var episode3 = fixture.SeedEpisode(1, 3);
+
+        var requestMediaIds = new List<int?>();
+        fixture.TranslationQueue
+            .Setup(queue => queue.CreateImportRequest(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<int?>(), It.IsAny<MediaType>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync(41)
+            .Callback((string _, string _, string _, string _, int? mediaId, MediaType _, string _, bool _)
+                => requestMediaIds.Add(mediaId));
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Episode, episode2.Id, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(3, outcome.FilesLanded);
+        fixture.TranslationQueue.Verify(
+            queue => queue.CreateImportRequest(
+                It.IsAny<string>(), It.IsAny<string>(), "en", "zh",
+                It.IsAny<int?>(), MediaType.Episode, It.IsAny<string?>(), It.IsAny<bool>()),
+            Times.Exactly(3));
+        // every request is bound to the episode its file landed next to
+        Assert.Equal(new List<int?> { episode1.Id, episode2.Id, episode3.Id }, requestMediaIds);
+    }
+
+    [Fact]
+    public async Task Download_SeasonPackWithSkipTranslation_LandsTheFilesWithoutTouchingTheQueue()
+    {
+        // Locked manual-download contract, per file: the pack lands in full,
+        // the translation queue is never called.
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "pack.zip",
+            ZipOf(
+                (PackEntry(1, 1), SrtOf("episode one")),
+                (PackEntry(1, 2), SrtOf("episode two")),
+                (PackEntry(1, 3), SrtOf("episode three")))));
+        fixture.SeedEpisode(1, 1);
+        var episode2 = fixture.SeedEpisode(1, 2);
+        fixture.SeedEpisode(1, 3);
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Episode, episode2.Id, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None, skipTranslation: true);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(3, outcome.FilesLanded);
+        Assert.Null(outcome.TranslationRequestId);
+        fixture.TranslationQueue.Verify(
+            queue => queue.CreateImportRequest(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<int?>(), It.IsAny<MediaType>(), It.IsAny<string?>(), It.IsAny<bool>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Download_SeasonPack_DropsTheDetailPageFileCacheOfEveryWrittenDirectory()
+    {
+        // The Files card serves cached directory scans; a fanned-out pack
+        // writes into several episode directories and EVERY written
+        // directory must drop its entry — invalidating only the first one
+        // written leaves the other detail pages on the pre-download list.
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "pack.zip",
+            ZipOf(
+                (PackEntry(1, 3), SrtOf("episode three")), // first landed file → the first-directory-only bug shape
+                (PackEntry(1, 1), SrtOf("episode one")),
+                (PackEntry(1, 2), SrtOf("episode two")))));
+        var episode1 = fixture.SeedEpisode(1, 1);
+        var episode2 = fixture.SeedEpisode(1, 2);
+        fixture.SeedEpisode(1, 3);
+        // The card scans the season directory — point it at E01's directory
+        // so the cache that must drop is NOT the first one written (E03's).
+        fixture.DbContext.Seasons.Single().Path = episode1.Directory;
+        await fixture.DbContext.SaveChangesAsync();
+        var showId = fixture.DbContext.Shows.Single().Id;
+
+        var scans = 0;
+        fixture.SubtitleService
+            .Setup(service => service.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>())
+            .Callback(() => scans++);
+
+        var controller = new MediaController(
+            null!, null!, fixture.SubtitleService.Object, null!, null!, fixture.DbContext);
+        await controller.GetMediaSubtitles(MediaType.Show, showId);
+        Assert.Equal(1, scans); // the first view scans and primes the cache
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Episode, episode2.Id, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(3, outcome.FilesLanded);
+        var afterDownload = scans; // whatever the coverage refresher scanned
+
+        await controller.GetMediaSubtitles(MediaType.Show, showId);
+        Assert.Equal(afterDownload + 1, scans); // E01's directory entry dropped → rescanned
     }
 
     private static string ContentHashOfSrtPayload()
@@ -720,6 +996,61 @@ public class SubtitleDownloadPipelineTests
 
     /// <summary>Id of the seeded movie row.</summary>
     internal int MovieId { get; }
+
+    // ── Season-pack fan-out seeding: one lazily-created show/season, each
+    // episode in its own directory under the fixture's media root — the
+    // multi-directory shape the fan-out must invalidate per directory.
+    // The write side the pipeline reads (Episode.Path = subtitle landing
+    // directory, Episode.FileName = video file name) is seeded exactly as
+    // the pipeline's own ComputeOutputPathAsync consumes it.
+    private Show? _seedShow;
+    private readonly Dictionary<int, Season> _seedSeasons = new();
+
+    /// <summary>Seeded episode anchor: library id, directory, video file name.</summary>
+    internal sealed record EpisodeRef(int Id, string Directory, string VideoFileName);
+
+    internal EpisodeRef SeedEpisode(int seasonNumber, int episodeNumber)
+    {
+        if (_seedShow is null)
+        {
+            _seedShow = new Show
+            {
+                SonarrId = 1,
+                Title = "6ixtynin9 The Series",
+                Path = MediaDirectory,
+                DateAdded = DateTimeOffset.UtcNow
+            };
+            DbContext.Shows.Add(_seedShow);
+        }
+
+        if (!_seedSeasons.TryGetValue(seasonNumber, out var season))
+        {
+            season = new Season
+            {
+                SeasonNumber = seasonNumber,
+                Path = Path.Combine(MediaDirectory, $"Season {seasonNumber:D2}"),
+                Show = _seedShow
+            };
+            DbContext.Seasons.Add(season);
+            _seedSeasons[seasonNumber] = season;
+        }
+
+        var directory = Path.Combine(MediaDirectory, $"s{seasonNumber:D2}e{episodeNumber:D2}");
+        Directory.CreateDirectory(directory);
+        var episode = new Episode
+        {
+            SonarrId = seasonNumber * 1000 + episodeNumber,
+            EpisodeNumber = episodeNumber,
+            Title = $"Episode {episodeNumber}",
+            FileName = $"Show.S{seasonNumber:D2}E{episodeNumber:D2}.720p.NF.WEBRip.x264-GalaxyTV.mkv",
+            Path = directory,
+            Season = season,
+            DateAdded = DateTimeOffset.UtcNow
+        };
+        DbContext.Episodes.Add(episode);
+        DbContext.SaveChanges();
+        return new EpisodeRef(episode.Id, directory, episode.FileName);
+    }
 
     public void Dispose()
     {

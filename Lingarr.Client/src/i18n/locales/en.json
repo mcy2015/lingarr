@@ -1234,7 +1234,8 @@
         "sourceError": "failed: {message}",
         "downloadRejected": "Download failed · {result} · {error}",
         "translationDuplicate": "A similar translation request already exists",
-        "noSources": "No subtitle source available — configure one in Settings first."
+        "noSources": "No subtitle source available — configure one in Settings first.",
+        "downloadedSeasonPack": "Downloaded and matched {count} episodes"
     },
     "dashboard": {
         "subtitles": {

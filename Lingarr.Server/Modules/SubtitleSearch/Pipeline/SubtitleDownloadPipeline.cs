@@ -30,13 +30,15 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 /// <param name="Error">Readable failure reason when <see cref="Result"/> is Failed.</param>
 /// <param name="TranslationRequestId">First translation request created (⑦ step ⑦, one per target language); null when none.</param>
 /// <param name="TranslationDuplicate">True when at least one target language was skipped because the same content/target pair is already tracked.</param>
+/// <param name="FilesLanded">How many files this attempt wrote: 1 for an ordinary candidate, N when a whole-season archive fanned out one entry per episode, 0 when nothing landed.</param>
 public sealed record SubtitleDownloadOutcome(
     int HistoryId,
     string? FilePath,
     SubtitleDownloadResult Result,
     string? Error = null,
     int? TranslationRequestId = null,
-    bool TranslationDuplicate = false);
+    bool TranslationDuplicate = false,
+    int FilesLanded = 0);
 
 /// <summary>
 /// Download post-processing pipeline (tech design ⑦): fetch → magic-number
@@ -184,7 +186,10 @@ public sealed class SubtitleDownloadPipeline
                 error: $"Unknown subtitle provider '{candidate.Provider}'.");
         }
 
-        ExtractedSubtitle? entry;
+        byte[] payloadContent;
+        string? payloadFileName;
+        string? payloadFormat;
+        IReadOnlyList<ExtractedSubtitle> entries;
         try
         {
             var payload = await registered.Provider.DownloadAsync(
@@ -207,8 +212,16 @@ public sealed class SubtitleDownloadPipeline
                     candidate.Provider);
             }
 
-            entry = _extractor.Extract(
-                payload.Content, payload.FileName, payload.Format, candidate.Language, candidate.Provider);
+            payloadContent = payload.Content;
+            payloadFileName = payload.FileName;
+            payloadFormat = payload.Format;
+
+            // ① every subtitle entry of the payload (a single passthrough
+            // entry for plain files) — the season-pack fan-out below decides
+            // from the full list whether one entry per episode should land;
+            // every failure contract of the single pick applies unchanged.
+            entries = _extractor.ExtractAll(
+                payloadContent, payloadFileName, payloadFormat, candidate.Provider);
         }
         catch (OperationCanceledException)
         {
@@ -216,32 +229,39 @@ public sealed class SubtitleDownloadPipeline
         }
         catch (SubtitleProviderException ex)
         {
-            // Content-invalid failures (unparseable archive/body — raised by
-            // the extractor or the adapter's payload checks, never carrying an
-            // HTTP status) are permanent properties of this candidate: the
-            // same external id would serve the same garbage forever.
-            // Transport/auth/limit failures are transient and never
-            // blacklist. Locked contract: key = (provider, external_id),
-            // 90-day window.
-            if (ex.Reason == SubtitleProviderFailureReason.InvalidResponse && ex.HttpStatus is null)
-            {
-                await BlacklistCandidateAsync(candidate, ex.Message, cancellationToken);
-            }
+            return await HandleExtractionFailureAsync(
+                candidate, mediaType, mediaId, source, searchSessionId, ex, cancellationToken);
+        }
 
-            // R3 quota circuit-breaker: a daily-quota-exhaustion verdict
-            // (OpenSubtitles 406 with remaining:0 — the DailyLimit bucket)
-            // cools the source down until its own reset moment, so the next
-            // rounds skip it instead of hammering a 406. Best effort: a
-            // cooldown write must never mask the history row of the attempt.
-            if (ex.Reason == SubtitleProviderFailureReason.DailyLimit)
+        // ①b season-pack fan-out (episode downloads only): an archive whose
+        // entries carry episode markers of the initiating season lands one
+        // file per sibling episode instead of one picked file — the whole-
+        // season packs subtitle sources serve would otherwise mis-file every
+        // episode but one. Returns null whenever the pack does not qualify,
+        // and the single-entry path below runs byte-identically to before.
+        if (mediaType == MediaType.Episode && media.SeasonId is int initiatingSeasonId)
+        {
+            var seasonPack = await TryDownloadSeasonPackAsync(
+                candidate, mediaId, initiatingSeasonId, media, entries,
+                payloadContent, payloadFileName, payloadFormat,
+                source, searchSessionId, skipTranslation, cancellationToken);
+            if (seasonPack is not null)
             {
-                await RecordQuotaCooldownSafeAsync(candidate.Provider, ex, cancellationToken);
+                return seasonPack;
             }
+        }
 
-            return await RecordAsync(
-                candidate, mediaType, mediaId, source, searchSessionId,
-                SubtitleDownloadResult.Failed, filePath: null,
-                error: ex.Message);
+        // ① (single-entry path) the one picked entry per the ⑦ rule.
+        ExtractedSubtitle entry;
+        try
+        {
+            entry = _extractor.Extract(
+                payloadContent, payloadFileName, payloadFormat, candidate.Language, candidate.Provider);
+        }
+        catch (SubtitleProviderException ex)
+        {
+            return await HandleExtractionFailureAsync(
+                candidate, mediaType, mediaId, source, searchSessionId, ex, cancellationToken);
         }
 
         // ② encoding → UTF-8 (GBK/GB18030 detection lives in the shared service).
@@ -339,7 +359,7 @@ public sealed class SubtitleDownloadPipeline
 
         var outcome = await RecordAsync(
             candidate, mediaType, mediaId, source, searchSessionId,
-            SubtitleDownloadResult.Succeeded, filePath: finalPath, error: null);
+            SubtitleDownloadResult.Succeeded, filePath: finalPath, error: null, filesLanded: 1);
 
         // ⑥ translation hook: target-language hits are terminal; non-target
         // languages enter the queue when auto_translate is on (content-hash
@@ -401,7 +421,8 @@ public sealed class SubtitleDownloadPipeline
         int? searchSessionId,
         SubtitleDownloadResult result,
         string? filePath,
-        string? error)
+        string? error,
+        int filesLanded = 0)
     {
         var row = new Lingarr.Core.Entities.SubtitleDownload
         {
@@ -421,8 +442,410 @@ public sealed class SubtitleDownloadPipeline
         };
         _dbContext.SubtitleDownloads.Add(row);
         await _dbContext.SaveChangesAsync();
-        return new SubtitleDownloadOutcome(row.Id, filePath, result, error);
+        return new SubtitleDownloadOutcome(row.Id, filePath, result, error, FilesLanded: filesLanded);
     }
+
+    /// <summary>
+    /// Failure handling shared by the extraction passes (the fan-out's
+    /// ExtractAll and the single pick's Extract): content-invalid failures
+    /// (unparseable archive/body — raised by the extractor or the adapter's
+    /// payload checks, never carrying an HTTP status) are permanent
+    /// properties of this candidate — the same external id would serve the
+    /// same garbage forever — and blacklist it (locked contract: key =
+    /// (provider, external_id), 90-day window). Transport/auth/limit
+    /// failures never blacklist. A daily-quota-exhaustion verdict
+    /// (OpenSubtitles 406 with remaining:0 — the DailyLimit bucket) cools
+    /// the source down until its own reset moment (R3 circuit-breaker; best
+    /// effort — a cooldown write must never mask the history row). Every
+    /// attempt lands its Failed history row.
+    /// </summary>
+    private async Task<SubtitleDownloadOutcome> HandleExtractionFailureAsync(
+        SubtitleCandidate candidate,
+        MediaType mediaType,
+        int mediaId,
+        SubtitleDownloadSource source,
+        int? searchSessionId,
+        SubtitleProviderException exception,
+        CancellationToken cancellationToken)
+    {
+        if (exception.Reason == SubtitleProviderFailureReason.InvalidResponse && exception.HttpStatus is null)
+        {
+            await BlacklistCandidateAsync(candidate, exception.Message, cancellationToken);
+        }
+
+        if (exception.Reason == SubtitleProviderFailureReason.DailyLimit)
+        {
+            await RecordQuotaCooldownSafeAsync(candidate.Provider, exception, cancellationToken);
+        }
+
+        return await RecordAsync(
+            candidate, mediaType, mediaId, source, searchSessionId,
+            SubtitleDownloadResult.Failed, filePath: null,
+            error: exception.Message);
+    }
+
+    /// <summary>One sibling episode of the initiating season — a fan-out landing target.</summary>
+    private sealed record SeasonSibling(
+        int Id,
+        int EpisodeNumber,
+        string? Path,
+        string? FileName,
+        string Title,
+        int SeasonNumber,
+        string ShowTitle);
+
+    /// <summary>One fan-out landing attempt: the written path (null = the entry was skipped) plus what the pipeline needs next.</summary>
+    private sealed record LandingAttempt(string? Path, byte[]? Utf8, string? Error, bool ContentInvalid);
+
+    /// <summary>One file the season-pack fan-out wrote next to its episode.</summary>
+    private sealed record LandedFile(SeasonSibling Episode, string Path, byte[] Utf8);
+
+    /// <summary>
+    /// Season-pack fan-out (episode downloads): when at least two extracted
+    /// entries parse to an episode number — season-tagged entries counting
+    /// only when the tag matches the initiating season — every such entry
+    /// lands next to its own sibling episode, each through the full
+    /// single-entry treatment (encoding → optional SRT conversion →
+    /// naming template for that episode's directory and video name →
+    /// unique path → write). Cross-season and unparseable entries are
+    /// ignored; the language always stays the candidate's requested one
+    /// (entry homing looks at the episode number only).
+    /// <para>
+    /// The initiating episode never walks away empty-handed: when no entry
+    /// homed in on it, the original single-pick <see cref="SubtitleArchiveExtractor.Extract"/>
+    /// selection lands there (identical selection rules as before the
+    /// fan-out existed).
+    /// </para>
+    /// <para>
+    /// Returns null when the fan-out condition is not met — the caller then
+    /// runs the single-entry pipeline, byte-identical to the pre-fan-out
+    /// behaviour. On a fan-out run: one history row (FilePath = the
+    /// initiating episode's file), one translation enqueue per landed file
+    /// (content-hash idempotent, target-language hits terminal,
+    /// skipTranslation bypasses the queue), one coverage refresh of the
+    /// initiating episode (the refresher maps it to its show), one cache
+    /// invalidation per written directory and one progress broadcast.
+    /// </para>
+    /// </summary>
+    private async Task<SubtitleDownloadOutcome?> TryDownloadSeasonPackAsync(
+        SubtitleCandidate candidate,
+        int mediaId,
+        int initiatingSeasonId,
+        MediaContext media,
+        IReadOnlyList<ExtractedSubtitle> entries,
+        byte[] payloadContent,
+        string? payloadFileName,
+        string? payloadFormat,
+        SubtitleDownloadSource source,
+        int? searchSessionId,
+        bool skipTranslation,
+        CancellationToken cancellationToken)
+    {
+        // Trigger: ≥2 entries parse to an episode number, with every
+        // season-tagged one of them belonging to the initiating season.
+        // Anything less keeps the single-pick pipeline (null) — untagged
+        // and ambiguous packs behave exactly as before.
+        var assignable = new List<(ExtractedSubtitle Entry, int EpisodeNumber)>();
+        foreach (var entry in entries)
+        {
+            var parsed = SubtitleFilenameParser.Parse(entry.FileName);
+            if (parsed.Episode is int episodeNumber
+                && (parsed.Season is null || parsed.Season == media.SeasonNumber))
+            {
+                assignable.Add((entry, episodeNumber));
+            }
+        }
+
+        if (assignable.Count < 2)
+        {
+            return null;
+        }
+
+        // Same-season siblings (the initiating episode's SeasonId): episode
+        // numbers → landing targets. Projection stays anonymous for EF,
+        // mapped client-side to the sibling record (StatisticsJob precedent).
+        var siblingRows = await _dbContext.Episodes
+            .Where(episode => episode.SeasonId == initiatingSeasonId)
+            .Select(episode => new
+            {
+                episode.Id,
+                episode.EpisodeNumber,
+                episode.Path,
+                episode.FileName,
+                episode.Title,
+                SeasonNumber = episode.Season.SeasonNumber,
+                ShowTitle = episode.Season.Show.Title
+            })
+            .ToListAsync(cancellationToken);
+        var siblingByNumber = new Dictionary<int, SeasonSibling>();
+        foreach (var row in siblingRows)
+        {
+            var sibling = new SeasonSibling(
+                row.Id, row.EpisodeNumber, row.Path, row.FileName, row.Title, row.SeasonNumber, row.ShowTitle);
+            siblingByNumber.TryAdd(row.EpisodeNumber, sibling);
+        }
+
+        // Archive order, first entry wins per episode number (the same
+        // first-wins tie rule the single pick applies): duplicate entries
+        // for one episode and numbers without a library sibling are skipped.
+        var claims = new List<(SeasonSibling Target, ExtractedSubtitle Entry)>();
+        var claimedNumbers = new HashSet<int>();
+        foreach (var (entry, episodeNumber) in assignable)
+        {
+            if (claimedNumbers.Contains(episodeNumber)
+                || !siblingByNumber.TryGetValue(episodeNumber, out var sibling))
+            {
+                continue;
+            }
+
+            claimedNumbers.Add(episodeNumber);
+            claims.Add((sibling, entry));
+        }
+
+        // Same conversion settings as the single-entry path.
+        var settings = await _settingService.GetSettings([
+            SettingKeys.SubtitleSearch.ConvertToSrt,
+            SettingKeys.SubtitleSearch.AutoTranslate
+        ]);
+        var convertToSrt = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.ConvertToSrt) != "false";
+        var autoTranslate = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.AutoTranslate) != "false";
+
+        // One landing attempt per claim: a defective entry (empty payload,
+        // unparseable format, unwritable directory) is skipped with a log
+        // line — one bad file must not sink the episodes whose entries are
+        // fine. Content-invalid defects are remembered for the nothing-
+        // landed-at-all verdict below.
+        var landed = new List<LandedFile>();
+        string? lastError = null;
+        var contentInvalid = false;
+        foreach (var (target, entry) in claims)
+        {
+            var attempt = await TryLandEntryAsync(
+                candidate.Language, target, entry, convertToSrt, cancellationToken);
+            if (attempt.Path is null)
+            {
+                lastError = attempt.Error ?? lastError;
+                contentInvalid |= attempt.ContentInvalid;
+                _logger.LogWarning(
+                    "Season pack entry '{EntryFileName}' could not land on episode {EpisodeId}: {Reason}.",
+                    entry.FileName, target.Id, attempt.Error);
+                continue;
+            }
+
+            landed.Add(new LandedFile(target, attempt.Path, attempt.Utf8!));
+        }
+
+        // Initiating-episode fallback: no entry homed in on the episode the
+        // download started from (an E01+E03 pack downloaded from E02) — the
+        // original single-pick selection lands there instead, so the
+        // initiating episode keeps the never-empty-handed contract.
+        if (siblingByNumber.Values.FirstOrDefault(sibling => sibling.Id == mediaId) is { } initiating
+            && landed.All(file => file.Episode.Id != mediaId))
+        {
+            try
+            {
+                var picked = _extractor.Extract(
+                    payloadContent, payloadFileName, payloadFormat, candidate.Language, candidate.Provider);
+                var attempt = await TryLandEntryAsync(
+                    candidate.Language, initiating, picked, convertToSrt, cancellationToken);
+                if (attempt.Path is null)
+                {
+                    lastError = attempt.Error ?? lastError;
+                    contentInvalid |= attempt.ContentInvalid;
+                    _logger.LogWarning(
+                        "Season pack fallback pick could not land on episode {EpisodeId}: {Reason}.",
+                        mediaId, attempt.Error);
+                }
+                else
+                {
+                    landed.Add(new LandedFile(initiating, attempt.Path, attempt.Utf8!));
+                }
+            }
+            catch (SubtitleProviderException ex)
+            {
+                lastError = ex.Message;
+                contentInvalid |= ex.Reason == SubtitleProviderFailureReason.InvalidResponse
+                                  && ex.HttpStatus is null;
+            }
+        }
+
+        if (landed.Count == 0)
+        {
+            if (contentInvalid)
+            {
+                await BlacklistCandidateAsync(
+                    candidate, lastError ?? "the downloaded subtitle is empty.", cancellationToken);
+            }
+
+            return await RecordAsync(
+                candidate, MediaType.Episode, mediaId, source, searchSessionId,
+                SubtitleDownloadResult.Failed, filePath: null,
+                error: lastError ?? "none of the archive entries could be written.");
+        }
+
+        // History row and broadcast stay single: FilePath (and the broadcast
+        // path) point at the initiating episode's file when it landed,
+        // honestly at the first landed file otherwise.
+        var initiatingFile = landed.FirstOrDefault(file => file.Episode.Id == mediaId)?.Path
+                             ?? landed[0].Path;
+        var outcome = await RecordAsync(
+            candidate, MediaType.Episode, mediaId, source, searchSessionId,
+            SubtitleDownloadResult.Succeeded, filePath: initiatingFile, error: null,
+            filesLanded: landed.Count);
+
+        // Translation enqueue per landed file — the same adjudication the
+        // single-entry path runs (content-hash idempotent, target-language
+        // hits terminal, skipTranslation bypasses the queue entirely): a
+        // non-target-language whole-season pack becomes one import request
+        // per episode.
+        int? firstRequestId = null;
+        var anyDuplicate = false;
+        foreach (var file in landed)
+        {
+            var enqueued = await EnqueueTranslationAsync(
+                candidate, MediaType.Episode, file.Episode.Id, TitleOf(file.Episode), file.Path, file.Utf8,
+                autoTranslate, cancellationToken, skipTranslation);
+            firstRequestId ??= enqueued.requestId;
+            anyDuplicate |= enqueued.duplicate;
+        }
+
+        // One coverage refresh of the initiating episode (episode → its
+        // show is the refresher's own mapping, which rescans every season
+        // directory of that show).
+        try
+        {
+            await _coverageRefresher.RefreshAsync(MediaType.Episode, mediaId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // The files are on disk; the daily scan re-syncs the flags anyway.
+            _logger.LogWarning(ex, "Coverage refresh failed for Episode {MediaId}.", mediaId);
+        }
+
+        // The Files card caches directory scans for a short TTL — drop
+        // EVERY directory that received a file: a multi-episode pack spans
+        // directories, and missing one leaves that detail page serving the
+        // pre-download list until the TTL expires (TranslationJob
+        // writeback precedent).
+        foreach (var directory in landed
+                     .Select(file => Path.GetDirectoryName(file.Path))
+                     .Where(directory => directory is not null)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            MediaController.InvalidateSubtitleFileCache(directory);
+        }
+
+        // One broadcast (path = the initiating episode's file) — per-episode
+        // events would storm the progress hub.
+        try
+        {
+            await _hubContext.Clients.Group("JobProgress").SendAsync(
+                "SubtitleDownloaded",
+                new
+                {
+                    mediaType = MediaType.Episode.ToString(),
+                    mediaId,
+                    language = candidate.Language,
+                    provider = candidate.Provider,
+                    path = initiatingFile
+                },
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Subtitle download broadcast failed for Episode {MediaId}.", mediaId);
+        }
+
+        return outcome with
+        {
+            TranslationRequestId = firstRequestId,
+            TranslationDuplicate = anyDuplicate
+        };
+    }
+
+    /// <summary>
+    /// Lands one archive entry next to one episode through the single-entry
+    /// treatment: encoding → UTF-8, empty-payload guard, optional SRT
+    /// conversion, naming template over the episode's directory and video
+    /// name, unique path, write. Failures come back as a skipped attempt
+    /// (never an exception) with the readable reason;
+    /// <see cref="LandingAttempt.ContentInvalid"/> marks the permanently-
+    /// unusable-content family (empty/unparseable) for blacklisting when
+    /// nothing lands at all.
+    /// </summary>
+    private async Task<LandingAttempt> TryLandEntryAsync(
+        string language,
+        SeasonSibling target,
+        ExtractedSubtitle entry,
+        bool convertToSrt,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(target.Path) || string.IsNullOrEmpty(target.FileName))
+        {
+            return new LandingAttempt(
+                null, null, $"episode {target.Id} has no file path; nowhere to write the subtitle.", false);
+        }
+
+        byte[] utf8;
+        try
+        {
+            utf8 = _encodingService.ConvertToUtf8(entry.Content);
+        }
+        catch (Exception ex)
+        {
+            return new LandingAttempt(null, null, $"encoding conversion failed: {ex.Message}", false);
+        }
+
+        // An empty entry would silently count as coverage — same guard as
+        // the single-entry path.
+        if (utf8.Length == 0 || string.IsNullOrWhiteSpace(Encoding.UTF8.GetString(utf8)))
+        {
+            return new LandingAttempt(null, null, "the downloaded subtitle is empty.", true);
+        }
+
+        string outputExtension;
+        byte[] outputBytes;
+        if (convertToSrt)
+        {
+            try
+            {
+                outputBytes = ConvertToSrt(entry.FileName, utf8);
+                outputExtension = ".srt";
+            }
+            catch (Exception ex)
+            {
+                return new LandingAttempt(
+                    null, null, $"could not parse '{entry.FileName}' as a subtitle: {ex.Message}", true);
+            }
+        }
+        else
+        {
+            outputBytes = utf8;
+            outputExtension = ExtensionOf(entry.FileName) is { } extension and not ""
+                ? extension
+                : ".srt";
+        }
+
+        try
+        {
+            var finalPath = await ComputeOutputPathAsync(
+                target.Path, target.FileName, language, outputExtension);
+            finalPath = UniquePath(finalPath);
+            await File.WriteAllBytesAsync(finalPath, outputBytes, cancellationToken);
+            return new LandingAttempt(finalPath, utf8, null, false);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException)
+        {
+            return new LandingAttempt(null, null, $"cannot write the subtitle file: {ex.Message}", false);
+        }
+    }
+
+    /// <summary>
+    /// The translation-request title of one episode — the same
+    /// "Show - S01E02 - Title" shape <see cref="LoadMediaAsync"/> builds.
+    /// </summary>
+    private static string TitleOf(SeasonSibling episode) =>
+        $"{episode.ShowTitle} - S{episode.SeasonNumber:D2}E{episode.EpisodeNumber:D2} - {episode.Title}";
 
     /// <summary>
     /// Writes or refreshes the blacklist observation for a content-invalid
@@ -497,8 +920,16 @@ public sealed class SubtitleDownloadPipeline
     }
 
     /// <summary>Media facts the pipeline needs; built client-side so the EF
-    /// projections stay anonymous (translatable) — StatisticsJob precedent.</summary>
-    private sealed record MediaContext(string? DirectoryPath, string? VideoFileName, string Title);
+    /// projections stay anonymous (translatable) — StatisticsJob precedent.
+    /// The season coordinates (episode media only) drive the season-pack
+    /// fan-out: SeasonId scopes the sibling lookup, SeasonNumber gates the
+    /// season-tagged archive entries.</summary>
+    private sealed record MediaContext(
+        string? DirectoryPath,
+        string? VideoFileName,
+        string Title,
+        int? SeasonId = null,
+        int? SeasonNumber = null);
 
     private async Task<MediaContext?> LoadMediaAsync(
         MediaType mediaType, int mediaId, CancellationToken cancellationToken)
@@ -522,6 +953,7 @@ public sealed class SubtitleDownloadPipeline
                     e.FileName,
                     e.Title,
                     e.EpisodeNumber,
+                    e.SeasonId,
                     SeasonNumber = e.Season.SeasonNumber,
                     ShowTitle = e.Season.Show.Title
                 })
@@ -531,7 +963,9 @@ public sealed class SubtitleDownloadPipeline
                 : new MediaContext(
                     episode.Path,
                     episode.FileName,
-                    $"{episode.ShowTitle} - S{episode.SeasonNumber:D2}E{episode.EpisodeNumber:D2} - {episode.Title}");
+                    $"{episode.ShowTitle} - S{episode.SeasonNumber:D2}E{episode.EpisodeNumber:D2} - {episode.Title}",
+                    episode.SeasonId,
+                    episode.SeasonNumber);
         }
 
         return null;

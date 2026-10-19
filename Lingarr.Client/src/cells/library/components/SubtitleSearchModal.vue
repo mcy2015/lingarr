@@ -349,10 +349,16 @@ async function download(row: CandidateRow, skipTranslation: boolean): Promise<vo
             if (result.translationDuplicate) {
                 toast.push({ message: t('subSearch.translationDuplicate'), type: 'info' })
             }
+            // whole-season archive: one download landed a file next to every
+            // episode of the season — the matched-count toast replaces the
+            // single-file one
+            const landed = result.filesLanded ?? 1
             toast.push({
-                message: result.translationRequestId
-                    ? t('subSearch.downloadedAndQueued', { file: result.filePath })
-                    : t('subSearch.downloaded', { file: result.filePath }),
+                message: landed > 1
+                    ? t('subSearch.downloadedSeasonPack', { count: landed })
+                    : result.translationRequestId
+                      ? t('subSearch.downloadedAndQueued', { file: result.filePath })
+                      : t('subSearch.downloaded', { file: result.filePath }),
                 type: 'success'
             })
             emit('downloaded', result.filePath)

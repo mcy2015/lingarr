@@ -93,13 +93,15 @@ public sealed record SubtitleDownloadRequestBody(
     bool SkipTranslation = false);
 
 /// <summary>Download response: the landing path plus the history row id.</summary>
+/// <param name="FilesLanded">How many files this download wrote — 1 for an ordinary candidate, N when a whole-season archive fanned out one entry per episode of the initiating season.</param>
 public sealed record SubtitleDownloadResponse(
     int HistoryId,
     string? FilePath,
     string Result,
     string? Error,
     int? TranslationRequestId,
-    bool TranslationDuplicate);
+    bool TranslationDuplicate,
+    int FilesLanded);
 
 /// <summary>Pin/unpin request (⑥).</summary>
 /// <param name="MediaId">Library id of the movie/episode.</param>
@@ -421,7 +423,8 @@ public class SubtitleSearchController : ControllerBase
             outcome.Result.ToString(),
             outcome.Error,
             outcome.TranslationRequestId,
-            outcome.TranslationDuplicate));
+            outcome.TranslationDuplicate,
+            outcome.FilesLanded));
     }
 
     /// <summary>

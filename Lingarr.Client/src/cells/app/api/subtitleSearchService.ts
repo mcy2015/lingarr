@@ -7,6 +7,15 @@ import type {
     ISubtitleProviderHealthState
 } from '@/types/services'
 
+/// Season-pack fan-out contract: the download response also carries
+/// `filesLanded` — how many files the download wrote (1 for an ordinary
+/// candidate, N when the picked candidate was a whole-season archive landed
+/// per episode). Optional here because the shared wire-shape mirror in
+/// types/services predates it; the modal defaults a missing value to 1.
+export interface ISeasonPackDownloadResponse extends ISubtitleDownloadResponse {
+    filesLanded?: number
+}
+
 /// Locked contract with the backend: `provider` is the single source key
 /// (required — the backend rejects provider-less fan-in bodies with 400),
 /// `mediaType` is the wire form "movie" | "episode", and `query` is the
@@ -55,7 +64,7 @@ class SubtitleSearchService {
         return response.data
     }
 
-    async download<T = ISubtitleDownloadResponse>(
+    async download<T = ISeasonPackDownloadResponse>(
         request: DownloadRequest,
         signal?: AbortSignal
     ): Promise<T> {

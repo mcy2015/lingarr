@@ -60,6 +60,120 @@ public sealed class SubtitleArchiveExtractor
     private static readonly byte[] SevenZipMagic = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
 
     /// <summary>
+    /// Extracts every subtitle payload of the download. Plain (non-archive)
+    /// payloads pass through as the single entry; archives are opened by
+    /// magic number and every subtitle-extension entry is returned, in
+    /// archive order — the season-pack fan-out of the download pipeline
+    /// decides from this full list whether one entry per episode should
+    /// land. Same budgets (<see cref="MaxArchiveEntries"/>/
+    /// <see cref="MaxEntryBytes"/>), same GB18030 name decoding and the
+    /// same error contracts (fake-zip detection, bomb budgets, the
+    /// no-subtitle-entry verdict) as <see cref="Extract"/>; an archive
+    /// whose entries are all non-subtitle files fails exactly like
+    /// <see cref="Extract"/> would.
+    /// </summary>
+    /// <param name="payload">The raw download payload.</param>
+    /// <param name="fileName">Remote file name of the payload.</param>
+    /// <param name="declaredFormat">Source-declared format ("zip", "srt"…).</param>
+    /// <param name="provider">Source key, for error attribution.</param>
+    public IReadOnlyList<ExtractedSubtitle> ExtractAll(
+        byte[] payload,
+        string? fileName,
+        string? declaredFormat,
+        string provider)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+
+        if (!LooksLikeArchive(payload))
+        {
+            if (declaredFormat is not null && ArchiveFormats.Contains(declaredFormat, StringComparer.OrdinalIgnoreCase))
+            {
+                throw SubtitleProviderException.ForInvalidResponse(
+                    provider,
+                    $"declared format '{declaredFormat}' but the payload carries no archive magic number.");
+            }
+
+            return [new ExtractedSubtitle(fileName ?? "subtitle.srt", payload)];
+        }
+
+        try
+        {
+            using var stream = new MemoryStream(payload);
+            // Same GB18030 default as the single pick (⑦): Chinese packs
+            // carry GBK names; UTF-8-flagged names still decode as UTF-8.
+            var options = new SharpCompress.Readers.ReaderOptions
+            {
+                ArchiveEncoding = new ArchiveEncoding
+                {
+                    Default = Encoding.GetEncoding("GB18030")
+                }
+            };
+            using var archive = ArchiveFactory.Open(stream, options);
+
+            // Entry-count budget first (QA2 P2-5), before any entry streams.
+            var entries = archive.Entries.ToList();
+            if (entries.Count > MaxArchiveEntries)
+            {
+                throw SubtitleProviderException.ForInvalidResponse(
+                    provider,
+                    $"the archive carries {entries.Count} entries, over the {MaxArchiveEntries}-entry budget.");
+            }
+
+            var extracted = new List<ExtractedSubtitle>();
+            foreach (var entry in entries)
+            {
+                if (entry.IsDirectory || string.IsNullOrEmpty(entry.Key))
+                {
+                    continue;
+                }
+
+                var name = Path.GetFileName(entry.Key);
+                if (!SubtitleExtensions.Contains(Path.GetExtension(name).ToLowerInvariant()))
+                {
+                    continue;
+                }
+
+                using var entryStream = ((SharpCompress.Archives.IArchiveEntry)entry).OpenEntryStream();
+                using var copied = new MemoryStream();
+                // Bounded copy (QA2 P2-5): the cap is enforced on the bytes
+                // actually read, never on the declared size.
+                var chunk = new byte[81920];
+                long total = 0;
+                int read;
+                while ((read = entryStream.Read(chunk, 0, chunk.Length)) > 0)
+                {
+                    total += read;
+                    if (total > MaxEntryBytes)
+                    {
+                        throw SubtitleProviderException.ForInvalidResponse(
+                            provider,
+                            $"archive entry '{entry.Key}' decompressed past the {MaxEntryBytes / (1024 * 1024)}MB budget.");
+                    }
+
+                    copied.Write(chunk, 0, read);
+                }
+
+                extracted.Add(new ExtractedSubtitle(name, copied.ToArray()));
+            }
+
+            return extracted.Count > 0
+                ? extracted
+                : throw SubtitleProviderException.ForInvalidResponse(
+                    provider,
+                    "the archive contains no subtitle entry (.srt/.ass/.ssa/.vtt).");
+        }
+        catch (SubtitleProviderException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw SubtitleProviderException.ForInvalidResponse(
+                provider, $"the archive could not be read ({ex.Message}).", ex);
+        }
+    }
+
+    /// <summary>
     /// Extracts the subtitle payload. Plain (non-archive) payloads pass
     /// through untouched; archives are opened by magic number and one entry
     /// is picked per the ⑦ rule.
