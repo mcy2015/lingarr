@@ -1,4 +1,4 @@
-import { IGlossaryBulkEntry } from '@/types'
+import { IGlossaryBulkEntry, ITranslationGlossary } from '@/types'
 
 export interface IGlossaryCsvParseResult {
     entries: IGlossaryBulkEntry[]
@@ -100,4 +100,36 @@ export function parseGlossaryCsv(text: string): IGlossaryCsvParseResult {
     }
 
     return result
+}
+
+/// Quotes one CSV field when the import parser would otherwise misread it:
+/// a field containing a comma, quote or line break is wrapped in double
+/// quotes, with inner quotes doubled — the standard rules mirrored from
+/// parseCsvLine above.
+function escapeCsvField(field: string): string {
+    if (
+        field.indexOf(',') === -1 &&
+        field.indexOf('"') === -1 &&
+        field.indexOf('\r') === -1 &&
+        field.indexOf('\n') === -1
+    ) {
+        return field
+    }
+    return `"${field.replace(/"/g, '""')}"`
+}
+
+/// Builds the glossary CSV (R9a「导出 CSV」) as the exact symmetric
+/// counterpart of parseGlossaryCsv: a UTF-8 BOM prefix (Excel opens CJK
+/// terms directly), the source,target,mode header, and one row per entry
+/// with the canonical locked/context mode spelling. An empty glossary
+/// yields the header row only, and the output re-imports losslessly.
+export function buildGlossaryCsv(
+    entries: Pick<ITranslationGlossary, 'sourceTerm' | 'targetTerm' | 'isLocked'>[]
+): string {
+    const rows = entries.map(
+        (entry) =>
+            `${escapeCsvField(entry.sourceTerm)},${escapeCsvField(entry.targetTerm)},` +
+            `${entry.isLocked ? 'locked' : 'context'}`
+    )
+    return `\uFEFFsource,target,mode\r\n${rows.join('\r\n')}${rows.length > 0 ? '\r\n' : ''}`
 }

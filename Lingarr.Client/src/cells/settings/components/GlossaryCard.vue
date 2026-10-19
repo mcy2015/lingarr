@@ -20,6 +20,14 @@
                 @click="csvInput?.click()">
                 {{ t('settings.glossary.import') }}
             </button>
+            <!-- CSV 导出(R9a):服务端 /api/glossary/export 出 blob,本地对象 URL 下载 -->
+            <button
+                type="button"
+                class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
+                data-test="glossary-export"
+                @click="exportCsv">
+                {{ t('settings.glossary.export') }}
+            </button>
             <button
                 type="button"
                 class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors"
@@ -194,6 +202,25 @@ async function onCsvPicked(event: Event): Promise<void> {
         await refresh()
     } catch {
         toastStore.push({ message: t('settings.glossary.importFailed'), type: 'error' })
+    }
+}
+
+/// CSV 导出(R9a):请求 /api/glossary/export 拿 UTF-8 BOM 的 blob(Excel 中文
+/// 直开),经对象 URL 触发浏览器下载,完成后立即 revoke。
+async function exportCsv(): Promise<void> {
+    try {
+        const response = await axios.get('/api/glossary/export', { responseType: 'blob' })
+        const blob = response.data as Blob
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = 'lingarr-glossary.csv'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+    } catch {
+        toastStore.push({ message: t('common.loadFailed'), type: 'error' })
     }
 }
 
