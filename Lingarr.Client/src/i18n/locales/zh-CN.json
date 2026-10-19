@@ -439,7 +439,8 @@
             "invalidNumber": "请输入有效的数字",
             "lengthBetween": "长度必须在 {min} 到 {max} 之间",
             "invalidUrl": "无效的 URL",
-            "invalidCron": "无效的 cron 表达式，请使用 <a href=\"https://crontab.guru/\" target=\"_blank\">https://crontab.guru<a> 或其他工具生成有效表达式"
+            "invalidCron": "无效的 cron 表达式，请使用 <a href=\"https://crontab.guru/\" target=\"_blank\">https://crontab.guru<a> 或其他工具生成有效表达式",
+            "clamped": "数值超出允许范围，已钳制到 {range}"
         }
     },
     "services": {
@@ -758,7 +759,8 @@
             "deletePartial": "已将 {service} 移出回退链，但清空其配置失败 —— 请检查插件清单。",
             "deleteFailed": "从回退链移除 {service} 失败。",
             "sinceRestart": "自重启起",
-            "requestsThisMonth": "本月 {count} 次请求"
+            "requestsThisMonth": "本月 {count} 次请求",
+            "samples": "{count} 样本"
         },
         "glossary": {
             "title": "术语表",

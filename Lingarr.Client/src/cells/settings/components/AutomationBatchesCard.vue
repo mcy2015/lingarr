@@ -118,13 +118,18 @@
                                 :type="INPUT_TYPE.NUMBER"
                                 :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
                                 :min-length="0"
+                                :min="1"
+                                :max="1000"
                                 :label="t('settings.automation.limitPerSchedule')"
                                 @update:validation="(val) => (draftLimitValid = val)" />
+                            <!-- 年龄阈值单位为小时:下界 0(0 = 新片立即处理,基线种子值);
+                                 负数意味着「未来的媒体也成熟」,失焦夹回 0。上界无依据,不设。 -->
                             <InputComponent
                                 v-model="draftMovieAge"
                                 :type="INPUT_TYPE.NUMBER"
                                 :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
                                 :min-length="0"
+                                :min="0"
                                 :label="t('settings.automation.movieAgeDelay')"
                                 @update:validation="(val) => (draftMovieAgeValid = val)" />
                             <InputComponent
@@ -132,6 +137,7 @@
                                 :type="INPUT_TYPE.NUMBER"
                                 :validation-type="INPUT_VALIDATION_TYPE.NUMBER"
                                 :min-length="0"
+                                :min="0"
                                 :label="t('settings.automation.showAgeDelay')"
                                 @update:validation="(val) => (draftShowAgeValid = val)" />
 

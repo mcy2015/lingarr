@@ -23,7 +23,7 @@
                 :class="inputClasses"
                 :placeholder="placeholder"
                 @input="handleInput"
-                @blur="emit('blur')" />
+                @blur="handleBlur" />
             <ValidationIcon
                 v-if="validationType && !hasTrailing"
                 :is-valid="isValid"
@@ -55,6 +55,8 @@
 <script setup lang="ts">
 import { computed, ref, useSlots } from 'vue'
 import { InputType, INPUT_TYPE, InputValidationType } from '@/types'
+import i18n from '@/i18n'
+import { useToastStore } from '@/cells/app/stores/toast'
 import useValidation from '@/cells/settings/composables/useValidation'
 import useDebounce from '@/cells/kernel/composables/useDebounce'
 import ValidationIcon from '@/cells/kernel/components/ValidationIcon.vue'
@@ -73,6 +75,11 @@ const props = withDefaults(
         size?: 'sm' | 'md' | 'lg'
         validationType?: InputValidationType
         debounce?: number
+        /// Numeric bounds (R17): when either is set, an out-of-range value is
+        /// clamped back to the boundary on blur (element + model) with one
+        /// info toast. Fields without bounds keep the exact legacy behavior.
+        min?: number
+        max?: number
     }>(),
     {
         size: 'md',
@@ -89,6 +96,17 @@ const emit = defineEmits<{
     (e: 'submit'): void
 }>()
 const { isValid, isInvalid, error, validate } = useValidation(props)
+
+// ── 失焦钳制(R17):min/max 字段的越界值夹回边界 ─────────────────────
+const hasClamp = computed(() => props.min !== undefined || props.max !== undefined)
+let lastEmitted: string | null = null
+
+const clampRangeLabel = (): string => {
+    if (props.min !== undefined && props.max !== undefined) {
+        return `${props.min}–${props.max}`
+    }
+    return props.min !== undefined ? `≥ ${props.min}` : `≤ ${props.max}`
+}
 
 /// trailing 插槽占据输入框右端:存在时本地显隐按钮与 ValidationIcon 让位
 const slots = useSlots()
@@ -116,6 +134,12 @@ const emitValue = (event: Event) => {
         validate(value)
         emit('update:validation', isValid.value)
     }
+    // Clamped fields dedupe identical consecutive emits: the blur clamp emits
+    // immediately while the pending input debounce still holds the original
+    // event — when it fires it re-reads the (already rewritten) element and
+    // would emit the same string a second time (double save + double toast).
+    if (hasClamp.value && value === lastEmitted) return
+    lastEmitted = value
     emit('update:modelValue', value)
     emit('update:value', value)
 }
@@ -128,6 +152,30 @@ const handleInput = (event: Event) => {
     } else {
         emitValue(event)
     }
+}
+
+/// 失焦钳制:越界值夹回边界后立刻 emit(抢在未决防抖之前),并给一次 info
+/// toast。非数值/空值交由既有 NUMBER 校验路径,不在此处拦截。
+const handleBlur = (event: FocusEvent) => {
+    emit('blur')
+    if (!hasClamp.value) return
+    const target = event.target as HTMLInputElement
+    const raw = target.value.trim()
+    if (raw === '') return
+    const num = Number(raw)
+    if (!Number.isFinite(num)) return
+    // ±Infinity fallbacks keep single-sided ranges working: with max unset,
+    // `props.max ?? num` would clamp to num itself and a min-bound miss.
+    const clamped = Math.min(props.max ?? Infinity, Math.max(props.min ?? -Infinity, num))
+    if (clamped === num) return
+    target.value = String(clamped)
+    emitValue(event)
+    // Lazy store access: untouched (bound-less) fields never reach here, so
+    // mounts without an active pinia keep working.
+    useToastStore().push({
+        message: i18n.global.t('toast.validation.clamped', { range: clampRangeLabel() }),
+        type: 'info'
+    })
 }
 
 const togglePassword = () => {

@@ -665,6 +665,39 @@ describe('SettingsProvidersPage · 用量行(批E E7)', () => {
     })
 })
 
+describe('SettingsProvidersPage · 样本数徽章(R17)', () => {
+    it('shows the sample-count chip beside the success rate when the window has samples', async () => {
+        getHealthMock.mockResolvedValue([
+            { ...openai, successRate: 0.92, sampleCount: 13 }
+        ])
+        const { wrapper } = await mountPage()
+
+        const usage = wrapper.find('[data-test="card-usage-openai"]')
+        expect(usage.text()).toContain('92%')
+        const chip = wrapper.find('[data-test="samples-chip-openai"]')
+        expect(chip.exists()).toBe(true)
+        expect(chip.text()).toBe(en.settings.providers.samples.replace('{count}', '13'))
+    })
+
+    it('omits the chip when the rolling window is empty (rate unknown)', async () => {
+        getHealthMock.mockResolvedValue([openai]) // successRate null, sampleCount 0
+        const { wrapper } = await mountPage()
+
+        expect(wrapper.find('[data-test="samples-chip-openai"]').exists()).toBe(false)
+        // the success slot keeps its honest dash instead
+        expect(wrapper.find('[data-test="card-usage-openai"]').text()).toContain('—')
+    })
+
+    it('omits the chip for a zero sample count even when a rate is present', async () => {
+        // defensive: the server derives the rate from samples so this combo
+        // should not occur, but a zero count must never render "0 samples"
+        getHealthMock.mockResolvedValue([{ ...openai, successRate: 1, sampleCount: 0 }])
+        const { wrapper } = await mountPage()
+
+        expect(wrapper.find('[data-test="samples-chip-openai"]').exists()).toBe(false)
+    })
+})
+
 describe('SettingsProvidersPage · 删除服务', () => {
     const deepl: ITranslationServiceHealth = {
         ...openai,

@@ -74,6 +74,17 @@
                         <b class="mono text-primary-content font-semibold">
                             {{ card.successRate != null ? `${Math.round(card.successRate * 100)}%` : '—' }}
                         </b>
+                        <!-- 样本数徽章(R17):3 次样本的 100% 与 300 次的不可等同观感,
+                             成功率旁必须可见窗口样本量。空窗口(成功率 null / 样本 0)
+                             与 successRate 的「—」惯例一致 —— 不渲染徽章。样式沿用本页
+                             plugins-count 的 chip 骨架。data-test 不用 card- 前缀,避开
+                             pcard 骨架对齐断言的四槽过滤。 -->
+                        <span
+                            v-if="card.successRate != null && card.sampleCount > 0"
+                            class="mono text-secondary-content ml-1 rounded-[3px] border border-line bg-tertiary px-1.5 py-px text-[10.5px]"
+                            :data-test="`samples-chip-${card.provider}`">
+                            {{ t('settings.providers.samples', { count: card.sampleCount }) }}
+                        </span>
                     </span>
                 </div>
                 <!-- ═══ 主动探测内联结果(原型 .test-res):ok 绿 / err 红,mono,含状态·延迟·消息 ═══ -->

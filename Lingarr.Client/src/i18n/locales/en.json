@@ -439,7 +439,8 @@
             "invalidNumber": "Please enter a valid number",
             "lengthBetween": "Length must be between {min} and {max}",
             "invalidUrl": "Invalid URL",
-            "invalidCron": "Invalid cron expression, use <a href=\"https://crontab.guru/\" target=\"_blank\">https://crontab.guru<a> or other tools to generate a valid expression"
+            "invalidCron": "Invalid cron expression, use <a href=\"https://crontab.guru/\" target=\"_blank\">https://crontab.guru<a> or other tools to generate a valid expression",
+            "clamped": "Value was outside the allowed range and has been clamped to {range}"
         }
     },
     "services": {
@@ -758,7 +759,8 @@
             "deletePartial": "{service} was removed from the fallback chain, but clearing its configuration failed — check the plugin manifest.",
             "deleteFailed": "Removing {service} from the fallback chain failed.",
             "sinceRestart": "Since restart",
-            "requestsThisMonth": "{count} requests this month"
+            "requestsThisMonth": "{count} requests this month",
+            "samples": "{count} samples"
         },
         "glossary": {
             "title": "Glossary",

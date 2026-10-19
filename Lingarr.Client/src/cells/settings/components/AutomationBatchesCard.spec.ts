@@ -326,3 +326,78 @@ describe('AutomationBatchesCard · 编辑(cron 归位本卡,参数与开关解�
         expect(document.querySelector('[data-test="batch-modal"]')).not.toBeNull()
     })
 })
+
+describe('AutomationBatchesCard · 数值失焦钳制(R17)', () => {
+    /// 模态输入序:cron → 每次运行上限 → 新片延迟(电影)→ 新片延迟(剧集)
+    const openModalInputs = async (mounted: Mounted): Promise<HTMLInputElement[]> => {
+        await mounted.wrapper.find('[data-test="batch-edit"]').trigger('click')
+        await flushPromises()
+        const modal = document.querySelector('[data-test="batch-modal"]')!
+        return [...modal.querySelectorAll('input')] as HTMLInputElement[]
+    }
+
+    it('clamps the per-run limit up to 1 on blur and saves the clamped value', async () => {
+        const mounted = await mountCard()
+        const inputs = await openModalInputs(mounted)
+
+        inputs[1].value = '0'
+        inputs[1].dispatchEvent(new Event('input'))
+        inputs[1].dispatchEvent(new Event('blur'))
+        await flushPromises()
+
+        // element and draft both carry the boundary — 0 never reaches the API
+        expect(inputs[1].value).toBe('1')
+        ;(document.querySelector('[data-test="batch-save"]') as HTMLElement).click()
+        await flushPromises()
+
+        const written = Object.fromEntries(setSettingMock.mock.calls)
+        expect(written['max_translations_per_run']).toBe('1')
+        expect(mounted.toastStore.toasts.some((toast) => toast.type === 'info')).toBe(true)
+        expect(mounted.toastStore.toasts.find((toast) => toast.type === 'info')?.message).toBe(
+            en.toast.validation.clamped.replace('{range}', '1–1000')
+        )
+    })
+
+    it('clamps a negative new-release delay back to 0 (min-only range label)', async () => {
+        const mounted = await mountCard()
+        const inputs = await openModalInputs(mounted)
+
+        inputs[2].value = '-5'
+        inputs[2].dispatchEvent(new Event('input'))
+        inputs[2].dispatchEvent(new Event('blur'))
+        await flushPromises()
+
+        expect(inputs[2].value).toBe('0')
+        ;(document.querySelector('[data-test="batch-save"]') as HTMLElement).click()
+        await flushPromises()
+
+        const written = Object.fromEntries(setSettingMock.mock.calls)
+        expect(written['movie_age_threshold']).toBe('0')
+        expect(mounted.toastStore.toasts.find((toast) => toast.type === 'info')?.message).toBe(
+            en.toast.validation.clamped.replace('{range}', '≥ 0')
+        )
+    })
+
+    it('leaves an in-range limit untouched on blur — no clamp toast, no boundary write', async () => {
+        const mounted = await mountCard()
+        const inputs = await openModalInputs(mounted)
+
+        // '25' is within 1–1000: the blur must not rewrite it. The draft still
+        // holds the prefilled '50' until the 1s debounce settles — the point
+        // here is that neither the input nor a toast reports a clamp.
+        inputs[1].value = '25'
+        inputs[1].dispatchEvent(new Event('input'))
+        inputs[1].dispatchEvent(new Event('blur'))
+        await flushPromises()
+
+        expect(inputs[1].value).toBe('25')
+        expect(mounted.toastStore.toasts.some((toast) => toast.type === 'info')).toBe(false)
+
+        ;(document.querySelector('[data-test="batch-save"]') as HTMLElement).click()
+        await flushPromises()
+
+        const written = Object.fromEntries(setSettingMock.mock.calls)
+        expect(written['max_translations_per_run']).not.toBe('1')
+        expect(written['max_translations_per_run']).not.toBe('1000')
+    })
+})
