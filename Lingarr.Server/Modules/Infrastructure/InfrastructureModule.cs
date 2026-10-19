@@ -148,6 +148,13 @@ public static class InfrastructureModule
         var jobTimeoutMinutes = int.TryParse(Environment.GetEnvironmentVariable("JOB_TIMEOUT_MINUTES"), out var timeout) && timeout > 0
             ? timeout
             : 30;
+
+        // The jobs database is disposable: recurring jobs re-register at
+        // every startup (ScheduleInitializationService) and pending
+        // translation requests re-enqueue from the main database — so a
+        // corrupt file gets quarantined instead of limping on it.
+        QuarantineCorruptHangfireDatabase(sqliteDbPath);
+
         using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={sqliteDbPath}"))
         {
             // add Write-Ahead Logging
@@ -197,5 +204,79 @@ public static class InfrastructureModule
                     // Job recovery timeout if worker crashes
                     InvisibilityTimeout = TimeSpan.FromMinutes(jobTimeoutMinutes)
                 }));
+    }
+
+    /// <summary>
+    /// Boot-time health check of the Hangfire SQLite database (NAS
+    /// incident 2026-10-19, round two: the lock storm left the file with
+    /// "database disk image is malformed" and every enqueue endpoint died
+    /// until a human deleted it). quick_check answers "ok" for a healthy
+    /// file; anything else — an error verdict or an unreadable file — is
+    /// quarantined by renaming it (plus its -wal/-shm siblings) aside with
+    /// a timestamp, so Hangfire creates a fresh one and the boot re-enqueues
+    /// everything it needs. Public static (the "no InternalsVisibleTo"
+    /// test-seam ruling). Returns true when a corrupt file was quarantined.
+    /// </summary>
+    public static bool QuarantineCorruptHangfireDatabase(string sqliteDbPath)
+    {
+        if (!File.Exists(sqliteDbPath))
+        {
+            return false;
+        }
+
+        string verdict;
+        try
+        {
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(
+                $"Data Source={sqliteDbPath};Mode=ReadOnly");
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA quick_check";
+            verdict = command.ExecuteScalar() as string ?? "quick_check returned no verdict";
+        }
+        catch (Exception ex)
+        {
+            verdict = $"unreadable: {ex.Message}";
+        }
+
+        if (verdict.Trim().Equals("ok", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var stamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
+        var quarantined = new List<string>();
+        foreach (var suffix in new[] { "", "-wal", "-shm" })
+        {
+            var sidecar = sqliteDbPath + suffix;
+            if (!File.Exists(sidecar))
+            {
+                continue;
+            }
+
+            var moved = $"{sidecar}.corrupt-{stamp}";
+            try
+            {
+                File.Move(sidecar, moved);
+                quarantined.Add(Path.GetFileName(moved));
+            }
+            catch (IOException)
+            {
+                // best effort: if a sidecar refuses to move, the fresh
+                // create below fails loudly instead of silently degrading
+            }
+        }
+
+        InMemoryLogSink.AddLog(new LogEntry
+        {
+            LogLevel = LogLevel.Error,
+            Message =
+                $"Hangfire database was corrupt (quick_check: {verdict}) and has been quarantined " +
+                $"({string.Join(", ", quarantined)}); a fresh one is being created and pending " +
+                "translation requests will re-enqueue from the main database.",
+            Timestamp = DateTimeOffset.UtcNow,
+            Category = "Lingarr.Server.Modules.Infrastructure.InfrastructureModule"
+        });
+        return true;
     }
 }
