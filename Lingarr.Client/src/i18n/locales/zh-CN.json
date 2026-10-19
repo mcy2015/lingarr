@@ -133,7 +133,11 @@
         "nativeBadgeTitle": "容器音轨已覆盖目标语言 —— 无需字幕",
         "audioUnknownBadge": "音轨未知",
         "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理，详见详情页标记入口",
-        "audioSuggestedTitle": "TMDB 原始语言推测，仅供参考"
+        "audioSuggestedTitle": "TMDB 原始语言推测，仅供参考",
+        "bulk": {
+            "created": "已创建 {count} 个翻译任务",
+            "skipped": "{count} 部无源字幕，已跳过"
+        }
     },
     "version": {
         "development": "开发版",
@@ -768,6 +772,7 @@
             "delete": "删除",
             "saveFailed": "保存术语失败。",
             "import": "导入 CSV",
+            "export": "导出 CSV",
             "importResult": "导入 {imported} 条 · 跳过 {skipped} 条",
             "importFailed": "导入术语失败。"
         },
