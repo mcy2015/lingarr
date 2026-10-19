@@ -346,8 +346,7 @@ public sealed class SubtitleDownloadPipeline
         {
             finalPath = await ComputeOutputPathAsync(
                 media.DirectoryPath, media.VideoFileName, candidate.Language, outputExtension);
-            finalPath = UniquePath(finalPath);
-            await File.WriteAllBytesAsync(finalPath, outputBytes, cancellationToken);
+            await WriteAtomicAsync(finalPath, outputBytes, cancellationToken);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException)
         {
@@ -830,8 +829,7 @@ public sealed class SubtitleDownloadPipeline
         {
             var finalPath = await ComputeOutputPathAsync(
                 target.Path, target.FileName, language, outputExtension);
-            finalPath = UniquePath(finalPath);
-            await File.WriteAllBytesAsync(finalPath, outputBytes, cancellationToken);
+            await WriteAtomicAsync(finalPath, outputBytes, cancellationToken);
             return new LandingAttempt(finalPath, utf8, null, false);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException)
@@ -1152,24 +1150,35 @@ public sealed class SubtitleDownloadPipeline
     private static string FormatTimeCode(int milliseconds) =>
         TimeSpan.FromMilliseconds(milliseconds).ToString(@"hh\:mm\:ss\,fff");
 
-    /// <summary>Same-language collision: "(1)" suffix before the extension — the import-service UniquePath rule.</summary>
-    private static string UniquePath(string candidatePath)
+    /// <summary>
+    /// Same-name collisions overwrite (user ruling 2026-10-19): re-downloading
+    /// the same episode+language replaces the file — the old "(1)" suffix
+    /// stacking left players holding stale subtitles while duplicates piled
+    /// up. The write goes to a temp sibling first (an extension the scanner
+    /// never picks up) and moves over the target atomically, so a crash
+    /// mid-write can never leave a half-written subtitle in place of a good
+    /// one.
+    /// </summary>
+    private static async Task WriteAtomicAsync(string path, byte[] bytes, CancellationToken cancellationToken)
     {
-        if (!File.Exists(candidatePath))
+        var temporary = path + ".lingarr-partial";
+        try
         {
-            return candidatePath;
+            await File.WriteAllBytesAsync(temporary, bytes, cancellationToken);
+            File.Move(temporary, path, overwrite: true);
         }
-
-        var directory = Path.GetDirectoryName(candidatePath) ?? string.Empty;
-        var stem = Path.GetFileNameWithoutExtension(candidatePath);
-        var extension = Path.GetExtension(candidatePath);
-        for (var counter = 1; ; counter++)
+        catch
         {
-            var next = Path.Combine(directory, $"{stem}({counter}){extension}");
-            if (!File.Exists(next))
+            try
             {
-                return next;
+                File.Delete(temporary);
             }
+            catch (IOException)
+            {
+                // best-effort cleanup of the abandoned temp file
+            }
+
+            throw;
         }
     }
 

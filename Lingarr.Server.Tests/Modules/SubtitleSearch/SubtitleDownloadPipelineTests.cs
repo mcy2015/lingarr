@@ -341,6 +341,30 @@ public class SubtitleDownloadPipelineTests
     }
 
     [Fact]
+    public async Task Download_SameTargetTwice_OverwritesInsteadOfStackingCopies()
+    {
+        // User ruling 2026-10-19: re-downloading the same episode+language
+        // replaces the file — the old "(1)" suffixing stacked duplicates and
+        // left players on the stale first copy.
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+
+        var first = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+        var second = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, second.Result);
+        Assert.Equal(first.FilePath, second.FilePath); // same landing path
+        var directory = Path.GetDirectoryName(second.FilePath);
+        // exactly one subtitle file: no "(1)" sibling, no temp leftovers
+        Assert.Equal(
+            Path.GetFileName(second.FilePath),
+            Directory.GetFiles(directory!, "*.srt").Select(Path.GetFileName).Single());
+    }
+
+    [Fact]
     public async Task Download_Success_DropsTheDetailPageSubtitleFileCache()
     {
         // Regression: the search modal closes with a downloaded event and
