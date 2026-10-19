@@ -270,6 +270,7 @@ import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
 import { useToastStore } from '@/cells/app/stores/toast'
 import {
+    IBulkTranslateSummary,
     IFilter,
     ILanguage,
     IMediaLibraryItem,
@@ -622,11 +623,25 @@ async function refreshEstimate(): Promise<void> {
 async function translateSelection(language: ILanguage): Promise<void> {
     const showIds = [...selection.values()].filter((i) => i.mediaType === 'Show').map((i) => i.id)
     const movieIds = [...selection.values()].filter((i) => i.mediaType === 'Movie').map((i) => i.id)
+    // R11: bulk used to end with no feedback at all — skips (no path / no
+    // source subtitle) were server-side logs only. Both calls are accumulated
+    // first so the user gets one created count and one skip count, not two
+    // competing toasts per media type.
+    let created = 0
+    const skipped: IBulkTranslateSummary['skipped'] = []
     if (showIds.length > 0) {
-        await translateStore.bulkTranslate(showIds, language.code, MEDIA_TYPE.SHOW)
+        const summary = await translateStore.bulkTranslate(showIds, language.code, MEDIA_TYPE.SHOW)
+        created += summary.created
+        skipped.push(...summary.skipped)
     }
     if (movieIds.length > 0) {
-        await translateStore.bulkTranslate(movieIds, language.code, MEDIA_TYPE.MOVIE)
+        const summary = await translateStore.bulkTranslate(movieIds, language.code, MEDIA_TYPE.MOVIE)
+        created += summary.created
+        skipped.push(...summary.skipped)
+    }
+    toastStore.push({ message: t('library.bulk.created', { count: created }), type: 'success' })
+    if (skipped.length > 0) {
+        toastStore.push({ message: t('library.bulk.skipped', { count: skipped.length }), type: 'info' })
     }
     clearSelection()
 }

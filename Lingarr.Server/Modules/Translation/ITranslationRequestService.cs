@@ -55,8 +55,11 @@ public interface ITranslationRequestService
     /// and source language resolution server-side.
     /// </summary>
     /// <param name="request">The bulk translate request containing media IDs, target language, and media type</param>
-    /// <returns>A list of created translation request IDs</returns>
-    Task CreateBulkRequest(BulkTranslateRequest request);
+    /// <returns>
+    /// A summary of how many translation requests were actually created and which media
+    /// items were skipped (no path on record, or no translatable source subtitle)
+    /// </returns>
+    Task<BulkRequestSummary> CreateBulkRequest(BulkTranslateRequest request);
 
     /// <summary>
     /// Retrieves the collection of currently active (Pending or InProgress) translation requests.

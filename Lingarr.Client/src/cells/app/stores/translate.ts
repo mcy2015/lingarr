@@ -1,5 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import {
+    IBulkTranslateSummary,
     ILanguage,
     ISubtitle,
     ITranslateEmbeddedTrackRequest,
@@ -48,17 +49,20 @@ export const useTranslateStore = defineStore('translate', {
             await useTranslationRequestStore().fetchActiveTranslations()
             return result.jobId
         },
+        /// R11: passes the created/skipped summary through so the caller can
+        /// surface it (the used-to-be-silent skips).
         async bulkTranslate(
             mediaIds: number[],
             targetLanguage: string,
             mediaType: MediaType
-        ): Promise<void> {
-            await translateApi.bulkTranslate<number[]>(
+        ): Promise<IBulkTranslateSummary> {
+            const summary = await translateApi.bulkTranslate(
                 mediaIds,
                 targetLanguage,
                 mediaType
             )
             await useTranslationRequestStore().fetchActiveTranslations()
+            return summary
         },
         async setLanguages(): Promise<void> {
             try {

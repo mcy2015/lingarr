@@ -15,6 +15,31 @@ namespace Lingarr.Server.Modules.Translation;
 public sealed class TargetLanguageAlreadyPresentException(string message) : Exception(message);
 
 /// <summary>
+/// R11: outcome of a bulk translate submission. <see cref="Created"/> counts the
+/// translation requests actually created (a duplicate of an already-active request
+/// does not count); <see cref="Skipped"/> lists the media items that used to be
+/// silently dropped — one row per movie, one aggregated row per show. Media whose
+/// target language is already covered are neither created nor skipped (nothing is
+/// missing for them).
+/// </summary>
+public sealed record BulkRequestSummary(int Created, List<BulkSkip> Skipped);
+
+/// <summary>
+/// One media item skipped by a bulk translate submission. Shows are aggregated:
+/// the row carries the show's id and title even when the trigger was a single
+/// season or episode, and the reason is whichever condition fired first.
+/// <see cref="Reason"/> is a stable code the frontend localizes.
+/// </summary>
+public sealed record BulkSkip(int MediaId, string Title, string Reason)
+{
+    /// <summary>The media item has no usable path on record (movie path, season path, or episode path/file name missing).</summary>
+    public const string NoPathReason = "no-path";
+
+    /// <summary>No translatable source subtitle exists for the media item.</summary>
+    public const string NoSourceReason = "no-source";
+}
+
+/// <summary>
 /// Lifecycle operations on translation requests: creation, enqueueing, cancellation,
 /// removal, retry, resume and status updates.
 /// </summary>
@@ -76,7 +101,11 @@ public interface ITranslationRequestQueueService
     /// Creates translation requests for multiple media items, handling subtitle discovery
     /// and source language resolution server-side.
     /// </summary>
-    Task CreateBulkRequest(BulkTranslateRequest request);
+    /// <returns>
+    /// A summary of how many requests were actually created and which media items were
+    /// skipped (no path on record, or no translatable source subtitle).
+    /// </returns>
+    Task<BulkRequestSummary> CreateBulkRequest(BulkTranslateRequest request);
 
     /// <summary>
     /// Cancels an existing translation request and its associated background job.

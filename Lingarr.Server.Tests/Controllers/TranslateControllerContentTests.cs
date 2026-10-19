@@ -16,6 +16,7 @@ using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models;
+using Lingarr.Server.Models.Api;
 using Lingarr.Server.Models.FileSystem;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -43,6 +44,7 @@ public class TranslateControllerContentTests : IDisposable
     private readonly Mock<IProgressService> _progressServiceMock;
     private readonly Mock<IStatisticsService> _statisticsServiceMock;
     private readonly Mock<ISettingService> _settingServiceMock;
+    private readonly Mock<ISubtitleService> _subtitleServiceMock = new();
     private readonly Dictionary<string, string> _settings;
     private readonly TranslationRequestService _translationRequestService;
     private readonly TranslateController _controller;
@@ -217,7 +219,7 @@ public class TranslateControllerContentTests : IDisposable
             eventServiceMock.Object,
             _progressServiceMock.Object,
             _settingServiceMock.Object,
-            new Mock<ISubtitleService>().Object,
+            _subtitleServiceMock.Object,
             new Mock<IEmbeddedTrackService>().Object,
             NullLogger<TranslationRequestQueueService>.Instance);
         var proofreadService = new ProofreadRequestService(
@@ -705,5 +707,74 @@ public class TranslateControllerContentTests : IDisposable
 
         var translationRequest = await _context.TranslationRequests.SingleAsync();
         Assert.Equal(TranslationStatus.Failed, translationRequest.Status);
+    }
+
+    // ── R11: bulk translate answers with a created/skipped summary ──────
+
+    [Fact]
+    public async Task BulkTranslate_Returns200WithCreatedAndSkippedSummary()
+    {
+        _settingServiceMock
+            .Setup(settingService => settingService.GetSettingAsJson<SourceLanguage>(SettingKeys.Translation.SourceLanguages))
+            .ReturnsAsync([new SourceLanguage { Name = "English", Code = "en" }]);
+        _settingServiceMock
+            .Setup(settingService => settingService.GetSetting(SettingKeys.Translation.IgnoreCaptions))
+            .ReturnsAsync("false");
+        _subtitleServiceMock
+            .Setup(subtitleService => subtitleService.GetSubtitles(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((string path, string _) => path == "/movies/with-source"
+                ? [new Subtitles
+                {
+                    Path = path,
+                    FileName = "With.Source.2024.en.srt",
+                    Language = "en",
+                    Format = ".srt"
+                }]
+                : new List<Subtitles>());
+        _subtitleServiceMock
+            .Setup(subtitleService => subtitleService.SelectSourceSubtitle(
+                It.IsAny<List<Subtitles>>(), It.IsAny<HashSet<string>>(), It.IsAny<string>()))
+            .Returns((List<Subtitles> subtitles, HashSet<string> _, string _) =>
+                subtitles.Count == 0
+                    ? null
+                    : new SelectedSourceSubtitle
+                    {
+                        Subtitle = subtitles[0],
+                        SourceLanguage = subtitles[0].Language,
+                        AvailableLanguages = ["en"]
+                    });
+
+        // the fixture's canonical movie has Path = null — it is the skip case;
+        // a second movie with a source subtitle is the created case
+        _context.Movies.Add(new Movie
+        {
+            RadarrId = RadarrMovieId + 1,
+            Title = "With Source",
+            FileName = "With.Source.2024.mkv",
+            Path = "/movies/with-source",
+            DateAdded = DateTime.UtcNow,
+            IncludeInTranslation = true
+        });
+        await _context.SaveChangesAsync();
+        var withSourceId = _context.Movies.Single(movie => movie.Title == "With Source").Id;
+
+        var response = await _controller.BulkTranslate(new BulkTranslateRequest
+        {
+            MediaIds = [_movieId, withSourceId],
+            TargetLanguage = "es",
+            MediaType = MediaType.Movie
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var summary = Assert.IsType<BulkRequestSummary>(ok.Value);
+        Assert.Equal(1, summary.Created);
+        var skip = Assert.Single(summary.Skipped);
+        Assert.Equal(_movieId, skip.MediaId);
+        Assert.Equal("Canonical Movie", skip.Title);
+        Assert.Equal(BulkSkip.NoPathReason, skip.Reason);
+
+        var request = await _context.TranslationRequests.SingleAsync();
+        Assert.Equal(withSourceId, request.MediaId);
+        Assert.Equal("With Source", request.Title);
     }
 }

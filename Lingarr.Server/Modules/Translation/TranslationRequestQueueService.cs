@@ -62,6 +62,15 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
 
     /// <inheritdoc />
     public async Task<int> CreateRequest(TranslateAbleSubtitle translateAbleSubtitle)
+        => (await CreateSubtitleRequest(translateAbleSubtitle)).Id;
+
+    /// <summary>
+    /// Stages and enqueues a library translation request, reporting whether a new
+    /// row was actually created. <see cref="CreateBulkRequest"/> counts only
+    /// genuinely new rows — a deduplicate of an already-active request returns
+    /// the existing id with <c>Created = false</c>.
+    /// </summary>
+    private async Task<(int Id, bool Created)> CreateSubtitleRequest(TranslateAbleSubtitle translateAbleSubtitle)
     {
         var mediaTitle = await _contentTranslationService.FormatMediaTitle(translateAbleSubtitle.MediaId, translateAbleSubtitle.MediaType);
         var translationRequest = new TranslationRequest
@@ -75,7 +84,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
             Status = TranslationStatus.Pending
         };
 
-        return await EnqueueRequest(translationRequest);
+        return await EnqueueRequestWithOutcome(translationRequest);
     }
 
     /// <inheritdoc />
@@ -249,6 +258,13 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
     }
 
     private async Task<int> EnqueueRequest(TranslationRequest translationRequest)
+        => (await EnqueueRequestWithOutcome(translationRequest)).Id;
+
+    /// <summary>
+    /// Enqueue core that also reports whether the id belongs to a freshly created
+    /// row or to an already-active duplicate (R11 bulk summary counts only the former).
+    /// </summary>
+    private async Task<(int Id, bool Created)> EnqueueRequestWithOutcome(TranslationRequest translationRequest)
     {
         if (translationRequest.SubtitleToTranslate != null)
         {
@@ -269,7 +285,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
                 _logger.LogInformation(
                     "Duplicate translation request skipped for '{Subtitle}' -> '{Language}' (existing id {Id}).",
                     translationRequest.SubtitleToTranslate, translationRequest.TargetLanguage, existing.Id);
-                return existing.Id;
+                return (existing.Id, false);
             }
         }
 
@@ -307,17 +323,32 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
 
         await _queryService.UpdateActiveCount();
 
-        return translationRequestCopy.Id;
+        return (translationRequestCopy.Id, true);
+    }
+
+    /// <summary>
+    /// Per-item outcome of the bulk subtitle pipeline; the caller maps it onto
+    /// <see cref="BulkRequestSummary"/> counts and skip rows.
+    /// </summary>
+    private enum BulkItemOutcome
+    {
+        RequestCreated,
+        NoSourceSubtitle,
+        TargetLanguagePresent,
+        DuplicateActiveRequest
     }
 
     /// <inheritdoc />
-    public async Task CreateBulkRequest(BulkTranslateRequest request)
+    public async Task<BulkRequestSummary> CreateBulkRequest(BulkTranslateRequest request)
     {
         var sourceLanguages = await _settingService.GetSettingAsJson<SourceLanguage>(
             SettingKeys.Translation.SourceLanguages
             );
         var sourceCodes = sourceLanguages.Select(sourceLanguage => sourceLanguage.Code).ToHashSet();
         var ignoreCaptions = await _settingService.GetSetting(SettingKeys.Translation.IgnoreCaptions) ?? "false";
+
+        var created = 0;
+        var skipped = new List<BulkSkip>();
 
         switch (request.MediaType)
         {
@@ -331,9 +362,11 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
                     if (movie.Path == null)
                     {
                         _logger.LogInformation("Bulk: skipping movie {Id} — path is null", movie.Id);
+                        skipped.Add(new BulkSkip(movie.Id, movie.Title, BulkSkip.NoPathReason));
                         continue;
                     }
-                    await ProcessMediaSubtitles(
+
+                    var outcome = await ProcessMediaSubtitles(
                         movie.Path,
                         movie.FileName,
                         movie.Id,
@@ -341,6 +374,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
                         request.TargetLanguage,
                         sourceCodes,
                         ignoreCaptions);
+                    ApplyMovieOutcome(outcome, movie, ref created, skipped);
                 }
                 break;
 
@@ -353,10 +387,18 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
 
                 foreach (var show in shows)
                 {
+                    // R11: skips aggregate to one row per show (the tray submits
+                    // shows, not episodes) — the first trigger wins the reason,
+                    // later triggers of the same show do not add rows. Remaining
+                    // episodes are still processed so one bad episode does not
+                    // block the rest of the show.
+                    var showSkipRecorded = false;
+
                     foreach (var season in show.Seasons)
                     {
                         if (string.IsNullOrEmpty(season.Path))
                         {
+                            RecordShowSkip(show, BulkSkip.NoPathReason, ref showSkipRecorded, skipped);
                             continue;
                         }
 
@@ -364,9 +406,11 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
                         {
                             if (string.IsNullOrEmpty(episode.FileName) || string.IsNullOrEmpty(episode.Path))
                             {
+                                RecordShowSkip(show, BulkSkip.NoPathReason, ref showSkipRecorded, skipped);
                                 continue;
                             }
-                            await ProcessMediaSubtitles(
+
+                            var outcome = await ProcessMediaSubtitles(
                                 season.Path,
                                 episode.FileName,
                                 episode.Id,
@@ -374,17 +418,60 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
                                 request.TargetLanguage,
                                 sourceCodes,
                                 ignoreCaptions);
+                            switch (outcome)
+                            {
+                                case BulkItemOutcome.RequestCreated:
+                                    created++;
+                                    break;
+                                case BulkItemOutcome.NoSourceSubtitle:
+                                    RecordShowSkip(show, BulkSkip.NoSourceReason, ref showSkipRecorded, skipped);
+                                    break;
+                                // target already covered / duplicate active request:
+                                // nothing is missing, not worth a skip row
+                            }
                         }
                     }
                 }
                 break;
         }
+
+        return new BulkRequestSummary(created, skipped);
+    }
+
+    private static void ApplyMovieOutcome(
+        BulkItemOutcome outcome,
+        Movie movie,
+        ref int created,
+        List<BulkSkip> skipped)
+    {
+        switch (outcome)
+        {
+            case BulkItemOutcome.RequestCreated:
+                created++;
+                break;
+            case BulkItemOutcome.NoSourceSubtitle:
+                skipped.Add(new BulkSkip(movie.Id, movie.Title, BulkSkip.NoSourceReason));
+                break;
+        }
+    }
+
+    private static void RecordShowSkip(
+        Show show,
+        string reason,
+        ref bool recorded,
+        List<BulkSkip> skipped)
+    {
+        if (recorded) return;
+        recorded = true;
+        skipped.Add(new BulkSkip(show.Id, show.Title, reason));
     }
 
     /// <summary>
-    /// Discovers subtitles for a media item, resolves the source subtitle, and creates a translation request.
+    /// Discovers subtitles for a media item, resolves the source subtitle, and creates a
+    /// translation request. Returns the per-item outcome so <see cref="CreateBulkRequest"/>
+    /// can report what happened instead of silently dropping the item.
     /// </summary>
-    private async Task ProcessMediaSubtitles(
+    private async Task<BulkItemOutcome> ProcessMediaSubtitles(
         string path,
         string? fileName,
         int mediaId,
@@ -396,7 +483,7 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
         if (string.IsNullOrEmpty(fileName))
         {
             _logger.LogDebug("Bulk: skipping mediaId {MediaId} — fileName is empty", mediaId);
-            return;
+            return BulkItemOutcome.NoSourceSubtitle;
         }
 
         var subtitles = await _subtitleService.GetSubtitles(path, fileName);
@@ -406,17 +493,17 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
             _logger.LogDebug("Bulk: skipping mediaId {MediaId} — no source subtitle found (sourceCodes: {SourceCodes}, available: {Available})",
                 mediaId, string.Join(", ", sourceCodes),
                 string.Join(", ", subtitles.Select(s => s.Language)));
-            return;
+            return BulkItemOutcome.NoSourceSubtitle;
         }
 
         if (selected.AvailableLanguages.Contains(targetLanguage.ToLowerInvariant()))
         {
             _logger.LogDebug("Bulk: skipping mediaId {MediaId} — target language {Target} already exists",
                 mediaId, targetLanguage);
-            return;
+            return BulkItemOutcome.TargetLanguagePresent;
         }
 
-        await CreateRequest(new TranslateAbleSubtitle
+        var (_, createdRow) = await CreateSubtitleRequest(new TranslateAbleSubtitle
         {
             MediaId = mediaId,
             MediaType = mediaType,
@@ -425,6 +512,10 @@ public class TranslationRequestQueueService : ITranslationRequestQueueService
             SourceLanguage = selected.SourceLanguage,
             SubtitleFormat = selected.Subtitle.Format
         });
+
+        return createdRow
+            ? BulkItemOutcome.RequestCreated
+            : BulkItemOutcome.DuplicateActiveRequest;
     }
 
     /// <inheritdoc />

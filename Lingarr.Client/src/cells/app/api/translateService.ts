@@ -1,5 +1,6 @@
 import { AxiosStatic } from 'axios'
 import {
+    IBulkTranslateSummary,
     ILanguage,
     IProofreadLineRequest,
     IServiceLanguageResponse,
@@ -31,10 +32,16 @@ const service = (http: AxiosStatic, resource = '/api/translate'): ITranslateServ
             })
             .then((response) => response.data)
     },
-    bulkTranslate<T>(mediaIds: number[], targetLanguage: string, mediaType: MediaType): Promise<T> {
+    /// R11: the bulk endpoint answers with a created/skipped summary instead
+    /// of an empty body, so silent skips become visible to the caller.
+    bulkTranslate(
+        mediaIds: number[],
+        targetLanguage: string,
+        mediaType: MediaType
+    ): Promise<IBulkTranslateSummary> {
         return http
             .post(`${resource}/bulk`, { mediaIds, targetLanguage, mediaType })
-            .then((response) => response.data)
+            .then((response) => response.data as IBulkTranslateSummary)
     },
     translateEmbeddedTrack<T>(request: ITranslateEmbeddedTrackRequest): Promise<T> {
         return http.post(`${resource}/embedded-track`, request).then((response) => response.data)

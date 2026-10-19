@@ -291,6 +291,23 @@ export interface IVersionService {
     getVersion<T>(): Promise<T>
 }
 
+/// POST /api/translate/bulk response (R11): how many translation requests the
+/// server actually created, plus the media items it had to skip. Field names
+/// match the server's camelCase JSON wire shape letter for letter
+/// (BulkRequestSummary / BulkSkip serialized with JsonNamingPolicy.CamelCase).
+export interface IBulkTranslateSkip {
+    /// Movie id for movie rows; show id for show rows (skips aggregate per show).
+    mediaId: number
+    title: string
+    /// Stable code the UI localizes: 'no-path' | 'no-source'.
+    reason: string
+}
+
+export interface IBulkTranslateSummary {
+    created: number
+    skipped: IBulkTranslateSkip[]
+}
+
 export interface ITranslateService {
     translateSubtitle<T>(
         mediaId: number,
@@ -299,7 +316,13 @@ export interface ITranslateService {
         target: ILanguage,
         mediaType: MediaType
     ): Promise<T>
-    bulkTranslate<T>(mediaIds: number[], targetLanguage: string, mediaType: MediaType): Promise<T>
+    /// Submits a bulk translate; the response body reports created and skipped
+    /// counts so the caller can surface them instead of failing silently.
+    bulkTranslate(
+        mediaIds: number[],
+        targetLanguage: string,
+        mediaType: MediaType
+    ): Promise<IBulkTranslateSummary>
     /// F2b: translate one text-based embedded subtitle track. The server
     /// extracts the stream with ffmpeg and creates a regular request.
     translateEmbeddedTrack<T>(request: ITranslateEmbeddedTrackRequest): Promise<T>

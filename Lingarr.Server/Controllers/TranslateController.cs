@@ -396,12 +396,16 @@ public class TranslateController : ControllerBase
     /// Handles subtitle discovery and source language resolution server-side.
     /// </summary>
     /// <param name="request">The bulk translate request containing media IDs, target language, and media type.</param>
-    /// <returns>Returns a list of created translation request IDs.</returns>
+    /// <returns>
+    /// Returns how many translation requests were actually created and which media items
+    /// were skipped (no path on record, or no translatable source subtitle), so the
+    /// client can surface them instead of failing silently.
+    /// </returns>
     [HttpPost("bulk")]
-    public async Task<ActionResult> BulkTranslate([FromBody] BulkTranslateRequest request)
+    public async Task<ActionResult<BulkRequestSummary>> BulkTranslate([FromBody] BulkTranslateRequest request)
     {
-        await _translationRequestService.CreateBulkRequest(request);
-        return Ok();
+        var summary = await _translationRequestService.CreateBulkRequest(request);
+        return Ok(summary);
     }
 
     /// <summary>

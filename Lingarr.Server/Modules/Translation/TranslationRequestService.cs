@@ -62,7 +62,7 @@ public class TranslationRequestService : ITranslationRequestService
         => _queueService.ResumePausedTranslationRequest(resumeRequest);
 
     /// <inheritdoc />
-    public Task CreateBulkRequest(BulkTranslateRequest request)
+    public Task<BulkRequestSummary> CreateBulkRequest(BulkTranslateRequest request)
         => _queueService.CreateBulkRequest(request);
 
     /// <inheritdoc />

@@ -10,12 +10,14 @@ import PaginationComponent from '@/cells/kernel/components/PaginationComponent.v
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useUiStore } from '@/cells/app/stores/ui'
-import { IMediaLibraryItem, IPagedResult, ITranslationEstimate, MEDIA_TYPE, SETTINGS } from '@/types'
+import { ILanguage, IMediaLibraryItem, IPagedResult, ITranslationEstimate, MEDIA_TYPE, SETTINGS } from '@/types'
 
 const statisticsMock = vi.hoisted(() => vi.fn())
 const statusCountsMock = vi.hoisted(() => vi.fn())
 const libraryMock = vi.hoisted(() => vi.fn())
 const estimateMock = vi.hoisted(() => vi.fn())
+const bulkTranslateMock = vi.hoisted(() => vi.fn())
+const getActiveTranslationsMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/mediaService', () => ({
     mediaService: () => ({ library: libraryMock, estimate: estimateMock })
@@ -26,7 +28,16 @@ vi.mock('@/cells/app/api/statisticsService', () => ({
 }))
 
 vi.mock('@/cells/app/api/translationRequestService', () => ({
-    translationRequestService: () => ({ statusCounts: statusCountsMock })
+    translationRequestService: () => ({
+        statusCounts: statusCountsMock,
+        getActiveTranslations: getActiveTranslationsMock
+    })
+}))
+
+// the translate store builds its API at module scope; stubbing the service
+// module keeps the bulk created/skipped summary observable without a network
+vi.mock('@/cells/app/api/translateService', () => ({
+    translateService: () => ({ bulkTranslate: bulkTranslateMock })
 }))
 
 // ── fixtures (partial rows: only the fields the page reads) ──────
@@ -75,6 +86,8 @@ const libraryPage: IPagedResult<IMediaLibraryItem> = {
 
 libraryMock.mockResolvedValue(libraryPage)
 estimateMock.mockResolvedValue({ characters: 1200, provider: 'openai', cost: 0.02 } as ITranslationEstimate)
+bulkTranslateMock.mockResolvedValue({ created: 0, skipped: [] })
+getActiveTranslationsMock.mockResolvedValue([])
 statisticsMock.mockResolvedValue({
     mediaCount: 10,
     missingSubtitles: 63,
@@ -116,6 +129,7 @@ interface LibraryVm {
     toggleSelect: (item: IMediaLibraryItem) => void
     toggleSelectAll: () => void
     clearSelection: () => void
+    translateSelection: (language: ILanguage) => Promise<void>
 }
 
 interface MountedLibrary {
@@ -135,8 +149,9 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
     settingStore.storeSetting(SETTINGS.SONARR_SETTINGS_COMPLETED, 'true')
     settingStore.storeSetting(SETTINGS.TARGET_LANGUAGES, [{ code: 'ZH', name: 'Chinese' }])
 
-    // messages cover only the keys the row title link and the audio badges
-    // assert; everything else renders as its key and is not asserted anywhere
+    // messages cover only the keys the row title link, the audio badges and
+    // the bulk toasts assert; everything else renders as its key and is not
+    // asserted anywhere
     const i18n = createI18n({
         legacy: false,
         locale: 'en',
@@ -146,7 +161,11 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
                     table: { openDetail: 'Open {type} {title} details' },
                     badge: { show: 'Show', movie: 'Movie' },
                     nativeBadge: 'Native Chinese',
-                    audioUnknownBadge: 'Audio unknown'
+                    audioUnknownBadge: 'Audio unknown',
+                    bulk: {
+                        created: 'Created {count} translation jobs',
+                        skipped: 'Skipped {count} items with no source subtitles'
+                    }
                 }
             }
         },
@@ -663,5 +682,59 @@ describe('LibraryPage', () => {
         expect(second.wrapper.find('.shell-scroll').element.scrollTop).toBe(120)
 
         sessionStorage.clear()
+    })
+
+    // ── R11: bulk translate summary toasts (created + skipped) ────────
+    it('toasts the accumulated created and skipped counts after a bulk translate', async () => {
+        // show call: 2 created + 1 skipped; movie call: 1 created — the page
+        // accumulates both before toasting so each count appears once
+        bulkTranslateMock
+            .mockResolvedValueOnce({
+                created: 2,
+                skipped: [{ mediaId: 1, title: 'Foundation', reason: 'no-source' }]
+            })
+            .mockResolvedValueOnce({ created: 1, skipped: [] })
+
+        const { vm, toastStore } = await mountLibraryPage()
+        vm.toggleSelect(show1) // skipped show
+        vm.toggleSelect(show3) // created
+        vm.toggleSelect(movie2) // movie call
+        await settle()
+
+        await vm.translateSelection({ code: 'ZH', name: 'Chinese' } as ILanguage)
+        await settle()
+
+        // shows go in one bulk call, movies in another
+        expect(bulkTranslateMock).toHaveBeenCalledTimes(2)
+        expect(bulkTranslateMock).toHaveBeenNthCalledWith(1, [1, 3], 'ZH', 'Show')
+        expect(bulkTranslateMock).toHaveBeenNthCalledWith(2, [2], 'ZH', 'Movie')
+
+        expect(toastStore.toasts).toHaveLength(2)
+        expect(toastStore.toasts[0].message).toBe('Created 3 translation jobs')
+        expect(toastStore.toasts[0].type).toBe('success')
+        expect(toastStore.toasts[1].message).toBe('Skipped 1 items with no source subtitles')
+        expect(toastStore.toasts[1].type).toBe('info')
+
+        // the tray selection is cleared after submission
+        expect(vm.selection.size).toBe(0)
+    })
+
+    it('omits the skipped toast when every selected item produced a request', async () => {
+        bulkTranslateMock
+            .mockResolvedValueOnce({ created: 2, skipped: [] })
+            .mockResolvedValueOnce({ created: 0, skipped: [] })
+
+        const { vm, toastStore } = await mountLibraryPage()
+        vm.toggleSelect(show1)
+        vm.toggleSelect(show3)
+        vm.toggleSelect(movie2)
+        await settle()
+
+        await vm.translateSelection({ code: 'ZH', name: 'Chinese' } as ILanguage)
+        await settle()
+
+        expect(toastStore.toasts).toHaveLength(1)
+        expect(toastStore.toasts[0].message).toBe('Created 2 translation jobs')
+        expect(toastStore.toasts[0].type).toBe('success')
     })
 })
