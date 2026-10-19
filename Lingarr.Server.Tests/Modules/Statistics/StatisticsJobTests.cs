@@ -137,7 +137,8 @@ public class StatisticsJobTests : IDisposable
     private StatisticsJob CreateJob(
         ISubtitleService? subtitleService = null,
         ISettingService? settingService = null,
-        int? finalizeChunkSize = null) => new(
+        int? finalizeChunkSize = null,
+        int? incrementalScanBatchSize = null) => new(
         _dbContext,
         subtitleService ?? new SubtitleService(
             NullLogger<SubtitleService>.Instance,
@@ -146,7 +147,8 @@ public class StatisticsJobTests : IDisposable
         _scheduleService.Object,
         settingService ?? new Mock<ISettingService>().Object,
         NullLogger<StatisticsJob>.Instance,
-        finalizeChunkSize);
+        finalizeChunkSize,
+        incrementalScanBatchSize);
 
     /// <summary>
     /// Setting service whose target languages are exactly the given codes —
@@ -395,11 +397,14 @@ public class StatisticsJobTests : IDisposable
     public async Task Execute_NestedSeasonPaths_CountFilesOnceButMergeEverySeason()
     {
         var subtitleService = new Mock<ISubtitleService>();
+        // R13: the file must be attributable (episode-matching name) to be
+        // counted — the aggregate reads the persisted snapshots, whose
+        // per-language counts are attributed episodes.
         subtitleService
             .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
             .ReturnsAsync(
             [
-                new Subtitles { Path = "/x/a.zh.srt", FileName = "a.zh", Language = "zh", Languages = ["zh"], Format = ".srt" }
+                new Subtitles { Path = "/x/show4.s01e01.zh.srt", FileName = "show4.s01e01.zh", Language = "zh", Languages = ["zh"], Format = ".srt" }
             ]);
 
         // season 2's path starts with season 1's path → nested duplicate
@@ -706,4 +711,274 @@ public class StatisticsJobTests : IDisposable
         var storedShow = await _dbContext.Shows.AsNoTracking().SingleAsync(s => s.Id == show.Id);
         Assert.Equal(1, storedShow.SubtitleCoverage!["zh"].Count);
     }
+
+    // ── R13: watermark-driven incremental scanning ─────────────────
+
+    [Fact]
+    public async Task Execute_FreshWatermarks_ScanNothingAndAggregateFromSnapshots()
+    {
+        await SeedMovieAsync(90);
+        WriteSubtitleFile("movie90", "movie90.zh.srt", 15);
+        await SeedShowAsync(91, "show91/s01");
+        WriteSubtitleFile("show91/s01", "show91.s01e01.zh.srt", 25);
+
+        // bootstrap run: scans the library once and stamps the watermarks
+        await CreateJob().Execute();
+
+        var subtitleService = new Mock<ISubtitleService>();
+        subtitleService
+            .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>());
+        _sqlLog.Clear();
+        await CreateJob(subtitleService.Object).Execute();
+
+        // steady state: fresh watermarks → zero disk scans, no media row
+        // rewritten — the round's cost no longer depends on the library size
+        subtitleService.Verify(s => s.GetAllSubtitles(It.IsAny<string>()), Times.Never);
+        Assert.Equal(0, _sqlLog.Count(sql => IsCoverageUpdate(sql) || IsNeedsUpdate(sql)));
+
+        // ... and the aggregate still comes out of the persisted snapshots
+        var stats = await _dbContext.Statistics.AsNoTracking().SingleAsync();
+        Assert.Equal(1, stats.TotalMovies);
+        Assert.Equal(2, stats.TotalEpisodes);
+        Assert.Equal(2, stats.TotalSubtitles); // movie zh incidence + episode zh incidence
+        Assert.Equal(2, stats.SubtitlesByLanguage["zh"]);
+    }
+
+    [Fact]
+    public async Task Execute_NewMediaFirst_ThenOldestWatermarks_WithinTheBatchLimit()
+    {
+        // one new movie (null watermark), four stale ones (30 days old)
+        await SeedMovieAsync(100);
+        WriteSubtitleFile("movie100", "movie100.zh.srt", 10);
+        for (var id = 101; id <= 104; id++)
+        {
+            var (stale, _) = await SeedMovieAsync(id);
+            stale.CoverageCheckedAt = DateTimeOffset.UtcNow.AddDays(-30);
+        }
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        var subtitleService = new Mock<ISubtitleService>();
+        subtitleService
+            .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>());
+
+        await CreateJob(subtitleService.Object, incrementalScanBatchSize: 2).Execute();
+
+        // the new movie (null watermark first) plus the single oldest stale
+        // one fill the budget of two; the rest stay untouched
+        subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, "movie100")), Times.Once);
+        subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, "movie101")), Times.Once);
+        subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, "movie102")), Times.Never);
+        subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, "movie104")), Times.Never);
+
+        var watermarks = await _dbContext.Movies.AsNoTracking()
+            .ToDictionaryAsync(movie => movie.Id, movie => movie.CoverageCheckedAt);
+        Assert.NotNull(watermarks[100]);
+        Assert.NotNull(watermarks[101]);
+        // 102/104 were seeded with 30-day-old watermarks and stay untouched
+        // this round — still stale, not rewritten, not nulled
+        Assert.True(watermarks[102] < DateTimeOffset.UtcNow.AddDays(-29));
+        Assert.True(watermarks[104] < DateTimeOffset.UtcNow.AddDays(-29));
+
+        // the next round resumes exactly where this one stopped
+        subtitleService.Invocations.Clear();
+        await CreateJob(subtitleService.Object, incrementalScanBatchSize: 2).Execute();
+        subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, "movie102")), Times.Once);
+        subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, "movie103")), Times.Once);
+        // movie100's watermark is fresh now — it is not rescanned
+        subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, "movie100")), Times.Never);
+    }
+
+    [Fact]
+    public async Task Execute_FailedScan_WritesNoWatermark_MediaStaysEligible()
+    {
+        var (movie, _) = await SeedMovieAsync(110);
+        WriteSubtitleFile("movie110", "movie110.zh.srt", 10);
+        var (fresh, _) = await SeedMovieAsync(111);
+        fresh.CoverageCheckedAt = DateTimeOffset.UtcNow;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        var subtitleService = new Mock<ISubtitleService>();
+        subtitleService
+            .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
+            .ThrowsAsync(new IOException("share dropped mid-scan"));
+        await CreateJob(subtitleService.Object).Execute();
+
+        _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
+        // the failed round never reaches its closing statements: neither the
+        // coverage values nor the watermark landed
+        var afterFailure = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == movie.Id);
+        Assert.Null(afterFailure.CoverageCheckedAt);
+        Assert.Null(afterFailure.SubtitleCoverageJson);
+
+        // ... so the next round selects the same media again and succeeds
+        await CreateJob().Execute();
+        var afterRetry = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == movie.Id);
+        Assert.NotNull(afterRetry.CoverageCheckedAt);
+        Assert.NotNull(afterRetry.SubtitleCoverageJson);
+    }
+
+    [Fact]
+    public async Task Execute_TwoIncrementalRounds_MatchOneFullScan()
+    {
+        // a mixed library: two covered movies, an uncovered one, a show with
+        // two attributed episode subtitles and one uncovered episode
+        await SeedMovieAsync(120);
+        WriteSubtitleFile("movie120", "movie120.zh.srt", 11);
+        await SeedMovieAsync(121);
+        WriteSubtitleFile("movie121", "movie121.en.srt", 12);
+        await SeedMovieAsync(122);
+        await SeedShowAsync(123, "show123/s01");
+        WriteSubtitleFile("show123/s01", "show123.s01e01.zh.srt", 13);
+        WriteSubtitleFile("show123/s01", "show123.s01e02.en.srt", 14);
+
+        // two incremental rounds with a per-type budget of two
+        await CreateJob(incrementalScanBatchSize: 2).Execute();
+        await CreateJob(incrementalScanBatchSize: 2).Execute();
+
+        var incrementalStats = await _dbContext.Statistics.AsNoTracking().SingleAsync();
+        var incrementalMovieJson = await MovieCoverageJsonAsync(120, 122);
+        var incrementalShowJson = await _dbContext.Shows.AsNoTracking()
+            .Where(show => show.Id == 123)
+            .Select(show => show.SubtitleCoverageJson)
+            .SingleAsync();
+        var incrementalDaily = await DailyCoverageRowsAsync();
+
+        // wipe the watermarks → the next run takes the bootstrap full-scan path
+        await _dbContext.Movies.ExecuteUpdateAsync(setters => setters
+            .SetProperty(movie => movie.CoverageCheckedAt, (DateTimeOffset?)null));
+        await _dbContext.Episodes.ExecuteUpdateAsync(setters => setters
+            .SetProperty(episode => episode.CoverageCheckedAt, (DateTimeOffset?)null));
+        _dbContext.ChangeTracker.Clear();
+
+        await CreateJob(incrementalScanBatchSize: 2).Execute(); // budget ignored on the bootstrap path
+
+        // R13 zero-drift pin: the incremental aggregate, per-media snapshots
+        // and daily coverage rows equal the full scan's
+        var fullStats = await _dbContext.Statistics.AsNoTracking().SingleAsync();
+        Assert.Equal(fullStats.TotalMovies, incrementalStats.TotalMovies);
+        Assert.Equal(fullStats.TotalEpisodes, incrementalStats.TotalEpisodes);
+        Assert.Equal(fullStats.TotalSubtitles, incrementalStats.TotalSubtitles);
+        Assert.Equal(fullStats.SubtitlesByLanguageJson, incrementalStats.SubtitlesByLanguageJson);
+        Assert.Equal(await MovieCoverageJsonAsync(120, 122), incrementalMovieJson);
+        Assert.Equal(
+            await _dbContext.Shows.AsNoTracking()
+                .Where(show => show.Id == 123)
+                .Select(show => show.SubtitleCoverageJson)
+                .SingleAsync(),
+            incrementalShowJson);
+        Assert.Equal(await DailyCoverageRowsAsync(), incrementalDaily);
+    }
+
+    [Fact]
+    public async Task Execute_AllNullWatermarks_BootstrapScansEverythingDespiteTheLimit()
+    {
+        for (var id = 130; id <= 133; id++)
+        {
+            await SeedMovieAsync(id);
+        }
+
+        var subtitleService = new Mock<ISubtitleService>();
+        subtitleService
+            .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>());
+
+        await CreateJob(subtitleService.Object, incrementalScanBatchSize: 1).Execute();
+
+        // first-scan/migration path: every movie scanned in one run and stamped
+        for (var id = 130; id <= 133; id++)
+        {
+            subtitleService.Verify(s => s.GetAllSubtitles(Path.Combine(_root, $"movie{id}")), Times.Once);
+        }
+        var watermarks = await _dbContext.Movies.AsNoTracking()
+            .Where(movie => movie.Id >= 130 && movie.Id <= 133)
+            .ToListAsync();
+        Assert.True(watermarks.TrueForAll(movie => movie.CoverageCheckedAt != null));
+    }
+
+    [Fact]
+    public async Task Execute_WritesCoverageDailyRows_AndUpsertsSameDayRuns()
+    {
+        await SeedMovieAsync(140);
+        WriteSubtitleFile("movie140", "movie140.zh.srt", 10);
+        await SeedShowAsync(141, "show141/s01");
+        WriteSubtitleFile("show141/s01", "show141.s01e01.zh.srt", 20);
+
+        await CreateJob(settingService: TargetsService("zh", "en")).Execute();
+        // same UTC day → upsert, not a duplicate row
+        await CreateJob(settingService: TargetsService("zh", "en")).Execute();
+
+        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
+        var rows = await _dbContext.CoverageDailies.AsNoTracking()
+            .Where(row => row.Date == today)
+            .ToListAsync();
+        // one row per (media type, language); zero-covered targets are the
+        // interesting state and always recorded
+        Assert.Equal(4, rows.Count);
+        Assert.Contains(rows, row => row.MediaType == MediaType.Movie && row.Language == "zh"
+                                     && row.Covered == 1 && row.Total == 1);
+        Assert.Contains(rows, row => row.MediaType == MediaType.Movie && row.Language == "en"
+                                     && row.Covered == 0 && row.Total == 1);
+        Assert.Contains(rows, row => row.MediaType == MediaType.Episode && row.Language == "zh"
+                                     && row.Covered == 1 && row.Total == 2);
+        Assert.Contains(rows, row => row.MediaType == MediaType.Episode && row.Language == "en"
+                                     && row.Covered == 0 && row.Total == 2);
+    }
+
+    [Fact]
+    public async Task Execute_UnmatchedSubtitleFile_CountsNoIncidenceButKeepsBytes()
+    {
+        var show = await SeedShowAsync(150, "show150/s01");
+        WriteSubtitleFile("show150/s01", "stray.zh.srt", 30); // matches no episode file name
+
+        await CreateJob().Execute();
+
+        var stats = await _dbContext.Statistics.AsNoTracking().SingleAsync();
+        // the incidence aggregate answers "which media items carry the
+        // language" — a stray file carries bytes only, no coverage slot
+        Assert.Equal(0, stats.TotalSubtitles);
+        Assert.Empty(stats.SubtitlesByLanguage);
+
+        var storedShow = await _dbContext.Shows.AsNoTracking().SingleAsync(s => s.Id == show.Id);
+        Assert.Equal(30, storedShow.SubtitleCoverage!["zh"].Bytes);
+        Assert.Equal(0, storedShow.SubtitleCoverage!["zh"].Count);
+    }
+
+    [Fact]
+    public async Task Execute_FreshWatermarkMovie_RecomputesFlagsFromThePersistedSnapshot()
+    {
+        await SeedMovieAsync(160);
+        WriteSubtitleFile("movie160", "movie160.zh.srt", 10);
+        // bootstrap with no targets: needs = false, watermark stamped
+        await CreateJob().Execute();
+        var firstWatermark = (await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 160))
+            .CoverageCheckedAt;
+
+        // target languages appear later; the movie's watermark is fresh so
+        // the disk is not rescanned, but the flag follows the snapshot
+        await CreateJob(settingService: TargetsService("ja")).Execute();
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 160);
+        Assert.True(stored.NeedsTranslation); // zh on disk, ja targeted → gap
+        // the flag fix never claims a scan: the watermark keeps its age
+        Assert.Equal(firstWatermark, stored.CoverageCheckedAt);
+    }
+
+    private async Task<List<string?>> MovieCoverageJsonAsync(int fromId, int toId) =>
+        await _dbContext.Movies.AsNoTracking()
+            .Where(movie => movie.Id >= fromId && movie.Id <= toId)
+            .OrderBy(movie => movie.Id)
+            .Select(movie => movie.SubtitleCoverageJson)
+            .ToListAsync();
+
+    private async Task<List<(DateOnly Date, MediaType MediaType, string Language, int Covered, int Total)>> DailyCoverageRowsAsync() =>
+        (await _dbContext.CoverageDailies.AsNoTracking()
+            .OrderBy(row => row.MediaType)
+            .ThenBy(row => row.Language)
+            .ToListAsync())
+        .Select(row => (row.Date, row.MediaType, row.Language, row.Covered, row.Total))
+        .ToList();
 }
