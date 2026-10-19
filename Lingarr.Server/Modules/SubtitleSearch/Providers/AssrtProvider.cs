@@ -34,6 +34,16 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
     /// </summary>
     private const int MaxDetailFanOut = 20;
 
+    /// <summary>
+    /// Wait before the single throttle retry of a file download. assrt
+    /// answers the file fetch with non-standard 493/509 as a transient
+    /// per-token throttle (Bazarr #802/#1953) — one patient retry rides out
+    /// the window; a persistent throttle then surfaces as RateLimited with
+    /// a one-minute cooldown. Public static settable for tests (the
+    /// "public test seams, no InternalsVisibleTo" ruling).
+    /// </summary>
+    public static TimeSpan ThrottleRetryDelay = TimeSpan.FromSeconds(8);
+
     private readonly ISettingsAccess _settings;
 
     public AssrtProvider(
@@ -107,15 +117,28 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
     {
         var context = CandidateCache.Resolve<CandidateContext>(candidateRef, ProviderKey);
 
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, context.FileUrl);
-        var (content, headerFileName) = await SubtitleHttp.SendForBytesAsync(
-            Http, httpRequest, ProviderKey, cancellationToken);
-        var fileName = headerFileName ?? context.FileName ?? "assrt.ass";
+        // The file fetch is where assrt throttles (493/509, transient
+        // per-token): one patient retry before the verdict surfaces — a
+        // fresh HttpRequestMessage per attempt, they are single-use.
+        for (var attempt = 0; ; attempt++)
+        {
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, context.FileUrl);
+            try
+            {
+                var (content, headerFileName) = await SubtitleHttp.SendForBytesAsync(
+                    Http, httpRequest, ProviderKey, cancellationToken);
+                var fileName = headerFileName ?? context.FileName ?? "assrt.ass";
 
-        // The quota snapshot captured by the detail round that produced this
-        // candidate rides along — the download pipeline feeds it into the
-        // provider_quota_usage telemetry (the quotaRemaining channel).
-        return new SubtitleDownload(ProviderKey, fileName, FormatFromFileName(fileName), content, context.QuotaRemaining);
+                // The quota snapshot captured by the detail round that produced this
+                // candidate rides along — the download pipeline feeds it into the
+                // provider_quota_usage telemetry (the quotaRemaining channel).
+                return new SubtitleDownload(ProviderKey, fileName, FormatFromFileName(fileName), content, context.QuotaRemaining);
+            }
+            catch (SubtitleProviderException ex) when (attempt == 0 && ex.HttpStatus is 493 or 509)
+            {
+                await Task.Delay(ThrottleRetryDelay, cancellationToken);
+            }
+        }
     }
 
     /// <inheritdoc />

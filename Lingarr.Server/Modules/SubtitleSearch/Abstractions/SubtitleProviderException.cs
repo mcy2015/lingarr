@@ -125,6 +125,18 @@ public sealed class SubtitleProviderException : Exception
                 cooldown: MaxHourOrRetryAfter(retryAfterSeconds),
                 retryAfterSeconds: retryAfterSeconds,
                 httpStatus: (int)statusCode),
+            // assrt.net throttles the file fetch itself with a non-standard
+            // 493 (509 on bad days) — undocumented upstream, transient
+            // per-token waits, NOT the daily quota (Bazarr issues #802/#1953
+            // hit the same wall). A short cooldown keeps automated rounds
+            // from hammering the window; the assrt adapter additionally
+            // retries once behind the same status before this surfaces.
+            var throttled when (int)throttled is 493 or 509 => new SubtitleProviderException(
+                provider,
+                SubtitleProviderFailureReason.RateLimited,
+                $"{provider} throttled the download (HTTP {(int)throttled}) — retry in a minute.{suffix}",
+                cooldown: TimeSpan.FromMinutes(1),
+                httpStatus: (int)throttled),
             System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden =>
                 new SubtitleProviderException(
                     provider,

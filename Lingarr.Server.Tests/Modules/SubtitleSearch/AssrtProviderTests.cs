@@ -299,6 +299,89 @@ public class AssrtProviderTests
         Assert.Equal(37, download.QuotaRemaining);
     }
 
+    // ── assrt's non-standard download throttle (NAS incident 2026-10-19:
+    // manual download of a real candidate answered HTTP 493; Bazarr
+    // #802/#1953 hit the same undocumented throttle) ──
+
+    private static HttpResponseMessage Throttled(int code) =>
+        new((HttpStatusCode)code);
+
+    [Fact]
+    public async Task Download_ThrottledWith493_RetriesOnceAndSucceeds()
+    {
+        var payload = "[Script Info]"u8.ToArray();
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "search.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .Enqueue(_ => Throttled(493))
+            .Enqueue(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload)
+            });
+
+        var provider = Create(handler);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+
+        var originalDelay = AssrtProvider.ThrottleRetryDelay;
+        AssrtProvider.ThrottleRetryDelay = TimeSpan.Zero;
+        SubtitleDownload download;
+        try
+        {
+            download = await provider.DownloadAsync(
+                new SubtitleCandidateRef(search.Candidates[1].ExternalId), CancellationToken.None);
+        }
+        finally
+        {
+            AssrtProvider.ThrottleRetryDelay = originalDelay;
+        }
+
+        // the retried fetch hit the same file URL and delivered the payload
+        Assert.Equal(payload, download.Content);
+        var fileFetches = handler.Requests
+            .Where(request => request.RequestUri!.AbsoluteUri.Contains("/sub/download/"))
+            .ToList();
+        Assert.Equal(2, fileFetches.Count);
+        Assert.Equal(
+            fileFetches[0].RequestUri!.AbsoluteUri,
+            fileFetches[1].RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task Download_PersistentThrottle_SurfacesAsRateLimitedWithShortCooldown()
+    {
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "search.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .Enqueue(_ => Throttled(493))
+            .Enqueue(_ => Throttled(509));
+
+        var provider = Create(handler);
+        var search = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+
+        var originalDelay = AssrtProvider.ThrottleRetryDelay;
+        AssrtProvider.ThrottleRetryDelay = TimeSpan.Zero;
+        SubtitleProviderException exception;
+        try
+        {
+            exception = await Assert.ThrowsAsync<SubtitleProviderException>(
+                () => provider.DownloadAsync(
+                    new SubtitleCandidateRef(search.Candidates[1].ExternalId), CancellationToken.None));
+        }
+        finally
+        {
+            AssrtProvider.ThrottleRetryDelay = originalDelay;
+        }
+
+        // bucketed as a transient rate limit with the one-minute cooldown,
+        // not the generic invalid-response verdict the incident showed
+        Assert.Equal(SubtitleProviderFailureReason.RateLimited, exception.Reason);
+        Assert.Equal(509, exception.HttpStatus);
+        Assert.Equal(TimeSpan.FromMinutes(1), exception.Cooldown);
+        Assert.Contains("throttled the download", exception.Message);
+    }
+
     [Fact]
     public async Task Download_WithoutQuotaFieldReportsNull()
     {
