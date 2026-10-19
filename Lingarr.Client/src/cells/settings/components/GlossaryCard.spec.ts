@@ -200,6 +200,7 @@ describe('GlossaryCard · 导出 CSV (R9a)', () => {
         Object.defineProperty(window.URL, 'revokeObjectURL', { value: revokeObjectURL, configurable: true })
         clickedAnchor = null
         vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+            // oxlint-disable-next-line no-this-alias - the spy needs the receiver
             clickedAnchor = this
         })
     })
