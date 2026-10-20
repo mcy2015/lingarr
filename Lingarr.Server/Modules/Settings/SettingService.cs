@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Lingarr.Core.Data;
+using Lingarr.Core.Entities;
 using Lingarr.Server.Modules.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
