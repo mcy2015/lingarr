@@ -10,6 +10,11 @@
 // native-audio hint shows once per session, existing languages pre-mark
 // their rows, downloads lock their row into a ✓ state, and failed sources
 // re-fire individually with their own cacheKey.
+// Any-language batch: the「+ 更多语言」picker expands the quick-toggle row
+// with the culture-table full set (filter, 翻译源 markers, selections ride
+// the wire), and the no-translation chrome (single button / badge / green
+// track) anchors to the SETTINGS target set instead of the first checked
+// language — non-target rows keep the dual download buttons.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -26,6 +31,7 @@ const getProvidersMock = vi.hoisted(() => vi.fn())
 const searchMock = vi.hoisted(() => vi.fn())
 const downloadMock = vi.hoisted(() => vi.fn())
 const getSettingMock = vi.hoisted(() => vi.fn())
+const getLanguagesMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/subtitleSearchService', () => ({
     subtitleSearchService: {
@@ -33,6 +39,10 @@ vi.mock('@/cells/app/api/subtitleSearchService', () => ({
         search: searchMock,
         download: downloadMock
     }
+}))
+
+vi.mock('@/cells/app/api/translateService', () => ({
+    translateService: () => ({ getLanguages: getLanguagesMock })
 }))
 
 vi.mock('@/cells/app/api/settingService', () => ({
@@ -56,6 +66,15 @@ beforeEach(() => {
     vi.clearAllMocks()
     // seeded default of M0008 — individual tests override to move the line
     getSettingMock.mockResolvedValue('75')
+    // culture-table stand-in (GET /api/translate/languages) for the
+    // more-languages picker; only an expanded panel ever fetches it
+    getLanguagesMock.mockResolvedValue([
+        { code: 'zh', name: 'Chinese' },
+        { code: 'en', name: 'English' },
+        { code: 'it', name: 'Italian' },
+        { code: 'ja', name: 'Japanese' },
+        { code: 'zh-TW', name: 'Chinese (Traditional, Taiwan)' }
+    ])
 })
 
 afterEach(() => {
@@ -132,6 +151,12 @@ const downloadResponse = (
     ...overrides
 })
 
+/// zh-only deployment for the download-semantics suites: their 'en'
+/// candidates stay NON-target rows (dual buttons, no badge) after the
+/// target-set alignment — the missing-setting fallback pair [zh, en] would
+/// turn them into target rows.
+const ZH_ONLY = { targetLanguages: [{ code: 'zh', name: 'Chinese' }] }
+
 interface MountedModal {
     wrapper: VueWrapper
     toast: ReturnType<typeof useToastStore>
@@ -149,12 +174,19 @@ async function mountModal(
         /// language toggles derive from it (omit for the missing-setting
         /// fallback path; pass [] for the empty-list fallback path).
         targetLanguages?: { code: string; name: string }[]
+        /// Seeds source_languages the same way — the picker's「翻译源」
+        /// markers derive from it.
+        sourceLanguages?: { code: string; name: string }[]
     } = {}
 ): Promise<MountedModal> {
-    const { targetLanguages, ...componentProps } = props
+    const { targetLanguages, sourceLanguages, ...componentProps } = props
     const pinia = createPinia()
+    const setting = useSettingStore(pinia)
     if (targetLanguages) {
-        useSettingStore(pinia).storeSetting(SETTINGS.TARGET_LANGUAGES, targetLanguages)
+        setting.storeSetting(SETTINGS.TARGET_LANGUAGES, targetLanguages)
+    }
+    if (sourceLanguages) {
+        setting.storeSetting(SETTINGS.SOURCE_LANGUAGES, sourceLanguages)
     }
     const wrapper = mount(SubtitleSearchModal, {
         props: {
@@ -330,7 +362,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
                 candidate({ language: 'en', externalId: 'ext-dl-translate' })
             ])
         )
-        await mountModal()
+        await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadOnly)
         await clickButton(en.subSearch.downloadAndTranslate)
@@ -358,7 +390,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
 
     it('toasts "queued" when the response carries a translationRequestId, plain saved otherwise', async () => {
         downloadMock.mockResolvedValue(downloadResponse({ translationRequestId: 55 }))
-        const { toast, wrapper } = await mountModal()
+        const { toast, wrapper } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadAndTranslate)
         expect(toast.toasts[0].message).toBe(
@@ -370,7 +402,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
 
     it('toasts plain saved when no translation was queued', async () => {
         downloadMock.mockResolvedValue(downloadResponse())
-        const { toast } = await mountModal()
+        const { toast } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadOnly)
         expect(toast.toasts[0].message).toBe(
@@ -383,7 +415,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
         // toast with the matched-count one (the downloaded event still
         // carries the initiating episode's file).
         downloadMock.mockResolvedValue(downloadResponse({ filesLanded: 8 }))
-        const { toast, wrapper } = await mountModal()
+        const { toast, wrapper } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadOnly)
         expect(toast.toasts[0].message).toBe(
@@ -397,7 +429,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
         downloadMock.mockResolvedValue(
             downloadResponse({ filesLanded: 1, translationRequestId: 55 })
         )
-        const { toast } = await mountModal()
+        const { toast } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadAndTranslate)
         expect(toast.toasts[0].message).toBe(
@@ -409,7 +441,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
         downloadMock.mockResolvedValue(
             downloadResponse({ translationRequestId: 9, translationDuplicate: true })
         )
-        const { toast } = await mountModal()
+        const { toast } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadAndTranslate)
         expect(toast.toasts[0].message).toBe(en.subSearch.translationDuplicate)
@@ -420,7 +452,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
         downloadMock.mockResolvedValue(
             downloadResponse({ filePath: '', result: 'Skipped', error: 'target already covered' })
         )
-        const { toast } = await mountModal()
+        const { toast } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadOnly)
         expect(toast.toasts[0].message).toBe(
@@ -444,7 +476,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
                 cooldownUntilUtc: untilIso
             })
         )
-        const { toast } = await mountModal()
+        const { toast } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadOnly)
         const localHm = (() => {
@@ -469,7 +501,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
         downloadMock.mockResolvedValue(
             downloadResponse({ filePath: '', result: 'CooldownSkipped', error: null })
         )
-        const { toast } = await mountModal()
+        const { toast } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadOnly)
         expect(toast.toasts[0].message).toBe(
@@ -484,7 +516,7 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
             message: 'Network Error',
             response: { data: { message: 'the search result expired' } }
         })
-        const { toast } = await mountModal()
+        const { toast } = await mountModal(ZH_ONLY)
 
         await clickButton(en.subSearch.downloadOnly)
         expect(toast.toasts[0].message).toBe('the search result expired')
@@ -780,7 +812,7 @@ describe('SubtitleSearchModal · 下载成功 ✓ 态', () => {
             outcome('ck-os', [candidate({ language: 'en', externalId: 'ext-dl' })])
         )
         downloadMock.mockResolvedValue(downloadResponse())
-        await mountModal()
+        await mountModal(ZH_ONLY)
 
         const rowOf = (): HTMLElement =>
             document.querySelector('[data-test="candidate-row"]') as HTMLElement
@@ -819,7 +851,7 @@ describe('SubtitleSearchModal · 单源重试', () => {
                   })
                 : Promise.resolve(outcome('ck-sub', [candidate({ provider: 'subsource' })]))
         )
-        await mountModal()
+        await mountModal(ZH_ONLY)
 
         // the failed source exposes the retry button, the ok one does not
         expect(
@@ -893,5 +925,176 @@ describe('SubtitleSearchModal · 单源重试', () => {
         expect(
             document.querySelector('[data-test="source-retry-opensubtitles"]')
         ).not.toBeNull()
+    })
+})
+
+// ═══ any-language picker: culture-table expansion of the toggle row ═══
+describe('SubtitleSearchModal · 任意语言选择器', () => {
+    beforeEach(() => {
+        getProvidersMock.mockResolvedValue([subsource])
+        searchMock.mockResolvedValue(outcome('ck-sub', []))
+    })
+
+    /// The quick-toggle row keeps only language toggles — the more-languages
+    /// entry is an expand switch, not a toggle (no aria-pressed).
+    const langToggles = (): HTMLButtonElement[] =>
+        [...document.querySelectorAll('button[aria-pressed]')] as HTMLButtonElement[]
+
+    const clickTest = async (selector: string): Promise<void> => {
+        const element = document.querySelector(selector) as HTMLElement | null
+        expect(element, `${selector} should render`).not.toBeNull()
+        element!.click()
+        await flush()
+    }
+
+    it('renders only the target toggles by default, the picker entry collapsed and unfetched', async () => {
+        await mountModal({ targetLanguages: [{ code: 'zh', name: 'Chinese' }] })
+
+        expect(langToggles().map((b) => b.textContent?.trim())).toEqual(['ZH'])
+        expect(langToggles().every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+
+        const entry = document.querySelector('[data-test="subsearch-more-languages"]')
+        expect(entry).not.toBeNull()
+        expect(entry!.getAttribute('aria-expanded')).toBe('false')
+        expect(entry!.textContent).toContain(en.subSearch.moreLanguages)
+        expect(document.querySelector('[data-test="subsearch-language-panel"]')).toBeNull()
+        // the culture table loads lazily — a closed picker never fetches it
+        expect(getLanguagesMock).not.toHaveBeenCalled()
+    })
+
+    it('appends a picked culture-table language as a checked quick toggle and rides it on the wire', async () => {
+        await mountModal({ targetLanguages: [{ code: 'zh', name: 'Chinese' }] })
+        searchMock.mockClear()
+
+        await clickTest('[data-test="subsearch-more-languages"]')
+        expect(document.querySelector('[data-test="subsearch-language-panel"]')).not.toBeNull()
+        expect(getLanguagesMock).toHaveBeenCalledTimes(1)
+
+        // the target language renders checked inside the panel, en unchecked
+        expect(
+            document.querySelector('[data-test="culture-option-zh"]')!.getAttribute('aria-selected')
+        ).toBe('true')
+        expect(
+            document.querySelector('[data-test="culture-option-en"]')!.getAttribute('aria-selected')
+        ).toBe('false')
+
+        await clickTest('[data-test="culture-option-ja"]')
+
+        // JA joined the quick row after the target-derived toggle, checked
+        expect(langToggles().map((b) => b.textContent?.trim())).toEqual(['ZH', 'JA'])
+        expect(langToggles()[1].getAttribute('aria-pressed')).toBe('true')
+
+        await clickButton(en.subSearch.searchAction)
+        expect(searchMock).toHaveBeenCalledTimes(1)
+        expect(searchMock.mock.calls[0][0].languages).toEqual(['zh', 'ja'])
+    })
+
+    it('unchecking an appended quick toggle removes it from the wire but keeps the button', async () => {
+        await mountModal({ targetLanguages: [{ code: 'zh', name: 'Chinese' }] })
+        await clickTest('[data-test="subsearch-more-languages"]')
+        await clickTest('[data-test="culture-option-ja"]')
+        searchMock.mockClear()
+
+        ;(langToggles().find((b) => b.textContent?.trim() === 'JA') as HTMLButtonElement).click()
+        await flush()
+        await clickButton(en.subSearch.searchAction)
+
+        expect(searchMock).toHaveBeenCalledTimes(1)
+        expect(searchMock.mock.calls[0][0].languages).toEqual(['zh'])
+        // the appended button itself stays for a re-check, now unchecked
+        const jaToggle = langToggles().find((b) => b.textContent?.trim() === 'JA')
+        expect(jaToggle).toBeDefined()
+        expect(jaToggle!.getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('marks translation-source options and narrows the list through the filter', async () => {
+        await mountModal({
+            targetLanguages: [{ code: 'zh', name: 'Chinese' }],
+            sourceLanguages: [{ code: 'en', name: 'English' }]
+        })
+        await clickTest('[data-test="subsearch-more-languages"]')
+
+        expect(
+            document.querySelector('[data-test="culture-source-en"]')?.textContent?.trim()
+        ).toBe(en.subSearch.translationSource)
+        expect(document.querySelector('[data-test="culture-source-ja"]')).toBeNull()
+
+        const filter = document.querySelector(
+            '[data-test="subsearch-language-filter"]'
+        ) as HTMLInputElement
+        filter.value = 'ital'
+        filter.dispatchEvent(new Event('input'))
+        await flush()
+        expect(document.querySelector('[data-test="culture-option-it"]')).not.toBeNull()
+        expect(document.querySelector('[data-test="culture-option-ja"]')).toBeNull()
+
+        filter.value = 'zzz'
+        filter.dispatchEvent(new Event('input'))
+        await flush()
+        expect(document.querySelector('[data-test="culture-option-it"]')).toBeNull()
+        expect(textOf('[data-test="subsearch-language-panel"]')).toContain(
+            en.subSearch.languageNoResults
+        )
+    })
+})
+
+// ═══ no-translation judgment anchored to the settings target set ═══
+describe('SubtitleSearchModal · 免翻译判定锚定 target 集', () => {
+    it('gives target rows the single button, badge and green track; non-target rows dual buttons', async () => {
+        getProvidersMock.mockResolvedValue([opensubtitles])
+        searchMock.mockResolvedValue(
+            outcome('ck-os', [
+                candidate({ language: 'zh', externalId: 'zh-row', releaseInfo: 'Row.ZH' }),
+                candidate({ language: 'ja', externalId: 'ja-row', releaseInfo: 'Row.JA' })
+            ])
+        )
+        await mountModal({ targetLanguages: [{ code: 'zh', name: 'Chinese' }] })
+
+        const rows = [...document.querySelectorAll('[data-test="candidate-row"]')]
+        const zhRow = rows.find((row) => row.textContent?.includes('Row.ZH'))!
+        const jaRow = rows.find((row) => row.textContent?.includes('Row.JA'))!
+        const buttonsOf = (row: Element): string[] =>
+            [...row.querySelectorAll('button')]
+                .filter((b) => !b.hasAttribute('aria-label'))
+                .map((b) => b.textContent?.trim() ?? '')
+
+        // zh (target): single「下载」button, no-translate badge, green track
+        expect(buttonsOf(zhRow)).toEqual([en.subSearch.download])
+        expect(zhRow.textContent).toContain(en.subSearch.noTranslate)
+        expect(zhRow.querySelector('[data-test="candidate-track"]')!.classList.contains('bg-success')).toBe(true)
+
+        // ja (non-target): dual buttons, no badge, info track
+        expect(buttonsOf(jaRow)).toEqual([
+            en.subSearch.downloadOnly,
+            en.subSearch.downloadAndTranslate
+        ])
+        expect(jaRow.textContent).not.toContain(en.subSearch.noTranslate)
+        expect(jaRow.querySelector('[data-test="candidate-track"]')!.classList.contains('bg-info')).toBe(true)
+        expect(jaRow.querySelector('[data-test="candidate-track"]')!.classList.contains('bg-success')).toBe(false)
+    })
+
+    it('keeps the target row single-button even when its toggle is unchecked', async () => {
+        // the exemption judges the SETTINGS target set, never the currently
+        // checked set — unchecking ZH must not demote the zh row
+        getProvidersMock.mockResolvedValue([opensubtitles])
+        searchMock.mockResolvedValue(
+            outcome('ck-os', [
+                candidate({ language: 'zh', externalId: 'zh-row', releaseInfo: 'Row.ZH' })
+            ])
+        )
+        await mountModal({ targetLanguages: [{ code: 'zh', name: 'Chinese' }] })
+
+        const zhToggle = [...document.querySelectorAll('button[aria-pressed]')].find(
+            (b) => b.textContent?.trim() === 'ZH'
+        ) as HTMLButtonElement
+        zhToggle.click()
+        await flush()
+
+        const row = document.querySelector('[data-test="candidate-row"]')!
+        const buttons = [...row.querySelectorAll('button')]
+            .filter((b) => !b.hasAttribute('aria-label'))
+            .map((b) => b.textContent?.trim() ?? '')
+        expect(buttons).toEqual([en.subSearch.download])
+        expect(row.textContent).toContain(en.subSearch.noTranslate)
     })
 })

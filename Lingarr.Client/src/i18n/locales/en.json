@@ -1237,7 +1237,14 @@
         "noSources": "No subtitle source available — configure one in Settings first.",
         "downloadedSeasonPack": "Downloaded and matched {count} episodes",
         "downloadCooldown": "{provider} is rate-limited — try again after {time}",
-        "downloadCooldownPending": "{provider} is rate-limited — try again shortly"
+        "downloadCooldownPending": "{provider} is rate-limited — try again shortly",
+        "moreLanguages": "More languages",
+        "languageFilterLabel": "Filter languages by code or name",
+        "languagesLoading": "Loading languages…",
+        "languagesFailed": "Could not load the language list.",
+        "languageNoOptions": "No languages available.",
+        "languageNoResults": "No matching languages.",
+        "translationSource": "translation source"
     },
     "dashboard": {
         "subtitles": {

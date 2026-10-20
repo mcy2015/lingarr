@@ -48,9 +48,9 @@ public class AssrtProviderTests
             NewCache(), handler.ToClient(), NullLogger<AssrtProvider>.Instance);
     }
 
-    private static SubtitleSearchRequest MovieRequest() => new(
+    private static SubtitleSearchRequest MovieRequest(string[]? languages = null) => new(
         "Movie", 2019, Season: null, Episode: null,
-        ReleaseName: null, VideoHash: null, Languages: ["zh"], ImdbId: null);
+        ReleaseName: null, VideoHash: null, Languages: languages ?? ["zh"], ImdbId: null);
 
     [Fact]
     public async Task Search_FetchesDetailPerSubAndFlattensFileList()
@@ -76,12 +76,31 @@ public class AssrtProviderTests
         Assert.Equal(4, result.Candidates.Count);
         var candidate = result.Candidates[0];
         Assert.Equal("assrt", candidate.Provider);
-        Assert.Equal("zh", candidate.Language); // Chinese mainstay: primary requested code
+        Assert.Equal("zh", candidate.Language); // Chinese mainstay: fixed zh label
         Assert.Equal("电影2019", candidate.ReleaseInfo); // native_name preferred over title
         Assert.Equal("ass", candidate.Format);
         Assert.Equal("srt", result.Candidates[1].Format);
         Assert.StartsWith("subtitle-candidate:assrt:", candidate.ExternalId);
         Assert.False(candidate.HashMatch);
+    }
+
+    [Fact]
+    public async Task Search_AnyLanguageRequest_LabelsEveryCandidateZh()
+    {
+        // assrt's search has no language parameter and its catalogue is
+        // Chinese: an any-language manual search must not stamp the
+        // requested code onto the results — the label is the honest
+        // constant "zh" regardless of what was asked for.
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "search.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"))
+            .EnqueueJson(SubtitleFixtures.Read("assrt", "detail.json"));
+
+        var provider = Create(handler);
+        var result = await provider.SearchAsync(MovieRequest(["ja"]), CancellationToken.None);
+
+        Assert.Equal(4, result.Candidates.Count);
+        Assert.All(result.Candidates, candidate => Assert.Equal("zh", candidate.Language));
     }
 
     [Fact]

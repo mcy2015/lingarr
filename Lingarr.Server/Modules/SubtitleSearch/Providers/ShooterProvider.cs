@@ -67,13 +67,22 @@ public sealed class ShooterProvider : SubtitleProviderBase, ISubtitleProvider, I
         var candidates = new List<SubtitleCandidate>();
         foreach (var language in request.Languages)
         {
+            if (!LanguageMap.TryGetValue(language, out var mapped))
+            {
+                // Unmapped code (manual search can ask for any culture-table
+                // language): shooter has no lang parameter for it, and a
+                // query WITHOUT lang returns the whole library — every hit
+                // would then be mislabelled as this language. Skip the
+                // language silently instead (SubSource precedent).
+                continue;
+            }
+
             try
             {
-                var mapped = LanguageMap.TryGetValue(language, out var code) ? code : null;
                 var query = $"api/subapi.php?filehash={Uri.EscapeDataString(request.ShooterFileHash!)}"
                     + $"&pathinfo={Uri.EscapeDataString(request.ReleaseName ?? request.Title)}"
                     + "&format=json"
-                    + (mapped is null ? string.Empty : $"&lang={mapped}");
+                    + $"&lang={mapped}";
 
                 using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/{query}");
                 httpRequest.Headers.Add("Accept", "application/json");

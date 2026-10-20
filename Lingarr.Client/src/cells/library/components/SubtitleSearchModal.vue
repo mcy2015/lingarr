@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { useToastStore } from '@/cells/app/stores/toast'
 import { useSettingStore } from '@/cells/app/stores/setting'
+import { useTranslateStore } from '@/cells/app/stores/translate'
 import { settingService } from '@/cells/app/api/settingService'
 import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToastStore()
 const settingStore = useSettingStore()
+const translateStore = useTranslateStore()
 const settingApi = settingService(axios)
 
 // ── search state ─────────────────────────────────────────────
@@ -51,21 +53,98 @@ const query = ref('')
 /// previously hardcoded pair, kept so a search is always possible.
 const FALLBACK_LANGUAGES = ['zh', 'en']
 
-/// The toggle row derives from the global target_languages setting: the
-/// server's「no subtitle needed」exemption judges against that same list,
-/// so the manual dialog must not offer a different language set.
-const languageOptions = computed<string[]>(() => {
-    // getSettings parses both the raw JSON-string and array forms; anything
-    // unexpected (missing key, non-array) falls through to the fallback.
-    const configured = settingStore.getSettings.target_languages as ILanguage[]
-    const codes = (Array.isArray(configured) ? configured : [])
+/// Normalized codes of a language-list setting; getSettings parses both the
+/// raw JSON-string and array forms, anything unexpected falls through empty.
+function settingLanguageCodes(key: 'target_languages' | 'source_languages'): string[] {
+    const configured = settingStore.getSettings[key] as ILanguage[]
+    return (Array.isArray(configured) ? configured : [])
         .map((language) => String(language?.code ?? '').toLowerCase())
         .filter((code) => code !== '')
+}
+
+/// The settings' target_languages set (fallback zh/en): the quick-toggle row
+/// derives from it AND the server's「no subtitle needed」exemption judges
+/// against that same list — the checked set (what is searched) may go beyond
+/// it via the「more languages」picker, the exemption never does.
+const targetLanguages = computed<string[]>(() => {
+    const codes = settingLanguageCodes('target_languages')
     return codes.length > 0 ? codes : FALLBACK_LANGUAGES
 })
 
+/// Languages appended through the culture-table picker this modal session —
+/// they join the quick-toggle row after the target-derived ones.
+const extraLanguages = ref<string[]>([])
+
+/// Quick-toggle set = target-derived ∪ appended (decoupled from the checked
+/// set: unchecking a toggle never removes the button).
+const languageOptions = computed<string[]>(() => [
+    ...targetLanguages.value,
+    ...extraLanguages.value.filter((code) => !targetLanguages.value.includes(code))
+])
+
 /// Every derived option is checked by default (previous behaviour).
 const languages = ref<string[]>([...languageOptions.value])
+
+/// Translation-source whitelist (settings source_languages): picker options
+/// in it carry the「翻译源」marker — the automatic rounds already search them.
+const sourceLanguageCodes = computed<Set<string>>(
+    () => new Set(settingLanguageCodes('source_languages'))
+)
+
+// ── more-languages picker (any culture-table language) ───────
+const moreLanguagesOpen = ref(false)
+const languageFilter = ref('')
+
+const cultureLanguages = computed<ILanguage[]>(() => translateStore.getLanguages)
+
+/// Same filter semantics as the settings-page language selector: the input
+/// only narrows by code or name, it never creates off-table codes.
+const filteredCultureLanguages = computed<ILanguage[]>(() => {
+    const needle = languageFilter.value.trim().toLowerCase()
+    return cultureLanguages.value
+        .filter(
+            (language) =>
+                needle === '' ||
+                language.code.toLowerCase().includes(needle) ||
+                language.name.toLowerCase().includes(needle)
+        )
+        .slice()
+        .sort((a, b) => a.code.localeCompare(b.code))
+})
+
+/// Case-insensitive check lookup — culture-table codes keep their canonical
+/// casing ("zh-TW") while the checked set may hold the normalized form.
+function isCultureChecked(code: string): boolean {
+    return languages.value.some((checked) => checked.toLowerCase() === code.toLowerCase())
+}
+
+/// Toggle one culture-table language: on it joins the checked set and (when
+/// not target-derived) the quick-toggle row; off it leaves the checked set —
+/// the row keeps the button so it can be re-checked like a target toggle.
+function toggleCultureLanguage(code: string): void {
+    const existing = languages.value.find(
+        (checked) => checked.toLowerCase() === code.toLowerCase()
+    )
+    if (existing !== undefined) {
+        languages.value = languages.value.filter((checked) => checked !== existing)
+        return
+    }
+    languages.value = [...languages.value, code]
+    if (!languageOptions.value.some((option) => option.toLowerCase() === code.toLowerCase())) {
+        extraLanguages.value = [...extraLanguages.value, code]
+    }
+}
+
+function toggleMoreLanguages(): void {
+    moreLanguagesOpen.value = !moreLanguagesOpen.value
+    if (moreLanguagesOpen.value && cultureLanguages.value.length === 0) {
+        // Culture-table full set (GET /api/translate/languages) — the same
+        // source the settings language-policy card picks from. Opening
+        // again after a failure retries the fetch.
+        void translateStore.setLanguages()
+    }
+}
+
 const searching = ref(false)
 const providersLoading = ref(true)
 const providersFailed = ref(false)
@@ -118,15 +197,6 @@ const searchElapsed = ref(0)
 const sortedCandidates = computed<CandidateRow[]>(() => candidates.value)
 
 const metaSources = computed(() => `${settledCount.value}/${sourcesTotal.value}`)
-
-/// Primary target language (rows in it get the single「下载」button): the
-/// settings' first target language while it stays checked, else the first
-/// checked one, else the first option.
-const targetLang = computed(() =>
-    languages.value.find(l => l === languageOptions.value[0])
-        ?? languages.value[0]
-        ?? languageOptions.value[0]
-)
 
 /// Audio hint condition — the backend's「任一目标」exemption semantics: known
 /// audio covering ANY of the currently searched target languages means the
@@ -428,8 +498,14 @@ async function download(row: CandidateRow, skipTranslation: boolean): Promise<vo
     }
 }
 
+/// Set-membership against the settings' target_languages — exactly the
+/// server's exemption rule (SubtitleDownloadPipeline: a candidate whose
+/// language is a configured target lands without translation). What the
+/// user has currently checked plays no part: a target row keeps its single
+/// download button even when its toggle is off, and a non-target row never
+/// earns the badge no matter what was checked.
 function isTargetLang(candidate: ISubtitleCandidate): boolean {
-    return candidate.language.toLowerCase() === targetLang.value
+    return targetLanguages.value.includes(candidate.language.toLowerCase())
 }
 
 function isBusy(candidate: ISubtitleCandidate): boolean {
@@ -603,10 +679,95 @@ onBeforeUnmount(teardown)
                                 : [...languages, lang]">
                             {{ lang.toUpperCase() }}
                         </button>
+                        <!-- any culture-table language: opens the inline
+                             picker below the query bar; picker selections
+                             join this quick-toggle row -->
+                        <button
+                            type="button"
+                            class="mono rounded border border-dashed px-2 py-0.5 text-[11px] transition-colors"
+                            :class="moreLanguagesOpen
+                                ? 'border-accent text-accent'
+                                : 'border-line text-secondary-content hover:border-accent hover:text-primary-content'"
+                            :aria-expanded="moreLanguagesOpen"
+                            data-test="subsearch-more-languages"
+                            @click="toggleMoreLanguages">
+                            + {{ t('subSearch.moreLanguages') }}
+                        </button>
                     </span>
                     <ButtonComponent variant="primary" size="sm" @click="runSearch()">
                         {{ t('subSearch.searchAction') }}
                     </ButtonComponent>
+                </div>
+
+                <!-- more-languages picker: the culture-table full set (same
+                     source as the settings language-policy card); filter
+                     narrows by code/name, options toggle the checked set,
+                     translation-source whitelist entries carry a marker -->
+                <div
+                    v-if="moreLanguagesOpen"
+                    class="border-line border-b px-4 py-2"
+                    data-test="subsearch-language-panel">
+                    <input
+                        v-model="languageFilter"
+                        type="text"
+                        class="border-line bg-primary text-primary-content mono w-full rounded border px-2.5 py-1.5 text-xs outline-none focus:border-accent"
+                        :placeholder="t('subSearch.languageFilterLabel')"
+                        :aria-label="t('subSearch.languageFilterLabel')"
+                        data-test="subsearch-language-filter">
+                    <div
+                        class="shell-scroll mt-2 max-h-56 overflow-y-auto"
+                        role="listbox"
+                        aria-multiselectable="true"
+                        :aria-label="t('subSearch.moreLanguages')">
+                        <div
+                            v-if="translateStore.isLanguagesLoading && cultureLanguages.length === 0"
+                            class="text-secondary-content px-1 py-3 text-xs">
+                            {{ t('subSearch.languagesLoading') }}
+                        </div>
+                        <div
+                            v-else-if="translateStore.hasLanguagesError"
+                            class="text-secondary-content px-1 py-3 text-xs"
+                            data-test="subsearch-language-error">
+                            {{ t('subSearch.languagesFailed') }}
+                        </div>
+                        <div
+                            v-else-if="cultureLanguages.length === 0"
+                            class="text-secondary-content px-1 py-3 text-xs">
+                            {{ t('subSearch.languageNoOptions') }}
+                        </div>
+                        <div
+                            v-else-if="filteredCultureLanguages.length === 0"
+                            class="text-secondary-content px-1 py-3 text-xs">
+                            {{ t('subSearch.languageNoResults') }}
+                        </div>
+                        <template v-else>
+                            <div
+                                v-for="language in filteredCultureLanguages"
+                                :key="language.code"
+                                role="option"
+                                :aria-selected="isCultureChecked(language.code)"
+                                class="hover:bg-tertiary/50 flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors"
+                                :class="isCultureChecked(language.code) ? 'bg-accent/15' : ''"
+                                :data-test="'culture-option-' + language.code"
+                                @click="toggleCultureLanguage(language.code)">
+                                <span class="text-secondary-content mono w-14 flex-none text-[11px]">
+                                    {{ language.code }}
+                                </span>
+                                <span class="text-primary-content truncate">{{ language.name }}</span>
+                                <span
+                                    v-if="sourceLanguageCodes.has(language.code.toLowerCase())"
+                                    class="mono border-info/40 text-info rounded border px-1 py-px text-[10px] flex-none"
+                                    :data-test="'culture-source-' + language.code">
+                                    {{ t('subSearch.translationSource') }}
+                                </span>
+                                <span
+                                    v-if="isCultureChecked(language.code)"
+                                    class="text-accent ml-auto flex-none">
+                                    ✓
+                                </span>
+                            </div>
+                        </template>
+                    </div>
                 </div>
 
                 <!-- results header: meta + per-source status strip -->
@@ -663,7 +824,8 @@ onBeforeUnmount(teardown)
                         data-test="candidate-row">
                         <span
                             class="w-0.5 shrink-0 self-stretch rounded"
-                            :class="isTargetLang(row.candidate) ? 'bg-success' : 'bg-info'" />
+                            :class="isTargetLang(row.candidate) ? 'bg-success' : 'bg-info'"
+                            data-test="candidate-track" />
                         <div class="min-w-0 flex-1">
                             <div
                                 class="text-primary-content mono truncate text-xs font-medium"

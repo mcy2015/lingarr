@@ -1237,7 +1237,14 @@
         "noSources": "暂无可用字幕源 — 请先在设置中配置。",
         "downloadedSeasonPack": "已下载并匹配 {count} 集",
         "downloadCooldown": "{provider} 限流中,{time} 后可重试",
-        "downloadCooldownPending": "{provider} 限流中,请稍后重试"
+        "downloadCooldownPending": "{provider} 限流中,请稍后重试",
+        "moreLanguages": "更多语言",
+        "languageFilterLabel": "按代码或名称过滤语言",
+        "languagesLoading": "正在加载语言…",
+        "languagesFailed": "语言清单加载失败。",
+        "languageNoOptions": "暂无可选语言。",
+        "languageNoResults": "没有匹配的语言。",
+        "translationSource": "翻译源"
     },
     "dashboard": {
         "subtitles": {

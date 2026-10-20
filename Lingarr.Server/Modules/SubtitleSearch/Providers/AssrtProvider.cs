@@ -11,9 +11,9 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 /// Search is <c>GET /sub/search?q=</c>; the id then resolves a file list via
 /// <c>GET /sub/detail?id=</c> whose entries carry the direct file URLs. The
 /// API reports errors as <c>status != 0</c> inside an HTTP 200 body — those
-/// surface as InvalidResponse failures with the source's message. Candidate
-/// language defaults to the primary requested code: assrt's search is
-/// Chinese-focused and its per-sub language tags are unreliable.
+/// surface as InvalidResponse failures with the source's message. Candidates
+/// are always labelled <c>zh</c>: the search has no language parameter, the
+/// catalogue is Chinese, and the per-sub language tags are unreliable.
 /// </summary>
 [SubtitleProvider("assrt", requiresAuth: true)]
 public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISubtitleProviderHealth
@@ -43,6 +43,13 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
     /// "public test seams, no InternalsVisibleTo" ruling).
     /// </summary>
     public static TimeSpan ThrottleRetryDelay = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// The fixed language label of every assrt candidate: the search API has
+    /// no language parameter and its catalogue is Chinese, so the label is
+    /// the honest constant regardless of what the request asked for.
+    /// </summary>
+    private const string CandidateLanguage = "zh";
 
     private readonly ISettingsAccess _settings;
 
@@ -98,7 +105,7 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
 
                 using var detailDocument = await SubtitleHttp.SendForJsonAsync(
                     Http, detailRequest, ProviderKey, cancellationToken);
-                candidates.AddRange(ParseDetail(detailDocument, subId, request));
+                candidates.AddRange(ParseDetail(detailDocument, subId));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -184,7 +191,7 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
         return subIds;
     }
 
-    private List<SubtitleCandidate> ParseDetail(JsonDocument document, long subId, SubtitleSearchRequest request)
+    private List<SubtitleCandidate> ParseDetail(JsonDocument document, long subId)
     {
         EnsureOk(document, "sub/detail");
         var candidates = new List<SubtitleCandidate>();
@@ -207,7 +214,11 @@ public sealed class AssrtProvider : SubtitleProviderBase, ISubtitleProvider, ISu
         var title = SubtitleHttp.GetString(entry, "title");
         var nativeName = SubtitleHttp.GetString(entry, "native_name");
         var release = !string.IsNullOrWhiteSpace(nativeName) ? nativeName : title;
-        var language = request.Languages.FirstOrDefault()?.ToLowerInvariant() ?? "zh";
+        // The search has no language parameter and assrt's catalogue is
+        // Chinese-focused: the label must stay "zh" instead of echoing the
+        // requested code — any-language manual searches used to mark their
+        // results with whatever code was asked for.
+        var language = CandidateLanguage;
 
         // Official remaining-quota field of the detail response (assrt v1
         // reports the account's remaining downloads as sub.quota_remain;

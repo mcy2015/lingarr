@@ -77,6 +77,38 @@ public class ShooterProviderTests
     }
 
     [Fact]
+    public async Task Search_UnmappedLanguage_IsSkippedWithoutAnUpstreamRequest()
+    {
+        var handler = new StubHttpMessageHandler();
+
+        var provider = Create(handler);
+        var result = await provider.SearchAsync(Request(["ja"]), CancellationToken.None);
+
+        // Manual any-language search: shooter has no lang value for "ja",
+        // and a lang-less query would answer the whole library mislabelled
+        // as ja — the language is skipped silently, zero upstream requests.
+        Assert.Empty(result.Candidates);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Search_UnmappedLanguageAmongMapped_QueriesOnlyTheMappedOnes()
+    {
+        var handler = new StubHttpMessageHandler()
+            .EnqueueJson(SubtitleFixtures.Read("shooter", "search.json"));
+
+        var provider = Create(handler);
+        var result = await provider.SearchAsync(Request(["ja", "zh"]), CancellationToken.None);
+
+        // exactly one upstream request — for zh (chn); nothing for ja — and
+        // the fixture's hits are labelled with the language that queried them
+        Assert.Single(handler.Requests);
+        Assert.Contains("lang=chn", handler.SingleRequestUri!.ToString());
+        Assert.Equal(3, result.Candidates.Count);
+        Assert.All(result.Candidates, candidate => Assert.Equal("zh", candidate.Language));
+    }
+
+    [Fact]
     public async Task Search_WithoutFileHash_ReturnsEmptyWithoutHttpRequest()
     {
         var handler = new StubHttpMessageHandler();

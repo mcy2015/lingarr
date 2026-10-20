@@ -117,6 +117,30 @@ public class OpenSubtitlesProviderTests
     }
 
     [Fact]
+    public async Task Search_ResponseIso639ThreeLetter_FoldsToTwoLetterCodes()
+    {
+        // OpenSubtitles answers ISO 639-3 codes on the response side
+        // ("ita") while the culture-table picker offers the two-letter
+        // codes — the folding map bridges the two so a checked language
+        // actually matches its candidates. Unknown three-letter codes pass
+        // through unchanged instead of being dropped or guessed.
+        var search = """
+        {"total_pages": 1, "data": [
+          {"id": "1-1", "type": "subtitle", "attributes": {"language": "ita", "forced": false, "hearing_impaired": false, "uploader": {"name": "u"}, "files": [{"file_id": 11, "file_name": "Movie.2019.ita.srt"}]}},
+          {"id": "2-2", "type": "subtitle", "attributes": {"language": "qaa", "forced": false, "hearing_impaired": false, "uploader": {"name": "u"}, "files": [{"file_id": 12, "file_name": "Movie.2019.qaa.srt"}]}}
+        ]}
+        """;
+        var handler = new StubHttpMessageHandler().EnqueueJson(search);
+
+        var provider = Create(handler);
+        var result = await provider.SearchAsync(MovieRequest(), CancellationToken.None);
+
+        Assert.Equal(2, result.Candidates.Count);
+        Assert.Equal("it", result.Candidates[0].Language); // ita -> it
+        Assert.Equal("qaa", result.Candidates[1].Language); // unknown: kept verbatim
+    }
+
+    [Fact]
     public async Task SearchByHash_QueriesMovieHashesAndMarksHashMatch()
     {
         var handler = new StubHttpMessageHandler().EnqueueJson(SearchFixture);
