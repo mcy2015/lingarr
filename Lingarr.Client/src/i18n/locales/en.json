@@ -1062,6 +1062,7 @@
     "mediaDetail": {
         "back": "Library",
         "translateMissing": "Translate missing ▸",
+        "ctaTranslateSeason": "Translate missing · season ▸",
         "seasons": "Season",
         "episodeTitle": "Episode",
         "history": "Translation history",

@@ -1062,6 +1062,7 @@
     "mediaDetail": {
         "back": "媒体库",
         "translateMissing": "翻译缺失 ▸",
+        "ctaTranslateSeason": "翻译缺失 · 整季 ▸",
         "seasons": "季",
         "episodeTitle": "集标题",
         "history": "翻译历史",

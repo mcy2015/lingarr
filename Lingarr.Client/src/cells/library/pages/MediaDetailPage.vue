@@ -48,6 +48,10 @@
                 @click="openMovieSearch">
                 {{ t('mediaDetail.openSubtitleSearch') }}
             </button>
+            <!-- shows: the only in-page「翻译缺失」entry — it opens the
+                 language menu before queueing. Movies have no head button
+                 here (the label would duplicate the topbar CTA one-for-one,
+                 same handler): the CTA is their single entry. -->
             <ContextMenu v-if="isShow" @select="translateMissing">
                 <button
                     type="button"
@@ -55,13 +59,6 @@
                     {{ t('mediaDetail.translateMissing') }}
                 </button>
             </ContextMenu>
-            <button
-                v-else
-                type="button"
-                class="bg-accent text-accent-content border-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors hover:brightness-106"
-                @click="movieTranslateMissing">
-                {{ t('mediaDetail.translateMissing') }}
-            </button>
         </template>
 
         <!-- ═══ 媒体文件批次:海报 + 简介(*arr 详情页口径)—— 两者皆无时整块不渲染 ═══ -->
@@ -1622,21 +1619,25 @@ async function movieTranslateMissing(): Promise<void> {
 }
 
 // topbar CTA shares the screen button's action: shows queue for the primary
-// target directly (the language menu stays on the screen button), movies
-// run the busy/create path verbatim.
+// target directly (the language menu stays on the screen button, so the CTA
+// label says「整季」 to mark that difference), movies run the busy/create
+// path verbatim and keep the plain label — the CTA is their only entry.
 onMounted(() => {
-    uiStore.registerCta({ key: 'mediaDetail.translateMissing' }, () => {
-        if (isShow.value) {
-            const target = firstTargetLanguage.value
-            if (!target) {
-                toastStore.push({ message: t('mediaDetail.noTarget'), type: 'info' })
+    uiStore.registerCta(
+        { key: isShow.value ? 'mediaDetail.ctaTranslateSeason' : 'mediaDetail.translateMissing' },
+        () => {
+            if (isShow.value) {
+                const target = firstTargetLanguage.value
+                if (!target) {
+                    toastStore.push({ message: t('mediaDetail.noTarget'), type: 'info' })
+                    return
+                }
+                void translateMissing(target)
                 return
             }
-            void translateMissing(target)
-            return
+            void movieTranslateMissing()
         }
-        void movieTranslateMissing()
-    })
+    )
 })
 
 // ── chips / formatting (matrix vocabulary) ─────────────────────

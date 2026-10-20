@@ -389,6 +389,29 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
         expect(vm.activeRequests).toHaveLength(0) // refreshed history still empty
     })
 
+    it('keeps the topbar CTA as the movie translate entry — no duplicated head button', async () => {
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem, imdbId: 'tt2229499' }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper, uiStore } = await mountDetail('movie', '/library/movie/7')
+
+        // R1: the head actions keep their real entries (IMDb / import /
+        // subtitle search), but the「translate missing」button is gone — it
+        // duplicated the topbar CTA label and handler one-for-one
+        expect(wrapper.find('[data-test="imdb-link"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="open-subtitle-search"]').exists()).toBe(true)
+        expect(wrapper.text()).toContain(en.library.toolbar.import)
+        expect(
+            wrapper.findAll('button').find((b) => b.text() === en.mediaDetail.translateMissing)
+        ).toBeUndefined()
+        // the CTA stays registered under the plain label (no season wording
+        // on a movie) and keeps the busy/create handler
+        expect(uiStore.cta!.label).toEqual({ key: 'mediaDetail.translateMissing' })
+    })
+
     // ═══ C2:全目标语言就绪 → 静默完成态(无 Start translation)═══
     it('shows the silent all-done state instead of the start CTA when every target track is complete', async () => {
         libraryMock.mockResolvedValue({
@@ -544,7 +567,7 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
     it('queues every missing episode through the shared CTA, toasts the real count and jumps to the queue', async () => {
         const { uiStore, toastStore, router } = await mountDetail('show', '/library/show/3')
 
-        expect(uiStore.cta!.label).toEqual({ key: 'mediaDetail.translateMissing' })
+        expect(uiStore.cta!.label).toEqual({ key: 'mediaDetail.ctaTranslateSeason' })
         await uiStore.cta!.handler()
         await settle()
 
@@ -560,6 +583,21 @@ describe('MediaDetailPage · 剧集详情(screen-07)', () => {
         expect(toastStore.toasts[0].message).toBe('Queued 2 episodes · EN → ZH')
         expect(toastStore.toasts[0].type).toBe('success')
         expect(router.currentRoute.value.name).toBe('queue')
+    })
+
+    it('labels the show CTA「season」while the in-page button keeps the language-menu label', async () => {
+        const { wrapper, uiStore } = await mountDetail('show', '/library/show/3')
+
+        // R2: the topbar CTA runs the whole season for the first target
+        // without the language menu — its label must say so and differ from
+        // the in-page button (which still opens the menu)
+        expect(uiStore.cta!.label).toEqual({ key: 'mediaDetail.ctaTranslateSeason' })
+        const screenButton = wrapper
+            .findAll('button')
+            .find((b) => b.text() === en.mediaDetail.translateMissing)
+        expect(screenButton).toBeDefined()
+        expect(en.mediaDetail.ctaTranslateSeason).toContain('season')
+        expect(en.mediaDetail.ctaTranslateSeason).not.toBe(en.mediaDetail.translateMissing)
     })
 
     it('toasts "nothing to queue" when every episode already has the target track', async () => {
