@@ -149,9 +149,9 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
     settingStore.storeSetting(SETTINGS.SONARR_SETTINGS_COMPLETED, 'true')
     settingStore.storeSetting(SETTINGS.TARGET_LANGUAGES, [{ code: 'ZH', name: 'Chinese' }])
 
-    // messages cover only the keys the row title link, the audio badges and
-    // the bulk toasts assert; everything else renders as its key and is not
-    // asserted anywhere
+    // messages cover only the keys the row title link, the audio badges, the
+    // status-column badges and the bulk toasts assert; everything else renders
+    // as its key and is not asserted anywhere
     const i18n = createI18n({
         legacy: false,
         locale: 'en',
@@ -160,7 +160,12 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
                 library: {
                     table: { openDetail: 'Open {type} {title} details' },
                     badge: { show: 'Show', movie: 'Movie' },
-                    nativeBadge: 'Native Chinese',
+                    state: {
+                        none: '· Not queued',
+                        completedRatio: '✓ {done}/{total} completed',
+                        native: '✓ No subtitles needed'
+                    },
+                    nativeBadge: 'No subtitles needed',
                     audioUnknownBadge: 'Audio unknown',
                     bulk: {
                         created: 'Created {count} translation jobs',
@@ -559,9 +564,9 @@ describe('LibraryPage', () => {
 
         const badges = marked.wrapper.findAll('[data-test="native-audio-badge"]')
         expect(badges).toHaveLength(1)
-        expect(badges[0].text()).toBe('Native Chinese')
+        expect(badges[0].text()).toBe('No subtitles needed')
         // the weak badge trails the language chips inside the tracks cell
-        expect(marked.wrapper.findAll('tbody tr')[0].text()).toContain('Native Chinese')
+        expect(marked.wrapper.findAll('tbody tr')[0].text()).toContain('No subtitles needed')
 
         // unmarked rows (and absent field = legacy payload) render nothing
         const plain = await mountLibraryPage()
@@ -589,6 +594,56 @@ describe('LibraryPage', () => {
         // (undefined, not null) render nothing
         const plain = await mountLibraryPage()
         expect(plain.wrapper.findAll('[data-test="audio-unknown-badge"]')).toHaveLength(0)
+    })
+
+    // ── multi-dimension status column: exemption badge beside the state ──
+    it('renders the no-subtitle-needed badge in the status column of every exempt row', async () => {
+        // the「无需字幕」(native) filter result: every row carries the exemption
+        libraryMock.mockResolvedValueOnce({
+            ...libraryPage,
+            items: [show1, movie2, show3].map((item) => ({ ...item, needsNoSubtitles: true }))
+        })
+        const exempt = await mountLibraryPage()
+
+        const badges = exempt.wrapper.findAll('[data-test="state-no-subtitle-needed"]')
+        expect(badges).toHaveLength(3)
+        expect(badges[0].text()).toBe('✓ No subtitles needed')
+
+        // unmarked rows (and legacy payloads without the field) render none
+        const plain = await mountLibraryPage()
+        expect(plain.wrapper.findAll('[data-test="state-no-subtitle-needed"]')).toHaveLength(0)
+    })
+
+    it('shows the exemption badge beside the translation state without masking it', async () => {
+        libraryMock.mockResolvedValueOnce({
+            ...libraryPage,
+            items: [
+                // exempt + no translation flow: both dimensions render
+                { ...show1, needsNoSubtitles: true },
+                // exempt + completed flow: the translation badge stays visible
+                { ...movie2, needsNoSubtitles: true, state: 'Completed', completedCount: 1 },
+                // not exempt: status column renders the plain state label only
+                show3
+            ]
+        })
+        const { wrapper } = await mountLibraryPage()
+
+        const badges = wrapper.findAll('[data-test="state-no-subtitle-needed"]')
+        expect(badges).toHaveLength(2)
+
+        // exempt + None:「未排队」and「无需字幕」coexist in the status cell
+        const idleCell = badges[0].element.closest('td')
+        expect(idleCell?.textContent).toContain('· Not queued')
+        expect(idleCell?.textContent).toContain('✓ No subtitles needed')
+
+        // exempt + Completed: the translation-flow badge is not masked
+        const doneCell = badges[1].element.closest('td')
+        expect(doneCell?.textContent).toContain('✓ 1/1 completed')
+        expect(doneCell?.textContent).toContain('✓ No subtitles needed')
+
+        // unexempt row: status column unchanged from before this feature
+        const plainCell = wrapper.findAll('tbody tr')[2].findAll('td')[4]
+        expect(plainCell.text()).toBe('· Not queued')
     })
 
     // ── library B2: metadata chips (year · rating · quality · size) ───

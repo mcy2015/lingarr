@@ -161,9 +161,10 @@
                                         class="mono text-secondary-content/60 inline-flex items-center text-[11px]">
                                         +{{ item.tracks.length - visibleTrackCount }}
                                     </span>
-                                    <!-- 需求卡 B:原生中文弱标记 —— 仅真实豁免态渲染;
-                                         音轨未知渲染「?」弱标记(与 audio-unknown 过滤
-                                         一一对应,AC10),缺失字段的存量载荷不渲染 -->
+                                    <!-- 需求卡 B:豁免弱标记(词汇与筛选下拉统一为「无需字幕」,
+                                         原因移入 title)—— 仅真实豁免态渲染;音轨未知渲染「?」
+                                         弱标记(与 audio-unknown 过滤一一对应,AC10),缺失字段的
+                                         存量载荷不渲染 -->
                                     <span
                                         v-if="item.needsNoSubtitles"
                                         class="mono border-line/60 text-secondary-content/70 inline-flex items-center rounded border border-dashed px-1 py-px text-[10px]"
@@ -181,7 +182,19 @@
                                 </div>
                             </td>
                             <td :class="tdClass">
-                                <span :class="stateClass(item)">{{ stateLabel(item) }}</span>
+                                <!-- 多维度状态组合呈现:翻译流转态与正交的「无需字幕」
+                                     豁免态并排渲染,互不遮盖 —— 豁免行的翻译态徽章
+                                     (如「未排队」/「✓ 完成」)始终可见 -->
+                                <div class="inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                    <span :class="stateClass(item)">{{ stateLabel(item) }}</span>
+                                    <span
+                                        v-if="item.needsNoSubtitles"
+                                        class="mono border-line/60 text-secondary-content/70 inline-flex items-center whitespace-nowrap rounded border border-dashed px-1 py-px text-[10px]"
+                                        :title="t('library.nativeBadgeTitle')"
+                                        data-test="state-no-subtitle-needed">
+                                        {{ t('library.state.native') }}
+                                    </span>
+                                </div>
                             </td>
                             <td :class="tdClass">
                                 <time class="mono text-secondary-content text-xs">
