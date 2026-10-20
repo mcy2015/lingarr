@@ -6,8 +6,11 @@ namespace Lingarr.Core.Entities;
 /// <summary>
 /// One persisted download attempt in the subtitle-search history (M0008).
 /// Rows are appended by the download pipeline (⑦) for every outcome —
-/// successes, failures, low-confidence skips and already-exists skips — so
-/// the history screen and the KPIs count from real attempts only. A
+/// successes, failures, low-confidence skips, already-exists skips and
+/// cooldown-skipped refusals — so the history screen and the KPIs count
+/// from real interactions only; a <see cref="SubtitleDownloadResult.CooldownSkipped"/>
+/// row records a refused click (the source sat in its rate-limit window,
+/// no upstream request was made), never a fabricated attempt. A
 /// re-download simply lands a new file and a new row: the never-implemented
 /// replacement-chain columns were dropped in M0010 (dead schema misleads),
 /// and the files themselves stay on disk for the user's cleanup policy.
@@ -55,7 +58,8 @@ public class SubtitleDownload
     /// <summary>Outcome of the attempt.</summary>
     public required SubtitleDownloadResult Result { get; set; }
 
-    /// <summary>Failure reason when <see cref="Result"/> is Failed.</summary>
+    /// <summary>Failure reason when <see cref="Result"/> is Failed; on a
+    /// CooldownSkipped row, the source's original throttle message.</summary>
     public string? Error { get; set; }
 
     /// <summary>Attempt timestamp — the table deliberately has no updated_at.</summary>
@@ -88,5 +92,14 @@ public enum SubtitleDownloadResult
     LowConfidenceSkipped = 2,
 
     /// <summary>A subtitle for the language already existed.</summary>
-    AlreadyExistsSkipped = 3
+    AlreadyExistsSkipped = 3,
+
+    /// <summary>
+    /// The candidate's source sat in an unexpired RateLimited cooldown
+    /// (assrt's persistent 493/509 download throttle after the patient
+    /// retry) — no upstream request was made; the download response
+    /// carries the retry moment separately. Additive value 4: the M0008
+    /// int codes of the existing outcomes never move.
+    /// </summary>
+    CooldownSkipped = 4
 }

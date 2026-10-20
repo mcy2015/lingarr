@@ -216,6 +216,43 @@ describe('SubtitleSearchHistoryPage', () => {
         expect(wrapper.find('tbody a').exists()).toBe(false)
     })
 
+    it('renders the CooldownSkipped verdict with its own label and filter option', async () => {
+        // assrt 493 closure: a refused click inside the rate-limit window is
+        // its own outcome — labeled distinctly and never shown as Failed.
+        historyMock.mockResolvedValue({
+            items: [
+                historyItem({
+                    id: 11,
+                    result: 'CooldownSkipped',
+                    error: 'assrt throttled the download (HTTP 493).',
+                    fileName: null
+                })
+            ],
+            nextCursor: null
+        })
+        const { wrapper } = await mountHistoryPage()
+
+        expect(wrapper.find('[data-test="sub-history-result-11"]').text()).toBe(
+            en.subHistory.result.CooldownSkipped
+        )
+        // the badge stays honest even when the row carries the source's
+        // original throttle message (tooltip, not label)
+        expect(wrapper.find('[data-test="sub-history-result-11"]').attributes('title')).toBe(
+            'assrt throttled the download (HTTP 493).'
+        )
+        expect(wrapper.find('[data-test="sub-history-result-11"]').text()).not.toBe(
+            en.subHistory.result.Failed
+        )
+
+        // the result filter offers its own bucket — a CooldownSkipped row
+        // only matches CooldownSkipped, never the Failed filter
+        const options = wrapper
+            .find('[data-test="sub-history-filter-result"]')
+            .findAll('option')
+            .map((option) => (option.element as HTMLOptionElement).value)
+        expect(options).toContain('CooldownSkipped')
+    })
+
     it('resets to the first page when any filter changes', async () => {
         const { wrapper } = await mountHistoryPage()
         expect(historyMock).toHaveBeenCalledTimes(1)

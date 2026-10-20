@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -55,8 +56,8 @@ public class SubtitleDownloadPipelineTests
 
     private static byte[] SrtPayload => Encoding.UTF8.GetBytes(SrtText);
 
-    private static SubtitleCandidate Candidate(string language = "en") => new(
-        "fake",
+    private static SubtitleCandidate Candidate(string language = "en", string provider = "fake") => new(
+        provider,
         ExternalId: "ext-1",
         language,
         MatchScore: 90,
@@ -125,6 +126,29 @@ public class SubtitleDownloadPipelineTests
             SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
             => Task.FromResult(new Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload(
                 "fake", fileName, "zip", archive));
+    }
+
+    /// <summary>
+    /// Provider double whose download answers a plain SRT payload and
+    /// counts the calls — the cooldown-gate assertions need to prove ZERO
+    /// upstream fetches inside the window.
+    /// </summary>
+    internal sealed class CountingProvider(string providerKey = "fake") : ISubtitleProvider
+    {
+        public string Provider => providerKey;
+        public int DownloadCalls { get; private set; }
+
+        public Task<SubtitleSearchResult> SearchAsync(
+            SubtitleSearchRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(SubtitleSearchResult.Empty);
+
+        public Task<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload> DownloadAsync(
+            SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
+        {
+            DownloadCalls++;
+            return Task.FromResult(new Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload(
+                providerKey, "Movie.2019.WEBDL-1080p.srt", "srt", SrtPayload));
+        }
     }
 
     // ── Blacklist write side (P2 data batch): content-invalid failures
@@ -243,6 +267,108 @@ public class SubtitleDownloadPipelineTests
         // Midnight fallback: exactly the next UTC day boundary.
         Assert.Equal(TimeSpan.Zero, cooldown.Until.TimeOfDay);
         Assert.Equal(cooldown.Until, new DateTimeOffset(cooldown.Until.UtcDateTime.Date, TimeSpan.Zero));
+    }
+
+    // ── assrt 493 download-cooldown closure (dc2d6a4 follow-up): the
+    // RateLimited verdict of a persistent 493/509 throttle now persists its
+    // cooldown on the download side (only DailyLimit did before), and the
+    // download entry reads the map — inside the window a re-click makes
+    // zero upstream requests and answers CooldownSkipped immediately; once
+    // the window passes, the ordinary download path resumes.
+
+    [Fact]
+    public async Task Download_PersistentThrottle493_PersistsTheRateLimitCooldown()
+    {
+        // ForHttpStatus maps the non-standard 493 onto RateLimited with the
+        // one-minute span — the same verdict AssrtProvider surfaces after
+        // its patient retry (AssrtProviderTests pin the provider contract;
+        // this pins the pipeline wiring that used to drop the span).
+        using var fixture = new SubtitleEndpointFixture(new FailingProvider(
+            SubtitleProviderException.ForHttpStatus("fake", (HttpStatusCode)493)));
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Failed, outcome.Result);
+        Assert.Contains("throttled the download", outcome.Error);
+
+        var cooldowns = await fixture.Cooldowns.GetActiveAsync();
+        var cooldown = cooldowns["fake"];
+        Assert.Equal(nameof(SubtitleProviderFailureReason.RateLimited), cooldown.Reason);
+        // One-minute window from the verdict (493/509 span).
+        Assert.InRange(cooldown.Until,
+            DateTimeOffset.UtcNow.AddSeconds(55), DateTimeOffset.UtcNow.AddSeconds(65));
+
+        // A throttle is a source state, never a candidate defect — and the
+        // attempt keeps its Failed history row.
+        Assert.Equal(0, await fixture.DbContext.SubtitleSearchBlacklists.CountAsync());
+        Assert.Equal(1, await fixture.DbContext.SubtitleDownloads.CountAsync());
+    }
+
+    [Fact]
+    public async Task Download_WithinRateLimitCooldown_SkipsTheUpstreamFetchEntirely()
+    {
+        // The user-visible bug: every re-click on a cached candidate paid
+        // two throttled HTTP rounds + the 8s patient retry before the
+        // failure toast. Inside the window the gate answers CooldownSkipped
+        // with zero provider calls and without waiting.
+        var fake = new CountingProvider();
+        var other = new CountingProvider("other");
+        using var fixture = new SubtitleEndpointFixture(fake, other);
+        await fixture.Cooldowns.RecordFailureAsync(
+            "fake", SubtitleProviderException.ForHttpStatus("fake", (HttpStatusCode)493));
+
+        var stopwatch = Stopwatch.StartNew();
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+        stopwatch.Stop();
+
+        Assert.Equal(SubtitleDownloadResult.CooldownSkipped, outcome.Result);
+        Assert.Null(outcome.FilePath);
+        Assert.Equal(0, fake.DownloadCalls); // zero upstream requests
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1),
+            $"the cooldown skip must be immediate, took {stopwatch.Elapsed}");
+        Assert.NotNull(outcome.CooldownUntilUtc);
+
+        // The refused click still lands its history row, distinct from Failed.
+        var row = await fixture.DbContext.SubtitleDownloads.SingleAsync();
+        Assert.Equal(SubtitleDownloadResult.CooldownSkipped, row.Result);
+
+        // One source's cooldown never touches another source's downloads.
+        var unaffected = await fixture.Pipeline.DownloadAsync(
+            Candidate("en", provider: "other"), MediaType.Movie, fixture.MovieId,
+            SubtitleDownloadSource.Manual, searchSessionId: null, CancellationToken.None);
+        Assert.Equal(SubtitleDownloadResult.Succeeded, unaffected.Result);
+        Assert.Equal(1, other.DownloadCalls);
+    }
+
+    [Fact]
+    public async Task Download_AfterTheRateLimitCooldownExpires_ResumesTheNormalPath()
+    {
+        // An expired entry never survives GetActiveAsync — the download
+        // runs the ordinary fetch path again.
+        var provider = new CountingProvider();
+        using var fixture = new SubtitleEndpointFixture(provider);
+        fixture.Settings.SetSetting(
+            Lingarr.Core.Configuration.SettingKeys.SubtitleSearch.SourceCooldowns,
+            System.Text.Json.JsonSerializer.Serialize(
+                new Dictionary<string, SubtitleSourceCooldown>
+                {
+                    ["fake"] = new SubtitleSourceCooldown(
+                        DateTimeOffset.UtcNow.AddMinutes(-1),
+                        nameof(SubtitleProviderFailureReason.RateLimited),
+                        "fake throttled the download (HTTP 493).")
+                })).GetAwaiter().GetResult();
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("en"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(1, provider.DownloadCalls);
+        Assert.Null(outcome.CooldownUntilUtc);
     }
 
     [Fact]

@@ -94,6 +94,14 @@ public sealed record SubtitleDownloadRequestBody(
 
 /// <summary>Download response: the landing path plus the history row id.</summary>
 /// <param name="FilesLanded">How many files this download wrote — 1 for an ordinary candidate, N when a whole-season archive fanned out one entry per episode of the initiating season.</param>
+/// <param name="CooldownUntilUtc">
+/// UTC retry moment when <paramref name="Result"/> is CooldownSkipped — the
+/// source sat in its RateLimited window and no upstream request was made
+/// (the assrt 493 closure); null on every other result. Serializes as an
+/// ISO-8601 UTC timestamp and is dropped by the null-dropping response
+/// serializer when absent, mirroring the cooldown pair of the providers
+/// endpoint.
+/// </param>
 public sealed record SubtitleDownloadResponse(
     int HistoryId,
     string? FilePath,
@@ -101,7 +109,8 @@ public sealed record SubtitleDownloadResponse(
     string? Error,
     int? TranslationRequestId,
     bool TranslationDuplicate,
-    int FilesLanded);
+    int FilesLanded,
+    DateTimeOffset? CooldownUntilUtc = null);
 
 /// <summary>Pin/unpin request (⑥).</summary>
 /// <param name="MediaId">Library id of the movie/episode.</param>
@@ -170,7 +179,7 @@ public sealed record SubtitleProviderResponse(
 /// <param name="Provider">Source key ("opensubtitles"…).</param>
 /// <param name="Language">Normalized language code of the track.</param>
 /// <param name="Source">How the attempt started — Manual/Auto/Webhook.</param>
-/// <param name="Result">Succeeded/Failed/LowConfidenceSkipped/AlreadyExistsSkipped.</param>
+/// <param name="Result">Succeeded/Failed/LowConfidenceSkipped/AlreadyExistsSkipped/CooldownSkipped.</param>
 /// <param name="Error">Readable failure reason when <paramref name="Result"/> is Failed.</param>
 /// <param name="FileName">File name of the landed subtitle; null when nothing was written.</param>
 /// <param name="CreatedAt">Attempt timestamp.</param>
@@ -424,7 +433,8 @@ public class SubtitleSearchController : ControllerBase
             outcome.Error,
             outcome.TranslationRequestId,
             outcome.TranslationDuplicate,
-            outcome.FilesLanded));
+            outcome.FilesLanded,
+            outcome.CooldownUntilUtc));
     }
 
     /// <summary>
@@ -515,7 +525,7 @@ public class SubtitleSearchController : ControllerBase
             {
                 return BadRequest(new
                 {
-                    message = "result must be one of Succeeded, Failed, LowConfidenceSkipped, AlreadyExistsSkipped."
+                    message = "result must be one of Succeeded, Failed, LowConfidenceSkipped, AlreadyExistsSkipped, CooldownSkipped."
                 });
             }
 

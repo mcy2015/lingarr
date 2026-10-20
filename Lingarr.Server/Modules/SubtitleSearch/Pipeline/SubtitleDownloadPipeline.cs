@@ -31,6 +31,7 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 /// <param name="TranslationRequestId">First translation request created (⑦ step ⑦, one per target language); null when none.</param>
 /// <param name="TranslationDuplicate">True when at least one target language was skipped because the same content/target pair is already tracked.</param>
 /// <param name="FilesLanded">How many files this attempt wrote: 1 for an ordinary candidate, N when a whole-season archive fanned out one entry per episode, 0 when nothing landed.</param>
+/// <param name="CooldownUntilUtc">Earliest retry moment when <see cref="Result"/> is CooldownSkipped (the persisted cooldown's Until); null otherwise.</param>
 public sealed record SubtitleDownloadOutcome(
     int HistoryId,
     string? FilePath,
@@ -38,7 +39,8 @@ public sealed record SubtitleDownloadOutcome(
     string? Error = null,
     int? TranslationRequestId = null,
     bool TranslationDuplicate = false,
-    int FilesLanded = 0);
+    int FilesLanded = 0,
+    DateTimeOffset? CooldownUntilUtc = null);
 
 /// <summary>
 /// Download post-processing pipeline (tech design ⑦): fetch → magic-number
@@ -184,6 +186,23 @@ public sealed class SubtitleDownloadPipeline
                 candidate, mediaType, mediaId, source, searchSessionId,
                 SubtitleDownloadResult.Failed, filePath: null,
                 error: $"Unknown subtitle provider '{candidate.Provider}'.");
+        }
+
+        // ⓪ rate-limit cooldown gate (the assrt 493 closure): a source that
+        // just surfaced RateLimited sits in the persisted cooldown map until
+        // its window passes — a re-click on a cached candidate (or an auto
+        // round) must not re-fire the upstream fetch, where every attempt
+        // costs two throttled HTTP rounds plus the provider's patient retry
+        // delay, only to fail again. Only the RateLimited bucket short-
+        // circuits here; every other cooldown bucket keeps its existing
+        // per-reason handling below. The refused click still lands its
+        // history row — honestly distinct from a Failed attempt.
+        if (await GetRateLimitCooldownAsync(candidate.Provider, cancellationToken) is { } rateLimit)
+        {
+            return await RecordAsync(
+                candidate, mediaType, mediaId, source, searchSessionId,
+                SubtitleDownloadResult.CooldownSkipped, filePath: null,
+                error: rateLimit.Error, cooldownUntilUtc: rateLimit.Until);
         }
 
         byte[] payloadContent;
@@ -421,7 +440,8 @@ public sealed class SubtitleDownloadPipeline
         SubtitleDownloadResult result,
         string? filePath,
         string? error,
-        int filesLanded = 0)
+        int filesLanded = 0,
+        DateTimeOffset? cooldownUntilUtc = null)
     {
         var row = new Lingarr.Core.Entities.SubtitleDownload
         {
@@ -441,7 +461,8 @@ public sealed class SubtitleDownloadPipeline
         };
         _dbContext.SubtitleDownloads.Add(row);
         await _dbContext.SaveChangesAsync();
-        return new SubtitleDownloadOutcome(row.Id, filePath, result, error, FilesLanded: filesLanded);
+        return new SubtitleDownloadOutcome(
+            row.Id, filePath, result, error, FilesLanded: filesLanded, CooldownUntilUtc: cooldownUntilUtc);
     }
 
     /// <summary>
@@ -455,8 +476,12 @@ public sealed class SubtitleDownloadPipeline
     /// failures never blacklist. A daily-quota-exhaustion verdict
     /// (OpenSubtitles 406 with remaining:0 — the DailyLimit bucket) cools
     /// the source down until its own reset moment (R3 circuit-breaker; best
-    /// effort — a cooldown write must never mask the history row). Every
-    /// attempt lands its Failed history row.
+    /// effort — a cooldown write must never mask the history row), and a
+    /// RateLimited verdict (assrt's persistent 493/509 download throttle
+    /// after the patient retry, or a 429) persists its cooldown span too —
+    /// the same ⑧ mapping the search side applies, closing the loop the
+    /// download-entry gate reads. Every attempt lands its Failed history
+    /// row.
     /// </summary>
     private async Task<SubtitleDownloadOutcome> HandleExtractionFailureAsync(
         SubtitleCandidate candidate,
@@ -475,6 +500,11 @@ public sealed class SubtitleDownloadPipeline
         if (exception.Reason == SubtitleProviderFailureReason.DailyLimit)
         {
             await RecordQuotaCooldownSafeAsync(candidate.Provider, exception, cancellationToken);
+        }
+
+        if (exception.Reason == SubtitleProviderFailureReason.RateLimited)
+        {
+            await RecordFailureCooldownSafeAsync(candidate, exception, cancellationToken);
         }
 
         return await RecordAsync(
@@ -914,6 +944,65 @@ public sealed class SubtitleDownloadPipeline
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not persist the quota cooldown of {Provider}.", provider);
+        }
+    }
+
+    /// <summary>
+    /// Rate-limit cooldown recording must never fail the attempt's history
+    /// row either — the same best-effort ruling as
+    /// <see cref="RecordQuotaCooldownSafeAsync"/>, applied to the
+    /// RateLimited bucket (assrt's 493/509 throttle carries a one-minute
+    /// span, a 429 its own Retry-After-derived one). This is the write the
+    /// dc2d6a4 design missed on the download side: without it the span was
+    /// dropped and every re-click re-fired the throttled upstream.
+    /// </summary>
+    private async Task RecordFailureCooldownSafeAsync(
+        SubtitleCandidate candidate, SubtitleProviderException exception, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _cooldowns.RecordFailureAsync(candidate.Provider, exception, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist the rate-limit cooldown of {Provider}.",
+                candidate.Provider);
+        }
+    }
+
+    /// <summary>
+    /// The candidate source's active RateLimited cooldown, null when it has
+    /// none. Only that bucket gates the download — quota/credential
+    /// cooldowns keep their per-reason handling, and an expired entry never
+    /// survives <see cref="SubtitleSourceCooldownStore.GetActiveAsync"/> in
+    /// the first place. Best effort by design: a failing cooldown read
+    /// degrades to "no cooldown" and lets the upstream answer for itself —
+    /// a settings hiccup must never block a download.
+    /// </summary>
+    private async Task<SubtitleSourceCooldown?> GetRateLimitCooldownAsync(
+        string provider, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var active = await _cooldowns.GetActiveAsync(cancellationToken);
+            return active.TryGetValue(provider, out var cooldown)
+                   && cooldown.Reason == nameof(SubtitleProviderFailureReason.RateLimited)
+                ? cooldown
+                : null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not read the cooldown map before downloading from {Provider}; proceeding.", provider);
+            return null;
         }
     }
 

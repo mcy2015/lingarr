@@ -431,6 +431,53 @@ describe('SubtitleSearchModal · 下载语义与 toast', () => {
         expect(toast.toasts[0].type).toBe('error')
     })
 
+    it('toasts the localized retry moment on a CooldownSkipped answer', async () => {
+        // assrt 493 closure: inside the rate-limit window the server skips
+        // the upstream fetch and answers the retry moment — the toast names
+        // the source and quotes HH:MM in the viewer's local zone.
+        const untilIso = '2026-10-20T09:41:00.000Z'
+        downloadMock.mockResolvedValue(
+            downloadResponse({
+                filePath: '',
+                result: 'CooldownSkipped',
+                error: null,
+                cooldownUntilUtc: untilIso
+            })
+        )
+        const { toast } = await mountModal()
+
+        await clickButton(en.subSearch.downloadOnly)
+        const localHm = (() => {
+            const date = new Date(untilIso)
+            return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+        })()
+        expect(toast.toasts[0].message).toBe(
+            en.subSearch.downloadCooldown
+                .replace('{provider}', 'opensubtitles')
+                .replace('{time}', localHm)
+        )
+        expect(toast.toasts[0].type).toBe('info')
+        // nothing landed: the row stays unlocked for a retry after the window
+        const buttons = [...document.querySelectorAll('[data-test="candidate-row"] button')].filter(
+            (b) => !b.hasAttribute('aria-label')
+        )
+        expect(buttons.length).toBeGreaterThan(0)
+        expect(buttons.every((b) => !(b as HTMLButtonElement).disabled)).toBe(true)
+    })
+
+    it('falls back to the no-moment cooldown copy when the response carries no timestamp', async () => {
+        downloadMock.mockResolvedValue(
+            downloadResponse({ filePath: '', result: 'CooldownSkipped', error: null })
+        )
+        const { toast } = await mountModal()
+
+        await clickButton(en.subSearch.downloadOnly)
+        expect(toast.toasts[0].message).toBe(
+            en.subSearch.downloadCooldownPending.replace('{provider}', 'opensubtitles')
+        )
+        expect(toast.toasts[0].type).toBe('info')
+    })
+
     it('extracts the server message when the download request throws', async () => {
         downloadMock.mockRejectedValue({
             isAxiosError: true,

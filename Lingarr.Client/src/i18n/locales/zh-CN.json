@@ -1235,7 +1235,9 @@
         "downloadRejected": "下载失败 · {result} · {error}",
         "translationDuplicate": "已存在同类翻译请求",
         "noSources": "暂无可用字幕源 — 请先在设置中配置。",
-        "downloadedSeasonPack": "已下载并匹配 {count} 集"
+        "downloadedSeasonPack": "已下载并匹配 {count} 集",
+        "downloadCooldown": "{provider} 限流中,{time} 后可重试",
+        "downloadCooldownPending": "{provider} 限流中,请稍后重试"
     },
     "dashboard": {
         "subtitles": {
@@ -1269,7 +1271,8 @@
             "Succeeded": "成功",
             "Failed": "失败",
             "LowConfidenceSkipped": "低置信跳过",
-            "AlreadyExistsSkipped": "已有字幕"
+            "AlreadyExistsSkipped": "已有字幕",
+            "CooldownSkipped": "限流跳过"
         },
         "loadMore": "加载更多",
         "loadingMore": "加载中…",

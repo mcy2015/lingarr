@@ -389,6 +389,25 @@ async function download(row: CandidateRow, skipTranslation: boolean): Promise<vo
                 type: 'success'
             })
             emit('downloaded', result.filePath)
+        } else if (result.result === 'CooldownSkipped') {
+            // the source sits in its rate-limit window (assrt 493 closure):
+            // the server skipped the upstream fetch entirely and answered
+            // the retry moment — advisory state, not a download failure
+            const time = result.cooldownUntilUtc
+                ? formatCooldownTime(result.cooldownUntilUtc)
+                : null
+            toast.push({
+                message:
+                    time === null
+                        ? t('subSearch.downloadCooldownPending', {
+                              provider: row.candidate.provider
+                          })
+                        : t('subSearch.downloadCooldown', {
+                              provider: row.candidate.provider,
+                              time
+                          }),
+                type: 'info'
+            })
         } else if (result.error) {
             toast.push({
                 message: t('subSearch.downloadRejected', {
@@ -427,6 +446,15 @@ function formatBytes(bytes: number | null): string {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/// Local HH:MM of the UTC retry moment the CooldownSkipped response
+/// carries — the toast quotes the concrete moment, not a span (a span goes
+/// stale the moment it is read). Null for an unparsable/absent timestamp.
+function formatCooldownTime(iso: string): string | null {
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return null
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 // ── close / focus / a11y ─────────────────────────────────────

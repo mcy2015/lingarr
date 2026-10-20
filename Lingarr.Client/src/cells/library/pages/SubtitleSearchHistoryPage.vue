@@ -199,21 +199,25 @@ const RESULT_KEYS: SUBTITLE_HISTORY_RESULT[] = [
     'Succeeded',
     'Failed',
     'LowConfidenceSkipped',
-    'AlreadyExistsSkipped'
+    'AlreadyExistsSkipped',
+    'CooldownSkipped'
 ]
 
 const RESULT_LABELS: Record<string, string> = {
     Succeeded: 'subHistory.result.Succeeded',
     Failed: 'subHistory.result.Failed',
     LowConfidenceSkipped: 'subHistory.result.LowConfidenceSkipped',
-    AlreadyExistsSkipped: 'subHistory.result.AlreadyExistsSkipped'
+    AlreadyExistsSkipped: 'subHistory.result.AlreadyExistsSkipped',
+    CooldownSkipped: 'subHistory.result.CooldownSkipped'
 }
 
 const RESULT_CLASSES: Record<string, string> = {
     Succeeded: 'text-success-content border-success/40 bg-success/10',
     Failed: 'text-danger border-danger/40 bg-danger/10',
     LowConfidenceSkipped: 'text-warning-content border-warning/40 bg-warning/10',
-    AlreadyExistsSkipped: 'border-line/60 text-secondary-content/70 border-dashed'
+    AlreadyExistsSkipped: 'border-line/60 text-secondary-content/70 border-dashed',
+    // 限流窗口内的拒发(assrt 493 闭环):信息态配色,与 Failed 严格区分
+    CooldownSkipped: 'text-info border-info/40 bg-info/10'
 }
 
 const SOURCE_LABELS: Record<string, string> = {

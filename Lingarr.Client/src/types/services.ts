@@ -596,7 +596,10 @@ export interface ISubtitleSearchOutcome {
 /// Mirrors the backend SubtitleDownloadResponse record: filePath non-empty
 /// means the file landed; translationRequestId non-null means the download
 /// also entered the translation queue; translationDuplicate flags an already
-/// existing equivalent request.
+/// existing equivalent request. cooldownUntilUtc only rides a
+/// `CooldownSkipped` result (the source sat in its rate-limit window, no
+/// upstream request was made) — an ISO-8601 UTC timestamp of the retry
+/// moment, absent/null otherwise (the response serializer drops nulls).
 export interface ISubtitleDownloadResponse {
     historyId: number
     filePath: string | null
@@ -604,6 +607,7 @@ export interface ISubtitleDownloadResponse {
     error: string | null
     translationRequestId: number | null
     translationDuplicate: boolean
+    cooldownUntilUtc?: string | null
 }
 
 export interface ISubtitleBacklog {
@@ -615,7 +619,15 @@ export interface ISubtitleBacklog {
 
 /// Subtitle attempt outcomes on the wire (SubtitleDownloadResult enum
 /// names — the same strings the download response's `result` carries).
-export type SUBTITLE_HISTORY_RESULT = 'Succeeded' | 'Failed' | 'LowConfidenceSkipped' | 'AlreadyExistsSkipped'
+/// CooldownSkipped = the source sat in its rate-limit window and no
+/// upstream request was made (distinct from Failed — never matches the
+/// Failed filter).
+export type SUBTITLE_HISTORY_RESULT =
+    | 'Succeeded'
+    | 'Failed'
+    | 'LowConfidenceSkipped'
+    | 'AlreadyExistsSkipped'
+    | 'CooldownSkipped'
 
 /// How the attempt was started (SubtitleDownloadSource enum names).
 export type SUBTITLE_HISTORY_SOURCE = 'Manual' | 'Auto' | 'Webhook'

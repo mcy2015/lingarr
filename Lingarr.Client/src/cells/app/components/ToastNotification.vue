@@ -1,6 +1,6 @@
 <template>
     <div
-        class="pointer-events-none fixed top-4 right-4 z-50 flex w-full max-w-sm flex-col items-end gap-2">
+        class="pointer-events-none fixed top-4 right-4 z-[80] flex w-full max-w-sm flex-col items-end gap-2">
         <transition-group
             enter-active-class="transition ease-out duration-300 transform"
             enter-from-class="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"

@@ -1235,7 +1235,9 @@
         "downloadRejected": "Download failed · {result} · {error}",
         "translationDuplicate": "A similar translation request already exists",
         "noSources": "No subtitle source available — configure one in Settings first.",
-        "downloadedSeasonPack": "Downloaded and matched {count} episodes"
+        "downloadedSeasonPack": "Downloaded and matched {count} episodes",
+        "downloadCooldown": "{provider} is rate-limited — try again after {time}",
+        "downloadCooldownPending": "{provider} is rate-limited — try again shortly"
     },
     "dashboard": {
         "subtitles": {
@@ -1269,7 +1271,8 @@
             "Succeeded": "Succeeded",
             "Failed": "Failed",
             "LowConfidenceSkipped": "Low confidence skipped",
-            "AlreadyExistsSkipped": "Already existed"
+            "AlreadyExistsSkipped": "Already existed",
+            "CooldownSkipped": "Cooldown skipped"
         },
         "loadMore": "Load more",
         "loadingMore": "Loading…",
