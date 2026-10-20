@@ -161,19 +161,13 @@
                                         class="mono text-secondary-content/60 inline-flex items-center text-[11px]">
                                         +{{ item.tracks.length - visibleTrackCount }}
                                     </span>
-                                    <!-- 需求卡 B:豁免弱标记(词汇与筛选下拉统一为「无需字幕」,
-                                         原因移入 title)—— 仅真实豁免态渲染;音轨未知渲染「?」
-                                         弱标记(与 audio-unknown 过滤一一对应,AC10),缺失字段的
-                                         存量载荷不渲染 -->
+                                    <!-- 需求卡 B(实机走查修订):「无需字幕」豁免徽章已移至
+                                         状态列(state-no-subtitle-needed),与本列解耦 —— 勿再
+                                         往本列加回;音轨未知渲染「?」弱标记(与 audio-unknown
+                                         过滤一一对应,AC10),仅 audioLanguages === null 时渲染,
+                                         缺失字段的存量载荷(undefined)不渲染 -->
                                     <span
-                                        v-if="item.needsNoSubtitles"
-                                        class="mono border-line/60 text-secondary-content/70 inline-flex items-center rounded border border-dashed px-1 py-px text-[10px]"
-                                        :title="t('library.nativeBadgeTitle')"
-                                        data-test="native-audio-badge">
-                                        {{ t('library.nativeBadge') }}
-                                    </span>
-                                    <span
-                                        v-else-if="item.audioLanguages === null"
+                                        v-if="item.audioLanguages === null"
                                         class="mono border-line/60 text-secondary-content/50 inline-flex items-center rounded border border-dashed px-1 py-px text-[10px]"
                                         :title="t('library.audioUnknownBadgeTitle')"
                                         data-test="audio-unknown-badge">

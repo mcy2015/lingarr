@@ -129,7 +129,6 @@
             "needSelection": "请先选择媒体。"
         },
         "empty": "没有符合当前过滤条件的媒体。",
-        "nativeBadge": "无需字幕",
         "nativeBadgeTitle": "原生音轨已覆盖目标语言 —— 无需字幕",
         "audioUnknownBadge": "音轨未知",
         "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理，详见详情页标记入口",

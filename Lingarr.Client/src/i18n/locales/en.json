@@ -129,7 +129,6 @@
             "needSelection": "Select media first."
         },
         "empty": "No media matches the current filters.",
-        "nativeBadge": "No subtitles needed",
         "nativeBadgeTitle": "Native audio already covers the target language — no subtitles needed",
         "audioUnknownBadge": "Audio unknown",
         "audioUnknownBadgeTitle": "Audio languages not identified yet — subtitle need stays treated as missing; see the detail page mark entry",

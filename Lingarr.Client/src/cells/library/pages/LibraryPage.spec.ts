@@ -165,7 +165,6 @@ async function mountLibraryPage(path = '/library'): Promise<MountedLibrary> {
                         completedRatio: '✓ {done}/{total} completed',
                         native: '✓ No subtitles needed'
                     },
-                    nativeBadge: 'No subtitles needed',
                     audioUnknownBadge: 'Audio unknown',
                     bulk: {
                         created: 'Created {count} translation jobs',
@@ -555,22 +554,34 @@ describe('LibraryPage', () => {
         )
     })
 
-    it('renders the weak native badge only on rows marked needsNoSubtitles', async () => {
+    // ── requirement card B (walk-through revision): the exemption badge lives
+    // in the status column only — the tracks cell no longer repeats it ─────
+    it('renders the「no subtitles needed」badge only in the status column, never in tracks', async () => {
         libraryMock.mockResolvedValueOnce({
             ...libraryPage,
-            items: [{ ...show1, needsNoSubtitles: true }, movie2, show3]
+            items: [
+                // exempt with known audio — the real shape: exemption requires
+                // the audio to cover the target language
+                { ...show1, needsNoSubtitles: true, audioLanguages: ['zh'] },
+                movie2,
+                show3
+            ]
         })
         const marked = await mountLibraryPage()
 
-        const badges = marked.wrapper.findAll('[data-test="native-audio-badge"]')
-        expect(badges).toHaveLength(1)
-        expect(badges[0].text()).toBe('No subtitles needed')
-        // the weak badge trails the language chips inside the tracks cell
-        expect(marked.wrapper.findAll('tbody tr')[0].text()).toContain('No subtitles needed')
+        // the old weak badge is gone from the tracks cell entirely
+        expect(marked.wrapper.findAll('[data-test="native-audio-badge"]')).toHaveLength(0)
 
-        // unmarked rows (and absent field = legacy payload) render nothing
+        //「无需字幕」renders exactly once per exempt row, in the status cell
+        const badges = marked.wrapper.findAll('[data-test="state-no-subtitle-needed"]')
+        expect(badges).toHaveLength(1)
+        const cells = marked.wrapper.findAll('tbody tr')[0].findAll('td')
+        expect(cells[3].text()).not.toContain('No subtitles needed') // tracks
+        expect(cells[4].text()).toContain('No subtitles needed') // status
+
+        // unmarked rows (and legacy payloads without the field) render none
         const plain = await mountLibraryPage()
-        expect(plain.wrapper.findAll('[data-test="native-audio-badge"]')).toHaveLength(0)
+        expect(plain.wrapper.findAll('[data-test="state-no-subtitle-needed"]')).toHaveLength(0)
     })
 
     it('renders the audio-unknown badge only on rows with null audio languages', async () => {
@@ -590,8 +601,10 @@ describe('LibraryPage', () => {
         // the weak badge trails the language chips inside the tracks cell
         expect(unknown.wrapper.findAll('tbody tr')[0].text()).toContain('Audio unknown')
 
-        // known audio, exempt rows, and legacy payloads without the field
-        // (undefined, not null) render nothing
+        // known audio and legacy payloads without the field (undefined, not
+        // null) render nothing — the badge is purely audio-driven now; the
+        //「无需字幕」exemption no longer suppresses it (it lives in the
+        // status column instead)
         const plain = await mountLibraryPage()
         expect(plain.wrapper.findAll('[data-test="audio-unknown-badge"]')).toHaveLength(0)
     })
