@@ -129,7 +129,7 @@
             "needSelection": "请先选择媒体。"
         },
         "empty": "没有符合当前过滤条件的媒体。",
-        "nativeBadgeTitle": "原生音轨已覆盖目标语言 —— 无需字幕",
+        "nativeBadgeTitle": "音轨已覆盖目标语言 —— 无需字幕",
         "audioUnknownBadge": "音轨未知",
         "audioUnknownBadgeTitle": "音轨语言尚未识别 —— 字幕需求按缺处理，详见详情页标记入口",
         "audioSuggestedTitle": "TMDB 原始语言推测，仅供参考",
@@ -1211,7 +1211,7 @@
         "noResults": "未找到候选字幕，可调整关键词或语言后重试。",
         "noTranslate": "免翻译",
         "lowConfidence": "低于自动下载分数线({score}) — 仍可手动下载",
-        "nativeAudioHint": "容器音轨已覆盖所搜语言之一——该媒体通常无需字幕，仍可继续搜索下载。",
+        "nativeAudioHint": "音轨已覆盖所搜语言之一——该媒体通常无需字幕，仍可继续搜索下载。",
         "retrySource": "重试",
         "existing": "已存在",
         "downloadedMark": "已下载",

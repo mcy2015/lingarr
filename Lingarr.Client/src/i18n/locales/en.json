@@ -129,7 +129,7 @@
             "needSelection": "Select media first."
         },
         "empty": "No media matches the current filters.",
-        "nativeBadgeTitle": "Native audio already covers the target language — no subtitles needed",
+        "nativeBadgeTitle": "The audio track already covers the target language — no subtitles needed",
         "audioUnknownBadge": "Audio unknown",
         "audioUnknownBadgeTitle": "Audio languages not identified yet — subtitle need stays treated as missing; see the detail page mark entry",
         "audioSuggestedTitle": "A TMDB original-language guess — not container truth",
@@ -1211,7 +1211,7 @@
         "noResults": "No candidates found. Try adjusting the keywords or languages.",
         "noTranslate": "no translation",
         "lowConfidence": "Below the auto-download line ({score}) — manual download still available",
-        "nativeAudioHint": "The container audio already covers one of the searched languages — this media usually needs no subtitles, but you can still search and download.",
+        "nativeAudioHint": "The audio track already covers one of the searched languages — this media usually needs no subtitles, but you can still search and download.",
         "retrySource": "Retry",
         "existing": "Exists",
         "downloadedMark": "Downloaded",

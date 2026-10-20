@@ -3,10 +3,12 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import { useToastStore } from '@/cells/app/stores/toast'
+import { useSettingStore } from '@/cells/app/stores/setting'
 import { settingService } from '@/cells/app/api/settingService'
 import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import type { ISubtitleCandidate } from '@/types/services'
+import type { ILanguage } from '@/types'
 import type { ISubtitleProviderManifest } from '@/types/plugin'
 
 /// The auto-download threshold setting key (SettingKeys.SubtitleSearch.AutoScore
@@ -39,11 +41,31 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToastStore()
+const settingStore = useSettingStore()
 const settingApi = settingService(axios)
 
 // ── search state ─────────────────────────────────────────────
 const query = ref('')
-const languages = ref<string[]>(['zh', 'en'])
+
+/// Fallback when the target_languages setting is missing or empty — the
+/// previously hardcoded pair, kept so a search is always possible.
+const FALLBACK_LANGUAGES = ['zh', 'en']
+
+/// The toggle row derives from the global target_languages setting: the
+/// server's「no subtitle needed」exemption judges against that same list,
+/// so the manual dialog must not offer a different language set.
+const languageOptions = computed<string[]>(() => {
+    // getSettings parses both the raw JSON-string and array forms; anything
+    // unexpected (missing key, non-array) falls through to the fallback.
+    const configured = settingStore.getSettings.target_languages as ILanguage[]
+    const codes = (Array.isArray(configured) ? configured : [])
+        .map((language) => String(language?.code ?? '').toLowerCase())
+        .filter((code) => code !== '')
+    return codes.length > 0 ? codes : FALLBACK_LANGUAGES
+})
+
+/// Every derived option is checked by default (previous behaviour).
+const languages = ref<string[]>([...languageOptions.value])
 const searching = ref(false)
 const providersLoading = ref(true)
 const providersFailed = ref(false)
@@ -97,8 +119,13 @@ const sortedCandidates = computed<CandidateRow[]>(() => candidates.value)
 
 const metaSources = computed(() => `${settledCount.value}/${sourcesTotal.value}`)
 
+/// Primary target language (rows in it get the single「下载」button): the
+/// settings' first target language while it stays checked, else the first
+/// checked one, else the first option.
 const targetLang = computed(() =>
-    languages.value.find(l => l === 'zh') ? 'zh' : languages.value[0] ?? 'en'
+    languages.value.find(l => l === languageOptions.value[0])
+        ?? languages.value[0]
+        ?? languageOptions.value[0]
 )
 
 /// Audio hint condition — the backend's「任一目标」exemption semantics: known
@@ -506,7 +533,7 @@ onBeforeUnmount(teardown)
                 </div>
 
                 <!-- native-audio hint (requirement card A surfacing): shown
-                     once per modal session when the container audio already
+                     once per modal session when the audio track already
                      covers a searched target language; the search itself
                      stays fully available -->
                 <div
@@ -536,7 +563,7 @@ onBeforeUnmount(teardown)
                         @keydown.enter="runSearch()">
                     <span class="flex gap-1">
                         <button
-                            v-for="lang in ['zh', 'en']"
+                            v-for="lang in languageOptions"
                             :key="lang"
                             class="mono rounded border px-2 py-0.5 text-[11px] transition-colors"
                             :class="languages.includes(lang)

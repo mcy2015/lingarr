@@ -16,6 +16,8 @@ import { createI18n } from 'vue-i18n'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import SubtitleSearchModal from '@/cells/library/components/SubtitleSearchModal.vue'
 import { useToastStore } from '@/cells/app/stores/toast'
+import { useSettingStore } from '@/cells/app/stores/setting'
+import { SETTINGS } from '@/types'
 import en from '@/i18n/locales/en.json'
 import type { ISubtitleProviderManifest } from '@/types/plugin'
 import type { ISubtitleCandidate, ISubtitleDownloadResponse } from '@/types/services'
@@ -143,15 +145,23 @@ async function mountModal(
         episode?: string
         audioLanguages?: string[] | null
         existingLanguages?: string[]
+        /// Seeds target_languages in the setting store before mount — the
+        /// language toggles derive from it (omit for the missing-setting
+        /// fallback path; pass [] for the empty-list fallback path).
+        targetLanguages?: { code: string; name: string }[]
     } = {}
 ): Promise<MountedModal> {
+    const { targetLanguages, ...componentProps } = props
     const pinia = createPinia()
+    if (targetLanguages) {
+        useSettingStore(pinia).storeSetting(SETTINGS.TARGET_LANGUAGES, targetLanguages)
+    }
     const wrapper = mount(SubtitleSearchModal, {
         props: {
             mediaType: 'movie',
             mediaId: 7,
             title: 'Dune: Part Two',
-            ...props
+            ...componentProps
         },
         global: { plugins: [pinia, i18n] }
     })
@@ -608,6 +618,78 @@ describe('SubtitleSearchModal · 音轨覆盖提示', () => {
 
         await mountModal({ audioLanguages: null })
         expect(document.querySelector('[data-test="native-audio-hint"]')).toBeNull()
+    })
+})
+
+// ═══ language toggles derive from target_languages ════════════════
+describe('SubtitleSearchModal · 语言钮从 target_languages 派生', () => {
+    beforeEach(() => {
+        getProvidersMock.mockResolvedValue([subsource])
+        searchMock.mockResolvedValue(outcome('ck-sub', []))
+    })
+
+    /// The language toggles are the only aria-pressed buttons in the dialog.
+    const toggles = (): HTMLButtonElement[] =>
+        [...document.querySelectorAll('button[aria-pressed]')] as HTMLButtonElement[]
+
+    it('renders one all-checked toggle per configured target language', async () => {
+        await mountModal({
+            targetLanguages: [
+                { code: 'zh', name: 'Chinese' },
+                { code: 'ja', name: 'Japanese' }
+            ]
+        })
+
+        // ZH/JA toggles, all checked by default, no EN toggle anywhere
+        expect(toggles().map((b) => b.textContent?.trim())).toEqual(['ZH', 'JA'])
+        expect(toggles().every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+
+        // the derived pair rides the wire on every request of the round
+        for (const call of searchMock.mock.calls) {
+            expect(call[0].languages).toEqual(['zh', 'ja'])
+        }
+    })
+
+    it('rides the checked languages on the wire after a toggle', async () => {
+        await mountModal({
+            targetLanguages: [
+                { code: 'zh', name: 'Chinese' },
+                { code: 'ja', name: 'Japanese' }
+            ]
+        })
+        searchMock.mockClear()
+
+        // uncheck ZH — only JA stays checked, the new round sends ['ja']
+        ;(toggles().find((b) => b.textContent?.trim() === 'ZH') as HTMLButtonElement).click()
+        await flush()
+        await clickButton(en.subSearch.searchAction)
+
+        expect(searchMock).toHaveBeenCalledTimes(1)
+        expect(searchMock.mock.calls[0][0].languages).toEqual(['ja'])
+    })
+
+    it('falls back to zh/en when the setting is missing or empty', async () => {
+        await mountModal()
+        expect(toggles().map((b) => b.textContent?.trim())).toEqual(['ZH', 'EN'])
+        expect(searchMock.mock.calls[0][0].languages).toEqual(['zh', 'en'])
+
+        // an empty configured list falls back identically
+        activeWrapper?.unmount()
+        activeWrapper = null
+        document.body.innerHTML = ''
+        searchMock.mockClear()
+        await mountModal({ targetLanguages: [] })
+        expect(toggles().map((b) => b.textContent?.trim())).toEqual(['ZH', 'EN'])
+        expect(searchMock.mock.calls[0][0].languages).toEqual(['zh', 'en'])
+    })
+
+    it('normalizes configured codes to the lower-case wire form', async () => {
+        // settings may hold upper-case codes (the settings screen writes
+        // what the user picked) — the wire stays lower-case
+        await mountModal({ targetLanguages: [{ code: 'ZH', name: 'Chinese' }] })
+
+        expect(toggles().map((b) => b.textContent?.trim())).toEqual(['ZH'])
+        expect(searchMock.mock.calls[0][0].languages).toEqual(['zh'])
     })
 })
 
