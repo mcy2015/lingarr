@@ -127,4 +127,21 @@ public class SettingServiceTests : IDisposable
         var states = await _service.GetEncryptedSettingStates(new[] { "api_key" });
         Assert.False(states["api_key"]);
     }
+
+    [Fact]
+    public async Task SetSetting_MissingRow_CreatesItInsteadOfDroppingTheWrite()
+    {
+        // The subtitle source cooldown map key never got a migration seed:
+        // the old silent false made every persisted cooldown vanish on
+        // databases that lack the row. Upsert must create it and the very
+        // next read must see the value.
+        var saved = await _service.SetSetting(
+            "subtitle_source_cooldowns", "{\"assrt\":{\"until\":\"2026-01-01T00:00:00Z\",\"reason\":\"RateLimited\"}}");
+
+        Assert.True(saved);
+        Assert.Contains(await _dbContext.Settings.ToListAsync(),
+            s => s.Key == "subtitle_source_cooldowns");
+        var roundTrip = await _service.GetSetting("subtitle_source_cooldowns");
+        Assert.Contains("RateLimited", roundTrip);
+    }
 }

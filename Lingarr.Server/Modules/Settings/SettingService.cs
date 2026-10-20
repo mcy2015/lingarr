@@ -135,12 +135,19 @@ public class SettingService : ISettingService
         var setting = await _dbContext.Settings.FirstOrDefaultAsync(s => s.Key == key);
         if (setting == null)
         {
-            return false;
+            // A key migrations never seeded (the subtitle source cooldown
+            // map) creates its row here: the old silent false dropped the
+            // write whole, so the persisted cooldowns never existed on
+            // production databases that lack the row.
+            _dbContext.Settings.Add(new Setting { Key = key, Value = value });
+        }
+        else
+        {
+            setting.Value = value;
         }
 
-        setting.Value = value;
         await _dbContext.SaveChangesAsync();
-        OnSettingChange(setting.Key);
+        OnSettingChange(key);
         return true;
     }
 
