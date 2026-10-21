@@ -142,6 +142,12 @@ public sealed class SubtitleDownloadPipeline
     /// target-language direct hit on disk but never enqueues a translation
     /// request. Default false preserves the automated dual-path ruling.
     /// </param>
+    /// <param name="replaceFilePath">
+    /// Upgrade-round hint (B02): the superseded file's path. After a
+    /// successful landing whose path differs, the pipeline deletes it (the
+    /// same-path landing already overwrote it atomically). Null — every
+    /// non-upgrade caller — keeps the pre-B02 behaviour byte-identical.
+    /// </param>
     public async Task<SubtitleDownloadOutcome> DownloadAsync(
         SubtitleCandidate candidate,
         MediaType mediaType,
@@ -149,7 +155,8 @@ public sealed class SubtitleDownloadPipeline
         SubtitleDownloadSource source,
         int? searchSessionId,
         CancellationToken cancellationToken,
-        bool skipTranslation = false)
+        bool skipTranslation = false,
+        string? replaceFilePath = null)
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
@@ -280,7 +287,7 @@ public sealed class SubtitleDownloadPipeline
             var seasonPack = await TryDownloadSeasonPackAsync(
                 candidate, mediaId, initiatingSeasonId, media, entries,
                 payloadContent, payloadFileName, payloadFormat,
-                source, searchSessionId, skipTranslation, cancellationToken);
+                source, searchSessionId, skipTranslation, replaceFilePath, cancellationToken);
             if (seasonPack is not null)
             {
                 return seasonPack;
@@ -405,6 +412,12 @@ public sealed class SubtitleDownloadPipeline
         var outcome = await RecordAsync(
             candidate, mediaType, mediaId, source, searchSessionId,
             SubtitleDownloadResult.Succeeded, filePath: finalPath, error: postProcessError, filesLanded: 1);
+
+        // ④c upgrade replacement (B02): the superseded file is removed only
+        // after the new one is on disk AND post-processed — a replacement
+        // must never leave the media without its subtitle. Same-path
+        // landings already overwrote the old bytes atomically.
+        DeleteReplacedFile(finalPath, replaceFilePath);
 
         // ⑥ translation hook: target-language hits are terminal; non-target
         // languages enter the queue when auto_translate is on (content-hash
@@ -614,7 +627,10 @@ public sealed class SubtitleDownloadPipeline
     /// (content-hash idempotent, target-language hits terminal,
     /// skipTranslation bypasses the queue), one coverage refresh of the
     /// initiating episode (the refresher maps it to its show), one cache
-    /// invalidation per written directory and one progress broadcast.
+    /// invalidation per written directory and one progress broadcast. An
+    /// upgrade round's replace hint applies to the initiating episode's
+    /// previous file only (B02) — the fan-out lands siblings that had no
+    /// previous file of this language recorded.
     /// </para>
     /// </summary>
     private async Task<SubtitleDownloadOutcome?> TryDownloadSeasonPackAsync(
@@ -629,6 +645,7 @@ public sealed class SubtitleDownloadPipeline
         SubtitleDownloadSource source,
         int? searchSessionId,
         bool skipTranslation,
+        string? replaceFilePath,
         CancellationToken cancellationToken)
     {
         // Trigger: ≥2 entries parse to an episode number, with every
@@ -788,6 +805,10 @@ public sealed class SubtitleDownloadPipeline
             candidate, MediaType.Episode, mediaId, source, searchSessionId,
             SubtitleDownloadResult.Succeeded, filePath: initiatingFile, error: postProcessError,
             filesLanded: landed.Count);
+
+        // Upgrade replacement (B02), same contract as the single-entry path:
+        // only after every file landed and the history row exists.
+        DeleteReplacedFile(initiatingFile, replaceFilePath);
 
         // Translation enqueue per landed file — the same adjudication the
         // single-entry path runs (content-hash idempotent, target-language
@@ -967,6 +988,43 @@ public sealed class SubtitleDownloadPipeline
                 "Post-processing failed for {FilePath}; the subtitle stays on disk as written.",
                 filePath);
             return $"post-processing failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Removes the superseded file of an upgrade landing (B02). Called only
+    /// after the replacement is on disk, post-processed and recorded — the
+    /// new file's existence is the precondition, so a failure here leaves a
+    /// redundant old file, never a missing subtitle. A same-path landing
+    /// (Ordinal equality — on case-insensitive filesystems the recorded and
+    /// computed spellings of one file) means the atomic write already
+    /// replaced the bytes, and nothing is deleted. Best effort by design: a
+    /// locked or missing old file logs a warning and moves on.
+    /// </summary>
+    private void DeleteReplacedFile(string? landedPath, string? replacedPath)
+    {
+        if (string.IsNullOrEmpty(landedPath)
+            || string.IsNullOrEmpty(replacedPath)
+            || string.Equals(landedPath, replacedPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(replacedPath))
+            {
+                File.Delete(replacedPath);
+                _logger.LogInformation(
+                    "Upgrade replaced {ReplacedPath} with {LandedPath}; the old file was removed.",
+                    replacedPath, landedPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not delete the replaced subtitle {ReplacedPath}; both files stay on disk.",
+                replacedPath);
         }
     }
 

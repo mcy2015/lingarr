@@ -1,6 +1,6 @@
 <template>
     <!-- ═══ 第 13 屏:字幕下载历史。GET /api/subtitle-search/history 的 keyset
-         分页消费方——筛选条(类型/字幕源/结果)+ 表格(时间/媒体标题[链接进详情]/
+         分页消费方——筛选条(类型/字幕源/结果/来源)+ 表格(时间/媒体标题[链接进详情]/
          源/语言/来源/结果徽章/文件名)+「加载更多」按 nextCursor 续页。
          全部文案走 i18n,全部数字来自真实响应,无静态装饰句。 -->
     <div class="w-full flex h-full min-h-0 flex-col p-4 lg:p-6">
@@ -54,6 +54,18 @@
                         <option value="">{{ t('subHistory.filterAll') }}</option>
                         <option v-for="option in RESULT_KEYS" :key="option" :value="option">
                             {{ resultLabel(option) }}
+                        </option>
+                    </select>
+                </label>
+                <label class="flex items-center gap-1.5">
+                    <span class="text-secondary-content">{{ t('subHistory.filterSource') }}</span>
+                    <select
+                        v-model="filters.source"
+                        class="border-line bg-primary focus-visible:ring-accent cursor-pointer rounded border px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:outline-none"
+                        data-test="sub-history-filter-source">
+                        <option value="">{{ t('subHistory.filterAll') }}</option>
+                        <option v-for="option in SOURCE_KEYS" :key="option" :value="option">
+                            {{ sourceLabel(option) }}
                         </option>
                     </select>
                 </label>
@@ -187,7 +199,7 @@ const loadingMore = ref(false)
 const loadFailed = ref(false)
 
 // ── 筛选(任一变化即重置回第一页)──────────────────────────────
-const filters = reactive({ mediaType: '', provider: '', result: '' })
+const filters = reactive({ mediaType: '', provider: '', result: '', source: '' })
 
 /// 字幕源筛选项数据驱动:来自 providers 端点的注册源名单;读取失败时
 /// 筛选只保留「全部」,历史表本身不受影响。
@@ -220,10 +232,13 @@ const RESULT_CLASSES: Record<string, string> = {
     CooldownSkipped: 'text-info border-info/40 bg-info/10'
 }
 
+const SOURCE_KEYS: SUBTITLE_HISTORY_SOURCE[] = ['Manual', 'Auto', 'Webhook', 'Upgrade']
+
 const SOURCE_LABELS: Record<string, string> = {
     Manual: 'subHistory.source.Manual',
     Auto: 'subHistory.source.Auto',
-    Webhook: 'subHistory.source.Webhook'
+    Webhook: 'subHistory.source.Webhook',
+    Upgrade: 'subHistory.source.Upgrade'
 }
 
 function resultLabel(result: string): string {
@@ -260,7 +275,8 @@ async function fetchPage(): Promise<void> {
             limit: PAGE_SIZE,
             mediaType: filters.mediaType || undefined,
             provider: filters.provider || undefined,
-            result: filters.result || undefined
+            result: filters.result || undefined,
+            source: filters.source || undefined
         })
         items.value = page.items
         nextCursor.value = page.nextCursor

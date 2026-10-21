@@ -527,6 +527,7 @@ public class SubtitleSearchController : ControllerBase
     /// <param name="mediaType">Optional "movie"/"episode" filter.</param>
     /// <param name="provider">Optional exact source-key filter.</param>
     /// <param name="result">Optional SubtitleDownloadResult enum-name filter.</param>
+    /// <param name="source">Optional SubtitleDownloadSource enum-name filter (B02: the history screen's trigger filter — "Upgrade" isolates upgrade-round rows).</param>
     /// <param name="cancellationToken">Token to cancel the reads.</param>
     [HttpGet("history")]
     public async Task<IActionResult> History(
@@ -535,6 +536,7 @@ public class SubtitleSearchController : ControllerBase
         string? mediaType = null,
         string? provider = null,
         string? result = null,
+        string? source = null,
         CancellationToken cancellationToken = default)
     {
         MediaType? parsedMediaType = null;
@@ -563,6 +565,21 @@ public class SubtitleSearchController : ControllerBase
             parsedResult = parsed;
         }
 
+        SubtitleDownloadSource? parsedSource = null;
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            if (!Enum.TryParse(source, ignoreCase: false, out SubtitleDownloadSource parsedTrigger)
+                || !Enum.IsDefined(parsedTrigger))
+            {
+                return BadRequest(new
+                {
+                    message = "source must be one of Manual, Auto, Webhook, Upgrade."
+                });
+            }
+
+            parsedSource = parsedTrigger;
+        }
+
         (DateTimeOffset CreatedAt, int Id)? boundary = null;
         if (!string.IsNullOrWhiteSpace(cursor))
         {
@@ -588,6 +605,10 @@ public class SubtitleSearchController : ControllerBase
         if (parsedResult is { } outcome)
         {
             rows = rows.Where(download => download.Result == outcome);
+        }
+        if (parsedSource is { } trigger)
+        {
+            rows = rows.Where(download => download.Source == trigger);
         }
         if (boundary is { } edge)
         {

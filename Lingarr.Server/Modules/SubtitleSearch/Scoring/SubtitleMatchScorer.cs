@@ -72,6 +72,17 @@ public sealed partial class SubtitleMatchScorer
         => candidate.MatchScore >= threshold;
 
     /// <summary>
+    /// Nullable-threshold overload (B02 upgrade rounds): the effective auto
+    /// line there is computed per target — max of the configured
+    /// subtitle_search_auto_score and the old file's score + the upgrade
+    /// margin — and may legitimately be absent (null), which defers to
+    /// <see cref="DefaultAutoScore"/>. Semantics are otherwise identical to
+    /// the int overload.
+    /// </summary>
+    public bool IsAutoEligible(SubtitleCandidate candidate, int? minScoreOverride)
+        => candidate.MatchScore >= (minScoreOverride ?? DefaultAutoScore);
+
+    /// <summary>
     /// Tiebreak helper of the orchestrator's final ordering (design ⑧
     /// polish): a bilingual candidate outranks a monolingual one when score
     /// and hash verdict tie. Detection is deliberately simple and

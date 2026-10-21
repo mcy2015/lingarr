@@ -640,7 +640,9 @@ export type SUBTITLE_HISTORY_RESULT =
     | 'CooldownSkipped'
 
 /// How the attempt was started (SubtitleDownloadSource enum names).
-export type SUBTITLE_HISTORY_SOURCE = 'Manual' | 'Auto' | 'Webhook'
+/// Upgrade = the upgrade re-search round replaced a previously landed
+/// low-score file (B02).
+export type SUBTITLE_HISTORY_SOURCE = 'Manual' | 'Auto' | 'Webhook' | 'Upgrade'
 
 /// One row of GET /api/subtitle-search/history: a subtitle_downloads row
 /// joined with its library title. mediaTitle is null when the owning

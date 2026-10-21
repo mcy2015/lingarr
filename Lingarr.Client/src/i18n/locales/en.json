@@ -1275,6 +1275,7 @@
         "filterMediaType": "Type",
         "filterProvider": "Source",
         "filterResult": "Result",
+        "filterSource": "Trigger",
         "filterAll": "All",
         "filterMovie": "Movies",
         "filterEpisode": "Episodes",
@@ -1290,7 +1291,8 @@
         "source": {
             "Manual": "Manual",
             "Auto": "Auto",
-            "Webhook": "Webhook"
+            "Webhook": "Webhook",
+            "Upgrade": "Upgrade"
         },
         "result": {
             "Succeeded": "Succeeded",

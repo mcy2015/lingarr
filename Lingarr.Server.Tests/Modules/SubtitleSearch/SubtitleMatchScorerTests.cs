@@ -208,6 +208,20 @@ public class SubtitleMatchScorerTests
     }
 
     [Fact]
+    public void NullableThresholdOverload_NullDefersToDefault()
+    {
+        // B02 upgrade rounds compute the line per target; null (the caller
+        // has no override) defers to the default 75, a value replaces it
+        // exactly like the int overload.
+        var atLine = _scorer.Score(MovieRequest(), Candidate("Movie 2019 BluRay"));
+        Assert.Equal(75, atLine.MatchScore);
+
+        Assert.True(_scorer.IsAutoEligible(atLine, minScoreOverride: null));
+        Assert.True(_scorer.IsAutoEligible(atLine, minScoreOverride: 75));
+        Assert.False(_scorer.IsAutoEligible(atLine, minScoreOverride: 82));
+    }
+
+    [Fact]
     public void ScoreAll_OrdersDescendingAndKeepsTiesStable()
     {
         var request = MovieRequest(year: null, releaseName: null);

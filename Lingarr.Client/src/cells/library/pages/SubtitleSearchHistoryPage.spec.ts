@@ -122,7 +122,13 @@ describe('SubtitleSearchHistoryPage', () => {
         const { wrapper } = await mountHistoryPage()
 
         expect(historyMock).toHaveBeenCalledTimes(1)
-        expect(historyMock).toHaveBeenCalledWith({ limit: 50, mediaType: undefined, provider: undefined, result: undefined })
+        expect(historyMock).toHaveBeenCalledWith({
+            limit: 50,
+            mediaType: undefined,
+            provider: undefined,
+            result: undefined,
+            source: undefined
+        })
 
         const rows = wrapper.findAll('tbody tr')
         expect(rows).toHaveLength(2)
@@ -216,6 +222,71 @@ describe('SubtitleSearchHistoryPage', () => {
         expect(wrapper.find('tbody a').exists()).toBe(false)
     })
 
+    it('renders the Upgrade trigger with its own label, column badge and filter option', async () => {
+        // B02: an upgrade-round row (the replace-and-delete verdicts) renders
+        // its own trigger label — never the Auto one — and the trigger
+        // filter offers Upgrade; filtering by it sends source=Upgrade and
+        // renders only the rows the (mocked) server answered.
+        historyMock.mockResolvedValue({
+            items: [
+                historyItem({
+                    id: 21,
+                    source: 'Upgrade',
+                    result: 'Succeeded',
+                    error: null,
+                    fileName: 'Movie.2019.WEBDL-1080p.srt',
+                    createdAt: '2026-10-15T09:00:00Z'
+                }),
+                historyItem({
+                    id: 22,
+                    source: 'Upgrade',
+                    result: 'LowConfidenceSkipped',
+                    error: 'best upgrade candidate scored 80 (< 82, old score 79)',
+                    fileName: null,
+                    createdAt: '2026-10-15T08:50:00Z'
+                })
+            ],
+            nextCursor: null
+        })
+        const { wrapper } = await mountHistoryPage()
+
+        // the column badge labels both rows distinctly from Auto/Manual
+        expect(wrapper.find('[data-test="sub-history-row-21"]').text()).toContain(
+            en.subHistory.source.Upgrade
+        )
+        expect(wrapper.find('[data-test="sub-history-row-21"]').text()).not.toContain(
+            en.subHistory.source.Auto
+        )
+        expect(wrapper.find('[data-test="sub-history-row-22"]').text()).toContain(
+            en.subHistory.result.LowConfidenceSkipped
+        )
+
+        // the trigger filter offers exactly the four enum names + 全部
+        const options = wrapper
+            .find('[data-test="sub-history-filter-source"]')
+            .findAll('option')
+            .map((option) => (option.element as HTMLOptionElement).value)
+        expect(options).toEqual(['', 'Manual', 'Auto', 'Webhook', 'Upgrade'])
+
+        // selecting Upgrade re-issues page 1 with the source filter — the
+        // server does the narrowing, the mocked page stands in for it
+        historyMock.mockResolvedValueOnce({
+            items: [historyItem({ id: 21, source: 'Upgrade' })],
+            nextCursor: null
+        })
+        await wrapper.find('[data-test="sub-history-filter-source"]').setValue('Upgrade')
+        await flushPromises()
+        expect(historyMock).toHaveBeenLastCalledWith({
+            limit: 50,
+            mediaType: undefined,
+            provider: undefined,
+            result: undefined,
+            source: 'Upgrade'
+        })
+        expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+        expect(wrapper.find('tbody tr').text()).toContain(en.subHistory.source.Upgrade)
+    })
+
     it('renders the CooldownSkipped verdict with its own label and filter option', async () => {
         // assrt 493 closure: a refused click inside the rate-limit window is
         // its own outcome — labeled distinctly and never shown as Failed.
@@ -263,7 +334,8 @@ describe('SubtitleSearchHistoryPage', () => {
             limit: 50,
             mediaType: 'episode',
             provider: undefined,
-            result: undefined
+            result: undefined,
+            source: undefined
         })
 
         // provider options come from the providers endpoint (data-driven)
@@ -279,7 +351,8 @@ describe('SubtitleSearchHistoryPage', () => {
             limit: 50,
             mediaType: 'episode',
             provider: 'assrt',
-            result: undefined
+            result: undefined,
+            source: undefined
         })
 
         await wrapper.find('[data-test="sub-history-filter-result"]').setValue('Failed')
@@ -288,7 +361,18 @@ describe('SubtitleSearchHistoryPage', () => {
             limit: 50,
             mediaType: 'episode',
             provider: 'assrt',
-            result: 'Failed'
+            result: 'Failed',
+            source: undefined
+        })
+
+        await wrapper.find('[data-test="sub-history-filter-source"]').setValue('Upgrade')
+        await flushPromises()
+        expect(historyMock).toHaveBeenLastCalledWith({
+            limit: 50,
+            mediaType: 'episode',
+            provider: 'assrt',
+            result: 'Failed',
+            source: 'Upgrade'
         })
 
         // every filter round-trip re-issued page 1 — no cursor ever sent

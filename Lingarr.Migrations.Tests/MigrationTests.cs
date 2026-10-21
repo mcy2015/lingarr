@@ -33,15 +33,15 @@ public class MigrationTests
             // audio-and-language-cache, subtitle-search,
             // subtitle-search-telemetry, subtitle-search-schema-cleanup,
             // video-hash-and-title-fts,
-            // suggested-language-and-manual-audio and media-file-info
-            // migrations are applied.
-            Assert.Equal(13L, await ExecuteScalarAsync(connection,
+            // suggested-language-and-manual-audio, media-file-info and
+            // subtitle-upgrade-settings migrations are applied.
+            Assert.Equal(14L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(13L, await ExecuteScalarAsync(connection,
+            Assert.Equal(14L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
-            Assert.Equal(96L, await ExecuteScalarAsync(connection,
+            Assert.Equal(100L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'navigate_to_details_on_request' AND value = 'true'"));
@@ -86,6 +86,18 @@ public class MigrationTests
                 "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_batch_limit' AND value = '200'"));
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_auto_translate' AND value = 'true'"));
+
+            // M0014 seeds the subtitle-upgrade feature rows: off by default
+            // (replacing stored files never runs implicitly), daily 04:00
+            // cron inside the maintenance wave, margin 3 and window 14 days.
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_upgrade_enabled' AND value = 'false'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_upgrade_schedule' AND value = '0 4 * * *'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_upgrade_score_margin' AND value = '3'"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_upgrade_window_days' AND value = '14'"));
         }
         finally
         {
@@ -769,6 +781,56 @@ public class MigrationTests
             Assert.Contains("external_id", blacklistColumns);
             Assert.Equal(1L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM sqlite_master WHERE name = 'ix_subtitle_search_blacklist_provider'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// M0014 only seeds four settings rows, so rolling it back must return
+    /// exactly the M0013 state: version back to 13, the four
+    /// subtitle_upgrade rows removed, nothing else touched — every table,
+    /// column and pre-existing settings row survives.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_SubtitleUpgradeSettingsMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(13);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(13L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+
+            // The four seeded rows are gone and nothing else: back to the
+            // M0013 settings count, and no subtitle_upgrade key of any value.
+            Assert.Equal(0L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key LIKE 'subtitle_upgrade_%'"));
+            Assert.Equal(96L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings"));
+
+            // M0008's feature rows survive untouched (the upgrade feature
+            // reads subtitle_search_auto_score at round time).
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_auto_score' AND value = '75'"));
+
+            // No schema artifact existed to remove — every table survives.
+            Assert.Equal(30L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
         }
         finally
         {

@@ -217,6 +217,50 @@ public class ScheduleServiceTests : IDisposable
         Assert.Equal("SubtitleSearchJob", job.JobMethod);
     }
 
+    // ── SetJobEnabled: subtitle-upgrade master-switch linkage (B02) ──
+
+    [Fact]
+    public async Task GetRecurringJobs_UpgradeSwitchOff_ListsJobAsDisabled()
+    {
+        // The M0014 seeded default (no "true" in the settings): the upgrade
+        // round must surface as a disabled row, never as a registered job
+        // whose Execute() short-circuits — the same honest state as the
+        // search job's master switch.
+        _settingService.Values[SettingKeys.Automation.SubtitleUpgradeSchedule] = "0 4 * * *";
+
+        var job = (await _service.GetRecurringJobs()).Single(job => job.Id == "SubtitleUpgradeJob");
+
+        Assert.False(job.Enabled);
+        Assert.Equal("0 4 * * *", job.Cron);
+        Assert.Equal("SubtitleUpgradeJob", job.JobMethod);
+    }
+
+    [Fact]
+    public async Task SetJobEnabled_SubtitleUpgrade_SharesTheMasterSwitch()
+    {
+        // The schedule toggle is the upgrade switch's UI surface: both
+        // directions write subtitle_upgrade_enabled, and the cron comes from
+        // the seeded subtitle_upgrade_schedule row.
+        _settingService.Values[SettingKeys.Automation.SubtitleUpgradeSchedule] = "30 4 * * *";
+
+        Assert.True(await _service.SetJobEnabled("SubtitleUpgradeJob", true));
+
+        Assert.Equal("true", _settingService.Values[SettingKeys.SubtitleSearch.UpgradeEnabled]);
+        Assert.DoesNotContain("SubtitleUpgradeJob", ReadDisabledSetting());
+        var enabled = (await _service.GetRecurringJobs()).Single(job => job.Id == "SubtitleUpgradeJob");
+        Assert.True(enabled.Enabled);
+        Assert.Equal("30 4 * * *", enabled.Cron);
+
+        Assert.True(await _service.SetJobEnabled("SubtitleUpgradeJob", false));
+
+        Assert.Equal("false", _settingService.Values[SettingKeys.SubtitleSearch.UpgradeEnabled]);
+        Assert.DoesNotContain("SubtitleUpgradeJob", ReadDisabledSetting());
+        var disabledRow = (await _service.GetRecurringJobs()).Single(job => job.Id == "SubtitleUpgradeJob");
+        Assert.False(disabledRow.Enabled);
+        // the persisted cron survives for the merged disabled row
+        Assert.Equal("30 4 * * *", disabledRow.Cron);
+    }
+
     [Fact]
     public async Task Initialize_SubtitleSearchSwitchOff_SkipsUntilToggledOn()
     {

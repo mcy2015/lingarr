@@ -76,7 +76,14 @@ public enum SubtitleDownloadSource
     Auto = 1,
 
     /// <summary>Webhook-triggered round.</summary>
-    Webhook = 2
+    Webhook = 2,
+
+    /// <summary>
+    /// Upgrade re-search round replaced a previously landed low-score file
+    /// (B02). Additive value 3: the M0008 int codes of the existing sources
+    /// never move.
+    /// </summary>
+    Upgrade = 3
 }
 
 /// <summary>Outcome of a download attempt (M0008 int codes).</summary>

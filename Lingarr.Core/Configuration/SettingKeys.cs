@@ -176,6 +176,13 @@ public static class SettingKeys
         public const string SubtitleSearchSchedule = "subtitle_search_schedule";
 
         /// <summary>
+        /// Cron of the subtitle upgrade re-search round (B02). Seeded
+        /// "0 4 * * *" by M0014 — inside the 04:00 maintenance wave; the
+        /// round only ever re-offers files landed inside the upgrade window.
+        /// </summary>
+        public const string SubtitleUpgradeSchedule = "subtitle_upgrade_schedule";
+
+        /// <summary>
         /// Upper bound of media files one embedded track scan run may probe
         /// (audit P0-6). Already-scanned files are free (marker skip), so the
         /// next run resumes right after the last processed file. Values below
@@ -247,6 +254,31 @@ public static class SettingKeys
         /// seeded "none" (B01): converting stored text never runs by default.
         /// </summary>
         public const string PostProcessChineseVariant = "subtitle_postprocess_chinese_variant";
+
+        /// <summary>
+        /// Master switch of the subtitle upgrade re-search round (B02);
+        /// seeded "false" by M0014 — re-searching the library and REPLACING
+        /// stored files never runs implicitly. Governs both the recurring
+        /// registration (ScheduleService) and Execute()'s short-circuit.
+        /// </summary>
+        public const string UpgradeEnabled = "subtitle_upgrade_enabled";
+
+        /// <summary>
+        /// Minimum score gain an upgrade candidate must beat the old file by
+        /// (B02); seeded "3". The effective auto line of one target is
+        /// max(subtitle_search_auto_score, old score + this margin), so a
+        /// same-score candidate never replaces and the round cannot loop
+        /// (margin ≥ 1 keeps every replacement strictly score-increasing).
+        /// </summary>
+        public const string UpgradeScoreMargin = "subtitle_upgrade_score_margin";
+
+        /// <summary>
+        /// How recent (in days) a succeeded download must be for the upgrade
+        /// round to re-offer it (B02); seeded "14". Bounds the candidate set:
+        /// a 10w library's first round only sees the window's tail, the rest
+        /// digests day by day as the window scrolls.
+        /// </summary>
+        public const string UpgradeWindowDays = "subtitle_upgrade_window_days";
     }
 
     public static class SubtitleValidation

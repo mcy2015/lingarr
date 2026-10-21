@@ -53,6 +53,9 @@ export interface SubtitleHistoryQuery {
     provider?: string
     /// SubtitleDownloadResult enum name.
     result?: string
+    /// SubtitleDownloadSource enum name (B02): "Upgrade" isolates the
+    /// upgrade-round rows on the history screen.
+    source?: string
 }
 
 class SubtitleSearchService {

@@ -29,7 +29,7 @@ public class ScheduleService : IScheduleService
     /// Built-in recurring jobs and where their cron comes from. The catalog
     /// backs Initialize(), the enable/disable endpoints, the cron-update
     /// endpoint and the disabled-row merge in GetRecurringJobs() — one
-    /// structure, four consumers. The seven built-ins are the whole job
+    /// structure, four consumers. The eight built-ins are the whole job
     /// catalogue: nothing else creates recurring jobs anymore (legacy
     /// custom_recurring_jobs entries keep running, frozen per precedent).
     /// </summary>
@@ -55,7 +55,14 @@ public class ScheduleService : IScheduleService
         // Execute(), so disabling either the schedule row or the feature
         // stops the rounds.
         new("SubtitleSearchJob", "SubtitleSearchJob",
-            SettingKeys.Automation.SubtitleSearchSchedule, "0 5 * * *")
+            SettingKeys.Automation.SubtitleSearchSchedule, "0 5 * * *"),
+        // 8th built-in (B02 subtitle upgrade): queue=system, cron seeded
+        // "0 4 * * *" by M0014 — inside the maintenance wave. The
+        // subtitle_upgrade_enabled master switch (seeded false) governs the
+        // registration exactly like the search job's, so an off feature
+        // never registers no-op rounds.
+        new("SubtitleUpgradeJob", "SubtitleUpgradeJob",
+            SettingKeys.Automation.SubtitleUpgradeSchedule, "0 4 * * *")
     ];
 
     private readonly IHubContext<JobProgressHub> _hubContext;
@@ -87,8 +94,10 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.EmbeddedTrackSchedule,
             SettingKeys.Automation.SubtitleSearchSchedule,
+            SettingKeys.Automation.SubtitleUpgradeSchedule,
             SettingKeys.Automation.AutomationEnabled,
-            SettingKeys.SubtitleSearch.Enabled
+            SettingKeys.SubtitleSearch.Enabled,
+            SettingKeys.SubtitleSearch.UpgradeEnabled
         ]);
 
         if (TimeZoneConfiguration.ResolutionWarning != null)
@@ -156,8 +165,10 @@ public class ScheduleService : IScheduleService
             SettingKeys.Automation.StatisticsSchedule,
             SettingKeys.Automation.EmbeddedTrackSchedule,
             SettingKeys.Automation.SubtitleSearchSchedule,
+            SettingKeys.Automation.SubtitleUpgradeSchedule,
             SettingKeys.Automation.AutomationEnabled,
-            SettingKeys.SubtitleSearch.Enabled
+            SettingKeys.SubtitleSearch.Enabled,
+            SettingKeys.SubtitleSearch.UpgradeEnabled
         ]);
 
         foreach (var builtin in BuiltinJobs)
@@ -306,6 +317,27 @@ public class ScheduleService : IScheduleService
                 }
             }
         }
+        else if (builtin.Id == "SubtitleUpgradeJob")
+        {
+            // B02: the same shared-switch semantics as the search job — the
+            // schedule toggle is the upgrade master switch's UI surface
+            // (subtitle_upgrade_enabled, seeded false by M0014), written in
+            // both directions so Initialize(), IsBuiltinDisabled and
+            // Execute()'s short-circuit all read one source of truth.
+            await settingService.SetSetting(
+                SettingKeys.SubtitleSearch.UpgradeEnabled,
+                enabled ? "true" : "false");
+            if (enabled)
+            {
+                var disabled = await ReadDisabledJobIds(settingService);
+                if (disabled.Remove(builtin.Id))
+                {
+                    await settingService.SetSetting(
+                        SettingKeys.Automation.DisabledRecurringJobs,
+                        JsonConvert.SerializeObject(disabled));
+                }
+            }
+        }
         else
         {
             var disabled = await ReadDisabledJobIds(settingService);
@@ -381,7 +413,8 @@ public class ScheduleService : IScheduleService
         var disabled = await ReadDisabledJobIds(settingService);
         var settings = await settingService.GetSettings([
             SettingKeys.Automation.AutomationEnabled,
-            SettingKeys.SubtitleSearch.Enabled
+            SettingKeys.SubtitleSearch.Enabled,
+            SettingKeys.SubtitleSearch.UpgradeEnabled
         ]);
         if (!IsBuiltinDisabled(builtin, disabled, settings))
         {
@@ -459,6 +492,10 @@ public class ScheduleService : IScheduleService
                 RecurringJob.AddOrUpdate<Lingarr.Server.Modules.SubtitleSearch.Jobs.SubtitleSearchJob>(
                     jobId, job => job.Execute(), cron, options);
                 break;
+            case "SubtitleUpgradeJob":
+                RecurringJob.AddOrUpdate<Lingarr.Server.Modules.SubtitleSearch.Jobs.SubtitleUpgradeJob>(
+                    jobId, job => job.Execute(), cron, options);
+                break;
             default:
                 throw new ArgumentException($"Unsupported job type '{jobType}'.", nameof(jobType));
         }
@@ -468,8 +505,9 @@ public class ScheduleService : IScheduleService
     /// A built-in is effectively disabled when it carries the disabled flag,
     /// or — for the automated translation job — when the automation switch
     /// the settings screen shares is off. The subtitle-search job follows the
-    /// same shared-switch semantics through subtitle_search_enabled (AC7):
-    /// the master switch its Execute() short-circuits on also governs the
+    /// same shared-switch semantics through subtitle_search_enabled (AC7),
+    /// and the subtitle-upgrade job through subtitle_upgrade_enabled (B02):
+    /// the master switch each Execute() short-circuits on also governs the
     /// registration, so an off feature never registers no-op rounds and the
     /// schedule screen honestly offers「启用」on the merged disabled row.
     /// </summary>
@@ -486,8 +524,12 @@ public class ScheduleService : IScheduleService
         {
             return settings.GetValueOrDefault(SettingKeys.Automation.AutomationEnabled) != "true";
         }
-        return builtin.Id == "SubtitleSearchJob" &&
-               settings.GetValueOrDefault(SettingKeys.SubtitleSearch.Enabled) != "true";
+        if (builtin.Id == "SubtitleSearchJob")
+        {
+            return settings.GetValueOrDefault(SettingKeys.SubtitleSearch.Enabled) != "true";
+        }
+        return builtin.Id == "SubtitleUpgradeJob" &&
+               settings.GetValueOrDefault(SettingKeys.SubtitleSearch.UpgradeEnabled) != "true";
     }
 
     private static string ResolveBuiltinCron(BuiltinJob builtin, Dictionary<string, string> settings)

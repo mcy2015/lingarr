@@ -1137,10 +1137,41 @@ public class SubtitleSearchControllerTests
 
         Assert.IsType<BadRequestObjectResult>(await controller.History(mediaType: "season"));
         Assert.IsType<BadRequestObjectResult>(await controller.History(result: "Maybe"));
+        Assert.IsType<BadRequestObjectResult>(await controller.History(source: "Sometimes"));
 
         var result = Assert.IsType<BadRequestObjectResult>(await controller.History(cursor: "not-a-cursor"));
         using var body = Body(result);
         Assert.NotNull(body.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task History_SourceFilter_NarrowsToMatchingTriggerRows()
+    {
+        // B02: the history screen's trigger filter — "Upgrade" isolates the
+        // upgrade-round rows (the replace-and-delete verdicts), and the enum
+        // names compose with the other filters exactly like result does.
+        using var fixture = new SubtitleEndpointFixture(new ScriptedSearchProvider());
+        var now = DateTimeOffset.UtcNow;
+        fixture.DbContext.SubtitleDownloads.AddRange(
+            DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
+                now.AddMinutes(-1)),
+            DownloadRow(MediaType.Movie, fixture.MovieId, "opensubtitles", SubtitleDownloadResult.Succeeded,
+                now.AddMinutes(-2), source: SubtitleDownloadSource.Upgrade),
+            DownloadRow(MediaType.Movie, fixture.MovieId, "gestdown", SubtitleDownloadResult.LowConfidenceSkipped,
+                now.AddMinutes(-3), source: SubtitleDownloadSource.Upgrade, filePath: string.Empty,
+                error: "best upgrade candidate scored 74 (< 75)"));
+        await fixture.DbContext.SaveChangesAsync();
+        var controller = CreateFullController(fixture);
+
+        var upgrades = HistoryPage(await controller.History(source: "Upgrade"));
+        Assert.Equal(new[] { 2, 3 }, upgrades.Items.Select(item => item.Id).ToArray());
+        Assert.All(upgrades.Items, item => Assert.Equal("Upgrade", item.Source));
+
+        var combo = HistoryPage(await controller.History(source: "Upgrade", result: "Succeeded"));
+        Assert.Equal(new[] { 2 }, combo.Items.Select(item => item.Id).ToArray());
+
+        var manual = HistoryPage(await controller.History(source: "Manual"));
+        Assert.Equal(new[] { 1 }, manual.Items.Select(item => item.Id).ToArray());
     }
 
     [Fact]
