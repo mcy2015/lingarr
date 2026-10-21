@@ -89,9 +89,18 @@
                     data-test="health-all-offline">
                     {{ t('overview.health.allOffline') }}
                 </p>
-                <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
+                <!-- 6-row cap in the idle state (246px ≈ 6 × 41px row):
+                     beyond that the list scrolls inside the card instead of
+                     stretching the row — the left active-tasks card matches
+                     the height via the grid's default stretch. With tasks
+                     in flight the row keeps its flexible layout and the
+                     list is bounded by the row itself. -->
+                <div
+                    class="shell-scroll min-h-0 flex-1 overflow-y-auto"
+                    :class="activeItems.length === 0 ? 'max-h-[246px]' : ''"
+                    data-test="health-list">
                     <router-link
-                        v-for="provider in health"
+                        v-for="provider in configuredHealth"
                         :key="provider.provider"
                         :to="{ name: 'settings-providers' }"
                         class="hover:bg-tertiary/50 border-line flex items-center gap-2.5 border-b px-4 py-2.5 text-[13px] last:border-b-0">
@@ -217,6 +226,12 @@ const allServicesDown = computed(() => {
             !provider.configured || (provider.successRate != null && provider.successRate < 0.5)
     )
 })
+
+/// 走查 2026-10-21:默认只列已配置的服务——16 个槽位里未配置的灰行是纯
+/// 噪音,还把这一行撑成整页溢出的主因。未配置服务的状态去设置页看。
+const configuredHealth = computed(() =>
+    health.value.filter((provider) => provider.configured)
+)
 
 /// Month-to-date meta for the trend card (QA P3-3), assembled from the
 /// pipeline statistics the page already fetches; null until they load.
