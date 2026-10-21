@@ -305,6 +305,10 @@ public class SubtitleUpgradeJobTests
 
         internal int MovieId => Endpoint.MovieId;
 
+        internal InMemorySettingService Settings => Endpoint.Settings;
+
+        internal LingarrDbContext DbContext => Endpoint.DbContext;
+
         /// <summary>
         /// Seeds the old, still-on-disk succeeded download the round is to
         /// re-offer: a real file in the fixture's media directory plus its

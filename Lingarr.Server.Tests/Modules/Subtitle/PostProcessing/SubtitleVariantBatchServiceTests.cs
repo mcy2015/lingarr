@@ -102,8 +102,8 @@ public sealed class SubtitleVariantBatchServiceTests : IDisposable
         var after = Snapshot(directory);
         foreach (var (path, snapshot) in before)
         {
-            Assert.Equal(snapshot.Bytes, after[path]);
-            Assert.Equal(snapshot.Mtime, after[path]);
+            Assert.Equal(snapshot.Bytes, after[path].Bytes);
+            Assert.Equal(snapshot.Mtime, after[path].Mtime);
         }
     }
 
