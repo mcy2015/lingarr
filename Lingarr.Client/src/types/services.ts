@@ -173,8 +173,37 @@ export interface ISettingService {
     setEncryptedSetting(key: string, value: string): Promise<void>
 }
 
+/// POST api/subtitle/bilingual-merge request (B06): merge two external
+/// subtitle files of one media item into one bilingual file. The primary
+/// file is the caller's main-language choice (its text renders on top and
+/// its language becomes the output's primary tag).
+export interface IBilingualMergeRequest {
+    mediaType: 'Movie' | 'Episode'
+    mediaId: number
+    primaryPath: string
+    primaryLanguage: string
+    secondaryPath: string
+    secondaryLanguage: string
+}
+
+/// POST api/subtitle/bilingual-merge response: the written output plus the
+/// pairing verdict (cues that paired bilingual vs preserved monolingual).
+export interface IBilingualMergeResponse {
+    outputPath: string
+    outputFileName: string
+    primaryCues: number
+    secondaryCues: number
+    pairedCues: number
+    primaryOnlyCues: number
+    secondaryOnlyCues: number
+}
+
 export interface ISubtitleService {
     collect<T>(path: string): Promise<T>
+    /// B06: two-file bilingual merge (server-side pairing by cue overlap;
+    /// unpaired cues pass through monolingual). The output lands next to
+    /// the media as {base}.{primary}.{secondary}.srt|ass.
+    mergeBilingual<T>(request: IBilingualMergeRequest): Promise<T>
 }
 
 export interface IParsedSubtitleFilename {

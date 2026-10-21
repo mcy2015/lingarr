@@ -31,6 +31,7 @@ const mediaSubtitlesMock = vi.hoisted(() => vi.fn())
 const subtitleNeedMock = vi.hoisted(() => vi.fn())
 const setTargetLanguagesMock = vi.hoisted(() => vi.fn())
 const extractEmbeddedTrackMock = vi.hoisted(() => vi.fn())
+const mergeBilingualMock = vi.hoisted(() => vi.fn())
 
 /// mediaSubtitles payload shape (F2a + requirement card A/B): external
 /// files + embedded tracks + the container's audio languages (null=unknown).
@@ -67,7 +68,7 @@ vi.mock('@/cells/app/api/translationRequestService', () => ({
 }))
 
 vi.mock('@/cells/library/services/subtitleService', () => ({
-    subtitleService: () => ({ collect: collectMock })
+    subtitleService: () => ({ collect: collectMock, mergeBilingual: mergeBilingualMock })
 }))
 
 // the translate store builds its API at module scope; stubbing the service
@@ -2122,5 +2123,197 @@ describe('MediaDetailPage · 内嵌轨抽取为外挂(B04)', () => {
                 'Embedded stream 2 (pgs) is image-based'
             )
         )
+    })
+})
+
+// ═══ B06:双文件双语合并(行级多选 + 合并条)══════════════════════════
+describe('MediaDetailPage · 双语合并(B06)', () => {
+    const zhFile = {
+        fileName: 'dune.zh.srt',
+        directory: '/media/movies',
+        languages: ['zh'],
+        format: 'srt',
+        bytes: 2048
+    }
+    const enFile = {
+        fileName: 'dune.en.srt',
+        directory: '/media/movies',
+        languages: ['en'],
+        format: 'srt',
+        bytes: 4096
+    }
+
+    const mergeResult = {
+        outputPath: '/media/movies/dune.zh.en.srt',
+        outputFileName: 'dune.zh.en.srt',
+        primaryCues: 100,
+        secondaryCues: 100,
+        pairedCues: 96,
+        primaryOnlyCues: 2,
+        secondaryOnlyCues: 2
+    }
+
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        libraryMock.mockResolvedValue({
+            items: [movieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({ files: [zhFile, enFile], embeddedScanned: true })
+        )
+        mergeBilingualMock.mockResolvedValue(mergeResult)
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('selects two files, merges primary-on-top and refreshes the card', async () => {
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        const selects = card.findAll('[data-test="subtitle-file-select"]')
+        expect(selects).toHaveLength(2)
+
+        // one pick alone shows no bar
+        await selects[0].trigger('click')
+        expect(card.find('[data-test="bilingual-merge-bar"]').exists()).toBe(false)
+
+        await selects[1].trigger('click')
+        const bar = card.find('[data-test="bilingual-merge-bar"]')
+        expect(bar.exists()).toBe(true)
+        // first pick = primary (top line)
+        expect(bar.find('[data-test="bilingual-merge-primary"]').text()).toContain(
+            'dune.zh.srt'
+        )
+        expect(bar.find('[data-test="bilingual-merge-secondary"]').text()).toContain(
+            'dune.en.srt'
+        )
+
+        const loadCallsBefore = mediaSubtitlesMock.mock.calls.length
+        await bar.find('[data-test="bilingual-merge-action"]').trigger('click')
+        await settle()
+
+        expect(mergeBilingualMock).toHaveBeenCalledWith({
+            mediaType: 'Movie',
+            mediaId: 7,
+            primaryPath: '/media/movies/dune.zh.srt',
+            primaryLanguage: 'zh',
+            secondaryPath: '/media/movies/dune.en.srt',
+            secondaryLanguage: 'en'
+        })
+        // toast carries the real pairing verdict, then the page reloads the
+        // subtitle payload (the merged file shows up in the card)
+        expect(toastStore.toasts[0].type).toBe('success')
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.b06merge.doneToast
+                .replace('{paired}', '96')
+                .replace('{count}', '100')
+                .replace('{file}', 'dune.zh.en.srt')
+        )
+        expect(mediaSubtitlesMock.mock.calls.length).toBe(loadCallsBefore + 1)
+        // selection cleared after success — the bar is gone
+        expect(wrapper.find('[data-test="bilingual-merge-bar"]').exists()).toBe(false)
+    })
+
+    it('swap flips which language is the primary (top line)', async () => {
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        const selects = card.findAll('[data-test="subtitle-file-select"]')
+        await selects[0].trigger('click')
+        await selects[1].trigger('click')
+        await card.find('[data-test="bilingual-merge-swap"]').trigger('click')
+
+        const bar = card.find('[data-test="bilingual-merge-bar"]')
+        expect(bar.find('[data-test="bilingual-merge-primary"]').text()).toContain('dune.en.srt')
+        expect(bar.find('[data-test="bilingual-merge-secondary"]').text()).toContain('dune.zh.srt')
+
+        await bar.find('[data-test="bilingual-merge-action"]').trigger('click')
+        await settle()
+
+        expect(mergeBilingualMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                primaryPath: '/media/movies/dune.en.srt',
+                primaryLanguage: 'en',
+                secondaryPath: '/media/movies/dune.zh.srt',
+                secondaryLanguage: 'zh'
+            })
+        )
+    })
+
+    it('disables the merge when both files carry the same language', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                files: [zhFile, { ...zhFile, fileName: 'dune.chs.srt' }],
+                embeddedScanned: true
+            })
+        )
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        const selects = card.findAll('[data-test="subtitle-file-select"]')
+        await selects[0].trigger('click')
+        await selects[1].trigger('click')
+
+        const action = card.find('[data-test="bilingual-merge-action"]')
+        expect(action.attributes('disabled')).toBeDefined()
+        expect(action.attributes('title')).toBe(en.mediaDetail.b06merge.sameLanguageTitle)
+        expect(mergeBilingualMock).not.toHaveBeenCalled()
+    })
+
+    it('keeps dual-language files out of the merge selection', async () => {
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                files: [
+                    zhFile,
+                    { fileName: 'dune.scjp.ass', directory: '/media/movies', languages: ['zh', 'ja'], format: 'ass', bytes: 8192 }
+                ],
+                embeddedScanned: true
+            })
+        )
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        const selects = card.findAll('[data-test="subtitle-file-select"]')
+        expect(selects[1].attributes('disabled')).toBeDefined()
+
+        // a disabled select cannot join: the bar never appears
+        await selects[0].trigger('click')
+        await selects[1].trigger('click')
+        expect(card.find('[data-test="bilingual-merge-bar"]').exists()).toBe(false)
+        expect(mergeBilingualMock).not.toHaveBeenCalled()
+    })
+
+    it('toasts the readable server error and keeps the selection on failure', async () => {
+        mergeBilingualMock.mockRejectedValue({
+            isAxiosError: true,
+            message: 'Network Error',
+            response: { data: { message: "both files carry the same language 'zh'" } }
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const card = wrapper.find('[data-test="subtitle-files-card"]')
+        const selects = card.findAll('[data-test="subtitle-file-select"]')
+        await selects[0].trigger('click')
+        await selects[1].trigger('click')
+        await card.find('[data-test="bilingual-merge-action"]').trigger('click')
+        await settle()
+
+        expect(toastStore.toasts[0].type).toBe('error')
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.b06merge.failedToast.replace(
+                '{message}',
+                "both files carry the same language 'zh'"
+            )
+        )
+        // the picks survive a failure so the user can retry or adjust
+        expect(card.find('[data-test="bilingual-merge-bar"]').exists()).toBe(true)
     })
 })

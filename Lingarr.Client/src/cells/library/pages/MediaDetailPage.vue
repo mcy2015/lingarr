@@ -670,6 +670,48 @@
                     </span>
                 </div>
             </div>
+            <!-- ═══ B06:双语合并条 —— 恰好选中两行时出现;首个选中是主语言
+                 (上行),⇄ 交换主次;按钮禁用态如实给出不可合并的原因 ═══ -->
+            <div
+                v-if="mergeSelection.length === 2"
+                class="border-line bg-tertiary/40 shrink-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b px-4 py-2 text-[12.5px]"
+                data-test="bilingual-merge-bar">
+                <span class="text-secondary-content text-xs">
+                    {{ t('mediaDetail.b06merge.barLabel') }}
+                </span>
+                <span
+                    class="mono text-primary-content max-w-[220px] truncate text-[11.5px]"
+                    :title="t('mediaDetail.b06merge.primary')"
+                    data-test="bilingual-merge-primary">
+                    {{ mergeSelection[0].fileName }} ·
+                    {{ mergeSelection[0].languages[0].toUpperCase() }}
+                </span>
+                <button
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-1.5 py-0.5 text-xs transition-colors"
+                    :title="t('mediaDetail.b06merge.swap')"
+                    :aria-label="t('mediaDetail.b06merge.swap')"
+                    data-test="bilingual-merge-swap"
+                    @click="swapMergeSelection">
+                    ⇄
+                </button>
+                <span
+                    class="mono text-primary-content max-w-[220px] truncate text-[11.5px]"
+                    :title="t('mediaDetail.b06merge.secondary')"
+                    data-test="bilingual-merge-secondary">
+                    {{ mergeSelection[1].fileName }} ·
+                    {{ mergeSelection[1].languages[0].toUpperCase() }}
+                </span>
+                <button
+                    type="button"
+                    class="border-line text-primary-content hover:bg-tertiary ml-auto cursor-pointer rounded border px-2 py-0.5 text-xs font-semibold transition-colors disabled:cursor-default disabled:opacity-50"
+                    :disabled="!mergeEligible || mergeBusy"
+                    :title="mergeBlockedTitle"
+                    data-test="bilingual-merge-action"
+                    @click="mergeBilingualAction">
+                    {{ mergeBusy ? '…' : t('mediaDetail.b06merge.action') }}
+                </button>
+            </div>
             <div class="shell-scroll min-h-0 flex-1 overflow-y-auto">
                 <div
                     v-if="subtitleFiles.length === 0"
@@ -680,7 +722,21 @@
                     v-for="file in subtitleFiles"
                     :key="file.directory + '/' + file.fileName"
                     class="border-line flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b px-4 py-2 text-[12.5px]"
+                    :class="isMergeSelected(file) ? 'bg-accent/10' : ''"
                     :data-test="'subtitle-file-row'">
+                    <!-- B06:行级合并多选(最多两行,首个选中 = 主语言/上行)。
+                         B10 的字幕工具面板聚合既有动作时保留此多选形态,不重做 -->
+                    <button
+                        type="button"
+                        class="mono border-line bg-tertiary text-secondary-content hover:text-primary-content flex-none cursor-pointer rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        :class="isMergeSelected(file) ? 'border-accent/60 bg-accent/15 text-accent' : ''"
+                        :disabled="!canEnterMergeSelection(file)"
+                        :aria-pressed="isMergeSelected(file)"
+                        :title="mergeSelectTitle(file)"
+                        data-test="subtitle-file-select"
+                        @click="toggleMergeSelection(file)">
+                        {{ isMergeSelected(file) ? '✓' : '+' }}
+                    </button>
                     <span
                         class="mono text-primary-content min-w-0 flex-1 truncate text-[11.5px]"
                         :title="file.directory + '/' + file.fileName">
@@ -879,10 +935,12 @@ import VirtualEpisodeList from '@/cells/library/components/VirtualEpisodeList.vu
 import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
 import {
+    IBilingualMergeResponse,
     ILanguage,
     MEDIA_TYPE,
     IMediaEmbeddedTrack,
     IMediaLibraryItem,
+    IMediaSubtitleFile,
     IMediaSubtitlesResponse,
     ISeason,
     IShow,
@@ -1581,6 +1639,159 @@ async function extractEmbeddedTrackAction(track: IMediaEmbeddedTrack): Promise<v
         extractBusyKey.value = null
     }
 }
+
+// ── 双文件双语合并(B06)════════════════════════════════════════════
+// v1 是 UI 直调(无自动策略):行级多选最多两行,首个选中 = 主语言(渲染在
+// 上行,并成为输出文件的主语言标签)。B10 的字幕工具面板聚合既有动作时
+// 保留此多选形态,不重做。
+
+/// 当前多选(按选择顺序;[0] 是主语言)。
+const mergeSelection = ref<IMediaSubtitleFile[]>([])
+const mergeBusy = ref(false)
+
+function mergeFileKey(file: IMediaSubtitleFile): string {
+    return file.directory + '/' + file.fileName
+}
+
+function isMergeSelected(file: IMediaSubtitleFile): boolean {
+    return mergeSelection.value.some(
+        (selected) => mergeFileKey(selected) === mergeFileKey(file)
+    )
+}
+
+/// 双语言文件(scjp/简日…)不能进入两文件合并——主/次各一个语言码描述不了它。
+function canEnterMergeSelection(file: IMediaSubtitleFile): boolean {
+    return file.languages.length === 1
+}
+
+function mergeSelectTitle(file: IMediaSubtitleFile): string {
+    return canEnterMergeSelection(file)
+        ? t('mediaDetail.b06merge.selectTitle')
+        : t('mediaDetail.b06merge.dualLanguageTitle')
+}
+
+function toggleMergeSelection(file: IMediaSubtitleFile): void {
+    if (!canEnterMergeSelection(file)) return
+    if (isMergeSelected(file)) {
+        mergeSelection.value = mergeSelection.value.filter(
+            (selected) => mergeFileKey(selected) !== mergeFileKey(file)
+        )
+        return
+    }
+    // 上限两行:最早的选中被挤出,始终保留最近两行
+    const next = [...mergeSelection.value, file]
+    mergeSelection.value = next.slice(Math.max(0, next.length - 2))
+}
+
+function swapMergeSelection(): void {
+    mergeSelection.value = [...mergeSelection.value].reverse()
+}
+
+/// 一个文件的可寻址归属(merge API 只认 Movie/Episode):电影直接归属自身;
+/// 剧集载荷跨季聚合,按视频 base 名匹配到 owning episode(与剧集行同一启发式)。
+function mergeOwnerOf(
+    file: IMediaSubtitleFile
+): { mediaType: 'Movie' | 'Episode'; mediaId: number } | null {
+    if (!item.value) return null
+    if (!isShow.value) return { mediaType: 'Movie', mediaId: item.value.id }
+    const fileName = file.fileName.toLowerCase()
+    let owner: number | null = null
+    for (const episode of episodeById.value.values()) {
+        const base = episode.fileName
+            ? episode.fileName.replace(/\.[^.]+$/, '').toLowerCase()
+            : null
+        if (!base) continue
+        if (fileName === base || fileName.startsWith(base + '.')) {
+            if (owner !== null && owner !== episode.id) return null
+            owner = episode.id
+        }
+    }
+    return owner === null ? null : { mediaType: 'Episode', mediaId: owner }
+}
+
+function sameMergeOwner(
+    a: { mediaType: 'Movie' | 'Episode'; mediaId: number },
+    b: { mediaType: 'Movie' | 'Episode'; mediaId: number } | null
+): boolean {
+    return b !== null && a.mediaType === b.mediaType && a.mediaId === b.mediaId
+}
+
+/// 两行都可选且语言互异且归属同一 Movie/Episode 才能合并——服务端同样会
+/// 拒绝;禁用态直接给出原因,不做无效往返。
+const mergeEligible = computed<boolean>(() => {
+    if (mergeSelection.value.length !== 2) return false
+    const primary = mergeSelection.value[0]
+    const secondary = mergeSelection.value[1]
+    if (!canEnterMergeSelection(primary) || !canEnterMergeSelection(secondary)) {
+        return false
+    }
+    if (primary.languages[0].toLowerCase() === secondary.languages[0].toLowerCase()) {
+        return false
+    }
+    const owner = mergeOwnerOf(primary)
+    return owner !== null && sameMergeOwner(owner, mergeOwnerOf(secondary))
+})
+
+const mergeBlockedTitle = computed<string>(() => {
+    if (mergeEligible.value || mergeSelection.value.length !== 2) return ''
+    const primary = mergeSelection.value[0]
+    const secondary = mergeSelection.value[1]
+    if (!canEnterMergeSelection(primary) || !canEnterMergeSelection(secondary)) {
+        return t('mediaDetail.b06merge.dualLanguageTitle')
+    }
+    if (primary.languages[0].toLowerCase() === secondary.languages[0].toLowerCase()) {
+        return t('mediaDetail.b06merge.sameLanguageTitle')
+    }
+    return t('mediaDetail.b06merge.noOwnerTitle')
+})
+
+/// 「合并双语」:服务端按 cue 时间重叠配对(≥50% 配对,未配对单语保留),
+/// 输出 {base}.{主语言}.{次语言}.srt|ass;成功后 toast 携带真实配对数并
+/// load() 刷新字幕卡(新文件出现在列表中)。
+async function mergeBilingualAction(): Promise<void> {
+    if (!mergeEligible.value || mergeBusy.value) return
+    const primary = mergeSelection.value[0]
+    const secondary = mergeSelection.value[1]
+    const owner = mergeOwnerOf(primary)
+    if (!owner || !sameMergeOwner(owner, mergeOwnerOf(secondary))) return
+    mergeBusy.value = true
+    try {
+        const result = await subtitleApi.mergeBilingual<IBilingualMergeResponse>({
+            mediaType: owner.mediaType,
+            mediaId: owner.mediaId,
+            primaryPath: primary.directory + '/' + primary.fileName,
+            primaryLanguage: primary.languages[0],
+            secondaryPath: secondary.directory + '/' + secondary.fileName,
+            secondaryLanguage: secondary.languages[0]
+        })
+        toastStore.push({
+            message: t('mediaDetail.b06merge.doneToast', {
+                paired: result.pairedCues,
+                count:
+                    result.pairedCues + result.primaryOnlyCues + result.secondaryOnlyCues,
+                file: result.outputFileName
+            }),
+            type: 'success'
+        })
+        mergeSelection.value = []
+        await load()
+    } catch (error) {
+        toastStore.push({
+            message: t('mediaDetail.b06merge.failedToast', { message: errorMessage(error) }),
+            type: 'error'
+        })
+    } finally {
+        mergeBusy.value = false
+    }
+}
+
+// 合并/外因移除文件后刷新载荷:不再存在的选中行从多选中剔除
+watch(subtitleFiles, (files) => {
+    const keys = new Set(files.map(mergeFileKey))
+    mergeSelection.value = mergeSelection.value.filter((file) =>
+        keys.has(mergeFileKey(file))
+    )
+})
 
 /// Extractable embedded tracks of the CURRENT search unit (movie: all rows;
 /// episode: that episode's rows), handed to the search modal for its

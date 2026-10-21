@@ -38,6 +38,11 @@ public static class SubtitleModule
         services.AddScoped<CompositePostProcessor>();
         services.AddScoped<ISubtitleVariantBatchService, SubtitleVariantBatchService>();
 
+        // Two-file bilingual merge (B06): reuses the scoped SubtitleService
+        // above for reading/writing/naming — stateless itself, scoped wiring
+        // is exact.
+        services.AddScoped<IBilingualMergeService, BilingualMergeService>();
+
         // Note: SrtParser/SsaParser/SrtWriter/SsaWriter are instantiated directly
         // by SubtitleService per file extension — no DI consumers exist, so no
         // (conflicting) registrations are needed.

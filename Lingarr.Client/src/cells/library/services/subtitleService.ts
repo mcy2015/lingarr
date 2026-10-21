@@ -1,5 +1,5 @@
 import { AxiosStatic } from 'axios'
-import { ISubtitleService } from '@/types'
+import { IBilingualMergeRequest, ISubtitleService } from '@/types'
 
 const service = (http: AxiosStatic, resource = '/api/subtitle'): ISubtitleService => ({
     collect<T>(path: string): Promise<T> {
@@ -15,6 +15,14 @@ const service = (http: AxiosStatic, resource = '/api/subtitle'): ISubtitleServic
                     }
                 }
             )
+            .then((response) => response.data)
+    },
+    /// B06: POST api/subtitle/bilingual-merge/merge — the two-file bilingual
+    /// merge (separate controller; deliberately NOT under ${resource}/all's
+    /// path-whitelist contract since it validates media ownership instead).
+    mergeBilingual<T>(request: IBilingualMergeRequest): Promise<T> {
+        return http
+            .post(`${resource}/bilingual-merge/merge`, request)
             .then((response) => response.data)
     }
 })

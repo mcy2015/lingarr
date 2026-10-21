@@ -1236,6 +1236,19 @@
             "reset": "Follow global",
             "resetTitle": "Clear the override and follow the global target languages again",
             "failedToast": "Updating the target languages failed: {message}"
+        },
+        "b06merge": {
+            "selectTitle": "Select for bilingual merge (max two; first pick = top line)",
+            "dualLanguageTitle": "Dual-language files cannot enter a two-file merge",
+            "barLabel": "Bilingual merge:",
+            "primary": "Primary language (top line)",
+            "secondary": "Secondary language (below)",
+            "swap": "Swap which language is on top",
+            "action": "Merge bilingual",
+            "sameLanguageTitle": "The two files carry the same language",
+            "noOwnerTitle": "The two files must belong to the same movie or episode",
+            "doneToast": "Merged {paired}/{count} paired cues → {file}",
+            "failedToast": "Bilingual merge failed: {message}"
         }
     },
     "cmdk": {

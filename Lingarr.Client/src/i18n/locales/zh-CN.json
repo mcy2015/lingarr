@@ -1236,6 +1236,19 @@
             "reset": "恢复全局",
             "resetTitle": "清除覆盖，重新跟随全局目标语言",
             "failedToast": "更新目标语言失败：{message}"
+        },
+        "b06merge": {
+            "selectTitle": "选入双语合并（最多两行；首个选中 = 上行主语言）",
+            "dualLanguageTitle": "双语言文件不能进入两文件合并",
+            "barLabel": "双语合并：",
+            "primary": "主语言（上行）",
+            "secondary": "次语言（下行）",
+            "swap": "交换上下行语言",
+            "action": "合并双语",
+            "sameLanguageTitle": "两个文件语言相同",
+            "noOwnerTitle": "两个文件须属于同一电影或剧集单集",
+            "doneToast": "已合并：{paired}/{count} 条配对 → {file}",
+            "failedToast": "双语合并失败：{message}"
         }
     },
     "cmdk": {
