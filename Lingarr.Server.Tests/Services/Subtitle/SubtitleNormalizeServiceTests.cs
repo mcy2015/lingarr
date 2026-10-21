@@ -268,6 +268,42 @@ public class SubtitleNormalizeServiceTests : IDisposable
         Assert.Equal(SubtitleNormalizeSkipReasons.AlreadyNormalized, skipped.Reason);
     }
 
+    // ── B07 round trip: the download pipeline's caption suffix
+    // ({base}.{language}.forced|.hi.{ext}) is already the normalizer's
+    // canonical shape — the preview must never propose a rename for it. ──
+
+    [Theory]
+    [InlineData("forced")]
+    [InlineData("hi")]
+    public async Task Preview_Movie_PipelineCaptionSuffix_IsAlreadyNormalized(string caption)
+    {
+        var (movie, directory) = await SeedMovie();
+        WriteFile(Path.Combine(directory, $"Dune.2021.zh.{caption}.srt"));
+
+        var preview = await _service.Preview("Movie", movie.Id);
+
+        Assert.Empty(preview.Items);
+        var skipped = Assert.Single(preview.Skipped);
+        Assert.Equal(SubtitleNormalizeSkipReasons.AlreadyNormalized, skipped.Reason);
+        // The file on disk is untouched either way — a preview never writes.
+        Assert.True(File.Exists(Path.Combine(directory, $"Dune.2021.zh.{caption}.srt")));
+    }
+
+    [Theory]
+    [InlineData("forced")]
+    [InlineData("hi")]
+    public async Task Preview_Show_PipelineCaptionSuffix_IsAlreadyNormalized(string caption)
+    {
+        var show = await SeedShow();
+        WriteFile(Path.Combine(show.Path!, $"Shogun.S01E01.zh.{caption}.srt"));
+
+        var preview = await _service.Preview("Show", show.Id);
+
+        Assert.Empty(preview.Items);
+        var skipped = Assert.Single(preview.Skipped);
+        Assert.Equal(SubtitleNormalizeSkipReasons.AlreadyNormalized, skipped.Reason);
+    }
+
     [Fact]
     public async Task Preview_Movie_TwoFilesClaimingSameNewName_BothSkipped()
     {

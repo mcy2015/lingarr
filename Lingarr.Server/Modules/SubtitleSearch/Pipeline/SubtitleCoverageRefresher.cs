@@ -115,13 +115,15 @@ public sealed class SubtitleCoverageRefresher
         // object; a scanned one gets one count/bytes slot per language,
         // dual-language files counting for each language they carry.
         string? coverageJson = null;
-        Dictionary<string, MediaLanguageCoverage>.KeyCollection? covered = null;
+        IEnumerable<string>? covered = null;
         if (!string.IsNullOrWhiteSpace(movie.Path))
         {
             var subtitles = await _subtitleService.GetAllSubtitles(movie.Path);
             var coverage = SubtitleCoverageMath.MovieCoverage(subtitles);
             coverageJson = SubtitleCoverageMath.SerializeCoverage(coverage);
-            covered = coverage.Keys;
+            // B07: a language carried ONLY as forced caption is not covered
+            // — the forced dimension never exempts the full search.
+            covered = SubtitleCoverageMath.FullyCoveredLanguages(coverage);
         }
 
         var needs = SubtitleNeedRule.NeedsTranslation(
@@ -277,10 +279,12 @@ internal sealed record EpisodeFileRef(int Id, string? FileName);
 internal static class SubtitleCoverageMath
 {
     /// <summary>
-    /// Movie coverage: every language present counts as one file. Dual-language
-    /// files (scjp/简日…) contribute to each language they carry. Audit P2:
-    /// each file is stat'ed once and the size reused per language — the old
-    /// Where().Sum(BytesOf) re-statted every file for every language.
+    /// Movie coverage: every language present counts as one file (0/1 per
+    /// dimension). Dual-language files (scjp/简日…) contribute to each
+    /// language they carry. B07 dimension split: forced-only files (caption
+    /// "forced") count into the forced dimension, never into the full count.
+    /// Audit P2: each file is stat'ed once and the size reused per language —
+    /// the old Where().Sum(BytesOf) re-statted every file for every language.
     /// </summary>
     internal static Dictionary<string, MediaLanguageCoverage> MovieCoverage(List<Subtitles> subtitles)
     {
@@ -292,10 +296,32 @@ internal static class SubtitleCoverageMath
         foreach (var language in sizes.SelectMany(entry => LanguagesOf(entry.Subtitle)).Distinct())
         {
             var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
-            slot.Count++;
-            slot.Bytes += sizes
-                .Where(entry => LanguagesOf(entry.Subtitle).Contains(language))
-                .Sum(entry => entry.Size);
+            var hasFull = false;
+            var hasForced = false;
+            foreach (var entry in sizes.Where(entry => LanguagesOf(entry.Subtitle).Contains(language)))
+            {
+                if (IsForcedOnly(entry.Subtitle))
+                {
+                    hasForced = true;
+                    slot.ForcedBytes += entry.Size;
+                }
+                else
+                {
+                    hasFull = true;
+                    slot.Bytes += entry.Size;
+                }
+            }
+
+            if (hasFull)
+            {
+                slot.Count = 1;
+            }
+
+            if (hasForced)
+            {
+                slot.ForcedCount = 1;
+            }
+
             coverage[language] = slot;
         }
 
@@ -309,7 +335,9 @@ internal static class SubtitleCoverageMath
     /// Unmatched files still contribute bytes to their language for the
     /// estimate heuristic. <paramref name="episodeLanguages"/> collects the
     /// languages each episode carries — the coverage input of the per-episode
-    /// subtitle-need rule.
+    /// subtitle-need rule. B07: forced-only files feed the forced dimension
+    /// of the show aggregate and NEVER the per-episode covered set — a
+    /// forced track does not satisfy the episode's full-subtitle need.
     /// </summary>
     internal static void MergeSeasonCoverage(
         Dictionary<string, MediaLanguageCoverage> coverage,
@@ -335,6 +363,10 @@ internal static class SubtitleCoverageMath
         // per process, so distinct (episode, language) pairs could collide
         // and silently drop coverage counts.
         var coveredEpisodes = new HashSet<(int EpisodeId, string Language)>();
+        // B07: forced-only attribution keeps its own (episode, language) set
+        // — a forced file increments ForcedCount without ever touching the
+        // full Count of its language.
+        var forcedEpisodes = new HashSet<(int EpisodeId, string Language)>();
         foreach (var subtitle in subtitles)
         {
             var size = BytesOf(subtitle);
@@ -356,25 +388,62 @@ internal static class SubtitleCoverageMath
             }
 
             var episode = match?.Episode;
+            var forcedOnly = IsForcedOnly(subtitle);
             HashSet<string>? episodeSet = null;
-            if (episode != null && !episodeLanguages.TryGetValue(episode.Id, out episodeSet))
+            if (episode != null && !forcedOnly && !episodeLanguages.TryGetValue(episode.Id, out episodeSet))
             {
                 episodeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 episodeLanguages[episode.Id] = episodeSet;
             }
             foreach (var language in LanguagesOf(subtitle))
             {
-                episodeSet?.Add(language);
-                var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
-                slot.Bytes += size;
-                if (episode != null && coveredEpisodes.Add((episode.Id, language)))
+                if (!forcedOnly)
                 {
-                    slot.Count++;
+                    episodeSet?.Add(language);
                 }
+
+                var slot = coverage.GetValueOrDefault(language) ?? new MediaLanguageCoverage();
+                if (forcedOnly)
+                {
+                    slot.ForcedBytes += size;
+                    if (episode != null && forcedEpisodes.Add((episode.Id, language)))
+                    {
+                        slot.ForcedCount++;
+                    }
+                }
+                else
+                {
+                    slot.Bytes += size;
+                    if (episode != null && coveredEpisodes.Add((episode.Id, language)))
+                    {
+                        slot.Count++;
+                    }
+                }
+
                 coverage[language] = slot;
             }
         }
     }
+
+    /// <summary>
+    /// B07 dimension discriminator: a file whose filename caption is exactly
+    /// "forced" (a foreign-audio-only track). The other captions of the
+    /// vocabulary (sdh/cc/hi) are full subtitles for a specific audience and
+    /// count as full coverage.
+    /// </summary>
+    internal static bool IsForcedOnly(Subtitles subtitle) =>
+        string.Equals(subtitle.Caption, "forced", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Languages with FULL coverage (Count &gt; 0) — the need rule's covered
+    /// input. Replaces the pre-B07 <c>coverage.Keys</c>: a language carried
+    /// only as forced caption now owns a slot with Count 0 and must still
+    /// read as missing, so the forced dimension never exempts the full
+    /// search.
+    /// </summary>
+    internal static IEnumerable<string> FullyCoveredLanguages(
+        Dictionary<string, MediaLanguageCoverage> coverage) =>
+        coverage.Where(pair => pair.Value.Count > 0).Select(pair => pair.Key);
 
     /// <summary>
     /// Known video container extensions — the only suffixes ever stripped

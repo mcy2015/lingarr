@@ -300,6 +300,14 @@ public static class SettingKeys
         /// digests day by day as the window scrolls.
         /// </summary>
         public const string UpgradeWindowDays = "subtitle_upgrade_window_days";
+
+        /// <summary>
+        /// Whether hearing-impaired (SDH) candidates win score ties (B07);
+        /// seeded "false". A pure ordering preference — the score itself and
+        /// the auto-download threshold never see this flag, so the default
+        /// keeps the pre-B07 ranking byte-identical.
+        /// </summary>
+        public const string PreferHearingImpaired = "subtitle_search_prefer_hearing_impaired";
     }
 
     public static class SubtitleValidation

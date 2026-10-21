@@ -101,7 +101,10 @@
         "track": {
             "complete": "{lang}: complete",
             "partial": "{lang}: {have}/{total} episodes",
-            "none": "{lang}: no subtitles"
+            "none": "{lang}: no subtitles",
+            "forcedTag": "forced",
+            "forcedOnlyTitle": "{lang}: forced-only subtitles ({have}/{total}) — a full subtitle is still missing",
+            "forcedAlongsideTitle": "{count} forced-only subtitle(s) alongside the full track"
         },
         "state": {
             "none": "· Not queued",
@@ -929,6 +932,12 @@
             "tokenConfigured": "Configured (leave empty to keep)",
             "refresh": "Refresh libraries after subtitles land",
             "refreshHint": "Enqueued on every subtitle landing and translation writeback; overlapping refreshes merge into one"
+        },
+        "subtitlePreference": {
+            "title": "Subtitle search preferences",
+            "description": "Candidate ranking of the subtitle search",
+            "preferHiLabel": "Prefer hearing-impaired",
+            "preferHiHint": "At equal match scores, hearing-impaired (SDH) candidates rank first; scores and the auto-download threshold never change. Off by default"
         }
     },
     "translations": {

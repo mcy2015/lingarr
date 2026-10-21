@@ -533,6 +533,147 @@ public class SubtitleDownloadPipelineTests
             Directory.GetFiles(directory!, "*.srt").Select(Path.GetFileName).Single());
     }
 
+    // ── B07 caption suffix: a forced / hearing-impaired candidate carries
+    // its dimension into the file name through the REAL naming chain (the
+    // fixture's default pipeline mocks CreateFilePath to a passthrough, so
+    // these run a pipeline variant wired to the production SubtitleService).
+
+    [Fact]
+    public async Task Download_ForcedCandidate_LandsWithTheForcedCaptionSuffix()
+    {
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+        var pipeline = fixture.PipelineWithRealNaming();
+
+        var outcome = await pipeline.DownloadAsync(
+            Candidate("zh") with { Forced = true }, MediaType.Movie, fixture.MovieId,
+            SubtitleDownloadSource.Manual, searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        // CreateFilePath re-appends the caption after the language — the
+        // exact vocabulary the scanner and the normalizer already parse.
+        Assert.EndsWith("Movie.2019.WEBDL-1080p.zh.forced.srt", outcome.FilePath);
+        Assert.True(File.Exists(outcome.FilePath));
+    }
+
+    [Fact]
+    public async Task Download_HearingImpairedCandidate_LandsWithTheHiCaptionSuffix()
+    {
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+        var pipeline = fixture.PipelineWithRealNaming();
+
+        var outcome = await pipeline.DownloadAsync(
+            Candidate("zh") with { HearingImpaired = true }, MediaType.Movie, fixture.MovieId,
+            SubtitleDownloadSource.Manual, searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.EndsWith("Movie.2019.WEBDL-1080p.zh.hi.srt", outcome.FilePath);
+    }
+
+    [Fact]
+    public async Task Download_ForcedAndHearingImpairedCandidate_ForcedWinsTheSuffix()
+    {
+        // A name can carry only ONE caption segment (the parsers keep the
+        // last one and the normalizer would propose a rename) — forced wins
+        // because it is the dimension that changes coverage semantics.
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+        var pipeline = fixture.PipelineWithRealNaming();
+
+        var outcome = await pipeline.DownloadAsync(
+            Candidate("zh") with { Forced = true, HearingImpaired = true },
+            MediaType.Movie, fixture.MovieId,
+            SubtitleDownloadSource.Manual, searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.EndsWith("Movie.2019.WEBDL-1080p.zh.forced.srt", outcome.FilePath);
+        Assert.DoesNotContain(".zh.hi", outcome.FilePath);
+    }
+
+    [Fact]
+    public async Task Download_SeasonPackForcedCandidate_LandsEveryEntryWithTheSuffix()
+    {
+        using var fixture = new SubtitleEndpointFixture(new ArchiveProvider(
+            "6ixtynin9.The.Series.S01.THAI.720p.NF.WEBRip.x264-GalaxyTV.zip",
+            ZipOf(
+                (PackEntry(1, 1), SrtOf("episode one")),
+                (PackEntry(1, 2), SrtOf("episode two")))));
+        var episode1 = fixture.SeedEpisode(1, 1);
+        var episode2 = fixture.SeedEpisode(1, 2);
+        var pipeline = fixture.PipelineWithRealNaming();
+
+        var outcome = await pipeline.DownloadAsync(
+            Candidate("zh") with { Forced = true }, MediaType.Episode, episode2.Id,
+            SubtitleDownloadSource.Manual, searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.Equal(2, outcome.FilesLanded);
+        Assert.EndsWith(".zh.forced.srt", Path.GetFileName(outcome.FilePath));
+        Assert.True(File.Exists(Path.Combine(
+            episode1.Directory, Path.GetFileNameWithoutExtension(episode1.FileName) + ".zh.forced.srt")));
+        Assert.True(File.Exists(Path.Combine(
+            episode2.Directory, Path.GetFileNameWithoutExtension(episode2.FileName) + ".zh.forced.srt")));
+    }
+
+    // ── B07 auto-round dedupe: forced-only files are their own dimension —
+    // they answer a forced candidate but never block the full search. ────
+
+    [Fact]
+    public async Task Download_AutoRound_ForcedOnlyFileDoesNotBlockTheFullCandidate()
+    {
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+        var forcedPath = Path.Combine(fixture.MediaDirectory, "Movie.2019.WEBDL-1080p.zh.forced.srt");
+        fixture.SubtitleService
+            .Setup(service => service.GetSubtitles(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>
+            {
+                new()
+                {
+                    Path = forcedPath,
+                    FileName = "Movie.2019.WEBDL-1080p.zh.forced",
+                    Language = "zh",
+                    Languages = ["zh"],
+                    Caption = "forced"
+                }
+            });
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Auto,
+            searchSessionId: null, CancellationToken.None);
+
+        // The forced-only file does not satisfy the full need: the full
+        // candidate still downloads (and lands beside it).
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.True(File.Exists(outcome.FilePath));
+    }
+
+    [Fact]
+    public async Task Download_AutoRound_ForcedCandidateSkipsOnAnExistingForcedFile()
+    {
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+        var forcedPath = Path.Combine(fixture.MediaDirectory, "Movie.2019.WEBDL-1080p.zh.forced.srt");
+        fixture.SubtitleService
+            .Setup(service => service.GetSubtitles(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>
+            {
+                new()
+                {
+                    Path = forcedPath,
+                    FileName = "Movie.2019.WEBDL-1080p.zh.forced",
+                    Language = "zh",
+                    Languages = ["zh"],
+                    Caption = "forced"
+                }
+            });
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh") with { Forced = true }, MediaType.Movie, fixture.MovieId,
+            SubtitleDownloadSource.Auto, searchSessionId: null, CancellationToken.None);
+
+        // The dimensions agree: the forced candidate dedupes against the
+        // forced file (same dimension), and the history row points at it.
+        Assert.Equal(SubtitleDownloadResult.AlreadyExistsSkipped, outcome.Result);
+        Assert.Equal(forcedPath, outcome.FilePath);
+    }
+
     [Fact]
     public async Task Download_Success_DropsTheDetailPageSubtitleFileCache()
     {
@@ -1199,8 +1340,39 @@ public class SubtitleDownloadPipelineTests
             DbContext, Settings, new LazyMediaHasher());
     }
 
-    /// <summary>Id of the seeded movie row.</summary>
-    internal int MovieId { get; }
+        /// <summary>Id of the seeded movie row.</summary>
+        internal int MovieId { get; }
+
+        /// <summary>
+        /// Pipeline variant wired to the PRODUCTION SubtitleService — the
+        /// default fixture mocks CreateFilePath to a passthrough, so the B07
+        /// caption-suffix tests run the real naming chain (template
+        /// expansion + caption re-append) exactly as production lands it.
+        /// </summary>
+        internal SubtitleDownloadPipeline PipelineWithRealNaming()
+        {
+            var subtitleService = new SubtitleService(
+                NullLogger<SubtitleService>.Instance,
+                new LanguageCodeService(),
+                Settings);
+            return new SubtitleDownloadPipeline(
+                DbContext,
+                Registry,
+                new SubtitleArchiveExtractor(),
+                new PassthroughEncodingService(),
+                subtitleService,
+                new CompositePostProcessor(
+                    PostProcessStages, NullLogger<CompositePostProcessor>.Instance),
+                TranslationQueue.Object,
+                Settings,
+                Cooldowns,
+                new SubtitleTelemetryService(DbContext),
+                new SubtitleCoverageRefresher(
+                    DbContext, subtitleService, Settings, NullLogger<SubtitleCoverageRefresher>.Instance),
+                HubContext(),
+                NullLogger<SubtitleDownloadPipeline>.Instance,
+                BackgroundJobs.Object);
+        }
 
     // ── Season-pack fan-out seeding: one lazily-created show/season, each
     // episode in its own directory under the fixture's media root — the

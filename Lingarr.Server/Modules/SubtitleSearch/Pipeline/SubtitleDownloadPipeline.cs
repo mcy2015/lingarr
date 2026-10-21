@@ -189,13 +189,16 @@ public sealed class SubtitleDownloadPipeline
         // Auto rounds must not duplicate coverage the library already has
         // (the queue was filled from the needs-translation gap scan, but a
         // file may have landed since). Manual picks always proceed — the
-        // user explicitly chose this candidate.
+        // user explicitly chose this candidate. B07: forced-only files are
+        // their own dimension — they dedupe a forced candidate but never
+        // satisfy a full one, so a language the library only carries as
+        // forced keeps its full search alive.
         if (source == SubtitleDownloadSource.Auto
             && media.DirectoryPath is not null
             && media.VideoFileName is not null)
         {
             var existing = await _subtitleService.GetSubtitles(media.DirectoryPath, media.VideoFileName);
-            if (existing.Any(subtitle => Carries(subtitle, candidate.Language)))
+            if (existing.Any(subtitle => SatisfiesCandidate(subtitle, candidate)))
             {
                 return await RecordAsync(
                     candidate, mediaType, mediaId, source, searchSessionId,
@@ -397,7 +400,8 @@ public sealed class SubtitleDownloadPipeline
         try
         {
             finalPath = await ComputeOutputPathAsync(
-                media.DirectoryPath, media.VideoFileName, candidate.Language, outputExtension);
+                media.DirectoryPath, media.VideoFileName, candidate.Language, outputExtension,
+                CaptionSuffixOf(candidate));
             await WriteAtomicAsync(finalPath, outputBytes, cancellationToken);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException)
@@ -751,13 +755,14 @@ public sealed class SubtitleDownloadPipeline
         // fine. Content-invalid defects are remembered for the nothing-
         // landed-at-all verdict below.
         var variantMode = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.PostProcessChineseVariant);
+        var captionSuffix = CaptionSuffixOf(candidate);
         var landed = new List<LandedFile>();
         string? lastError = null;
         var contentInvalid = false;
         foreach (var (target, entry) in claims)
         {
             var attempt = await TryLandEntryAsync(
-                candidate.Language, target, entry, convertToSrt, variantMode, cancellationToken);
+                candidate.Language, captionSuffix, target, entry, convertToSrt, variantMode, cancellationToken);
             if (attempt.Path is null)
             {
                 lastError = attempt.Error ?? lastError;
@@ -783,7 +788,7 @@ public sealed class SubtitleDownloadPipeline
                 var picked = _extractor.Extract(
                     payloadContent, payloadFileName, payloadFormat, candidate.Language, candidate.Provider);
                 var attempt = await TryLandEntryAsync(
-                    candidate.Language, initiating, picked, convertToSrt, variantMode, cancellationToken);
+                    candidate.Language, captionSuffix, initiating, picked, convertToSrt, variantMode, cancellationToken);
                 if (attempt.Path is null)
                 {
                     lastError = attempt.Error ?? lastError;
@@ -937,6 +942,7 @@ public sealed class SubtitleDownloadPipeline
     /// </summary>
     private async Task<LandingAttempt> TryLandEntryAsync(
         string language,
+        string? captionSuffix,
         SeasonSibling target,
         ExtractedSubtitle entry,
         bool convertToSrt,
@@ -992,7 +998,7 @@ public sealed class SubtitleDownloadPipeline
         try
         {
             var finalPath = await ComputeOutputPathAsync(
-                target.Path, target.FileName, language, outputExtension);
+                target.Path, target.FileName, language, outputExtension, captionSuffix);
             await WriteAtomicAsync(finalPath, outputBytes, cancellationToken);
             var postProcessError = await RunPostProcessingAsync(finalPath, variantMode, cancellationToken);
             return new LandingAttempt(finalPath, utf8, null, false, postProcessError);
@@ -1354,18 +1360,47 @@ public sealed class SubtitleDownloadPipeline
             .ToLowerInvariant();
     }
 
+    /// <summary>
+    /// B07 caption suffix of a candidate: "forced" / "hi" lands in the file
+    /// name so the dimension survives the round trip through the scanner
+    /// (Subtitles.Caption) and the normalizer. Forced wins when a candidate
+    /// is both — a forced track changes the coverage dimension, hi does not,
+    /// and the filename parsers keep only one caption segment per name.
+    /// </summary>
+    internal static string? CaptionSuffixOf(SubtitleCandidate candidate) =>
+        candidate.Forced ? "forced"
+        : candidate.HearingImpaired ? "hi"
+        : null;
+
     private async Task<string> ComputeOutputPathAsync(
         string directoryPath,
         string videoFileName,
         string language,
-        string outputExtension)
+        string outputExtension,
+        string? captionSuffix = null)
     {
         // Template input = video name with the OUTPUT extension, so
         // CreateFilePath's language/template expansion runs exactly like it
         // does for translation outputs (which pass the source subtitle
         // path). Only known video extensions are stripped — scene names
-        // must survive intact.
+        // must survive intact. B07: the caption suffix rides the SAME
+        // mechanism a captioned translation source uses — appended to the
+        // template input, CreateFilePath strips it as a caption segment and
+        // re-appends it after the language ("Movie.2019.zh.forced.srt"),
+        // so the naming template, the scanner and the normalizer all see
+        // the pre-existing caption vocabulary instead of a new one.
         var templateName = ReplaceVideoExtension(videoFileName, outputExtension);
+        if (!string.IsNullOrEmpty(captionSuffix))
+        {
+            // The caption goes BEFORE the output extension
+            // ("Movie.2019.forced.srt"): after it, the extension-aware
+            // consumers (CreateFilePath's GetExtension, the scanner's
+            // extension buckets) would read ".forced" as the format.
+            var captionSegment = "." + captionSuffix.ToLowerInvariant();
+            templateName = templateName.Insert(
+                templateName.Length - outputExtension.Length, captionSegment);
+        }
+
         var templatePath = Path.Combine(directoryPath, templateName);
         return await _subtitleService.CreateFilePath(templatePath, language, string.Empty);
     }
@@ -1484,4 +1519,17 @@ public sealed class SubtitleDownloadPipeline
     private static bool Carries(Subtitles subtitle, string language) =>
         (subtitle.Languages.Count > 0 ? subtitle.Languages : [subtitle.Language])
         .Any(l => string.Equals(l, language, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// B07 auto-round dedupe verdict: the existing file satisfies the
+    /// candidate only when the dimensions agree — a forced candidate is
+    /// answered by a forced file, a full candidate by a full file. A
+    /// forced-only file never blocks the full search of its language.
+    /// </summary>
+    private static bool SatisfiesCandidate(Subtitles subtitle, SubtitleCandidate candidate) =>
+        Carries(subtitle, candidate.Language)
+        && candidate.Forced == IsForcedCaption(subtitle);
+
+    private static bool IsForcedCaption(Subtitles subtitle) =>
+        string.Equals(subtitle.Caption, "forced", StringComparison.OrdinalIgnoreCase);
 }

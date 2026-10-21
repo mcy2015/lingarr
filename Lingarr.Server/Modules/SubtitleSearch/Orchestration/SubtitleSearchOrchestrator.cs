@@ -216,6 +216,12 @@ public sealed partial class SubtitleSearchOrchestrator
         // blacklist" — a monitoring table must not sink the search round.
         var blacklist = await LoadBlacklistAsync(cancellationToken);
 
+        // B07 hearing-impaired preference: read once per round, before the
+        // searches, so the per-source ordering and the final chain apply the
+        // same tiebreak. Absent key / read failure / the unwired legacy
+        // constructors all mean false — the pre-B07 ordering.
+        var preferHearingImpaired = await GetPreferHearingImpairedAsync(cancellationToken);
+
         var merged = new List<SubtitleCandidate>();
         var sessions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         if (targets.Count > 0)
@@ -223,7 +229,8 @@ public sealed partial class SubtitleSearchOrchestrator
             // One linked CTS per source so a timeout cancels exactly that
             // source's call; the caller's token stays linked to all of them.
             var searches = targets.Select(entry => SearchOneAsync(
-                    entry.Provider, request, mediaType, mediaId, outcomes, sessions, cancellationToken))
+                    entry.Provider, request, mediaType, mediaId, outcomes, sessions,
+                    cancellationToken, preferHearingImpaired))
                 .ToArray();
             var perSource = await Task.WhenAll(searches);
             foreach (var candidates in perSource)
@@ -235,7 +242,7 @@ public sealed partial class SubtitleSearchOrchestrator
         var filtered = blacklist.Count == 0
             ? merged
             : merged.Where(candidate => !blacklist.Contains((candidate.Provider, candidate.ExternalId))).ToList();
-        var ordered = Order(Dedupe(filtered));
+        var ordered = Order(Dedupe(filtered), preferHearingImpaired);
         var cacheKey = Guid.NewGuid().ToString("N");
         _cache.Set(
             CacheKeyPrefix + cacheKey,
@@ -411,7 +418,8 @@ public sealed partial class SubtitleSearchOrchestrator
         int mediaId,
         List<SubtitleSourceOutcome> outcomes,
         Dictionary<string, int> sessions,
-        CancellationToken callerToken)
+        CancellationToken callerToken,
+        bool preferHearingImpaired)
     {
         // The budget must reach the HTTP calls themselves: providers forward
         // this token into SendAsync, and a hanging handler unwinds the moment
@@ -463,7 +471,7 @@ public sealed partial class SubtitleSearchOrchestrator
                     provider.Provider);
             }
 
-            var scored = _scorer.ScoreAll(request, result.Candidates).ToList();
+            var scored = _scorer.ScoreAll(request, result.Candidates, preferHearingImpaired).ToList();
             foreach (var candidate in scored)
             {
                 // First session wins — the dedupe keeps one candidate per
@@ -549,25 +557,56 @@ public sealed partial class SubtitleSearchOrchestrator
     }
 
     /// <summary>
-    /// Final ordering: score descending, then hash hits, then the two
-    /// design-⑧-polish tiebreaks — bilingual over monolingual, then format
-    /// preference (srt &gt; ass &gt; vtt, see
+    /// Final ordering: score descending, then hash hits, then (B07, only
+    /// with the prefer_hearing_impaired setting on) hearing-impaired over
+    /// non-hi, then the two design-⑧-polish tiebreaks — bilingual over
+    /// monolingual, then format preference (srt &gt; ass &gt; vtt, see
     /// <see cref="SubtitleMatchScorer.FormatPreference"/>) — and finally
     /// registration order (stable). Registration order equals the default
     /// site priority of ⑩ (OpenSubtitles first … shooter last). The hash
-    /// verdict stays above the bilingual/format tiebreaks: an exact-file
-    /// match outranks any language/format preference.
+    /// verdict stays above the preference/polish tiebreaks: an exact-file
+    /// match outranks any language/format preference. With the setting off
+    /// the B07 key is a constant false and the stable sort keeps the
+    /// pre-B07 order byte-identical (回归门).
     /// </summary>
-    private List<SubtitleCandidate> Order(List<SubtitleCandidate> deduped)
+    private List<SubtitleCandidate> Order(List<SubtitleCandidate> deduped, bool preferHearingImpaired)
         => deduped
             .Select((candidate, index) => (candidate, index))
             .OrderByDescending(entry => entry.candidate.MatchScore)
             .ThenByDescending(entry => entry.candidate.HashMatch)
+            .ThenByDescending(entry => preferHearingImpaired && entry.candidate.HearingImpaired)
             .ThenByDescending(entry => SubtitleMatchScorer.IsBilingual(entry.candidate))
             .ThenBy(entry => SubtitleMatchScorer.FormatPreference(entry.candidate.Format))
             .ThenBy(entry => entry.index)
             .Select(entry => entry.candidate)
             .ToList();
+
+    /// <summary>
+    /// The B07 hearing-impaired preference flag
+    /// (<see cref="Lingarr.Core.Configuration.SettingKeys.SubtitleSearch.PreferHearingImpaired"/>),
+    /// one read per round. Absent key, settings hiccup or the unwired legacy
+    /// constructors all degrade to false — a monitoring read must never sink
+    /// the search round.
+    /// </summary>
+    private async Task<bool> GetPreferHearingImpairedAsync(CancellationToken cancellationToken)
+    {
+        if (_settingService is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return await _settingService.GetSetting(
+                Lingarr.Core.Configuration.SettingKeys.SubtitleSearch.PreferHearingImpaired) == "true";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Could not read the hearing-impaired preference; the candidate order is unchanged.");
+            return false;
+        }
+    }
 
     /// <summary>
     /// Release normalization for the dedupe key. Must fold punctuation

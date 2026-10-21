@@ -143,6 +143,14 @@ public class SubtitleTrackSummary
     public int Have { get; init; }
     public int Total { get; init; }
 
+    /// <summary>
+    /// B07 forced dimension: how many episodes carry a forced-only (caption
+    /// "forced") subtitle in this language. Presented alongside the full
+    /// coverage state — a forced-only language keeps State "none" (a forced
+    /// track never satisfies the full-subtitle need).
+    /// </summary>
+    public int ForcedHave { get; init; }
+
     /// <summary>complete (Have == Total), partial (0 &lt; Have &lt; Total) or none.</summary>
     public required string State { get; init; }
 }

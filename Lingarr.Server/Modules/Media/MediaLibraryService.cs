@@ -900,7 +900,11 @@ public class MediaLibraryService : IMediaLibraryService
 
     /// <summary>
     /// Track chips: every language found by the scan plus every configured
-    /// target language (missing targets surface as "none" tracks).
+    /// target language (missing targets surface as "none" tracks). B07: the
+    /// forced dimension rides the same per-language chip —
+    /// <see cref="SubtitleTrackSummary.ForcedHave"/> carries the forced-only
+    /// count while <see cref="SubtitleTrackSummary.Have"/>/State stay the
+    /// FULL coverage verdict (a forced-only language reads "none").
     /// </summary>
     private static List<SubtitleTrackSummary> BuildTracks(
         Dictionary<string, MediaLanguageCoverage> coverage,
@@ -914,12 +918,14 @@ public class MediaLibraryService : IMediaLibraryService
         return languages
             .Select(code =>
             {
-                var have = coverage.GetValueOrDefault(code)?.Count ?? 0;
+                var slot = coverage.GetValueOrDefault(code);
+                var have = slot?.Count ?? 0;
                 return new SubtitleTrackSummary
                 {
                     Language = code.ToLowerInvariant(),
                     Have = Math.Min(have, total),
                     Total = total,
+                    ForcedHave = Math.Min(slot?.ForcedCount ?? 0, total),
                     State = have == 0 ? "none" : have >= total ? "complete" : "partial"
                 };
             })

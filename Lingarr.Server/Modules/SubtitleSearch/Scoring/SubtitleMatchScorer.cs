@@ -55,10 +55,27 @@ public sealed partial class SubtitleMatchScorer
     /// priority × bilingual × format, ⑩).
     /// </summary>
     public IReadOnlyList<SubtitleCandidate> ScoreAll(SubtitleSearchRequest request, IEnumerable<SubtitleCandidate> candidates)
+        => ScoreAll(request, candidates, preferHearingImpaired: false);
+
+    /// <summary>
+    /// Ordering variant with the B07 hearing-impaired preference
+    /// (<c>subtitle_search_prefer_hearing_impaired</c>, default false): with
+    /// the flag on, a hearing-impaired (SDH) candidate outranks a non-hi one
+    /// when scores tie — layered BEFORE the stable input order, exactly where
+    /// the orchestrator's final chain slots it (above the bilingual/format
+    /// polish). A pure tiebreak: the score itself, the auto threshold and
+    /// every signal never see the flag, so with it off (the default) the
+    /// ordering is byte-identical to the pre-B07 behaviour (回归门).
+    /// </summary>
+    public IReadOnlyList<SubtitleCandidate> ScoreAll(
+        SubtitleSearchRequest request,
+        IEnumerable<SubtitleCandidate> candidates,
+        bool preferHearingImpaired)
     {
         return candidates
             .Select(candidate => Score(request, candidate))
             .OrderByDescending(candidate => candidate.MatchScore)
+            .ThenByDescending(candidate => preferHearingImpaired && candidate.HearingImpaired)
             .ToList();
     }
 

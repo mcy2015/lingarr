@@ -364,6 +364,44 @@ describe('MediaDetailPage · 电影详情(screen-08)', () => {
         expect(wrapper.findAll('table')).toHaveLength(0)
     })
 
+    it('marks the forced dimension inside the same language chip (B07)', async () => {
+        // zh carries ONLY a forced track: the chip keeps its honest none
+        // state (dot stays — the full subtitle is still missing) and gains
+        // one forced mark inside the same chip; no second badge row exists.
+        libraryMock.mockResolvedValue({
+            items: [
+                {
+                    ...movieItem,
+                    tracks: [
+                        { language: 'en', have: 1, total: 1, state: 'complete' },
+                        { language: 'zh', have: 0, total: 1, state: 'none', forcedHave: 1 }
+                    ]
+                }
+            ],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const chips = wrapper.findAll('[data-test="track-chip"]')
+        const forcedMark = chips[1].find('[data-test="track-forced-mark"]')
+        expect(forcedMark.exists()).toBe(true)
+        expect(forcedMark.text()).toBe(en.library.track.forcedTag)
+        // forced-only never flips the full-coverage verdict: the none dot
+        // stays and the chip stays in its dimmed none styling
+        expect(chips[1].find('[data-test="track-none-dot"]').exists()).toBe(true)
+        expect(chips[1].text()).toContain('ZH')
+        // a complete track without forced files renders no mark (EN)
+        expect(chips[0].find('[data-test="track-forced-mark"]').exists()).toBe(false)
+    })
+
+    it('renders no forced mark for pre-B07 payloads (field absent)', async () => {
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        expect(wrapper.findAll('[data-test="track-forced-mark"]')).toHaveLength(0)
+    })
+
     it('shows the untranslated empty state when no job is running and creates the translation on CTA', async () => {
         const { wrapper, vm, toastStore, uiStore } = await mountDetail('movie', '/library/movie/7')
 

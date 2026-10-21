@@ -127,9 +127,120 @@ public class SubtitleCoverageRefresherTests : IDisposable
         Assert.Equal(100, stored.SubtitleCoverage!["zh"].Bytes);
         Assert.Equal(1, stored.SubtitleCoverage!["en"].Count);
         Assert.Equal(40, stored.SubtitleCoverage!["en"].Bytes);
+        // B07 regression gate: a library without forced files serializes the
+        // slot without the forced fields (byte-identical pre-B07 JSON).
+        Assert.Equal(0, stored.SubtitleCoverage!["zh"].ForcedCount);
+        Assert.DoesNotContain("forcedCount", stored.SubtitleCoverageJson);
         // zh is covered and the audio is no target → no longer needing
         Assert.False(stored.NeedsTranslation);
         Assert.False(stored.NoSubtitleNeeded);
+    }
+
+    // ── B07: forced-only files are their own coverage dimension, presented
+    // separately and never exempting the full search. ────────────────────
+
+    [Fact]
+    public async Task RefreshAsync_MovieForcedOnly_CountsForcedDimensionAndKeepsTheNeedFlag()
+    {
+        var directory = Path.Combine(_root, "movie-forced");
+        Directory.CreateDirectory(directory);
+        var movie = new Movie
+        {
+            RadarrId = 11,
+            Title = "Forced Movie",
+            Year = 2021,
+            Path = directory,
+            FileName = "Forced.Movie.2021.WEBDL-1080p.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            AudioLanguages = ["en"],
+            NeedsTranslation = true
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+
+        // The pipeline's own B07 naming: a forced candidate lands as
+        // {base}.{language}.forced.{ext}.
+        WriteSubtitle("movie-forced", "Forced.Movie.2021.WEBDL-1080p.zh.forced.srt", 80);
+
+        await _refresher.RefreshAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == movie.Id);
+        Assert.NotNull(stored.SubtitleCoverage);
+        // zh exists as a slot — but ONLY in the forced dimension.
+        Assert.Equal(0, stored.SubtitleCoverage!["zh"].Count);
+        Assert.Equal(0, stored.SubtitleCoverage!["zh"].Bytes);
+        Assert.Equal(1, stored.SubtitleCoverage!["zh"].ForcedCount);
+        Assert.Equal(80, stored.SubtitleCoverage!["zh"].ForcedBytes);
+        // The forced dimension does not exempt the full search: zh still
+        // reads as missing for the need rule.
+        Assert.True(stored.NeedsTranslation);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_MovieFullAndForced_KeepsBothDimensionsApart()
+    {
+        var directory = Path.Combine(_root, "movie-mixed");
+        Directory.CreateDirectory(directory);
+        var movie = new Movie
+        {
+            RadarrId = 12,
+            Title = "Mixed Movie",
+            Year = 2022,
+            Path = directory,
+            FileName = "Mixed.Movie.2022.WEBDL-1080p.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            AudioLanguages = ["en"],
+            NeedsTranslation = true
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+
+        WriteSubtitle("movie-mixed", "Mixed.Movie.2022.WEBDL-1080p.zh.srt", 100);
+        WriteSubtitle("movie-mixed", "Mixed.Movie.2022.WEBDL-1080p.zh.forced.srt", 30);
+        // sdh/cc/hi captions are FULL subtitles for a specific audience —
+        // they must not slide into the forced dimension.
+        WriteSubtitle("movie-mixed", "Mixed.Movie.2022.WEBDL-1080p.zh.hi.srt", 60);
+
+        await _refresher.RefreshAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == movie.Id);
+        // Movie semantics stay 0/1 per dimension: full + hi are one "full"
+        // presence (bytes summed), the forced file one forced presence.
+        Assert.Equal(1, stored.SubtitleCoverage!["zh"].Count);
+        Assert.Equal(160, stored.SubtitleCoverage!["zh"].Bytes);
+        Assert.Equal(1, stored.SubtitleCoverage!["zh"].ForcedCount);
+        Assert.Equal(30, stored.SubtitleCoverage!["zh"].ForcedBytes);
+        // The full file covers zh regardless of the forced sibling.
+        Assert.False(stored.NeedsTranslation);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_EpisodeForcedOnly_DoesNotSatisfyTheEpisodeNeed()
+    {
+        var show = await SeedShowAsync(5, "show5/s01",
+            "show5.s01e01.mkv", "show5.s01e02.mkv");
+        var episodes = show.Seasons.SelectMany(s => s.Episodes).OrderBy(e => e.Id).ToList();
+        // E01 carries only a forced zh track; E02 carries a full one.
+        WriteSubtitle("show5/s01", "show5.s01e01.zh.forced.srt", 50);
+        WriteSubtitle("show5/s01", "show5.s01e02.zh.srt", 70);
+
+        await _refresher.RefreshAsync(MediaType.Episode, episodes[0].Id, CancellationToken.None);
+
+        var storedShow = await _dbContext.Shows.AsNoTracking().SingleAsync(s => s.Id == show.Id);
+        // The two dimensions coexist per language: E02's full file is the
+        // one full count, E01's forced track the one forced count.
+        Assert.Equal(1, storedShow.SubtitleCoverage!["zh"].Count);
+        Assert.Equal(70, storedShow.SubtitleCoverage!["zh"].Bytes);
+        Assert.Equal(1, storedShow.SubtitleCoverage!["zh"].ForcedCount);
+        Assert.Equal(50, storedShow.SubtitleCoverage!["zh"].ForcedBytes);
+
+        var storedEpisodes = await _dbContext.Episodes.AsNoTracking()
+            .Where(e => e.Season.ShowId == show.Id)
+            .OrderBy(e => e.Id)
+            .ToListAsync();
+        // Forced-only never exempts E01's full search; E02's full file does.
+        Assert.True(storedEpisodes[0].NeedsTranslation);
+        Assert.False(storedEpisodes[1].NeedsTranslation);
     }
 
     [Fact]

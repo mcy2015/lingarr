@@ -251,6 +251,12 @@ export interface ISubtitleTrackSummary {
     have: number
     total: number
     state: MediaLibraryTrackState
+    /// B07 forced dimension: how many episodes carry a forced-only (caption
+    /// "forced") subtitle in this language. Presented inside the same
+    /// per-language chip — `have`/`state` stay the FULL coverage verdict (a
+    /// forced-only language reads state "none"). Optional so pre-B07 payloads
+    /// keep typing as "no forced files".
+    forcedHave?: number
 }
 
 export const MEDIA_TRANSLATION_STATE = {

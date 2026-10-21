@@ -84,6 +84,7 @@ public class StartupService : IHostedService
         await SeedAudioIdentificationSettings(dbContext);
         await SeedSubtitlePostProcessingSettings(dbContext);
         await SeedPlexSettings(dbContext);
+        await SeedSubtitleSearchPreferenceSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -322,6 +323,32 @@ public class StartupService : IHostedService
 
         await dbContext.SaveChangesAsync();
         _logger.LogInformation("Seeded {Count} Plex setting rows (library refresh off by default).", missing.Count);
+    }
+
+    /// <summary>
+    /// Seeds the subtitle-search preference row (B07) with its "false"
+    /// default: prefer_hearing_impaired only reorders score ties, and even
+    /// that must never happen implicitly — the default keeps the pre-B07
+    /// ranking byte-identical. Existing rows are never overwritten. Seeded
+    /// here rather than by a migration, like the Plex rows above: the batch
+    /// ships no schema change, so the next migration number stays reserved.
+    /// </summary>
+    private async Task SeedSubtitleSearchPreferenceSettings(LingarrDbContext dbContext)
+    {
+        var key = SettingKeys.SubtitleSearch.PreferHearingImpaired;
+        if (await dbContext.Settings.AnyAsync(setting => setting.Key == key))
+        {
+            return;
+        }
+
+        dbContext.Settings.Add(new Setting
+        {
+            Key = key,
+            Value = "false",
+            Provider = null
+        });
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation("Seeded the subtitle-search preference row (hearing-impaired tiebreak off by default).");
     }
 
     /// Seeds empty Settings rows for every subtitle-source key that does not exist

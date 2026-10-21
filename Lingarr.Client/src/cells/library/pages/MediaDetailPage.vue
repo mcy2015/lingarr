@@ -114,6 +114,16 @@
                     :title="trackTitle(track)"
                     data-test="track-chip">
                     {{ trackLabel(track) }}
+                    <!-- B07:forced 维度并入同一枚语言 chip(9b0180f 同概念徽章全页
+                         只显一处——不另造第二套徽章体系);have/state 始终是全量口径,
+                         仅 forced 的语言维持 none 态,只是如实地多出一枚 forced 标 -->
+                    <span
+                        v-if="trackForcedCount(track) > 0"
+                        class="text-accent"
+                        :title="forcedTitle(track)"
+                        data-test="track-forced-mark">
+                        {{ t('library.track.forcedTag') }}
+                    </span>
                     <!-- C5:none 态用样式化状态点元素,不输出尾随文本「·」——裸点会被
                          误读成列表悬空分隔符 -->
                     <span
@@ -1693,6 +1703,32 @@ function trackTitle(track: { language: string; have: number; total: number }): s
             total: track.total
         })
     return t('library.track.none', { lang: track.language })
+}
+
+/// B07 forced dimension of one track: 0 when the payload predates the
+/// field (optional) or the language has no forced-only file.
+function trackForcedCount(track: { forcedHave?: number }): number {
+    return track.forcedHave ?? 0
+}
+
+/// Tooltip of the forced mark — honest about the two shapes: a forced-only
+/// language still misses its full subtitle; a covered one carries the forced
+/// track alongside.
+function forcedTitle(track: {
+    language: string
+    have: number
+    total: number
+    forcedHave?: number
+}): string {
+    const forced = trackForcedCount(track)
+    if (track.have > 0) {
+        return t('library.track.forcedAlongsideTitle', { count: forced })
+    }
+    return t('library.track.forcedOnlyTitle', {
+        lang: track.language,
+        have: forced,
+        total: track.total
+    })
 }
 
 function formatTime(value: string | Date): string {

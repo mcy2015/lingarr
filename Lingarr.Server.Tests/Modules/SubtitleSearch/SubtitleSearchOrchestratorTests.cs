@@ -570,6 +570,77 @@ public class SubtitleSearchOrchestratorTests : IDisposable
         Assert.Equal("ass", outcome.Candidates[1].ExternalId);
     }
 
+    // --- B07 prefer_hearing_impaired (subtitle_search_prefer_hearing_
+    // impaired, default false): a pure ordering tiebreak above the
+    // bilingual/format polish; off (absent key) keeps the pre-B07 order.
+
+    [Fact]
+    public async Task Search_PreferHearingImpairedDefaultOff_KeepsRegistrationOrderAtEqualScore()
+    {
+        // 回归门: no setting stored — the non-hi candidate of the
+        // first-registered source keeps its pre-B07 lead.
+        var plain = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("plain", size: 2222)])))
+        { Provider = "alpha" };
+        var hi = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("hi", size: 3333) with { HearingImpaired = true }])))
+        { Provider = "beta" };
+        var orchestrator = Create(plain, hi);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Equal(2, outcome.Candidates.Count);
+        Assert.Equal(outcome.Candidates[0].MatchScore, outcome.Candidates[1].MatchScore);
+        Assert.Equal("plain", outcome.Candidates[0].ExternalId);
+        Assert.Equal("hi", outcome.Candidates[1].ExternalId);
+    }
+
+    [Fact]
+    public async Task Search_PreferHearingImpairedOn_HiRanksFirstAtEqualScore()
+    {
+        // Same shape, setting on: the hi candidate of the LATER-registered
+        // source overtakes — the tiebreak applies in the final chain, not
+        // just the per-source order.
+        await _settings.SetSetting(
+            Lingarr.Core.Configuration.SettingKeys.SubtitleSearch.PreferHearingImpaired, "true");
+        var plain = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("plain", size: 2222)])))
+        { Provider = "alpha" };
+        var hi = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("hi", size: 3333) with { HearingImpaired = true }])))
+        { Provider = "beta" };
+        var orchestrator = Create(plain, hi);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Equal(2, outcome.Candidates.Count);
+        Assert.Equal(outcome.Candidates[0].MatchScore, outcome.Candidates[1].MatchScore);
+        Assert.Equal("hi", outcome.Candidates[0].ExternalId);
+        Assert.Equal("plain", outcome.Candidates[1].ExternalId);
+    }
+
+    [Fact]
+    public async Task Search_PreferHearingImpairedOn_BeatsTheFormatPolishTiebreak()
+    {
+        // Chain position: the user setting outranks the built-in srt>ass
+        // polish — the hi candidate wins even in the ass container.
+        await _settings.SetSetting(
+            Lingarr.Core.Configuration.SettingKeys.SubtitleSearch.PreferHearingImpaired, "true");
+        var srtPlain = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("plain-srt", format: "srt", size: 2222)])))
+        { Provider = "alpha" };
+        var assHi = new ScriptedProvider(_ => Task.FromResult(new SubtitleSearchResult(
+            [CandidateWithId("hi-ass", format: "ass", size: 3333) with { HearingImpaired = true }])))
+        { Provider = "beta" };
+        var orchestrator = Create(srtPlain, assHi);
+
+        var outcome = await orchestrator.SearchAsync(Request(), MediaType.Movie, 1, null, CancellationToken.None);
+
+        Assert.Equal(2, outcome.Candidates.Count);
+        Assert.Equal("hi-ass", outcome.Candidates[0].ExternalId);
+        Assert.Equal("plain-srt", outcome.Candidates[1].ExternalId);
+    }
+
     // --- daily-limit cooldown (⑧ same-day cooldown until UTC midnight).
 
     [Fact]

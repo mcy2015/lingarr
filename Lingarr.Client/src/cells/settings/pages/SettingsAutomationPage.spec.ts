@@ -79,6 +79,8 @@ describe('SettingsAutomationPage', () => {
 
         expect(wrapper.find('[data-test="batches-card"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="jobs-card"]').exists()).toBe(true)
+        // B07: the subtitle-search preference card lives on the same tab
+        expect(wrapper.find('[data-test="subtitle-preference-card"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="automation-no-providers"]').exists()).toBe(false)
     })
 

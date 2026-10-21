@@ -101,7 +101,10 @@
         "track": {
             "complete": "{lang}：完整",
             "partial": "{lang}：{have}/{total} 集",
-            "none": "{lang}：无字幕"
+            "none": "{lang}：无字幕",
+            "forcedTag": "强制",
+            "forcedOnlyTitle": "{lang}：仅有 forced（强制对白）字幕（{have}/{total}），仍缺全量字幕",
+            "forcedAlongsideTitle": "另有 {count} 条 forced（强制对白）字幕"
         },
         "state": {
             "none": "· 未排队",
@@ -929,6 +932,12 @@
             "tokenConfigured": "已配置（留空保持不变）",
             "refresh": "字幕落盘后刷新媒体库",
             "refreshHint": "每次字幕下载落盘与翻译写回都会入队刷新；重叠的刷新会自动合并"
+        },
+        "subtitlePreference": {
+            "title": "字幕搜索偏好",
+            "description": "字幕搜索的候选排序",
+            "preferHiLabel": "优先听障字幕",
+            "preferHiHint": "同分候选中听障（SDH）字幕排前；分数与自动下载阈值不受影响。默认关闭"
         }
     },
     "translations": {

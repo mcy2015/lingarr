@@ -213,8 +213,11 @@ public class StatisticsJob
                 // all the rule needs for a movie.
                 var stored = SubtitleCoverageMath.DeserializeCoverage(movie.SubtitleCoverageJson);
                 AddLanguageCounts(movieLanguageCounts, stored);
+                // B07: forced-only slots (Count 0) are not covered — the
+                // forced dimension never exempts the full search.
                 var needsFromSnapshot = SubtitleNeedRule.NeedsTranslation(
-                    movie.AudioOverride, movie.AudioLanguages, stored?.Keys, targetLanguages);
+                    movie.AudioOverride, movie.AudioLanguages,
+                    stored is null ? null : SubtitleCoverageMath.FullyCoveredLanguages(stored), targetLanguages);
                 var nativeFromSnapshot = SubtitleNeedRule.NoSubtitleNeeded(
                     movie.AudioOverride, movie.AudioLanguages, targetLanguages);
                 if (needsFromSnapshot != movie.NeedsTranslation
@@ -255,8 +258,11 @@ public class StatisticsJob
             var subtitles = await _subtitleService.GetAllSubtitles(movie.Path);
             var coverage = SubtitleCoverageMath.MovieCoverage(subtitles);
             var json = SubtitleCoverageMath.SerializeCoverage(coverage);
+            // B07: forced-only slots (Count 0) are not covered — the forced
+            // dimension never exempts the full search.
             var needs = SubtitleNeedRule.NeedsTranslation(
-                movie.AudioOverride, movie.AudioLanguages, coverage.Keys, targetLanguages);
+                movie.AudioOverride, movie.AudioLanguages,
+                SubtitleCoverageMath.FullyCoveredLanguages(coverage), targetLanguages);
             var native = SubtitleNeedRule.NoSubtitleNeeded(
                 movie.AudioOverride, movie.AudioLanguages, targetLanguages);
 

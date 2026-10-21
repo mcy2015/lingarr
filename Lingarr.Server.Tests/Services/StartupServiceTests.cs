@@ -427,6 +427,26 @@ public class StartupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SeedSubtitleSearchPreferenceSettings_FreshDatabase_SeedsTheOffDefault()
+    {
+        // Arrange/Act: B07 — the prefer_hearing_impaired row must exist for
+        // the settings card to save, and the tiebreak must default to
+        // "false" (the pre-B07 candidate order is the shipped default).
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var preference = await dbContext.Settings.FindAsync(
+            SettingKeys.SubtitleSearch.PreferHearingImpaired);
+        Assert.NotNull(preference);
+        Assert.Equal("false", preference.Value);
+        Assert.Null(preference.Provider);
+    }
+
+    [Fact]
     public async Task StartAsync_AfterSubtitleSeed_SetEncryptedSettingSucceeds()
     {
         // Arrange: the bug's acceptance core — SetSetting only updates rows

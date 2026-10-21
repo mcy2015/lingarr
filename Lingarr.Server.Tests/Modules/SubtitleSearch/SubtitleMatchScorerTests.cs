@@ -243,6 +243,54 @@ public class SubtitleMatchScorerTests
         Assert.Equal(0, scored[3].MatchScore);
     }
 
+    // ── B07 prefer_hearing_impaired tiebreak: the flag only ever reorders
+    // score ties; the score itself and the default ordering are untouched.
+
+    [Fact]
+    public void ScoreAll_PreferHearingImpairedOff_KeepsThePreB07OrderByteIdentical()
+    {
+        // 回归门: the flag defaults to false and the false path must order
+        // EXACTLY as before — a stable sort over equal scores keeps whatever
+        // input order there was, in either direction (no anti-hi bias
+        // either). Scored copies differ from the inputs (MatchScore), so the
+        // order assertion runs over the ExternalIds.
+        var request = MovieRequest(year: null, releaseName: null);
+        var hi = Candidate("Movie 2019 thing") with { HearingImpaired = true };
+        var plain = Candidate("Movie");
+
+        var hiFirst = new List<SubtitleCandidate> { hi, plain }; // both 55
+        var plainFirst = new List<SubtitleCandidate> { plain, hi };
+
+        Assert.Equal([hi.ExternalId, plain.ExternalId],
+            _scorer.ScoreAll(request, hiFirst).Select(candidate => candidate.ExternalId));
+        Assert.Equal([hi.ExternalId, plain.ExternalId],
+            _scorer.ScoreAll(request, hiFirst, preferHearingImpaired: false)
+                .Select(candidate => candidate.ExternalId));
+        Assert.Equal([plain.ExternalId, hi.ExternalId],
+            _scorer.ScoreAll(request, plainFirst, preferHearingImpaired: false)
+                .Select(candidate => candidate.ExternalId));
+    }
+
+    [Fact]
+    public void ScoreAll_PreferHearingImpairedOn_MovesHiAheadAtEqualScore()
+    {
+        var request = MovieRequest(year: null, releaseName: null);
+        var hi = Candidate("Movie 2019 thing") with { HearingImpaired = true };
+        var plain = Candidate("Movie");
+        var candidates = new List<SubtitleCandidate> { plain, hi }; // both 55
+
+        var withoutPreference = _scorer.ScoreAll(request, candidates, preferHearingImpaired: false);
+        var withPreference = _scorer.ScoreAll(request, candidates, preferHearingImpaired: true);
+
+        // Only the tie order moved — the scores are the same either way.
+        Assert.Equal([plain.ExternalId, hi.ExternalId],
+            withoutPreference.Select(candidate => candidate.ExternalId));
+        Assert.Equal([hi.ExternalId, plain.ExternalId],
+            withPreference.Select(candidate => candidate.ExternalId));
+        Assert.Equal(withoutPreference[0].MatchScore, withPreference[0].MatchScore);
+        Assert.Equal(withoutPreference[1].MatchScore, withPreference[1].MatchScore);
+    }
+
     [Fact]
     public void Score_ReturnsScoredCopy_LeavingInputUntouched()
     {
