@@ -1246,7 +1246,8 @@
         "languagesFailed": "语言清单加载失败。",
         "languageNoOptions": "暂无可选语言。",
         "languageNoResults": "没有匹配的语言。",
-        "translationSource": "翻译源"
+        "translationSource": "翻译源",
+        "openInSite": "去网站搜索"
     },
     "dashboard": {
         "subtitles": {

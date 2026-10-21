@@ -24,8 +24,11 @@ import { useToastStore } from '@/cells/app/stores/toast'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { SETTINGS } from '@/types'
 import en from '@/i18n/locales/en.json'
-import type { ISubtitleProviderManifest } from '@/types/plugin'
-import type { ISubtitleCandidate, ISubtitleDownloadResponse } from '@/types/services'
+import type {
+    ISubtitleCandidate,
+    ISubtitleDownloadResponse,
+    ISubtitleProviderHealthState
+} from '@/types/services'
 
 const getProvidersMock = vi.hoisted(() => vi.fn())
 const searchMock = vi.hoisted(() => vi.fn())
@@ -93,14 +96,16 @@ async function flush(): Promise<void> {
 // ── fixtures ──────────────────────────────────────────────────────
 const manifest = (
     key: string,
-    overrides: Partial<ISubtitleProviderManifest> = {}
-): ISubtitleProviderManifest => ({
+    overrides: Partial<ISubtitleProviderHealthState> = {}
+): ISubtitleProviderHealthState => ({
     provider: key,
     displayName: key.toUpperCase(),
     description: null,
     requiresAuth: false,
     credentialsConfigured: false,
     settings: [],
+    cooldownUntil: null,
+    cooldownReason: null,
     ...overrides
 })
 
@@ -126,10 +131,15 @@ const candidate = (overrides: Partial<ISubtitleCandidate> = {}): ISubtitleCandid
     ...overrides
 })
 
-const outcome = (cacheKey: string, candidates: ISubtitleCandidate[]) => ({
+const outcome = (
+    cacheKey: string,
+    candidates: ISubtitleCandidate[],
+    webSearchUrls?: Record<string, string>
+) => ({
     cacheKey,
     candidates,
-    sourceOutcomes: []
+    sourceOutcomes: [],
+    ...(webSearchUrls ? { webSearchUrls } : {})
 })
 
 /// The backend answer also carries filesLanded (season-pack fan-out: N when
@@ -1096,5 +1106,137 @@ describe('SubtitleSearchModal · 免翻译判定锚定 target 集', () => {
             .map((b) => b.textContent?.trim() ?? '')
         expect(buttons).toEqual([en.subSearch.download])
         expect(row.textContent).toContain(en.subSearch.noTranslate)
+    })
+})
+
+// ═══ web-search escape hatch: per-source external links ═══════════
+describe('SubtitleSearchModal · 网站搜索外链', () => {
+    /// The full deep-link map the backend derives from one media-level
+    /// request (episode form, "Severance" S01E02) — every per-source
+    /// response carries it, so any sibling's arrival fills links for the
+    /// whole strip.
+    const episodeWebUrls = (): Record<string, string> => ({
+        assrt: 'https://assrt.net/sub/?searchword=Severance%20S01E02',
+        opensubtitles:
+            'https://www.opensubtitles.com/en/search-tvshows/q-Severance/season-1/episode-2',
+        subdl: 'https://subdl.com/search/Severance',
+        subsource: 'https://subsource.net/search?q=Severance',
+        gestdown: 'https://www.addic7ed.com/search.php?search=Severance&Submit=Search'
+    })
+
+    it('renders the external link on every feasible source chip and none for xunlei/shooter', async () => {
+        getProvidersMock.mockResolvedValue([
+            manifest('opensubtitles', {
+                requiresAuth: true,
+                credentialsConfigured: true,
+                websiteUrl: 'https://www.opensubtitles.com'
+            }),
+            manifest('assrt', {
+                requiresAuth: true,
+                credentialsConfigured: true,
+                websiteUrl: 'https://assrt.net'
+            }),
+            manifest('subdl', { websiteUrl: 'https://subdl.com' }),
+            manifest('subsource', { websiteUrl: 'https://subsource.net' }),
+            manifest('gestdown', { websiteUrl: 'https://www.addic7ed.com' }),
+            // no public search page → no websiteUrl, no link, ever
+            manifest('xunlei', { requiresAuth: true, credentialsConfigured: false }),
+            manifest('shooter', { requiresAuth: true, credentialsConfigured: false })
+        ])
+        searchMock.mockImplementation(async (request: { provider: string }) =>
+            outcome('ck-' + request.provider, [], episodeWebUrls())
+        )
+        await mountModal({ mediaType: 'episode', title: 'Severance', episode: 'S01E02' })
+
+        const expected = episodeWebUrls()
+        for (const key of Object.keys(expected)) {
+            const anchor = document.querySelector(
+                `[data-test="source-web-${key}"]`
+            ) as HTMLAnchorElement | null
+            expect(anchor, `link of ${key} should render`).not.toBeNull()
+            expect(anchor!.getAttribute('href')).toBe(expected[key])
+            // safe external navigation + an honest, localized label
+            expect(anchor!.getAttribute('target')).toBe('_blank')
+            expect(anchor!.getAttribute('rel')).toBe('noopener noreferrer')
+            expect(anchor!.getAttribute('aria-label')).toBe(
+                `${key.toUpperCase()} ${en.subSearch.openInSite}`
+            )
+            expect(anchor!.textContent).toContain('↗')
+        }
+        expect(document.querySelector('[data-test="source-web-xunlei"]')).toBeNull()
+        expect(document.querySelector('[data-test="source-web-shooter"]')).toBeNull()
+    })
+
+    it('keeps the link through zero-hit, error and skipped states (skipped falls back to the homepage)', async () => {
+        getProvidersMock.mockResolvedValue([
+            // zero-hit source: ok state with no candidates
+            manifest('subdl', { websiteUrl: 'https://subdl.com' }),
+            // skipped: never searched, only the manifest homepage exists
+            manifest('assrt', { requiresAuth: true, credentialsConfigured: false, websiteUrl: 'https://assrt.net' }),
+            manifest('subsource', { websiteUrl: 'https://subsource.net' })
+        ])
+        const webUrls = episodeWebUrls()
+        // the sibling responses carry links for subdl/subsource only — assrt
+        // has no map entry and must fall back to its homepage
+        delete webUrls.assrt
+        searchMock.mockImplementation((request: { provider: string }) =>
+            request.provider === 'subsource'
+                ? Promise.reject({
+                      isAxiosError: true,
+                      message: 'Network Error',
+                      response: { data: { message: 'invalid credentials' } }
+                  })
+                : Promise.resolve(outcome('ck-' + request.provider, [], webUrls))
+        )
+        await mountModal({ mediaType: 'episode', title: 'Severance', episode: 'S01E02' })
+
+        // zero hits: the link survives (still the response's deep link)
+        const subdl = document.querySelector('[data-test="source-web-subdl"]') as HTMLAnchorElement
+        expect(subdl.getAttribute('href')).toBe(webUrls.subdl)
+
+        // errored source: the link survives on the error chip too
+        const subsource = document.querySelector(
+            '[data-test="source-web-subsource"]'
+        ) as HTMLAnchorElement
+        expect(subsource.getAttribute('href')).toBe(webUrls.subsource)
+        expect(
+            document
+                .querySelector('[data-test="source-status-subsource"]')
+                ?.textContent
+        ).toContain(en.subSearch.sourceError.replace('{message}', 'invalid credentials'))
+
+        // skipped source: homepage fallback when no sibling delivered its link
+        const assrt = document.querySelector('[data-test="source-web-assrt"]') as HTMLAnchorElement
+        expect(assrt.getAttribute('href')).toBe('https://assrt.net')
+        expect(
+            document.querySelector('[data-test="source-status-assrt"]')?.textContent
+        ).toContain(en.subSearch.sourceSkipped)
+    })
+
+    it('replaces the links when a new round carries a Query override', async () => {
+        getProvidersMock.mockResolvedValue([manifest('assrt', { requiresAuth: true, credentialsConfigured: true })])
+        searchMock.mockResolvedValue(outcome('ck-1', [], episodeWebUrls()))
+        await mountModal({ mediaType: 'episode', title: 'Severance', episode: 'S01E02' })
+        expect(
+            (document.querySelector('[data-test="source-web-assrt"]') as HTMLAnchorElement).getAttribute('href')
+        ).toBe('https://assrt.net/sub/?searchword=Severance%20S01E02')
+
+        // the override round answers with links built from the override
+        // term — the chip must show exactly what the new responses carry
+        searchMock.mockResolvedValue(
+            outcome('ck-2', [], {
+                assrt: 'https://assrt.net/sub/?searchword=Loki%20S01E01'
+            })
+        )
+        const input = document.querySelector(
+            '[data-test="subsearch-query-input"]'
+        ) as HTMLInputElement
+        input.value = 'Loki S01E01'
+        input.dispatchEvent(new Event('input'))
+        await clickButton(en.subSearch.searchAction)
+
+        expect(
+            (document.querySelector('[data-test="source-web-assrt"]') as HTMLAnchorElement).getAttribute('href')
+        ).toBe('https://assrt.net/sub/?searchword=Loki%20S01E01')
     })
 })

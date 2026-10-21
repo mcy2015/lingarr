@@ -1246,7 +1246,8 @@
         "languagesFailed": "Could not load the language list.",
         "languageNoOptions": "No languages available.",
         "languageNoResults": "No matching languages.",
-        "translationSource": "translation source"
+        "translationSource": "translation source",
+        "openInSite": "Open in website"
     },
     "dashboard": {
         "subtitles": {

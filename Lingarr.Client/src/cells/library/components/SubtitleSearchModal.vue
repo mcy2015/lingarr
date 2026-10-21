@@ -8,9 +8,12 @@ import { useTranslateStore } from '@/cells/app/stores/translate'
 import { settingService } from '@/cells/app/api/settingService'
 import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
-import type { ISubtitleCandidate } from '@/types/services'
+import type {
+    ISubtitleCandidate,
+    ISubtitleProviderHealthState,
+    SubtitleWebSearchUrlMap
+} from '@/types/services'
 import type { ILanguage } from '@/types'
-import type { ISubtitleProviderManifest } from '@/types/plugin'
 
 /// The auto-download threshold setting key (SettingKeys.SubtitleSearch.AutoScore
 /// on the server); seeded "75" by M0008.
@@ -181,13 +184,18 @@ interface SourceStatus {
     status: 'searching' | 'ok' | 'skipped' | 'error'
     message?: string
     count?: number
+    /// Public-site deep link of this source for the round's search term
+    /// (web-search escape hatch). Undefined until a response delivers the
+    /// map — the chip then falls back to the manifest homepage.
+    webSearchUrl?: string
 }
 const sourceStatuses = ref<Map<string, SourceStatus>>(new Map())
 const sourceList = computed<SourceStatus[]>(() => [...sourceStatuses.value.values()])
 
 /// Manifests of the current round, keyed by provider — the per-source retry
-/// re-fires with the same request shape the round used.
-const providerByKey = new Map<string, ISubtitleProviderManifest>()
+/// re-fires with the same request shape the round used, and the web-search
+/// fallback reads each source's homepage from it.
+const providerByKey = new Map<string, ISubtitleProviderHealthState>()
 
 const sourcesTotal = ref(0)
 const settledCount = ref(0)
@@ -244,16 +252,45 @@ function cancelled(error: unknown): boolean {
 }
 
 function setStatus(
-    provider: ISubtitleProviderManifest,
+    provider: ISubtitleProviderHealthState,
     status: SourceStatus['status'],
-    extra: { message?: string; count?: number } = {}
+    extra: { message?: string; count?: number } = {},
+    preserveLink = true
 ): void {
+    const prev = sourceStatuses.value.get(provider.provider)
     sourceStatuses.value.set(provider.provider, {
         key: provider.provider,
         label: provider.displayName || provider.provider,
         status,
-        ...extra
+        ...extra,
+        // A sibling's response map may have landed this source's deep link
+        // before its own terminal state arrived — keep it across in-round
+        // state transitions; the round reset below starts clean instead.
+        ...(preserveLink && prev?.webSearchUrl ? { webSearchUrl: prev.webSearchUrl } : {})
     })
+}
+
+/// Merges one response's web-search deep-link map into the round's source
+/// chips (assrt-throttling escape hatch). The backend derives every entry
+/// from the media-level request, so ANY sibling's response can fill links
+/// for sources that errored, are still searching or were skipped — first
+/// delivery wins, later responses of the same round carry identical URLs.
+/// Call AFTER setStatus: setStatus recreates the entry without the link.
+function applyWebSearchUrls(urls: SubtitleWebSearchUrlMap | null | undefined): void {
+    if (!urls) return
+    for (const [key, url] of Object.entries(urls)) {
+        const status = sourceStatuses.value.get(key)
+        if (status && !status.webSearchUrl) {
+            sourceStatuses.value.set(key, { ...status, webSearchUrl: url })
+        }
+    }
+}
+
+/// The chip's escape-hatch link: the round's deep link when a response has
+/// delivered one, else the manifest homepage (skipped/unconfigured sources
+/// still get somewhere to jump). Undefined (xunlei/shooter) renders nothing.
+function webLinkOf(source: SourceStatus): string | undefined {
+    return source.webSearchUrl ?? providerByKey.get(source.key)?.websiteUrl ?? undefined
 }
 
 /// Stable score-descending merge: arriving rows slot in below every
@@ -284,7 +321,7 @@ async function runSearch(): Promise<void> {
     providersFailed.value = false
     const start = performance.now()
 
-    let providers: ISubtitleProviderManifest[]
+    let providers: ISubtitleProviderHealthState[]
     try {
         providers = await subtitleSearchService.getProviders()
     } catch (error) {
@@ -298,11 +335,11 @@ async function runSearch(): Promise<void> {
     if (disposed || myRound !== round) return
     providersLoading.value = false
 
-    const unconfigured = (p: ISubtitleProviderManifest) => p.requiresAuth && !p.credentialsConfigured
+    const unconfigured = (p: ISubtitleProviderHealthState) => p.requiresAuth && !p.credentialsConfigured
     const searchable = providers.filter((p) => !unconfigured(p))
     for (const provider of providers) {
         providerByKey.set(provider.provider, provider)
-        setStatus(provider, unconfigured(provider) ? 'skipped' : 'searching')
+        setStatus(provider, unconfigured(provider) ? 'skipped' : 'searching', {}, false)
     }
     sourcesTotal.value = searchable.length
     if (searchable.length === 0) {
@@ -331,6 +368,7 @@ async function runSearch(): Promise<void> {
                 if (disposed || myRound !== round) return
                 okCount += 1
                 setStatus(provider, 'ok', { count: result.candidates.length })
+                applyWebSearchUrls(result.webSearchUrls)
                 mergeCandidates(
                     result.candidates.map((candidate, index) => ({
                         candidate,
@@ -394,6 +432,7 @@ async function retrySource(providerKey: string): Promise<void> {
         )
         if (disposed || signal.aborted) return
         setStatus(provider, 'ok', { count: result.candidates.length })
+        applyWebSearchUrls(result.webSearchUrls)
         mergeCandidates(
             result.candidates.map((candidate, index) => ({
                 candidate,
@@ -811,6 +850,23 @@ onBeforeUnmount(teardown)
                             @click="retrySource(source.key)">
                             {{ t('subSearch.retrySource') }}
                         </button>
+                        <!-- web-search escape hatch (assrt throttling): jump
+                             to this source's public search page for the
+                             current term and download by hand. Rendered in
+                             every state a URL exists for — searching, ok,
+                             error, skipped (homepage fallback); sources
+                             without a public page (xunlei/shooter) render
+                             nothing -->
+                        <a
+                            v-if="webLinkOf(source)"
+                            :href="webLinkOf(source)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="border-line text-secondary-content hover:border-accent hover:text-primary-content ml-1 rounded border px-1 py-px text-[10px] leading-none no-underline"
+                            :data-test="'source-web-' + source.key"
+                            :aria-label="source.label + ' ' + t('subSearch.openInSite')">
+                            ↗
+                        </a>
                     </span>
                 </div>
 

@@ -587,10 +587,20 @@ export interface ISubtitleSourceOutcome {
     error: string | null
 }
 
+/// Web-search escape hatch (the assrt throttling closure): provider key →
+/// public-site deep link carrying the current media's search term. The
+/// backend derives every entry from the one media-level request, so each
+/// per-source fan-out response carries the full map — a source that errored
+/// or was skipped still gets its deep link once any sibling response
+/// arrives. xunlei/shooter have no public search page and stay absent;
+/// absent/null means "no link to render".
+export type SubtitleWebSearchUrlMap = Record<string, string>
+
 export interface ISubtitleSearchOutcome {
     cacheKey: string
     candidates: ISubtitleCandidate[]
     sourceOutcomes: ISubtitleSourceOutcome[]
+    webSearchUrls?: SubtitleWebSearchUrlMap | null
 }
 
 /// Mirrors the backend SubtitleDownloadResponse record: filePath non-empty
@@ -675,6 +685,9 @@ export interface ISubtitleHistoryResponse {
 /// from /download response headers, kept in-memory server-side). Only
 /// sources with a verified quota contract ever set them (OpenSubtitles
 /// today); null/undefined means no quota state and renders no badge.
+/// `websiteUrl` is the web-search escape hatch's fallback: the source's
+/// public site homepage, absent for xunlei/shooter (no usable public
+/// search page) and for legacy payloads predating the field.
 export interface ISubtitleProviderHealthState {
     provider: string
     displayName: string
@@ -687,4 +700,5 @@ export interface ISubtitleProviderHealthState {
     enabled?: boolean
     quotaRemaining?: number | null
     quotaResetUtc?: string | null
+    websiteUrl?: string | null
 }

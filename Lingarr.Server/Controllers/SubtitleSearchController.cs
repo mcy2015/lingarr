@@ -11,6 +11,7 @@ using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
 using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
+using Lingarr.Server.Modules.SubtitleSearch.Providers;
 using Lingarr.Server.Modules.SubtitleSearch.Queue;
 using Lingarr.Server.Modules.SubtitleSearch.Requests;
 using Microsoft.AspNetCore.Authorization;
@@ -65,11 +66,24 @@ public sealed record SubtitleCandidateResponse(
     string? Uploader,
     long? Size);
 
-/// <summary>Search response: candidates plus the cache key the download endpoint needs.</summary>
+/// <summary>
+/// Search response: candidates plus the cache key the download endpoint
+/// needs, and the manual web-search escape hatch.
+/// </summary>
+/// <param name="WebSearchUrls">
+/// Provider key → public-site deep link (the assrt throttling closure: the
+/// user can go download by hand when the API path is rate-limited). All
+/// links derive from the one media-level request, so every per-source
+/// fan-out response carries the full map — a source that errored or was
+/// skipped still gets its deep link once any sibling response arrives.
+/// xunlei/shooter have no public search page and stay absent. Additive tail
+/// parameter; null-dropping keeps legacy shapes byte-identical.
+/// </param>
 public sealed record SubtitleSearchResponse(
     string CacheKey,
     IReadOnlyList<SubtitleCandidateResponse> Candidates,
-    IReadOnlyList<SubtitleSourceOutcome> SourceOutcomes);
+    IReadOnlyList<SubtitleSourceOutcome> SourceOutcomes,
+    IReadOnlyDictionary<string, string>? WebSearchUrls = null);
 
 /// <summary>
 /// Manual download request (⑥): the picked candidate is addressed by the
@@ -149,6 +163,10 @@ public sealed record SubtitleBacklogResponse(
 /// captures today. Pass-through by design: staleness/exhaustion is the
 /// front end's rendering concern (remaining &lt;= 0 or a past reset hides
 /// the badge; the cooldown chip covers the exhausted case).
+/// <see cref="WebsiteUrl"/> is the source's public site homepage (the
+/// web-search escape hatch's fallback): null for xunlei/shooter, which have
+/// no usable public search page — skipped/unconfigured sources still get a
+/// link to jump to.
 /// </summary>
 public sealed record SubtitleProviderResponse(
     string Provider,
@@ -161,7 +179,8 @@ public sealed record SubtitleProviderResponse(
     string? CooldownReason,
     bool Enabled,
     int? QuotaRemaining = null,
-    DateTimeOffset? QuotaResetUtc = null);
+    DateTimeOffset? QuotaResetUtc = null,
+    string? WebsiteUrl = null);
 
 /// <summary>
 /// One row of the download history (screen 13): a subtitle_downloads row
@@ -373,7 +392,11 @@ public class SubtitleSearchController : ControllerBase
                 candidate.ReleaseInfo,
                 candidate.Uploader,
                 candidate.Size)).ToList(),
-            outcome.SourceOutcomes));
+            outcome.SourceOutcomes,
+            // Web-search escape hatch: the full per-source deep-link map of
+            // the public sites, derived from the one media-level request —
+            // independent of how THIS source's round went.
+            SubtitleWebSearchUrls.BuildSearchUrls(built.Request)));
     }
 
     /// <summary>
@@ -795,7 +818,8 @@ public class SubtitleSearchController : ControllerBase
                 cooldown?.Reason,
                 !enabledMap.TryGetValue(key, out var stored) || SubtitleSourceSettingKeys.IsEnabled(stored),
                 quota?.Remaining,
-                quota?.ResetUtc));
+                quota?.ResetUtc,
+                SubtitleWebSearchUrls.HomepageOf(entry.Provider.Provider)));
         }
 
         return Ok(providers);
