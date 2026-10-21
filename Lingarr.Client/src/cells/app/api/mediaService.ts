@@ -118,6 +118,19 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
         return http
             .post(`${resource}/${mediaType}/${id}/subtitle-need`, { needed })
             .then((response) => response.data)
+    },
+    /// B08: set the per-media target-language override. null = follow the
+    /// global target_languages list again; [] = the explicit「无目标」state
+    /// (the media wants no subtitles); otherwise the exact code set the
+    /// need/coverage rules resolve against. Shows cover all their episodes.
+    setTargetLanguages<T>(
+        mediaType: MediaType,
+        id: number,
+        languages: string[] | null
+    ): Promise<T> {
+        return http
+            .put(`${resource}/${mediaType}/${id}/target-languages`, { languages })
+            .then((response) => response.data)
     }
 })
 

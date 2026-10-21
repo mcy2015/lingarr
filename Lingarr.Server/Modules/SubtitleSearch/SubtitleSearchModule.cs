@@ -123,6 +123,10 @@ public static class SubtitleSearchModule
         services.AddScoped<SubtitlePinService>();
         services.AddScoped<SubtitleSearchOrchestrator>();
         services.AddSingleton<SubtitleArchiveExtractor>();
+        // B08: the shared per-media target-language resolution (override >
+        // global) behind every needs_translation/no_subtitle_needed writer
+        // and the library detail projection.
+        services.AddScoped<TargetLanguageResolver>();
         services.AddScoped<SubtitleCoverageRefresher>();
         services.AddScoped<SubtitleDownloadPipeline>();
     }

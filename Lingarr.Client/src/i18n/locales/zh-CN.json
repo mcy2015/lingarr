@@ -1200,7 +1200,23 @@
             "resetTitle": "清除手动指定，恢复自动识别"
         },
         "openSubtitleSearch": "🔍 搜索字幕",
-        "openImdb": "打开 IMDb 页面"
+        "openImdb": "打开 IMDb 页面",
+        "b08target": {
+            "label": "目标",
+            "none": "无目标语言（显式）",
+            "overrideBadge": "已覆盖",
+            "globalNote": "跟随全局设置",
+            "showScope": "对全部集生效",
+            "edit": "编辑",
+            "editTitle": "覆盖此媒体的目标语言",
+            "editorLabel": "目标语言：",
+            "emptyHint": "不选任何语言保存 = 显式无目标",
+            "editDone": "目标语言已更新：{langs}",
+            "resetDone": "已恢复跟随全局目标语言",
+            "reset": "恢复全局",
+            "resetTitle": "清除覆盖，重新跟随全局目标语言",
+            "failedToast": "更新目标语言失败：{message}"
+        }
     },
     "cmdk": {
         "ariaLabel": "全局搜索",

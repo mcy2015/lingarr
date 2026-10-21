@@ -5,7 +5,6 @@ using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Media;
-using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,23 +28,27 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 /// <item>Show: the same show-level refresh as the episode path, addressed
 /// by the show id directly.</item>
 /// </list>
+/// B08: the need rules run on the media's EFFECTIVE target set — the
+/// per-media override (movies/shows.target_languages_override) resolved by
+/// the shared <see cref="TargetLanguageResolver"/> against the global list.
+/// A show's override applies to every episode of that show.
 /// </summary>
 public sealed class SubtitleCoverageRefresher
 {
     private readonly LingarrDbContext _dbContext;
     private readonly ISubtitleService _subtitleService;
-    private readonly ISettingService _settingService;
+    private readonly TargetLanguageResolver _targetLanguageResolver;
     private readonly ILogger<SubtitleCoverageRefresher> _logger;
 
     public SubtitleCoverageRefresher(
         LingarrDbContext dbContext,
         ISubtitleService subtitleService,
-        ISettingService settingService,
+        TargetLanguageResolver targetLanguageResolver,
         ILogger<SubtitleCoverageRefresher> logger)
     {
         _dbContext = dbContext;
         _subtitleService = subtitleService;
-        _settingService = settingService;
+        _targetLanguageResolver = targetLanguageResolver;
         _logger = logger;
     }
 
@@ -59,16 +62,14 @@ public sealed class SubtitleCoverageRefresher
         int mediaId,
         CancellationToken cancellationToken = default)
     {
-        var targets = (await _settingService.GetSettingAsJson<Lingarr.Server.Models.TargetLanguage>(
-                           Lingarr.Core.Configuration.SettingKeys.Translation.TargetLanguages)
-                       ?? [])
-            .Select(language => language.Code)
-            .ToList();
+        // The global list is fetched once; each media row then resolves its
+        // own effective set (override > global) inside the refresh paths.
+        var globalTargets = await _targetLanguageResolver.GetGlobalAsync(cancellationToken);
 
         switch (mediaType)
         {
             case MediaType.Movie:
-                await RefreshMovieAsync(mediaId, targets, cancellationToken);
+                await RefreshMovieAsync(mediaId, globalTargets, cancellationToken);
                 break;
             case MediaType.Episode:
             {
@@ -82,26 +83,26 @@ public sealed class SubtitleCoverageRefresher
                     .FirstOrDefaultAsync(cancellationToken);
                 if (showId is int id)
                 {
-                    await RefreshShowAsync(id, targets, cancellationToken);
+                    await RefreshShowAsync(id, globalTargets, cancellationToken);
                 }
                 break;
             }
             case MediaType.Show:
-                await RefreshShowAsync(mediaId, targets, cancellationToken);
+                await RefreshShowAsync(mediaId, globalTargets, cancellationToken);
                 break;
         }
     }
 
     private async Task RefreshMovieAsync(
         int movieId,
-        List<string> targets,
+        List<string> globalTargets,
         CancellationToken cancellationToken)
     {
         var movie = await _dbContext.Movies
             .Where(m => m.Id == movieId)
             .Select(m => new
             {
-                m.Id, m.Path, m.SubtitleCoverageJson,
+                m.Id, m.Path, m.SubtitleCoverageJson, m.TargetLanguagesOverride,
                 m.AudioLanguages, m.AudioOverride, m.NeedsTranslation, m.NoSubtitleNeeded
             })
             .FirstOrDefaultAsync(cancellationToken);
@@ -109,6 +110,9 @@ public sealed class SubtitleCoverageRefresher
         {
             return;
         }
+
+        // B08: this movie's own override (if any) replaces the global list.
+        var targets = TargetLanguageResolver.Resolve(movie.TargetLanguagesOverride, globalTargets);
 
         // Exactly what the daily scan would write (shared computation): a
         // pathless movie carries no coverage at all (null), not an empty
@@ -160,7 +164,7 @@ public sealed class SubtitleCoverageRefresher
     /// </summary>
     private async Task RefreshShowAsync(
         int showId,
-        List<string> targets,
+        List<string> globalTargets,
         CancellationToken cancellationToken)
     {
         var show = await _dbContext.Shows
@@ -169,6 +173,7 @@ public sealed class SubtitleCoverageRefresher
             {
                 s.Id,
                 s.SubtitleCoverageJson,
+                s.TargetLanguagesOverride,
                 Seasons = s.Seasons.Select(season => new
                 {
                     Path = season.Path,
@@ -188,6 +193,10 @@ public sealed class SubtitleCoverageRefresher
         {
             return;
         }
+
+        // B08: the SHOW's override applies to every episode of that show —
+        // episodes carry no column of their own.
+        var targets = TargetLanguageResolver.Resolve(show.TargetLanguagesOverride, globalTargets);
 
         var coverage = new Dictionary<string, MediaLanguageCoverage>();
         // Per-episode subtitle languages accumulated by the season scans —

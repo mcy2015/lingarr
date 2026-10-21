@@ -1200,7 +1200,23 @@
             "resetTitle": "Clear the manual values and return to automatic detection"
         },
         "openSubtitleSearch": "Search Subtitles",
-        "openImdb": "Open the IMDb page"
+        "openImdb": "Open the IMDb page",
+        "b08target": {
+            "label": "Target",
+            "none": "No target languages (explicit)",
+            "overrideBadge": "Override",
+            "globalNote": "Following the global settings",
+            "showScope": "Applies to all episodes",
+            "edit": "Edit",
+            "editTitle": "Override the target languages for this media",
+            "editorLabel": "Target languages:",
+            "emptyHint": "Saving with nothing selected = explicitly no target",
+            "editDone": "Target languages updated: {langs}",
+            "resetDone": "Restored to following the global target languages",
+            "reset": "Follow global",
+            "resetTitle": "Clear the override and follow the global target languages again",
+            "failedToast": "Updating the target languages failed: {message}"
+        }
     },
     "cmdk": {
         "ariaLabel": "Global search",

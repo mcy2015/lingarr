@@ -506,8 +506,115 @@
                         {{ t('mediaDetail.audio.edit') }}
                     </button>
                 </div>
+
+                <!-- ═══ B08:目标语言集合行 —— 每媒体覆盖(电影用自身,剧集用
+                     剧集级、全部集继承);覆盖存在时徽章常驻,空态/全局态诚实
+                     标注 ═══ -->
+                <div
+                    class="border-line bg-tertiary/50 mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]"
+                    data-test="target-languages-row">
+                    <span
+                        class="mono border-accent/40 bg-accent/10 text-accent rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold"
+                        data-test="target-badge">
+                        {{ t('mediaDetail.b08target.label') }}
+                    </span>
+                    <span
+                        v-if="effectiveTargetCodes.length > 0"
+                        class="mono text-primary-content text-[11.5px]"
+                        data-test="target-languages-value">
+                        {{ effectiveTargetCodes.join(' · ') }}
+                    </span>
+                    <span
+                        v-else
+                        class="text-secondary-content/70 text-xs"
+                        data-test="target-languages-none">
+                        {{ t('mediaDetail.b08target.none') }}
+                    </span>
+                    <!-- 覆盖徽章:覆盖存在(任一形态,含显式无目标)就常驻,
+                         「恢复全局」是唯一移除途径 -->
+                    <span
+                        v-if="targetOverrideActive"
+                        class="mono border-accent/50 bg-accent/15 text-accent rounded-[3px] border px-1.5 py-px text-[10.5px] font-bold"
+                        data-test="target-override-badge">
+                        {{ t('mediaDetail.b08target.overrideBadge') }}
+                    </span>
+                    <span
+                        v-else
+                        class="text-secondary-content/70 text-xs"
+                        data-test="target-source-global">
+                        {{ t('mediaDetail.b08target.globalNote') }}
+                    </span>
+                    <!-- 剧集形态:覆盖作用于全部集(电影无此说明) -->
+                    <span
+                        v-if="isShow"
+                        class="text-secondary-content/70 text-xs"
+                        data-test="target-show-scope">
+                        {{ t('mediaDetail.b08target.showScope') }}
+                    </span>
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors"
+                        :title="t('mediaDetail.b08target.editTitle')"
+                        data-test="edit-target-languages"
+                        @click="toggleTargetEditor">
+                        {{ t('mediaDetail.b08target.edit') }}
+                    </button>
+                </div>
             </div>
 
+            <!-- ═══ B08:目标语言覆盖编辑器 —— 交互形态照 edit-audio-languages:
+                 语言码多选;「保存」写覆盖(空选 = 显式无目标),「恢复全局」
+                 清除覆盖(NULL=随全局)═══ -->
+            <div
+                v-if="targetEditorOpen"
+                class="shrink-0 px-4 pb-3"
+                data-test="target-editor">
+                <div
+                    class="border-line bg-tertiary/40 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2.5">
+                    <span class="text-secondary-content mr-1 text-xs">
+                        {{ t('mediaDetail.b08target.editorLabel') }}
+                    </span>
+                    <button
+                        v-for="code in targetEditorCodes"
+                        :key="code"
+                        type="button"
+                        class="mono rounded-[3px] border px-1.5 py-px text-[11px] font-bold transition-colors"
+                        :class="
+                            targetEditorSelected.has(code)
+                                ? 'border-accent/60 bg-accent/15 text-accent'
+                                : 'border-line bg-secondary text-secondary-content hover:text-primary-content'
+                        "
+                        :aria-pressed="targetEditorSelected.has(code)"
+                        :data-test="`target-editor-code-${code}`"
+                        @click="toggleTargetEditorCode(code)">
+                        {{ code.toUpperCase() }}
+                    </button>
+                    <span
+                        class="text-secondary-content/60 text-[11px]"
+                        data-test="target-editor-hint">
+                        {{ t('mediaDetail.b08target.emptyHint') }}
+                    </span>
+                    <span class="ml-auto flex gap-1.5">
+                        <button
+                            type="button"
+                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:opacity-50"
+                            :disabled="targetEditorBusy"
+                            data-test="target-editor-save"
+                            @click="saveTargetLanguages">
+                            {{ t('common.save') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="border-line text-secondary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:opacity-50"
+                            :disabled="targetEditorBusy"
+                            :title="t('mediaDetail.b08target.resetTitle')"
+                            data-test="target-editor-reset"
+                            @click="resetTargetLanguages">
+                            {{ t('mediaDetail.b08target.reset') }}
+                        </button>
+                    </span>
+                </div>
+            </div>
             <!-- E:手动指定音轨语言 —— 常用语言码多选 + 保存/重置 -->
             <div
                 v-if="audioEditorOpen"
@@ -834,11 +941,6 @@ const trackedLanguages = computed<string[]>(() => {
     return [...langs]
 })
 
-const firstTargetLanguage = computed<ILanguage | null>(() => {
-    const languages = (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
-    return languages[0] ?? null
-})
-
 // ── 音轨行 · 字幕需求标记(需求卡 A/B)══════════════════════════
 
 /// Audio languages of the audio row: the subtitle-card payload (per-media
@@ -854,20 +956,59 @@ const audioLanguages = computed<string[] | null>(() => {
     return null
 })
 
-/// All configured target language codes (lowercased) — the audio row's
-/// exemption checks every target, not just the first: with targets
-/// [JA, ZH] an audio track in either language exempts the item.
+/// All configured target language codes (lowercased) — the GLOBAL list; the
+/// exemption checks every target, not just the first: with targets [JA, ZH]
+/// an audio track in either language exempts the item.
 const targetLanguageCodes = computed<string[]>(() => {
     const languages = (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
     return languages.map((language) => language.code.toLowerCase())
 })
 
-/// Whether the container audio already covers ANY configured target
-/// language — the automatic「无需字幕」exemption basis of requirement card A.
+// ── 目标语言集合(B08:每媒体覆盖)══════════════════════════════
+
+/// The media's own override codes (lowercased): null = no override (follow
+/// the global list — also what list rows and legacy payloads read as);
+/// [] = the explicit「无目标」state; otherwise the exact pinned codes.
+const targetOverrideCodes = computed<string[] | null>(() => {
+    const override = item.value?.targetLanguagesOverride
+    if (override === null || override === undefined) return null
+    return override.map((code) => code.toLowerCase())
+})
+
+/// An override is active in either non-null shape (pinned codes or the
+/// explicit empty set) — the badge is permanent while it lasts and only
+/// 「恢复全局」 removes it.
+const targetOverrideActive = computed<boolean>(() => targetOverrideCodes.value !== null)
+
+/// The media's EFFECTIVE target set — the page's every target notion (audio
+/// exemption, coverage chips verdict, gap/translate actions) runs on this,
+/// never on the bare global list.
+const effectiveTargetCodes = computed<string[]>(
+    () => targetOverrideCodes.value ?? targetLanguageCodes.value
+)
+
+/// The media's primary target — the effective set's first code (global list
+/// order when no override pins its own). Drives the header pair, the
+/// missing-episode count and the movie's start-translation action. The
+/// configured entry's own name/code casing wins (header shows「Chinese」,
+/// payloads carry the stored casing); a pinned code outside the global
+/// list synthesizes the display-cased fallback.
+const firstEffectiveTarget = computed<ILanguage | null>(() => {
+    const code = effectiveTargetCodes.value[0]
+    if (!code) return null
+    const configured = ((settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]).find(
+        (language) => language.code.toLowerCase() === code
+    )
+    return configured ?? { name: code.toUpperCase(), code: code.toUpperCase() }
+})
+
+/// Whether the container audio already covers ANY EFFECTIVE target language
+/// — the automatic「无需字幕」exemption basis of requirement card A (B08: a
+/// removed target no longer exempts, an added one starts to).
 const audioContainsTarget = computed<boolean>(() => {
     const audio = audioLanguages.value
     if (!audio) return false
-    return targetLanguageCodes.value.some((target) =>
+    return effectiveTargetCodes.value.some((target) =>
         audio.some((code) => code.toLowerCase() === target)
     )
 })
@@ -952,7 +1093,7 @@ const configuredSourceCodes = computed<string[]>(() => {
 /// side cannot be derived from real data.
 const movieLanguagePair = computed<string | null>(() => {
     const tracks = (item.value?.tracks ?? []).filter((track) => track.have > 0)
-    const target = firstTargetLanguage.value?.code?.toLowerCase()
+    const target = firstEffectiveTarget.value?.code?.toLowerCase()
     if (!target) return null
     const present = tracks.map((track) => track.language.toLowerCase())
     const source =
@@ -966,7 +1107,7 @@ const movieLanguagePair = computed<string | null>(() => {
 /// persisted no_subtitle_needed exemption owe nothing and are subtracted
 /// (gap counts never bill exempt media, matching the pipeline KPI).
 const missingTargetEpisodes = computed<number | null>(() => {
-    const target = firstTargetLanguage.value?.code
+    const target = firstEffectiveTarget.value?.code
     if (!target || !item.value || !isShow.value) return null
     const track = item.value.tracks.find(
         (candidate) => candidate.language.toLowerCase() === target.toLowerCase()
@@ -991,7 +1132,7 @@ const headerMeta = computed(() => {
                 ? ' · ' +
                   t('mediaDetail.missingEpisodes', {
                       count: missing,
-                      lang: firstTargetLanguage.value!.code.toUpperCase()
+                      lang: firstEffectiveTarget.value!.code.toUpperCase()
                   })
                 : '')
         )
@@ -1042,7 +1183,7 @@ const activeByLanguage = computed(() => {
 })
 
 const movieTargetComplete = computed(() => {
-    const target = firstTargetLanguage.value?.code
+    const target = firstEffectiveTarget.value?.code
     if (!target) return false
     return (item.value?.tracks ?? []).some(
         (track) =>
@@ -1054,7 +1195,9 @@ const movieTargetComplete = computed(() => {
 /// place (tracks state, not history) — the tasks card then shows the silent
 /// all-done state instead of "Not translated yet + Start translation".
 const movieAllTargetsComplete = computed(() => {
-    const targets = targetLanguageCodes.value
+    // B08: the all-done verdict checks the media's EFFECTIVE targets — an
+    // override that removed a global target stops demanding it.
+    const targets = effectiveTargetCodes.value
     if (targets.length === 0) return false
     const tracks = item.value?.tracks ?? []
     return targets.every((target) =>
@@ -1338,8 +1481,8 @@ function coveredLanguagesFor(mediaId: number): Set<string> {
 function embeddedTrackTranslatable(track: IMediaEmbeddedTrack): boolean {
     if (!track.isTextBased || !track.language) return false
     const covered = coveredLanguagesFor(track.mediaId)
-    const targets = (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
-    return targets.some((target) => !covered.has(target.code.toLowerCase()))
+    // B08: the gate runs on the owning media's effective target set
+    return effectiveTargetCodes.value.some((target) => !covered.has(target))
 }
 
 async function translateEmbeddedTrack(
@@ -1560,6 +1703,88 @@ function errorMessage(error: unknown): string {
         : String(error)
 }
 
+// ── 目标语言集合编辑器(B08:每媒体覆盖)──────────────────────────
+// 交互形态照 edit-audio-languages:常用语言码多选 + 保存/重置。语义差别:
+// 「保存」写覆盖(空选 = 显式无目标,可随时改回),「恢复全局」把列写回
+// NULL(唯一移除覆盖徽章的途径)。
+
+/// Editor vocabulary: the same known-code set the audio editor offers — a
+/// media-level override never introduces a code the stack cannot normalize.
+const TARGET_EDITOR_CODES = AUDIO_EDITOR_CODES
+
+const targetEditorOpen = ref(false)
+const targetEditorBusy = ref(false)
+const targetEditorSelected = ref<Set<string>>(new Set())
+const targetEditorCodes = computed(() => {
+    const current = targetOverrideCodes.value ?? []
+    return [...new Set([...current, ...TARGET_EDITOR_CODES])]
+})
+
+function toggleTargetEditor(): void {
+    targetEditorOpen.value = !targetEditorOpen.value
+    if (targetEditorOpen.value) {
+        targetEditorSelected.value = new Set(targetOverrideCodes.value ?? [])
+    }
+}
+
+function toggleTargetEditorCode(code: string): void {
+    const next = new Set(targetEditorSelected.value)
+    if (next.has(code)) {
+        next.delete(code)
+    } else {
+        next.add(code)
+    }
+    targetEditorSelected.value = next
+}
+
+/// After a target write the whole page reloads: the server refreshed the
+/// coverage flags and the detail projection rebuilt the chips under the
+/// new effective set, so the badges reflect the change immediately.
+async function applyTargetOverride(languages: string[] | null): Promise<void> {
+    const media = item.value
+    if (!media || targetEditorBusy.value) return
+    targetEditorBusy.value = true
+    try {
+        const result = await mediaApi.setTargetLanguages<{ languages: string[] | null }>(
+            isShow.value ? MEDIA_TYPE.SHOW : MEDIA_TYPE.MOVIE,
+            media.id,
+            languages
+        )
+        media.targetLanguagesOverride =
+            result.languages === null || result.languages === undefined
+                ? null
+                : result.languages
+        targetEditorOpen.value = false
+        toastStore.push({
+            message:
+                result.languages === null || result.languages === undefined
+                    ? t('mediaDetail.b08target.resetDone')
+                    : result.languages.length > 0
+                      ? t('mediaDetail.b08target.editDone', {
+                            langs: result.languages.map((c) => c.toUpperCase()).join(' · ')
+                        })
+                      : t('mediaDetail.b08target.none'),
+            type: 'success'
+        })
+        await load()
+    } catch (error) {
+        toastStore.push({
+            message: t('mediaDetail.b08target.failedToast', { message: errorMessage(error) }),
+            type: 'error'
+        })
+    } finally {
+        targetEditorBusy.value = false
+    }
+}
+
+function saveTargetLanguages(): void {
+    void applyTargetOverride([...targetEditorSelected.value])
+}
+
+function resetTargetLanguages(): void {
+    void applyTargetOverride(null)
+}
+
 /// Screen button + topbar CTA (shared action): queue every episode of the
 /// active season that still lacks the target-language track, then report
 /// the real count and follow the jobs into the queue screen.
@@ -1600,7 +1825,7 @@ async function movieTranslateMissing(): Promise<void> {
         return
     }
 
-    const target = firstTargetLanguage.value
+    const target = firstEffectiveTarget.value
     if (!target) {
         toastStore.push({ message: t('mediaDetail.noTarget'), type: 'info' })
         return
@@ -1637,7 +1862,7 @@ onMounted(() => {
         { key: isShow.value ? 'mediaDetail.ctaTranslateSeason' : 'mediaDetail.translateMissing' },
         () => {
             if (isShow.value) {
-                const target = firstTargetLanguage.value
+                const target = firstEffectiveTarget.value
                 if (!target) {
                     toastStore.push({ message: t('mediaDetail.noTarget'), type: 'info' })
                     return

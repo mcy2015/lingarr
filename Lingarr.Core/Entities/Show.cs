@@ -24,6 +24,18 @@ public class Show : BaseEntity
     public string? SubtitleCoverageJson { get; set; }
 
     /// <summary>
+    /// B08 per-media target-language override, stored comma-separated
+    /// ("zh,en"; column target_languages_override). NULL = follow the global
+    /// target_languages setting; EMPTY STRING = the explicit「无目标」state
+    /// (the show wants no subtitles — every episode's need flags judge
+    /// "nothing missing" and the gap queue skips them, reversible any time);
+    /// otherwise the exact code set the shared TargetLanguageResolver
+    /// resolves against instead of the global list. Episodes carry no column
+    /// of their own — they inherit this value through their season.
+    /// </summary>
+    public string? TargetLanguagesOverride { get; set; }
+
+    /// <summary>
     /// Series year from Sonarr (M0008). Episode search requests resolve
     /// Year/ImdbId through Season→Show rather than storing them per episode
     /// (design point 1: no per-episode write amplification).

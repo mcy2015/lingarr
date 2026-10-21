@@ -1,15 +1,12 @@
 using Hangfire;
-using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Filters;
-using Lingarr.Server.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Extensions;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Media;
-using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Lingarr.Server.Modules.Translation;
@@ -54,7 +51,7 @@ public class StatisticsJob
     private readonly LingarrDbContext _dbContext;
     private readonly ISubtitleService _subtitleService;
     private readonly IScheduleService _scheduleService;
-    private readonly ISettingService _settingService;
+    private readonly TargetLanguageResolver _targetLanguageResolver;
     private readonly ILogger<StatisticsJob> _logger;
     private readonly int _finalizeChunkSize;
     private readonly int _incrementalScanBatchSize;
@@ -63,7 +60,7 @@ public class StatisticsJob
         LingarrDbContext dbContext,
         ISubtitleService subtitleService,
         IScheduleService scheduleService,
-        ISettingService settingService,
+        TargetLanguageResolver targetLanguageResolver,
         ILogger<StatisticsJob> logger,
         int? finalizeChunkSize = null,
         int? incrementalScanBatchSize = null)
@@ -71,7 +68,7 @@ public class StatisticsJob
         _dbContext = dbContext;
         _subtitleService = subtitleService;
         _scheduleService = scheduleService;
-        _settingService = settingService;
+        _targetLanguageResolver = targetLanguageResolver;
         _logger = logger;
         _finalizeChunkSize = finalizeChunkSize ?? FinalizeChunkSize;
         _incrementalScanBatchSize = incrementalScanBatchSize ?? IncrementalScanBatchSize;
@@ -147,11 +144,10 @@ public class StatisticsJob
         // Subtitle-need inputs: the configured target languages drive both
         // the audio exemption and the coverage gap (contract: audio hits any
         // target → exempt; coverage lacks any target → needs translation).
-        var targetLanguages = (await _settingService.GetSettingAsJson<TargetLanguage>(
-                                  SettingKeys.Translation.TargetLanguages)
-                              ?? new List<TargetLanguage>())
-            .Select(language => language.Code)
-            .ToList();
+        // B08: the GLOBAL list only — each row below resolves its own
+        // effective set (per-media override > global) through the shared
+        // TargetLanguageResolver, exactly like the single-media refresher.
+        var globalTargets = await _targetLanguageResolver.GetGlobalAsync();
 
         // One clock for the whole round: every watermark stamped below
         // carries the same instant, and the staleness cutoff derives from it.
@@ -176,6 +172,7 @@ public class StatisticsJob
                 movie.Id,
                 movie.Path,
                 movie.SubtitleCoverageJson,
+                movie.TargetLanguagesOverride,
                 movie.AudioLanguages,
                 movie.AudioOverride,
                 movie.NeedsTranslation,
@@ -204,6 +201,10 @@ public class StatisticsJob
 
         foreach (var movie in movies)
         {
+            // B08: this movie's effective target set — its own override
+            // replaces the global list (NULL override = global, pre-B08).
+            var targets = TargetLanguageResolver.Resolve(movie.TargetLanguagesOverride, globalTargets);
+
             if (!scanMovieIds.Contains(movie.Id))
             {
                 // Fresh watermark: the persisted snapshot vouches for this
@@ -217,9 +218,9 @@ public class StatisticsJob
                 // forced dimension never exempts the full search.
                 var needsFromSnapshot = SubtitleNeedRule.NeedsTranslation(
                     movie.AudioOverride, movie.AudioLanguages,
-                    stored is null ? null : SubtitleCoverageMath.FullyCoveredLanguages(stored), targetLanguages);
+                    stored is null ? null : SubtitleCoverageMath.FullyCoveredLanguages(stored), targets);
                 var nativeFromSnapshot = SubtitleNeedRule.NoSubtitleNeeded(
-                    movie.AudioOverride, movie.AudioLanguages, targetLanguages);
+                    movie.AudioOverride, movie.AudioLanguages, targets);
                 if (needsFromSnapshot != movie.NeedsTranslation
                     || nativeFromSnapshot != movie.NoSubtitleNeeded)
                 {
@@ -233,9 +234,9 @@ public class StatisticsJob
                 // no files to scan: coverage clears and the need rule
                 // runs on audio/override alone (nothing is covered)
                 var needsWithoutPath = SubtitleNeedRule.NeedsTranslation(
-                    movie.AudioOverride, movie.AudioLanguages, null, targetLanguages);
+                    movie.AudioOverride, movie.AudioLanguages, null, targets);
                 var nativeWithoutPath = SubtitleNeedRule.NoSubtitleNeeded(
-                    movie.AudioOverride, movie.AudioLanguages, targetLanguages);
+                    movie.AudioOverride, movie.AudioLanguages, targets);
                 if (movie.SubtitleCoverageJson != null
                     || needsWithoutPath != movie.NeedsTranslation
                     || nativeWithoutPath != movie.NoSubtitleNeeded)
@@ -258,13 +259,13 @@ public class StatisticsJob
             var subtitles = await _subtitleService.GetAllSubtitles(movie.Path);
             var coverage = SubtitleCoverageMath.MovieCoverage(subtitles);
             var json = SubtitleCoverageMath.SerializeCoverage(coverage);
-            // B07: forced-only slots (Count 0) are not covered — the forced
-            // dimension never exempts the full search.
+            // B07: forced-only slots (Count 0) are not covered — the
+            // forced dimension never exempts the full search.
             var needs = SubtitleNeedRule.NeedsTranslation(
                 movie.AudioOverride, movie.AudioLanguages,
-                SubtitleCoverageMath.FullyCoveredLanguages(coverage), targetLanguages);
+                SubtitleCoverageMath.FullyCoveredLanguages(coverage), targets);
             var native = SubtitleNeedRule.NoSubtitleNeeded(
-                movie.AudioOverride, movie.AudioLanguages, targetLanguages);
+                movie.AudioOverride, movie.AudioLanguages, targets);
 
             // Unchanged rows are not rewritten — matches the old change
             // tracker, which produced no UPDATE for untouched coverage.
@@ -345,6 +346,7 @@ public class StatisticsJob
             {
                 show.Id,
                 show.SubtitleCoverageJson,
+                show.TargetLanguagesOverride,
                 Seasons = show.Seasons.Select(season => new SeasonProjection(
                         season.Id,
                         season.Path,
@@ -362,6 +364,9 @@ public class StatisticsJob
 
         foreach (var show in shows)
         {
+            // B08: the show's override applies to every episode of that
+            // show — episodes carry no column of their own.
+            var targets = TargetLanguageResolver.Resolve(show.TargetLanguagesOverride, globalTargets);
             // Coverage is recomputed fresh from every season that has a path.
             // The tracked-entity implementation seeded MergeCoverage from the
             // persisted snapshot, so each daily run re-added the same files
@@ -414,9 +419,9 @@ public class StatisticsJob
                     episode.AudioOverride,
                     episode.AudioLanguages,
                     episodeLanguages.GetValueOrDefault(episode.Id),
-                    targetLanguages);
+                    targets);
                 var native = SubtitleNeedRule.NoSubtitleNeeded(
-                    episode.AudioOverride, episode.AudioLanguages, targetLanguages);
+                    episode.AudioOverride, episode.AudioLanguages, targets);
                 if (needs != episode.NeedsTranslation || native != episode.NoSubtitleNeeded)
                 {
                     episodeNeedsUpdates.Add((episode.Id, needs, native));
@@ -464,7 +469,9 @@ public class StatisticsJob
         // rows (a zero-covered target is precisely the interesting state);
         // languages only present in snapshots get theirs too. Same-day runs
         // upsert: the composite PK makes the second write an update.
-        var dailyLanguages = new HashSet<string>(targetLanguages, StringComparer.OrdinalIgnoreCase);
+        // B08: the dashboard tracks the GLOBAL target list — per-media
+        // overrides are a need/queue concern, not a dashboard dimension.
+        var dailyLanguages = new HashSet<string>(globalTargets, StringComparer.OrdinalIgnoreCase);
         foreach (var language in byLanguage.Keys)
         {
             dailyLanguages.Add(language);

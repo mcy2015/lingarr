@@ -29,6 +29,7 @@ const translateEmbeddedTrackMock = vi.hoisted(() => vi.fn())
 const getActiveTranslationsMock = vi.hoisted(() => vi.fn())
 const mediaSubtitlesMock = vi.hoisted(() => vi.fn())
 const subtitleNeedMock = vi.hoisted(() => vi.fn())
+const setTargetLanguagesMock = vi.hoisted(() => vi.fn())
 
 /// mediaSubtitles payload shape (F2a + requirement card A/B): external
 /// files + embedded tracks + the container's audio languages (null=unknown).
@@ -51,7 +52,8 @@ vi.mock('@/cells/app/api/mediaService', () => ({
     mediaService: () => ({
         library: libraryMock,
         mediaSubtitles: mediaSubtitlesMock,
-        subtitleNeed: subtitleNeedMock
+        subtitleNeed: subtitleNeedMock,
+        setTargetLanguages: setTargetLanguagesMock
     })
 }))
 
@@ -1800,5 +1802,212 @@ describe('MediaDetailPage · 媒体文件详情(媒体文件批次)', () => {
         expect(qualities[0].attributes('title')).toBe(
             'WEBDL-1080p · 1080p · h264 · eac3 5.1 · 58 min'
         )
+    })
+})
+
+/// Library mock with a movie item carrying a B08 target-language override.
+const movieItemWithOverride = (
+    targetLanguagesOverride: string[] | null
+): IMediaLibraryItem =>
+    ({
+        ...movieItem,
+        targetLanguagesOverride
+    }) as unknown as IMediaLibraryItem
+
+describe('MediaDetailPage · 目标语言集合编辑器(B08 · 电影/剧集双形态)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        libraryMock.mockResolvedValue({
+            items: [{ ...movieItem }],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        mediaSubtitlesMock.mockResolvedValue(subtitlesPayload())
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('follows the global list by default and saves a pinned override', async () => {
+        // mountDetail seeds TARGET_LANGUAGES=[ZH] — with no override the row
+        // shows that global set and the honest follow-global note
+        setTargetLanguagesMock.mockResolvedValue({ languages: ['zh'], source: 'override' })
+        // first load: no override; the reload after the write returns the
+        // detail projection with the persisted override
+        libraryMock
+            .mockResolvedValueOnce({
+                items: [{ ...movieItem }],
+                totalCount: 1,
+                pageNumber: 1,
+                pageSize: 20
+            })
+            .mockResolvedValue({
+                items: [movieItemWithOverride(['zh'])],
+                totalCount: 1,
+                pageNumber: 1,
+                pageSize: 20
+            })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        const row = wrapper.find('[data-test="target-languages-row"]')
+        expect(row.exists()).toBe(true)
+        expect(row.find('[data-test="target-languages-value"]').text()).toBe('zh')
+        expect(row.find('[data-test="target-source-global"]').exists()).toBe(true)
+        expect(row.find('[data-test="target-override-badge"]').exists()).toBe(false)
+        // movie form carries no episodes-scope note
+        expect(row.find('[data-test="target-show-scope"]').exists()).toBe(false)
+
+        await row.find('[data-test="edit-target-languages"]').trigger('click')
+        expect(wrapper.find('[data-test="target-editor"]').exists()).toBe(true)
+        // the editor opens with NO code preselected (no override stored)
+        expect(wrapper.find('[data-test="target-editor-code-zh"]').attributes('aria-pressed')).toBe(
+            'false'
+        )
+
+        await wrapper.find('[data-test="target-editor-code-zh"]').trigger('click')
+        await wrapper.find('[data-test="target-editor-save"]').trigger('click')
+        await settle()
+
+        expect(setTargetLanguagesMock).toHaveBeenCalledTimes(1)
+        expect(setTargetLanguagesMock).toHaveBeenCalledWith('Movie', 7, ['zh'])
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.b08target.editDone.replace('{langs}', 'ZH')
+        )
+        expect(toastStore.toasts[0].type).toBe('success')
+        // the whole page reloads so the coverage chips re-render under the
+        // new effective set (the library row is fetched again)
+        expect(libraryMock).toHaveBeenCalledTimes(2)
+        // in-place override state update drives the badge immediately
+        expect(wrapper.find('[data-test="target-override-badge"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="target-languages-value"]').text()).toBe('zh')
+        // the editor closed on success
+        expect(wrapper.find('[data-test="target-editor"]').exists()).toBe(false)
+    })
+
+    it('show form renders the override badge, the effective set and the episodes scope', async () => {
+        // an existing show override [ja] replaces the global [ZH] set — the
+        // row shows ONLY ja, never the removed global target
+        setTargetLanguagesMock.mockResolvedValue({ languages: ['ja'], source: 'override' })
+        libraryMock.mockResolvedValue({
+            items: [
+                {
+                    ...showItem,
+                    targetLanguagesOverride: ['ja']
+                }
+            ],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('show', '/library/show/3')
+
+        const row = wrapper.find('[data-test="target-languages-row"]')
+        expect(row.find('[data-test="target-languages-value"]').text()).toBe('ja')
+        expect(row.find('[data-test="target-override-badge"]').text()).toBe(
+            en.mediaDetail.b08target.overrideBadge
+        )
+        expect(row.find('[data-test="target-source-global"]').exists()).toBe(false)
+        // show form: the series-level override is honest about its scope
+        expect(row.find('[data-test="target-show-scope"]').text()).toBe(
+            en.mediaDetail.b08target.showScope
+        )
+
+        // the editor preselects the stored override codes
+        await row.find('[data-test="edit-target-languages"]').trigger('click')
+        expect(wrapper.find('[data-test="target-editor-code-ja"]').attributes('aria-pressed')).toBe(
+            'true'
+        )
+        expect(wrapper.find('[data-test="target-editor-code-zh"]').attributes('aria-pressed')).toBe(
+            'false'
+        )
+    })
+
+    it('saves an empty selection as the explicit no-target state and toasts it honestly', async () => {
+        setTargetLanguagesMock.mockResolvedValue({ languages: [], source: 'override' })
+        libraryMock
+            .mockResolvedValueOnce({
+                items: [movieItemWithOverride(['zh'])],
+                totalCount: 1,
+                pageNumber: 1,
+                pageSize: 20
+            })
+            .mockResolvedValue({
+                items: [movieItemWithOverride([])],
+                totalCount: 1,
+                pageNumber: 1,
+                pageSize: 20
+            })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="edit-target-languages"]').trigger('click')
+        // deselect the preselected zh — saving nothing is the explicit
+        //「无目标」state, never a silent reset to global
+        await wrapper.find('[data-test="target-editor-code-zh"]').trigger('click')
+        await wrapper.find('[data-test="target-editor-save"]').trigger('click')
+        await settle()
+
+        expect(setTargetLanguagesMock).toHaveBeenCalledWith('Movie', 7, [])
+        expect(toastStore.toasts[0].message).toBe(en.mediaDetail.b08target.none)
+        expect(toastStore.toasts[0].type).toBe('success')
+        // the honest none state renders, the override badge stays (reversible)
+        expect(wrapper.find('[data-test="target-languages-none"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="target-languages-value"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="target-override-badge"]').exists()).toBe(true)
+    })
+
+    it('reset writes null and returns the media to the global list', async () => {
+        setTargetLanguagesMock.mockResolvedValue({ languages: null, source: 'global' })
+        libraryMock
+            .mockResolvedValueOnce({
+                items: [movieItemWithOverride(['zh'])],
+                totalCount: 1,
+                pageNumber: 1,
+                pageSize: 20
+            })
+            .mockResolvedValue({
+                items: [{ ...movieItem }],
+                totalCount: 1,
+                pageNumber: 1,
+                pageSize: 20
+            })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="edit-target-languages"]').trigger('click')
+        await wrapper.find('[data-test="target-editor-reset"]').trigger('click')
+        await settle()
+
+        expect(setTargetLanguagesMock).toHaveBeenCalledWith('Movie', 7, null)
+        expect(toastStore.toasts[0].message).toBe(en.mediaDetail.b08target.resetDone)
+        // the badge is gone with the override — the only way out
+        expect(wrapper.find('[data-test="target-override-badge"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="target-source-global"]').exists()).toBe(true)
+    })
+
+    it('toasts the readable server error and keeps the editor open when the write fails', async () => {
+        setTargetLanguagesMock.mockRejectedValue({
+            isAxiosError: true,
+            message: 'Network Error',
+            response: { data: { message: 'media not found' } }
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="edit-target-languages"]').trigger('click')
+        await wrapper.find('[data-test="target-editor-code-zh"]').trigger('click')
+        await wrapper.find('[data-test="target-editor-save"]').trigger('click')
+        await settle()
+
+        expect(toastStore.toasts[0].type).toBe('error')
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.b08target.failedToast.replace('{message}', 'media not found')
+        )
+        // failure keeps the editor open (nothing was applied) and the page
+        // did not reload
+        expect(wrapper.find('[data-test="target-editor"]').exists()).toBe(true)
+        expect(libraryMock).toHaveBeenCalledTimes(1)
     })
 })

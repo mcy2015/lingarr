@@ -61,6 +61,17 @@ public class MediaLibraryItem
     public bool? AudioOverride { get; init; }
 
     /// <summary>
+    /// B08 per-media target-language override: null = follow the global
+    /// target_languages setting (pre-B08 behavior); empty array = the
+    /// explicit「无目标」state (the media wants no subtitles); otherwise the
+    /// exact codes the need rules and the detail page's coverage chips
+    /// resolve against. Only the detail (single-item) projection populates
+    /// it — list rows stay null. Shows carry the series-level override
+    /// their episodes inherit.
+    /// </summary>
+    public string[]? TargetLanguagesOverride { get; init; }
+
+    /// <summary>
     /// Release year from *arr (library B2/M0008). Shows carry the series
     /// year; movies the release year. Null when the payload had none.
     /// </summary>

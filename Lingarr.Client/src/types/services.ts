@@ -94,6 +94,14 @@ export interface IMediaService {
     subtitleNeed<T>(mediaType: MediaType, id: number, needed: boolean | null): Promise<T>
     identifyAudio<T>(mediaType: MediaType, id: number): Promise<T>
     setAudioLanguages<T>(mediaType: MediaType, id: number, languages: string[]): Promise<T>
+    /// B08: set the per-media target-language override (null = follow the
+    /// global list again, [] = explicit「无目标」, otherwise the exact code
+    /// set). Shows cover all their episodes.
+    setTargetLanguages<T>(
+        mediaType: MediaType,
+        id: number,
+        languages: string[] | null
+    ): Promise<T>
 }
 
 /// One external subtitle file next to a media item; languages carries every

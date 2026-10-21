@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
@@ -9,8 +8,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Lingarr.Server.Modules.Media;
-using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Lingarr.Server.Modules.Translation;
 
 namespace Lingarr.Server.Controllers;
@@ -23,9 +22,10 @@ public class MediaController : ControllerBase
     private readonly IMediaService _mediaService;
     private readonly IMediaLibraryService _mediaLibraryService;
     private readonly ISubtitleService _subtitleService;
-    private readonly ISettingService _settingService;
     private readonly AudioLanguageService _audioLanguageService;
     private readonly LingarrDbContext _dbContext;
+    private readonly TargetLanguageResolver _targetLanguageResolver;
+    private readonly SubtitleCoverageRefresher _coverageRefresher;
 
     // ── subtitle file cache (audit P1-5) ───────────────────────────
     //
@@ -65,16 +65,18 @@ public class MediaController : ControllerBase
         IMediaService mediaService,
         IMediaLibraryService mediaLibraryService,
         ISubtitleService subtitleService,
-        ISettingService settingService,
         AudioLanguageService audioLanguageService,
-        LingarrDbContext dbContext)
+        LingarrDbContext dbContext,
+        TargetLanguageResolver targetLanguageResolver,
+        SubtitleCoverageRefresher coverageRefresher)
     {
         _mediaService = mediaService;
         _mediaLibraryService = mediaLibraryService;
         _subtitleService = subtitleService;
-        _settingService = settingService;
         _audioLanguageService = audioLanguageService;
         _dbContext = dbContext;
+        _targetLanguageResolver = targetLanguageResolver;
+        _coverageRefresher = coverageRefresher;
     }
 
     /// <summary>
@@ -236,11 +238,11 @@ public class MediaController : ControllerBase
         int id,
         [FromBody] SubtitleNeedRequest request)
     {
-        var targets = (await _settingService.GetSettingAsJson<TargetLanguage>(
-                           SettingKeys.Translation.TargetLanguages)
-                       ?? [])
-            .Select(language => language.Code)
-            .ToList();
+        // B08: the need verdict runs on the media's EFFECTIVE target set
+        // (per-media override > global) through the shared resolver — the
+        // same one the refresher and the daily scan use, so a manual mark
+        // still lands exactly where the nightly writers would put it.
+        var globalTargets = await _targetLanguageResolver.GetGlobalAsync();
 
         switch (mediaType)
         {
@@ -248,6 +250,7 @@ public class MediaController : ControllerBase
             {
                 var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == id);
                 if (movie == null) return NotFound();
+                var targets = TargetLanguageResolver.Resolve(movie.TargetLanguagesOverride, globalTargets);
                 movie.AudioOverride = request.Needed;
                 movie.NeedsTranslation = SubtitleNeedRule.NeedsTranslation(
                     movie.AudioOverride, movie.AudioLanguages, CoveredLanguages(movie.SubtitleCoverageJson), targets);
@@ -267,9 +270,16 @@ public class MediaController : ControllerBase
             {
                 var episode = await _dbContext.Episodes.FirstOrDefaultAsync(e => e.Id == id);
                 if (episode == null) return NotFound();
-                // episodes carry no per-episode coverage snapshot — the rule
-                // runs on audio/override alone (conservative) and the next
-                // statistics scan refines needs from the real subtitle files
+                // episodes carry no override of their own — they inherit the
+                // owning show's column (B08), and no per-episode coverage
+                // snapshot either: the rule runs on audio/override alone
+                // (conservative) and the next statistics scan refines needs
+                // from the real subtitle files
+                var showOverride = await _dbContext.Episodes
+                    .Where(e => e.Id == id)
+                    .Select(e => e.Season.Show.TargetLanguagesOverride)
+                    .FirstAsync();
+                var targets = TargetLanguageResolver.Resolve(showOverride, globalTargets);
                 episode.AudioOverride = request.Needed;
                 episode.NeedsTranslation = SubtitleNeedRule.NeedsTranslation(
                     episode.AudioOverride, episode.AudioLanguages, null, targets);
@@ -287,8 +297,16 @@ public class MediaController : ControllerBase
 
             case MediaType.Show:
             {
-                // the show must exist even when it has no episodes yet
-                if (!await _dbContext.Shows.AnyAsync(s => s.Id == id)) return NotFound();
+                // the show must exist even when it has no episodes yet;
+                // the override column rides the same existence check (a
+                // present show with NULL override and a missing show both
+                // read null here, hence the id-shaped projection)
+                var showRow = await _dbContext.Shows
+                    .Where(s => s.Id == id)
+                    .Select(s => new { s.Id, s.TargetLanguagesOverride })
+                    .FirstOrDefaultAsync();
+                if (showRow == null) return NotFound();
+                var targets = TargetLanguageResolver.Resolve(showRow.TargetLanguagesOverride, globalTargets);
                 var episodes = await _dbContext.Episodes
                     .Where(e => e.Season.ShowId == id)
                     .ToListAsync();
@@ -377,6 +395,85 @@ public class MediaController : ControllerBase
             return NotFound(new { message = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Sets the per-media target-language override (B08): the code set the
+    /// subtitle-need rules resolve against instead of the global
+    /// target_languages list. A show write covers every episode (episodes
+    /// carry no column of their own); movie writes address the movie.
+    /// After the write the media's coverage-derived flags are refreshed
+    /// through the shared refresher, so the gap queue and the coverage
+    /// badges react on the next read without waiting for the nightly scan.
+    /// </summary>
+    /// <param name="mediaType">Movie or Show (episodes inherit their show's override).</param>
+    /// <param name="id">Movie or show id.</param>
+    /// <param name="request">
+    /// null languages = clear the override (follow the global list again);
+    /// an empty array = the explicit「无目标」state (the media wants no
+    /// subtitles — reversible any time, distinct from the manual
+    /// not-needed mark); otherwise the exact code set (stored trimmed,
+    /// lower-cased, deduplicated, comma-separated).
+    /// </param>
+    /// <response code="200">The stored override (null = following global) and the media scope it applied to.</response>
+    /// <response code="404">Unknown media id or unsupported media type.</response>
+    [HttpPut("{mediaType}/{id}/target-languages")]
+    public async Task<IActionResult> SetTargetLanguages(
+        MediaType mediaType,
+        int id,
+        [FromBody] TargetLanguagesRequest request)
+    {
+        string? stored;
+        string target;
+        switch (mediaType)
+        {
+            case MediaType.Movie:
+            {
+                var movie = await _dbContext.Movies.FirstOrDefaultAsync(m => m.Id == id);
+                if (movie == null) return NotFound();
+                movie.TargetLanguagesOverride = StoreOverride(request);
+                stored = movie.TargetLanguagesOverride;
+                target = "movie";
+                await _dbContext.SaveChangesAsync();
+                await _coverageRefresher.RefreshAsync(MediaType.Movie, id);
+                break;
+            }
+            case MediaType.Show:
+            {
+                var show = await _dbContext.Shows.FirstOrDefaultAsync(s => s.Id == id);
+                if (show == null) return NotFound();
+                show.TargetLanguagesOverride = StoreOverride(request);
+                stored = show.TargetLanguagesOverride;
+                target = "show";
+                await _dbContext.SaveChangesAsync();
+                // the show-level refresh recomputes every episode's flags
+                // under the new effective target set
+                await _coverageRefresher.RefreshAsync(MediaType.Show, id);
+                break;
+            }
+            default:
+                return NotFound();
+        }
+
+        return Ok(new
+        {
+            // null = following the global list; [] = the explicit「无目标」state
+            languages = stored is null
+                ? (string[]?)null
+                : [.. TargetLanguageResolver.ParseStored(stored)],
+            source = stored is null ? "global" : "override",
+            target
+        });
+    }
+
+    /// <summary>
+    /// Request → stored column value: null request clears to NULL (follow
+    /// global); a code list serializes comma-separated, where the EMPTY list
+    /// stores "" — the explicit「无目标」state, never NULL.
+    /// </summary>
+    private static string? StoreOverride(TargetLanguagesRequest request) =>
+        request.Languages is null
+            ? null
+            : TargetLanguageResolver.SerializeOverride(request.Languages);
 
     /// <summary>
     /// Languages the media already carries subtitle files in, read from the
@@ -579,6 +676,21 @@ public class MediaController : ControllerBase
 public class AudioLanguagesRequest
 {
     /// <summary>Language codes to store ("zh", "en"…); empty resets to unknown.</summary>
+    public string[]? Languages { get; set; }
+}
+
+/// <summary>
+/// Body of PUT api/media/{mediaType}/{id}/target-languages (B08). The null
+/// vs empty distinction is the contract: null clears the override (follow
+/// the global list again), empty is the explicit「无目标」state.
+/// </summary>
+public class TargetLanguagesRequest
+{
+    /// <summary>
+    /// Target language codes to pin this media to ("zh", "en"…); null
+    /// (or absent) clears the override; an empty array means "no target
+    /// languages at all".
+    /// </summary>
     public string[]? Languages { get; set; }
 }
 

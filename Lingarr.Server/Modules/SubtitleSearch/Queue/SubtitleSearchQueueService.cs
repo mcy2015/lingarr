@@ -84,6 +84,18 @@ public sealed class SubtitleSearchQueueService
     /// (one per media type) — no per-media round trips, and the NOT EXISTS
     /// guard makes it idempotent across rounds.
     /// <para>
+    /// B08 target-language contract: the gap verdict is NOT re-derived here
+    /// — the flags this selection reads are written exclusively by writers
+    /// that resolve through the shared
+    /// <see cref="Lingarr.Server.Modules.SubtitleSearch.Pipeline.TargetLanguageResolver"/>
+    /// (SubtitleCoverageRefresher, StatisticsJob, the subtitle-need
+    /// endpoint), so a per-media override (or the explicit empty「无目标」
+    /// override, which judges "nothing missing" and keeps the media out of
+    /// this queue) is inherited through the flags with zero drift. The
+    /// override endpoint refreshes a media's flags at write time, so the
+    /// next round enqueues against fresh verdicts.
+    /// </para>
+    /// <para>
     /// Media without a file location (<c>path</c> NULL or empty) never enter
     /// the selection set (QA3 P3-9): there is nothing to search for or burn
     /// a subtitle next to, so queuing them only burns retries.

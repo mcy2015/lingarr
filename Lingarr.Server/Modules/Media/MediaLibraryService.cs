@@ -5,6 +5,7 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Lingarr.Server.Modules.Translation;
 using Microsoft.EntityFrameworkCore;
 using Lingarr.Server.Modules.Settings;
@@ -34,17 +35,20 @@ public class MediaLibraryService : IMediaLibraryService
     private readonly LingarrDbContext _dbContext;
     private readonly ISettingService _settingService;
     private readonly ICostService _costService;
+    private readonly TargetLanguageResolver _targetLanguageResolver;
     private readonly ILogger<MediaLibraryService> _logger;
 
     public MediaLibraryService(
         LingarrDbContext dbContext,
         ISettingService settingService,
         ICostService costService,
+        TargetLanguageResolver targetLanguageResolver,
         ILogger<MediaLibraryService> logger)
     {
         _dbContext = dbContext;
         _settingService = settingService;
         _costService = costService;
+        _targetLanguageResolver = targetLanguageResolver;
         _logger = logger;
     }
 
@@ -588,8 +592,11 @@ public class MediaLibraryService : IMediaLibraryService
     /// <inheritdoc />
     public async Task<MediaLibraryItem?> GetLibraryItem(MediaType? mediaType, int id)
     {
-        var targetLanguages = await _settingService.GetSettingAsJson<TargetLanguage>(
-            SettingKeys.Translation.TargetLanguages) ?? new List<TargetLanguage>();
+        // B08: the detail projection resolves the media's EFFECTIVE target
+        // set (per-media override > global) with the same shared resolver
+        // the need-flag writers use — the coverage chips never show a
+        // global target an override removed, and never hide one it added.
+        var globalTargetCodes = await _targetLanguageResolver.GetGlobalAsync();
 
         if (mediaType is null or MediaType.Show)
         {
@@ -603,6 +610,7 @@ public class MediaLibraryService : IMediaLibraryService
                 var summary = (await ShowStatusCountsAsync([show.Id])).GetValueOrDefault(show.Id);
                 var episodes = show.Seasons.SelectMany(season => season.Episodes).ToList();
                 var episodeCount = episodes.Count;
+                var showTargets = TargetLanguageCodes(show.TargetLanguagesOverride, globalTargetCodes);
                 return new MediaLibraryItem
                 {
                     Id = show.Id,
@@ -619,7 +627,7 @@ public class MediaLibraryService : IMediaLibraryService
                     Tracks = BuildTracks(
                         show.SubtitleCoverage ?? new Dictionary<string, MediaLanguageCoverage>(),
                         episodeCount,
-                        targetLanguages),
+                        showTargets),
                     State = DeriveState(summary),
                     CompletedCount = summary?.Completed ?? 0,
                     FailedCount = summary?.Failed ?? 0,
@@ -639,6 +647,7 @@ public class MediaLibraryService : IMediaLibraryService
                             : episodes.All(e => e.AudioOverride == false)
                                 ? false
                                 : null,
+                    TargetLanguagesOverride = OverrideCodesOnWire(show.TargetLanguagesOverride),
                     Show = show
                 };
             }
@@ -678,7 +687,7 @@ public class MediaLibraryService : IMediaLibraryService
                     Tracks = BuildTracks(
                         movie.SubtitleCoverage ?? new Dictionary<string, MediaLanguageCoverage>(),
                         1,
-                        targetLanguages),
+                        TargetLanguageCodes(movie.TargetLanguagesOverride, globalTargetCodes)),
                     State = DeriveState(summary),
                     CompletedCount = summary?.Completed ?? 0,
                     FailedCount = summary?.Failed ?? 0,
@@ -688,13 +697,37 @@ public class MediaLibraryService : IMediaLibraryService
                     AudioLanguages = movie.AudioLanguages,
                     SuggestedAudioLanguage = movie.SuggestedLanguage,
                     NeedsNoSubtitles = movie.NoSubtitleNeeded,
-                    AudioOverride = movie.AudioOverride
+                    AudioOverride = movie.AudioOverride,
+                    TargetLanguagesOverride = OverrideCodesOnWire(movie.TargetLanguagesOverride)
                 };
             }
         }
 
         return null;
     }
+
+    /// <summary>
+    /// B08: the stored override column → the effective code list the detail
+    /// projection builds its tracks against (override &gt; global, empty
+    /// stored string = explicit no-target), then wrapped into the
+    /// TargetLanguage shape BuildTracks consumes.
+    /// </summary>
+    private static List<TargetLanguage> TargetLanguageCodes(
+        string? storedOverride,
+        List<string> globalTargetCodes) =>
+        TargetLanguageResolver.Resolve(storedOverride, globalTargetCodes)
+            .Select(code => new TargetLanguage { Name = code, Code = code })
+            .ToList();
+
+    /// <summary>
+    /// B08 wire shape of the override: null = follow global, [] = explicit
+    /// no-target, otherwise the parsed codes. Only the stored-value parse —
+    /// never a global fallback, so the client can tell the two states apart.
+    /// </summary>
+    private static string[]? OverrideCodesOnWire(string? storedOverride) =>
+        storedOverride is null
+            ? (string[]?)null
+            : [.. TargetLanguageResolver.ParseStored(storedOverride)];
 
     /// <summary>
     /// Newest request per episode rolled up to counts per show (scale audit

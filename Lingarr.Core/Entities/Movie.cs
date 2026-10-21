@@ -76,6 +76,17 @@ public class Movie : BaseEntity, IMedia
     public bool NoSubtitleNeeded { get; set; }
 
     /// <summary>
+    /// B08 per-media target-language override, stored comma-separated
+    /// ("zh,en"; column target_languages_override). NULL = follow the global
+    /// target_languages setting; EMPTY STRING = the explicit「无目标」state
+    /// (this movie wants no subtitles — the need rules judge "nothing
+    /// missing" and the gap queue skips it, reversible any time); otherwise
+    /// the exact code set the shared TargetLanguageResolver resolves the
+    /// need rules against instead of the global list.
+    /// </summary>
+    public string? TargetLanguagesOverride { get; set; }
+
+    /// <summary>
     /// Release year from Radarr (M0008/B2). Feed for the subtitle-search
     /// request builder (title + year disambiguation, tech design ②/⑤).
     /// </summary>

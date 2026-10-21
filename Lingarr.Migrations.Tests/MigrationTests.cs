@@ -33,11 +33,12 @@ public class MigrationTests
             // audio-and-language-cache, subtitle-search,
             // subtitle-search-telemetry, subtitle-search-schema-cleanup,
             // video-hash-and-title-fts,
-            // suggested-language-and-manual-audio, media-file-info and
-            // subtitle-upgrade-settings migrations are applied.
-            Assert.Equal(14L, await ExecuteScalarAsync(connection,
+            // suggested-language-and-manual-audio, media-file-info,
+            // subtitle-upgrade-settings and per-media-target-languages
+            // migrations are applied.
+            Assert.Equal(15L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM version_info"));
-            Assert.Equal(14L, await ExecuteScalarAsync(connection,
+            Assert.Equal(15L, await ExecuteScalarAsync(connection,
                 "SELECT MAX(version) FROM version_info"));
 
             // Seed data is present.
@@ -542,7 +543,9 @@ public class MigrationTests
                     "suggested_language", "audio_languages_manual",
                     // M0013 media-file detail: overview + mediaInfo facts.
                     "overview", "video_codec", "audio_codec", "audio_channels", "resolution",
-                    "runtime_minutes"],
+                    "runtime_minutes",
+                    // M0015: per-media target-language override (B08).
+                    "target_languages_override"],
                 ["shows"] = ["id", "sonarr_id", "title", "path", "date_added", "translation_age_threshold",
                     "created_at", "updated_at", "include_in_translation", "subtitle_coverage_json",
                     // M0008: series-level year/imdb (design point 1) + B2 rating.
@@ -550,7 +553,10 @@ public class MigrationTests
                     // M0012: series-level original-language guess.
                     "suggested_language",
                     // M0013 media-file detail: series overview.
-                    "overview"],
+                    "overview",
+                    // M0015: per-media target-language override (B08; episodes
+                    // inherit it through their season).
+                    "target_languages_override"],
                 ["seasons"] = ["id", "season_number", "path", "show_id", "created_at", "updated_at",
                     "include_in_translation"],
                 ["episodes"] = ["id", "sonarr_id", "episode_number", "title", "file_name", "path", "media_hash",
@@ -829,6 +835,67 @@ public class MigrationTests
                 "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_search_auto_score' AND value = '75'"));
 
             // No schema artifact existed to remove — every table survives.
+            Assert.Equal(30L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// M0015 adds one nullable override column per media table (B08), so
+    /// rolling it back must return exactly the M0014 state: version back to
+    /// 14, target_languages_override gone from movies/shows while episodes
+    /// never carried it, and no settings seed to remove — the settings count
+    /// and every pre-existing column survive untouched.
+    /// </summary>
+    [Fact]
+    public async Task Sqlite_PerMediaTargetLanguagesMigration_RollsBackIndependently()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"lingarr_test_{Guid.NewGuid()}.db");
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var serviceProvider = BuildRunner(connectionString);
+            MigrationConfiguration.RunMigrations(serviceProvider);
+
+            using (var scope = serviceProvider.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(14);
+            }
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(14L, await ExecuteScalarAsync(connection,
+                "SELECT MAX(version) FROM version_info"));
+
+            // The override column is gone from both media tables…
+            var movieColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"movies\")", columnIndex: 1);
+            Assert.DoesNotContain("target_languages_override", movieColumns);
+            var showColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"shows\")", columnIndex: 1);
+            Assert.DoesNotContain("target_languages_override", showColumns);
+            // …while the columns created around it survive, and episodes
+            // never carried it (shows own the column their episodes read).
+            var episodeColumns = await ReadColumnAsync(connection,
+                "PRAGMA table_info(\"episodes\")", columnIndex: 1);
+            Assert.DoesNotContain("target_languages_override", episodeColumns);
+            Assert.Contains("needs_translation", movieColumns);
+            Assert.Contains("overview", showColumns);
+            Assert.Contains("audio_languages", episodeColumns);
+
+            // No settings seed existed — the M0014 settings count survives.
+            Assert.Equal(100L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings"));
+            Assert.Equal(1L, await ExecuteScalarAsync(connection,
+                "SELECT COUNT(*) FROM settings WHERE key = 'subtitle_upgrade_enabled' AND value = 'false'"));
+
+            // No table was added or dropped.
             Assert.Equal(30L, await ExecuteScalarAsync(connection,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"));
         }

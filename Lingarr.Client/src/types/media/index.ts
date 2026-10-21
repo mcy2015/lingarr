@@ -301,6 +301,14 @@ export interface IMediaLibraryItem {
     /// "needs subtitles", false = forced "not needed", null/undefined =
     /// automatic (the audio rule decides). Drives the detail page badge.
     audioOverride?: boolean | null
+    /// B08 per-media target-language override: null/undefined = follow the
+    /// global target_languages setting (pre-B08 behavior, also what list
+    /// rows and legacy payloads read as); [] = the explicit「无目标」state
+    /// (the media wants no subtitles — reversible any time); otherwise the
+    /// exact codes the need rules and coverage chips resolve against. Only
+    /// the detail (single-item) projection populates it. Show rows carry
+    /// the series-level override their episodes inherit.
+    targetLanguagesOverride?: string[] | null
     /// Option B: the work's original language (TMDb via *arr) — a guess
     /// shown as a muted hint while the real audio languages are unknown.
     suggestedAudioLanguage?: string | null
