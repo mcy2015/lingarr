@@ -898,6 +898,21 @@
             "model": "Model",
             "writeback": "Write the language tag back into the MKV after identification",
             "writebackHint": "Metadata-only via mkvpropedit (seconds); *arr and Plex then read the correct language directly"
+        },
+        "postProcess": {
+            "title": "Subtitle post-processing",
+            "description": "Runs on every downloaded subtitle after it lands",
+            "modeLabel": "Chinese variant",
+            "modeHint": "Converts newly downloaded subtitles to Simplified or Traditional; off by default",
+            "batchLabel": "Existing library",
+            "batchHint": "Convert the subtitles already on disk to the selected variant (idempotent, per file)",
+            "preview": "Preview",
+            "execute": "Convert now",
+            "previewResult": "{changed} of {scanned} subtitle files would change",
+            "previewNoChange": "Nothing to convert — all {scanned} files already match",
+            "executed": "{converted} converted · {skipped} already matched · {failed} failed",
+            "confirmHint": "Preview first, then confirm the conversion",
+            "batchFailed": "The batch run failed."
         }
     },
     "translations": {

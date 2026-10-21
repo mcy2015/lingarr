@@ -18,6 +18,7 @@ using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.Subtitle.PostProcessing;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
@@ -1048,6 +1049,14 @@ public class SubtitleDownloadPipelineTests
         internal readonly MemoryCache Cache = new(new MemoryCacheOptions());
         internal readonly Mock<ISubtitleService> SubtitleService = new();
         internal readonly Mock<ITranslationRequestQueueService> TranslationQueue = new();
+
+        /// <summary>
+        /// Post-processing stages the fixture's composite runs (B01): empty by
+        /// default — the pre-B01 behaviour — and mutable per test before the
+        /// pipeline runs (the composite enumerates per call).
+        /// </summary>
+        internal readonly List<ISubtitlePostProcessor> PostProcessStages = [];
+
         internal readonly string MediaDirectory;
         internal readonly SubtitleDownloadPipeline Pipeline;
         internal readonly SubtitleSearchOrchestrator Orchestrator;
@@ -1123,6 +1132,8 @@ public class SubtitleDownloadPipelineTests
             new SubtitleArchiveExtractor(),
             new PassthroughEncodingService(),
             SubtitleService.Object,
+            new CompositePostProcessor(
+                PostProcessStages, NullLogger<CompositePostProcessor>.Instance),
             TranslationQueue.Object,
             Settings,
             Cooldowns,

@@ -14,6 +14,7 @@ using Lingarr.Server.Models;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.Subtitle.PostProcessing;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Jobs;
@@ -598,6 +599,10 @@ public class SubtitleSearchJobTests
             services.AddScoped<SubtitleSearchQueueService>();
             services.AddScoped<SubtitleSearchOrchestrator>();
             services.AddScoped<SubtitleCoverageRefresher>();
+            // B01: the pipeline's post-processing dependency, with NO stage
+            // registered — the empty composite keeps these job tests at the
+            // pre-B01 download behaviour.
+            services.AddScoped<CompositePostProcessor>();
             services.AddScoped<SubtitleDownloadPipeline>();
             RootProvider = services.BuildServiceProvider();
 

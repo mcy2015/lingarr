@@ -240,6 +240,13 @@ public static class SettingKeys
         /// carry until=9999-12-31 (until credentials change).
         /// </summary>
         public const string SourceCooldowns = "subtitle_source_cooldowns";
+
+        /// <summary>
+        /// Chinese variant applied to subtitles after they land on disk
+        /// ("none"/"simplified"/"traditional" — the import-option vocabulary);
+        /// seeded "none" (B01): converting stored text never runs by default.
+        /// </summary>
+        public const string PostProcessChineseVariant = "subtitle_postprocess_chinese_variant";
     }
 
     public static class SubtitleValidation

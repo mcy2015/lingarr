@@ -82,6 +82,7 @@ public class StartupService : IHostedService
 
         await SeedSubtitleSourceSettings(dbContext);
         await SeedAudioIdentificationSettings(dbContext);
+        await SeedSubtitlePostProcessingSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -251,6 +252,30 @@ public class StartupService : IHostedService
 
         await dbContext.SaveChangesAsync();
         _logger.LogInformation("Seeded {Count} audio-identification setting rows.", missing.Count);
+    }
+
+    /// <summary>
+    /// Seeds the subtitle post-processing variant row (B01) with its "none"
+    /// default: converting stored subtitle text must never run implicitly, so
+    /// the row exists (settings saves need it) but the default is a no-op.
+    /// Existing rows are never overwritten.
+    /// </summary>
+    private async Task SeedSubtitlePostProcessingSettings(LingarrDbContext dbContext)
+    {
+        var key = SettingKeys.SubtitleSearch.PostProcessChineseVariant;
+        if (await dbContext.Settings.AnyAsync(setting => setting.Key == key))
+        {
+            return;
+        }
+
+        dbContext.Settings.Add(new Setting
+        {
+            Key = key,
+            Value = "none",
+            Provider = null
+        });
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation("Seeded the subtitle post-processing variant row (none).");
     }
 
     /// Seeds empty Settings rows for every subtitle-source key that does not exist

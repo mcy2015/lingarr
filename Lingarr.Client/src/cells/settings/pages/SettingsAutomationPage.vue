@@ -23,6 +23,7 @@
         </div>
 
         <AutomationBatchesCard />
+        <PostProcessCard />
         <ScheduleJobsCard />
     </div>
 </template>
@@ -34,6 +35,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import AutomationBatchesCard from '@/cells/settings/components/AutomationBatchesCard.vue'
+import PostProcessCard from '@/cells/settings/components/PostProcessCard.vue'
 import ScheduleJobsCard from '@/cells/settings/components/schedule/ScheduleJobsCard.vue'
 
 const router = useRouter()

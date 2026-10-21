@@ -898,6 +898,21 @@
             "model": "模型",
             "writeback": "识别后把语言标签写回 MKV 文件",
             "writebackHint": "使用 mkvpropedit 仅改元数据（秒级）；*arr / Plex 等将直接读到正确语言"
+        },
+        "postProcess": {
+            "title": "字幕后处理",
+            "description": "在每条字幕下载落盘后执行",
+            "modeLabel": "繁简转换",
+            "modeHint": "将新下载的字幕转为简体或繁体；默认关闭",
+            "batchLabel": "存量库",
+            "batchHint": "把已落盘的字幕按所选变体转换（逐文件幂等）",
+            "preview": "预览",
+            "execute": "立即转换",
+            "previewResult": "{scanned} 个字幕文件中有 {changed} 个将被改写",
+            "previewNoChange": "无需转换 —— {scanned} 个文件均已符合",
+            "executed": "已转换 {converted} · 已符合 {skipped} · 失败 {failed}",
+            "confirmHint": "先预览计数，再确认执行",
+            "batchFailed": "批处理执行失败。"
         }
     },
     "translations": {

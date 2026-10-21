@@ -11,6 +11,7 @@ using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.Subtitle.PostProcessing;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
 using Lingarr.Server.Modules.SubtitleSearch.Telemetry;
@@ -28,7 +29,7 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 /// <param name="HistoryId">Id of the written subtitle_downloads row.</param>
 /// <param name="FilePath">Where the file landed; null when nothing was written.</param>
 /// <param name="Result">Outcome classification of the attempt.</param>
-/// <param name="Error">Readable failure reason when <see cref="Result"/> is Failed.</param>
+/// <param name="Error">Readable failure reason when <see cref="Result"/> is Failed; on Succeeded carries a post-processing stage annotation ("{stage}: {message}") when a stage degraded the landed file's treatment without sinking it.</param>
 /// <param name="TranslationRequestId">First translation request created (⑦ step ⑦, one per target language); null when none.</param>
 /// <param name="TranslationDuplicate">True when at least one target language was skipped because the same content/target pair is already tracked.</param>
 /// <param name="FilesLanded">How many files this attempt wrote: 1 for an ordinary candidate, N when a whole-season archive fanned out one entry per episode, 0 when nothing landed.</param>
@@ -86,6 +87,7 @@ public sealed class SubtitleDownloadPipeline
     private readonly SubtitleArchiveExtractor _extractor;
     private readonly ISubtitleEncodingService _encodingService;
     private readonly ISubtitleService _subtitleService;
+    private readonly CompositePostProcessor _postProcessor;
     private readonly ITranslationRequestQueueService _translationQueue;
     private readonly ISettingService _settingService;
     private readonly SubtitleSourceCooldownStore _cooldowns;
@@ -100,6 +102,7 @@ public sealed class SubtitleDownloadPipeline
         SubtitleArchiveExtractor extractor,
         ISubtitleEncodingService encodingService,
         ISubtitleService subtitleService,
+        CompositePostProcessor postProcessor,
         ITranslationRequestQueueService translationQueue,
         ISettingService settingService,
         SubtitleSourceCooldownStore cooldowns,
@@ -113,6 +116,7 @@ public sealed class SubtitleDownloadPipeline
         _extractor = extractor;
         _encodingService = encodingService;
         _subtitleService = subtitleService;
+        _postProcessor = postProcessor;
         _translationQueue = translationQueue;
         _settingService = settingService;
         _cooldowns = cooldowns;
@@ -327,7 +331,8 @@ public sealed class SubtitleDownloadPipeline
         // parsers/writers — ass→srt rides the same SsaParser.
         var settings = await _settingService.GetSettings([
             SettingKeys.SubtitleSearch.ConvertToSrt,
-            SettingKeys.SubtitleSearch.AutoTranslate
+            SettingKeys.SubtitleSearch.AutoTranslate,
+            SettingKeys.SubtitleSearch.PostProcessChineseVariant
         ]);
         var convertToSrt = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.ConvertToSrt) != "false";
         var autoTranslate = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.AutoTranslate) != "false";
@@ -388,9 +393,18 @@ public sealed class SubtitleDownloadPipeline
                 error: $"cannot write the subtitle file: {ex.Message}");
         }
 
+        // ④b post-processing (B01): the file is on disk — stages run over it
+        // before the history row so a degraded stage treatment (variant
+        // conversion included) lands as an annotation on the Succeeded row,
+        // never as a failed download.
+        var postProcessError = await RunPostProcessingAsync(
+            finalPath,
+            settings.GetValueOrDefault(SettingKeys.SubtitleSearch.PostProcessChineseVariant),
+            cancellationToken);
+
         var outcome = await RecordAsync(
             candidate, mediaType, mediaId, source, searchSessionId,
-            SubtitleDownloadResult.Succeeded, filePath: finalPath, error: null, filesLanded: 1);
+            SubtitleDownloadResult.Succeeded, filePath: finalPath, error: postProcessError, filesLanded: 1);
 
         // ⑥ translation hook: target-language hits are terminal; non-target
         // languages enter the queue when auto_translate is on (content-hash
@@ -566,11 +580,15 @@ public sealed class SubtitleDownloadPipeline
         int SeasonNumber,
         string ShowTitle);
 
-    /// <summary>One fan-out landing attempt: the written path (null = the entry was skipped) plus what the pipeline needs next.</summary>
-    private sealed record LandingAttempt(string? Path, byte[]? Utf8, string? Error, bool ContentInvalid);
+    /// <summary>
+    /// One fan-out landing attempt: the written path (null = the entry was
+    /// skipped) plus what the pipeline needs next. PostProcessError carries a
+    /// degraded (not failed) post-processing annotation for the history row.
+    /// </summary>
+    private sealed record LandingAttempt(string? Path, byte[]? Utf8, string? Error, bool ContentInvalid, string? PostProcessError = null);
 
     /// <summary>One file the season-pack fan-out wrote next to its episode.</summary>
-    private sealed record LandedFile(SeasonSibling Episode, string Path, byte[] Utf8);
+    private sealed record LandedFile(SeasonSibling Episode, string Path, byte[] Utf8, string? PostProcessError = null);
 
     /// <summary>
     /// Season-pack fan-out (episode downloads): when at least two extracted
@@ -677,7 +695,8 @@ public sealed class SubtitleDownloadPipeline
         // Same conversion settings as the single-entry path.
         var settings = await _settingService.GetSettings([
             SettingKeys.SubtitleSearch.ConvertToSrt,
-            SettingKeys.SubtitleSearch.AutoTranslate
+            SettingKeys.SubtitleSearch.AutoTranslate,
+            SettingKeys.SubtitleSearch.PostProcessChineseVariant
         ]);
         var convertToSrt = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.ConvertToSrt) != "false";
         var autoTranslate = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.AutoTranslate) != "false";
@@ -687,13 +706,14 @@ public sealed class SubtitleDownloadPipeline
         // line — one bad file must not sink the episodes whose entries are
         // fine. Content-invalid defects are remembered for the nothing-
         // landed-at-all verdict below.
+        var variantMode = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.PostProcessChineseVariant);
         var landed = new List<LandedFile>();
         string? lastError = null;
         var contentInvalid = false;
         foreach (var (target, entry) in claims)
         {
             var attempt = await TryLandEntryAsync(
-                candidate.Language, target, entry, convertToSrt, cancellationToken);
+                candidate.Language, target, entry, convertToSrt, variantMode, cancellationToken);
             if (attempt.Path is null)
             {
                 lastError = attempt.Error ?? lastError;
@@ -704,7 +724,7 @@ public sealed class SubtitleDownloadPipeline
                 continue;
             }
 
-            landed.Add(new LandedFile(target, attempt.Path, attempt.Utf8!));
+            landed.Add(new LandedFile(target, attempt.Path, attempt.Utf8!, attempt.PostProcessError));
         }
 
         // Initiating-episode fallback: no entry homed in on the episode the
@@ -719,7 +739,7 @@ public sealed class SubtitleDownloadPipeline
                 var picked = _extractor.Extract(
                     payloadContent, payloadFileName, payloadFormat, candidate.Language, candidate.Provider);
                 var attempt = await TryLandEntryAsync(
-                    candidate.Language, initiating, picked, convertToSrt, cancellationToken);
+                    candidate.Language, initiating, picked, convertToSrt, variantMode, cancellationToken);
                 if (attempt.Path is null)
                 {
                     lastError = attempt.Error ?? lastError;
@@ -730,7 +750,7 @@ public sealed class SubtitleDownloadPipeline
                 }
                 else
                 {
-                    landed.Add(new LandedFile(initiating, attempt.Path, attempt.Utf8!));
+                    landed.Add(new LandedFile(initiating, attempt.Path, attempt.Utf8!, attempt.PostProcessError));
                 }
             }
             catch (SubtitleProviderException ex)
@@ -757,12 +777,16 @@ public sealed class SubtitleDownloadPipeline
 
         // History row and broadcast stay single: FilePath (and the broadcast
         // path) point at the initiating episode's file when it landed,
-        // honestly at the first landed file otherwise.
+        // honestly at the first landed file otherwise. A post-processing
+        // annotation rides the row the same way — the initiating episode's
+        // degradation first, else the first landed file that degraded.
         var initiatingFile = landed.FirstOrDefault(file => file.Episode.Id == mediaId)?.Path
                              ?? landed[0].Path;
+        var postProcessError = landed.FirstOrDefault(file => file.Episode.Id == mediaId)?.PostProcessError
+                               ?? landed.FirstOrDefault(file => file.PostProcessError is not null)?.PostProcessError;
         var outcome = await RecordAsync(
             candidate, MediaType.Episode, mediaId, source, searchSessionId,
-            SubtitleDownloadResult.Succeeded, filePath: initiatingFile, error: null,
+            SubtitleDownloadResult.Succeeded, filePath: initiatingFile, error: postProcessError,
             filesLanded: landed.Count);
 
         // Translation enqueue per landed file — the same adjudication the
@@ -839,17 +863,19 @@ public sealed class SubtitleDownloadPipeline
     /// Lands one archive entry next to one episode through the single-entry
     /// treatment: encoding → UTF-8, empty-payload guard, optional SRT
     /// conversion, naming template over the episode's directory and video
-    /// name, unique path, write. Failures come back as a skipped attempt
-    /// (never an exception) with the readable reason;
-    /// <see cref="LandingAttempt.ContentInvalid"/> marks the permanently-
-    /// unusable-content family (empty/unparseable) for blacklisting when
-    /// nothing lands at all.
+    /// name, unique path, write, then the post-processing stages (B01) with
+    /// the same never-block-the-landing contract as the single-entry path.
+    /// Failures come back as a skipped attempt (never an exception) with the
+    /// readable reason; <see cref="LandingAttempt.ContentInvalid"/> marks the
+    /// permanently-unusable-content family (empty/unparseable) for
+    /// blacklisting when nothing lands at all.
     /// </summary>
     private async Task<LandingAttempt> TryLandEntryAsync(
         string language,
         SeasonSibling target,
         ExtractedSubtitle entry,
         bool convertToSrt,
+        string? variantMode,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(target.Path) || string.IsNullOrEmpty(target.FileName))
@@ -903,11 +929,44 @@ public sealed class SubtitleDownloadPipeline
             var finalPath = await ComputeOutputPathAsync(
                 target.Path, target.FileName, language, outputExtension);
             await WriteAtomicAsync(finalPath, outputBytes, cancellationToken);
-            return new LandingAttempt(finalPath, utf8, null, false);
+            var postProcessError = await RunPostProcessingAsync(finalPath, variantMode, cancellationToken);
+            return new LandingAttempt(finalPath, utf8, null, false, postProcessError);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException)
         {
             return new LandingAttempt(null, null, $"cannot write the subtitle file: {ex.Message}", false);
+        }
+    }
+
+    /// <summary>
+    /// Runs the post-processing stages over one landed file (B01). The
+    /// composite already contains per-stage failures; this wrapper is the
+    /// last-resort guard so no post-processing problem can ever sink a file
+    /// that is already on disk — the error text (stage name included) comes
+    /// back for the history row instead. Caller cancellation is the only
+    /// propagation.
+    /// </summary>
+    private async Task<string?> RunPostProcessingAsync(
+        string filePath,
+        string? variantMode,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _postProcessor.ProcessAsync(
+                filePath, new PostProcessContext(variantMode), cancellationToken);
+            return result.Error;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Post-processing failed for {FilePath}; the subtitle stays on disk as written.",
+                filePath);
+            return $"post-processing failed: {ex.Message}";
         }
     }
 
