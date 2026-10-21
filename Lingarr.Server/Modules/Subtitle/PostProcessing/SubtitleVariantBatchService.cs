@@ -149,8 +149,7 @@ public sealed class SubtitleVariantBatchService : ISubtitleVariantBatchService
             .Where(show => show.Path != null && show.Path != string.Empty)
             .Select(show => new { show.Id, show.Path })
             .ToListAsync(cancellationToken);
-        var showsWithPath = shows.ToDictionary(
-            show => show.Id, show => show.Path!, StringComparer.OrdinalIgnoreCase);
+        var showsWithPath = shows.ToDictionary(show => show.Id, show => show.Path!);
         roots.AddRange(showsWithPath.Values);
 
         // Shows without a stored folder fall back to their distinct episode
