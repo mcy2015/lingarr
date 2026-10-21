@@ -25,6 +25,7 @@ namespace Lingarr.Server.Tests.Services;
 /// automation switch), user-created recurring jobs and the disabled-row
 /// merge in GetRecurringJobs().
 /// </summary>
+[Collection("HangfireGlobalStorage")] // swaps JobStorage.Current — see SettingChangedListenerTests
 public class ScheduleServiceTests : IDisposable
 {
     private readonly FakeSettingService _settingService = new();

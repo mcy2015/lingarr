@@ -21,6 +21,18 @@ namespace Lingarr.Server.Tests.Modules;
 /// never constructed the singleton), and the automation/schedule reaction
 /// groups stay pruned — recurring-job lifecycle belongs to ScheduleService.
 /// </summary>
+/// <summary>
+/// Both classes that swap the process-global <c>JobStorage.Current</c>
+/// (this one and <c>ScheduleServiceTests</c>) must never run in parallel
+/// with each other: a concurrent swap makes the other class's
+/// <c>GetRecurringJobs</c> read a storage it did not install.
+/// </summary>
+[CollectionDefinition("HangfireGlobalStorage", DisableParallelization = true)]
+public class HangfireGlobalStorageCollection
+{
+}
+
+[Collection("HangfireGlobalStorage")]
 public class SettingChangedListenerTests : IDisposable
 {
     private readonly SettingChangeNotifier _notifier = new();
