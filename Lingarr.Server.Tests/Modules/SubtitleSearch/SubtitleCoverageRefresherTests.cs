@@ -573,4 +573,220 @@ public class SubtitleCoverageRefresherTests : IDisposable
     }
 
     private sealed class RefresherDbContext(DbContextOptions options) : LingarrDbContext(options);
+
+    // ── B04: embedded tracks as coverage (setting-gated) ──────────────
+    //
+    // The flag is read through the settings service the refresher was built
+    // with: _refresher (the shared ctor instance) carries NO settings
+    // service, so it pins the flag-off regression gate regardless of what a
+    // previous test stored. The B04 cases build their own settings-aware
+    // refresher around the same SQLite database and temp tree.
+
+    private SubtitleCoverageRefresher CreateRefresher(bool embeddedAsCoverage)
+    {
+        _settings.SetSetting(
+            SettingKeys.SubtitleSearch.EmbeddedTrackCountsAsCoverage,
+            embeddedAsCoverage ? "true" : "false").GetAwaiter().GetResult();
+        return new SubtitleCoverageRefresher(
+            _dbContext,
+            new SubtitleService(
+                NullLogger<SubtitleService>.Instance,
+                new LanguageCodeService(),
+                _settings),
+            new TargetLanguageResolver(_settings),
+            NullLogger<SubtitleCoverageRefresher>.Instance,
+            _settings);
+    }
+
+    private async Task<Movie> SeedMovieWithEmbeddedTrackAsync(int radarrId, string relativeDir)
+    {
+        var directory = Path.Combine(_root, relativeDir);
+        Directory.CreateDirectory(directory);
+        var movie = new Movie
+        {
+            RadarrId = radarrId,
+            Title = $"movie {radarrId}",
+            Year = 2000 + radarrId,
+            Path = directory,
+            FileName = $"movie{radarrId}.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            AudioLanguages = ["en"], // not a target: the verdict turns on zh alone
+            NeedsTranslation = true
+        };
+        _dbContext.Movies.Add(movie);
+        // save FIRST: the track row needs the database-assigned movie id
+        await _dbContext.SaveChangesAsync();
+        _dbContext.MediaSubtitleTracks.Add(new MediaSubtitleTrack
+        {
+            MediaType = MediaType.Movie,
+            MediaId = movie.Id,
+            StreamIndex = 3,
+            Language = "zh",
+            RawLanguage = "chi",
+            Title = "简体中文",
+            Codec = "srt",
+            IsTextBased = true,
+            FilePath = Path.Combine(directory, movie.FileName)
+        });
+        await _dbContext.SaveChangesAsync();
+        return movie;
+    }
+
+    [Fact]
+    public async Task RefreshAsync_MovieEmbeddedTracks_FlagOn_ExemptsTheGapQueue()
+    {
+        // B04 acceptance 1 (on): a movie whose container carries a zh track
+        // gains the embedded coverage dimension, stops needing translation
+        // and therefore never enters EnqueueGapMediaAsync's gap INSERT.
+        var movie = await SeedMovieWithEmbeddedTrackAsync(31, "movie-emb-on");
+        var refresher = CreateRefresher(embeddedAsCoverage: true);
+
+        await refresher.RefreshAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == movie.Id);
+        Assert.NotNull(stored.SubtitleCoverage);
+        // the embedded dimension is its own slot: zh has NO file coverage
+        // (Count 0) but the embedded dimension (1).
+        Assert.Equal(0, stored.SubtitleCoverage!["zh"].Count);
+        Assert.Equal(1, stored.SubtitleCoverage!["zh"].EmbeddedCount);
+        Assert.Contains("\"embeddedCount\":1", stored.SubtitleCoverageJson);
+        // the dimension satisfies the need rule while the switch is on
+        Assert.False(stored.NeedsTranslation);
+
+        var queue = new SubtitleSearchQueueService(
+            _dbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+        var enqueued = await queue.EnqueueGapMediaAsync(CancellationToken.None);
+        Assert.Equal(0, enqueued);
+        var queuedIds = await _dbContext.SubtitleSearchStates.AsNoTracking()
+            .Where(state => state.MediaType == MediaType.Movie)
+            .Select(state => state.MediaId)
+            .ToListAsync();
+        Assert.DoesNotContain(movie.Id, queuedIds);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_MovieEmbeddedTracks_FlagOff_KeepsPreB04Behavior()
+    {
+        // B04 acceptance 1 (off, regression gate): the same fixture through
+        // the settings-less refresher — no embedded dimension is written,
+        // the JSON carries no embeddedCount key and the movie still needs
+        // translation, so the gap queue DOES pick it up.
+        var movie = await SeedMovieWithEmbeddedTrackAsync(32, "movie-emb-off");
+
+        await _refresher.RefreshAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == movie.Id);
+        Assert.NotNull(stored.SubtitleCoverage);
+        // no files and no merge: the track changes NOTHING — zh is not even
+        // a key of the snapshot, exactly the pre-B04 output.
+        Assert.False(stored.SubtitleCoverage!.ContainsKey("zh"));
+        Assert.DoesNotContain("embeddedCount", stored.SubtitleCoverageJson);
+        Assert.True(stored.NeedsTranslation);
+
+        var queue = new SubtitleSearchQueueService(
+            _dbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+        await queue.EnqueueGapMediaAsync(CancellationToken.None);
+        var queuedIds = await _dbContext.SubtitleSearchStates.AsNoTracking()
+            .Where(state => state.MediaType == MediaType.Movie)
+            .Select(state => state.MediaId)
+            .ToListAsync();
+        Assert.Contains(movie.Id, queuedIds);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_MovieGraphicTrack_AlsoCountsAsEmbeddedCoverage()
+    {
+        // A PGS track genuinely is a subtitle the player renders — the
+        // embedded dimension counts graphic tracks too (only the EXTRACT
+        // action is text-only).
+        var directory = Path.Combine(_root, "movie-emb-pgs");
+        Directory.CreateDirectory(directory);
+        var movie = new Movie
+        {
+            RadarrId = 33,
+            Title = "PGS Movie",
+            Year = 2024,
+            Path = directory,
+            FileName = "movie33.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            AudioLanguages = ["en"],
+            NeedsTranslation = true
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.MediaSubtitleTracks.Add(new MediaSubtitleTrack
+        {
+            MediaType = MediaType.Movie,
+            MediaId = movie.Id,
+            StreamIndex = 5,
+            Language = "zh",
+            RawLanguage = "chi",
+            Title = null,
+            Codec = "pgs",
+            IsTextBased = false,
+            FilePath = Path.Combine(directory, movie.FileName)
+        });
+        await _dbContext.SaveChangesAsync();
+
+        await CreateRefresher(embeddedAsCoverage: true)
+            .RefreshAsync(MediaType.Movie, movie.Id, CancellationToken.None);
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == movie.Id);
+        Assert.Equal(1, stored.SubtitleCoverage!["zh"].EmbeddedCount);
+        Assert.False(stored.NeedsTranslation);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ShowEmbeddedTracks_FlagOn_CountsDistinctEpisodes()
+    {
+        // Show semantics: the embedded dimension counts EPISODES carrying a
+        // track in the language, and every such episode's need flag flips —
+        // while an episode without tracks stays a gap.
+        await SetGlobalTargetsAsync("zh");
+        var show = await SeedShowAsync(7, "show7/s01",
+            "show7.s01e01.mkv", "show7.s01e02.mkv");
+        var episodes = show.Seasons.SelectMany(s => s.Episodes).OrderBy(e => e.Id).ToList();
+        _dbContext.MediaSubtitleTracks.AddRange(
+            new MediaSubtitleTrack
+            {
+                MediaType = MediaType.Episode,
+                MediaId = episodes[0].Id,
+                StreamIndex = 2,
+                Language = "zh",
+                RawLanguage = "chi",
+                Title = null,
+                Codec = "srt",
+                IsTextBased = true,
+                FilePath = "show7.s01e01.mkv"
+            },
+            // two tracks in the SAME episode of the same language: still one
+            // episode counted for the show dimension
+            new MediaSubtitleTrack
+            {
+                MediaType = MediaType.Episode,
+                MediaId = episodes[0].Id,
+                StreamIndex = 4,
+                Language = "zh",
+                RawLanguage = "chi",
+                Title = null,
+                Codec = "srt",
+                IsTextBased = true,
+                FilePath = "show7.s01e01.mkv"
+            });
+        await _dbContext.SaveChangesAsync();
+
+        await CreateRefresher(embeddedAsCoverage: true)
+            .RefreshAsync(MediaType.Show, show.Id, CancellationToken.None);
+
+        var storedShow = await _dbContext.Shows.AsNoTracking().SingleAsync(s => s.Id == show.Id);
+        Assert.Equal(1, storedShow.SubtitleCoverage!["zh"].EmbeddedCount);
+        Assert.Equal(0, storedShow.SubtitleCoverage!["zh"].Count);
+
+        var storedEpisodes = await _dbContext.Episodes.AsNoTracking()
+            .Where(e => e.Season.ShowId == show.Id)
+            .OrderBy(e => e.Id)
+            .ToListAsync();
+        Assert.False(storedEpisodes[0].NeedsTranslation); // owns the zh track
+        Assert.True(storedEpisodes[1].NeedsTranslation); // no track, still a gap
+    }
 }

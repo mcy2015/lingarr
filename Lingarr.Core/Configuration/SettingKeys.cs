@@ -308,6 +308,35 @@ public static class SettingKeys
         /// keeps the pre-B07 ranking byte-identical.
         /// </summary>
         public const string PreferHearingImpaired = "subtitle_search_prefer_hearing_impaired";
+
+        /// <summary>
+        /// Whether embedded subtitle tracks of a target language count as
+        /// coverage (B04); seeded "false". With the switch on, a media item
+        /// whose container carries a recognized embedded track in a target
+        /// language gains an "embedded" coverage dimension (badged like the
+        /// B07 forced dimension) and stops entering the missing-subtitle gap
+        /// queue for that language. Off (the default) keeps every coverage
+        /// computation byte-identical to the pre-B04 behavior — a user who
+        /// prefers external files over embedded tracks must opt in.
+        /// </summary>
+        public const string EmbeddedTrackCountsAsCoverage = "embedded_track_counts_as_coverage";
+
+        /// <summary>
+        /// Whisper transcription fallback (B04): an OpenAI-compatible
+        /// <c>POST {endpoint}/audio/transcriptions</c> service consulted as
+        /// the tail of the subtitle-source chain when regular sources miss.
+        /// All three rows are seeded empty — an outbound paid-by-token
+        /// integration never runs implicitly; the registry omits the source
+        /// until endpoint, model and key are all present.
+        /// </summary>
+        public static class Whisper
+        {
+            public const string Endpoint = "whisper_endpoint";
+            public const string Model = "whisper_model";
+
+            /// <summary>Bearer credential of the transcription service; encrypted at rest.</summary>
+            public const string ApiKey = "whisper_api_key";
+        }
     }
 
     public static class SubtitleValidation

@@ -124,6 +124,15 @@
                         data-test="track-forced-mark">
                         {{ t('library.track.forcedTag') }}
                     </span>
+                    <!-- B04:内封维度并入同一枚语言 chip(照 B07 forced 标同形,
+                         9b0180f 同概念徽章全页只显一处);have/state 仍是外挂文件口径 -->
+                    <span
+                        v-if="trackEmbeddedCount(track) > 0"
+                        class="text-info"
+                        :title="embeddedTitle(track)"
+                        data-test="track-embedded-mark">
+                        {{ t('library.track.embeddedTag') }}
+                    </span>
                     <!-- C5:none 态用样式化状态点元素,不输出尾随文本「·」——裸点会被
                          误读成列表悬空分隔符 -->
                     <span
@@ -775,6 +784,21 @@
                                 {{ t('mediaDetail.subtitleFiles.embedded.translate') }}
                             </button>
                         </ContextMenu>
+                        <!-- B04: 文本轨行级「抽取为外挂」——幂等落盘 {base}.{lang}.srt;
+                             图形轨不可抽取(服务端同样拒绝) -->
+                        <button
+                            v-if="track.isTextBased"
+                            type="button"
+                            class="border-line text-primary-content hover:bg-tertiary cursor-pointer rounded border px-2 py-0.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                            :disabled="extractBusyKey === `${track.mediaId}:${track.streamIndex}`"
+                            data-test="embedded-extract"
+                            @click="extractEmbeddedTrackAction(track)">
+                            {{
+                                extractBusyKey === `${track.mediaId}:${track.streamIndex}`
+                                    ? '…'
+                                    : t('mediaDetail.subtitleFiles.embedded.extract')
+                            }}
+                        </button>
                     </div>
                 </template>
             </div>
@@ -832,6 +856,7 @@
         :episode="searchTarget.episode"
         :audio-languages="audioLanguages"
         :existing-languages="searchExistingLanguages"
+        :embedded-tracks="searchEmbeddedTracks"
         @close="searchTarget = null"
         @downloaded="load" />
 </template>
@@ -1517,6 +1542,61 @@ async function translateEmbeddedTrack(
     }
 }
 
+// ── 内嵌轨抽取为外挂(B04)══════════════════════════════════════
+
+/// One in-flight extraction at a time, keyed by track (mediaId:streamIndex)
+/// — the button of the running row shows the busy state.
+const extractBusyKey = ref<string | null>(null)
+
+/// Row-level「抽取为外挂」: the server materializes {videoBase}.{lang}.srt
+/// next to the video (idempotent — an existing sidecar is left untouched)
+/// and refreshes the coverage-derived flags, so a full load() re-renders
+/// the file card, the coverage chips and the need state together.
+async function extractEmbeddedTrackAction(track: IMediaEmbeddedTrack): Promise<void> {
+    const key = `${track.mediaId}:${track.streamIndex}`
+    if (extractBusyKey.value) return
+    extractBusyKey.value = key
+    try {
+        const result = await mediaApi.extractEmbeddedTrack<{
+            path: string
+            fileName: string
+            created: boolean
+        }>(isShow.value ? MEDIA_TYPE.EPISODE : MEDIA_TYPE.MOVIE, track.mediaId, track.streamIndex)
+        toastStore.push({
+            message: result.created
+                ? t('mediaDetail.subtitleFiles.embedded.extractDone', { file: result.fileName })
+                : t('mediaDetail.subtitleFiles.embedded.extractExists', { file: result.fileName }),
+            type: 'success'
+        })
+        await load()
+    } catch (error) {
+        const detail = axios.isAxiosError(error)
+            ? ((error.response?.data as { message?: string } | undefined)?.message ?? error.message)
+            : String(error)
+        toastStore.push({
+            message: t('mediaDetail.subtitleFiles.embedded.extractFailed', { message: detail }),
+            type: 'error'
+        })
+    } finally {
+        extractBusyKey.value = null
+    }
+}
+
+/// Extractable embedded tracks of the CURRENT search unit (movie: all rows;
+/// episode: that episode's rows), handed to the search modal for its
+/// 「本地内封轨道」chips — text tracks with a recognized language only,
+/// the same population the extraction endpoint accepts.
+const searchEmbeddedTracks = computed<IMediaEmbeddedTrack[]>(() => {
+    if (!item.value || !searchTarget.value) return []
+    if (!isShow.value) {
+        return embeddedTracks.value.filter((track) => track.isTextBased && track.language)
+    }
+    return embeddedTracks.value.filter(
+        (track) =>
+            track.mediaId === searchTarget.value!.mediaId && track.isTextBased && track.language
+    )
+})
+
 /// 「标记需要字幕/清除标记」(需求卡 A/B): the response carries the resulting
 /// effective state and the persisted override — both apply in place (the
 /// list-derived row object is the same reference), toast, then refresh just
@@ -1952,6 +2032,34 @@ function forcedTitle(track: {
     return t('library.track.forcedOnlyTitle', {
         lang: track.language,
         have: forced,
+        total: track.total
+    })
+}
+
+/// B04 embedded dimension of one track: 0 when the payload predates the
+/// field (optional) or the language has no embedded-track coverage.
+function trackEmbeddedCount(track: { embeddedHave?: number }): number {
+    return track.embeddedHave ?? 0
+}
+
+/// Tooltip of the embedded mark — honest about what the dimension means:
+/// the container carries an embedded track in this language, and while the
+/// embedded_track_counts_as_coverage setting is on such a language no
+/// longer enters the missing-subtitle queue (have/state still count only
+/// external files).
+function embeddedTitle(track: {
+    language: string
+    have: number
+    total: number
+    embeddedHave?: number
+}): string {
+    const embedded = trackEmbeddedCount(track)
+    if (track.have > 0) {
+        return t('library.track.embeddedAlongsideTitle', { count: embedded })
+    }
+    return t('library.track.embeddedOnlyTitle', {
+        lang: track.language,
+        have: embedded,
         total: track.total
     })
 }

@@ -26,6 +26,7 @@ public class MediaController : ControllerBase
     private readonly LingarrDbContext _dbContext;
     private readonly TargetLanguageResolver _targetLanguageResolver;
     private readonly SubtitleCoverageRefresher _coverageRefresher;
+    private readonly IEmbeddedTrackService? _embeddedTrackService;
 
     // ── subtitle file cache (audit P1-5) ───────────────────────────
     //
@@ -68,7 +69,8 @@ public class MediaController : ControllerBase
         AudioLanguageService audioLanguageService,
         LingarrDbContext dbContext,
         TargetLanguageResolver targetLanguageResolver,
-        SubtitleCoverageRefresher coverageRefresher)
+        SubtitleCoverageRefresher coverageRefresher,
+        IEmbeddedTrackService? embeddedTrackService = null)
     {
         _mediaService = mediaService;
         _mediaLibraryService = mediaLibraryService;
@@ -77,6 +79,9 @@ public class MediaController : ControllerBase
         _dbContext = dbContext;
         _targetLanguageResolver = targetLanguageResolver;
         _coverageRefresher = coverageRefresher;
+        // B04: optional so the pre-B04 test constructors keep compiling;
+        // production DI always resolves the scoped implementation.
+        _embeddedTrackService = embeddedTrackService;
     }
 
     /// <summary>
@@ -393,6 +398,75 @@ public class MediaController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Extracts one embedded subtitle track as an external sidecar file
+    /// (B04): <c>{videoBase}.{language}.srt</c> next to the video, the same
+    /// name shape the translation flow writes. Idempotent — when the target
+    /// already exists (non-empty) the call answers 200 with created=false
+    /// and leaves the file's mtime untouched. After a fresh extraction the
+    /// subtitle-file cache of the media directory is dropped and the
+    /// coverage-derived flags are refreshed, so the detail page's file card
+    /// and coverage chips reflect the new file on the next read.
+    /// </summary>
+    /// <param name="mediaType">Movie or Episode — embedded track rows are owned by the container's own media item.</param>
+    /// <param name="id">Movie or episode id.</param>
+    /// <param name="streamIndex">ffprobe stream index of the track row.</param>
+    /// <response code="200">The sidecar path and whether this call created it.</response>
+    /// <response code="400">Unsupported media type or the extraction wiring is unavailable.</response>
+    /// <response code="404">Unknown media id.</response>
+    /// <response code="409">The track cannot be extracted (missing row, graphic track, container gone, ffmpeg failure) — the body carries the readable reason.</response>
+    [HttpPost("{mediaType}/{id}/embedded-tracks/{streamIndex}/extract")]
+    public async Task<IActionResult> ExtractEmbeddedTrack(MediaType mediaType, int id, int streamIndex)
+    {
+        if (_embeddedTrackService is null)
+        {
+            return BadRequest(new { message = "Embedded track extraction is not available." });
+        }
+
+        if (mediaType is not (MediaType.Movie or MediaType.Episode))
+        {
+            return NotFound(new { message = $"Embedded tracks are owned by movies and episodes, not {mediaType}." });
+        }
+
+        var exists = mediaType == MediaType.Movie
+            ? await _dbContext.Movies.AnyAsync(movie => movie.Id == id)
+            : await _dbContext.Episodes.AnyAsync(episode => episode.Id == id);
+        if (!exists)
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            var result = await _embeddedTrackService.ExtractToSidecarAsync(mediaType, id, streamIndex);
+            if (result.Created)
+            {
+                // The file card serves a cached directory scan — drop it so
+                // the new sidecar is visible immediately, then let the
+                // shared refresher flip coverage/need flags the same way the
+                // daily scan would.
+                InvalidateSubtitleFileCache(Path.GetDirectoryName(result.Path));
+                await _coverageRefresher.RefreshAsync(mediaType, id);
+            }
+
+            return Ok(new
+            {
+                path = result.Path,
+                fileName = Path.GetFileName(result.Path),
+                created = result.Created
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (Lingarr.Server.Exceptions.FFprobeUnavailableException ex)
+        {
+            // No ffmpeg binary in the environment — an actionable 409, not a 500.
+            return Conflict(new { message = ex.Message });
         }
     }
 

@@ -16,6 +16,11 @@ namespace Lingarr.Core.Entities;
 /// are omitted while zero so a library without forced files serializes
 /// byte-identically to the pre-B07 snapshot (no whole-library rewrite on
 /// the next scan).
+/// <para>
+/// B04 adds the embedded dimension (<see cref="EmbeddedCount"/>) alongside
+/// forced — same badge shape, different semantics: embedded counts toward
+/// the need rule while the embedded_track_counts_as_coverage setting is on.
+/// The two dimensions never feed each other.
 /// </para>
 /// </summary>
 public class MediaLanguageCoverage
@@ -33,4 +38,20 @@ public class MediaLanguageCoverage
     [JsonPropertyName("forcedBytes")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public long ForcedBytes { get; set; }
+
+    /// <summary>
+    /// B04 embedded dimension: a parallel coverage dimension alongside the
+    /// B07 forced split — the number of media units (0/1 for movies,
+    /// episodes for shows) whose container carries a recognized embedded
+    /// subtitle track in this language. Written ONLY while the
+    /// embedded_track_counts_as_coverage setting is on; a library that never
+    /// enables it (or one whose tracks are absent) serializes byte-identically
+    /// to the pre-B04 snapshot. Unlike the forced dimension, an
+    /// embedded-covered target language DOES satisfy the need rule while the
+    /// setting is on — that is the entire point of the switch — so the need
+    /// verdicts follow the setting, never the JSON alone.
+    /// </summary>
+    [JsonPropertyName("embeddedCount")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int EmbeddedCount { get; set; }
 }

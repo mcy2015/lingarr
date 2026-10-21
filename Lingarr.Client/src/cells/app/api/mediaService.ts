@@ -131,6 +131,13 @@ const service = (http: AxiosStatic, resource = '/api/media'): IMediaService => (
         return http
             .put(`${resource}/${mediaType}/${id}/target-languages`, { languages })
             .then((response) => response.data)
+    },
+    /// B04: extract one embedded track as an external sidecar next to the
+    /// video (idempotent — see IMediaService.extractEmbeddedTrack).
+    extractEmbeddedTrack<T>(mediaType: MediaType, id: number, streamIndex: number): Promise<T> {
+        return http
+            .post(`${resource}/${mediaType}/${id}/embedded-tracks/${streamIndex}/extract`)
+            .then((response) => response.data)
     }
 })
 

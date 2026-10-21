@@ -63,7 +63,31 @@ public interface IEmbeddedTrackService
         int mediaId,
         int streamIndex,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// B04 user-facing extraction: materializes one text-based embedded
+    /// track as an external sidecar file (<c>{videoBase}.{language}.srt</c>
+    /// next to the video — the same name shape the translation flow writes)
+    /// so players that prefer external subtitles pick it up. Idempotent: a
+    /// non-empty target file short-circuits BEFORE any ffmpeg run, so a
+    /// repeat call neither re-extracts nor touches the file's mtime.
+    /// Throws <see cref="InvalidOperationException"/> with a readable
+    /// message when the track row is missing, the track is graphic, the
+    /// container file is gone or ffmpeg fails.
+    /// </summary>
+    Task<EmbeddedTrackExtractionResult> ExtractToSidecarAsync(
+        MediaType mediaType,
+        int mediaId,
+        int streamIndex,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Outcome of a sidecar extraction (B04): the sidecar's absolute path and
+/// whether THIS call created it (false = an identical non-empty file was
+/// already next to the video and was left untouched).
+/// </summary>
+public sealed record EmbeddedTrackExtractionResult(string Path, bool Created);
 
 /// <summary>Outcome counters of one scan run.</summary>
 public sealed record EmbeddedTrackScanSummary(

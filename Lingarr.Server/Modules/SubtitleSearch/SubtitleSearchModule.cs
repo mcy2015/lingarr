@@ -52,6 +52,14 @@ public static class SubtitleSearchModule
     /// </summary>
     private static readonly long MaxJsonResponseBytes = 2L * 1024 * 1024;
 
+    /// <summary>
+    /// B04: the whisper source's own search budget — ffmpeg clip extraction
+    /// plus a transcription of a 120s clip legitimately outlasts the 10s
+    /// design-② default, so both the client timeout and the orchestrator's
+    /// per-source budget (via the provider attribute) run on this span.
+    /// </summary>
+    private static readonly TimeSpan WhisperSearchTimeout = TimeSpan.FromMinutes(5);
+
     public static void AddSubtitleSearchModule(this IServiceCollection services)
     {
         services.AddSingleton<SubtitleMatchScorer>();
@@ -87,6 +95,11 @@ public static class SubtitleSearchModule
         AddSource<XunleiProvider>(services);
         AddSource<AssrtProvider>(services);
         AddSource<ShooterProvider>(services);
+        // B04: the whisper transcription fallback rides the same wiring at
+        // the chain's tail, with its own (longer) search budget — the
+        // registry's settings gate keeps it out of every round until its
+        // three settings are complete.
+        AddSource<WhisperProvider>(services, searchTimeout: WhisperSearchTimeout);
 
         // Download-client wiring (QA2 P2-4): byte downloads resolve their
         // dedicated 120s clients through the static SubtitleHttp hook —
@@ -103,6 +116,9 @@ public static class SubtitleSearchModule
         services.AddSingleton<ISubtitleSourceManifest, XunleiPluginManifest>();
         services.AddSingleton<ISubtitleSourceManifest, AssrtPluginManifest>();
         services.AddSingleton<ISubtitleSourceManifest, ShooterPluginManifest>();
+        // B04: whisper's manifest feeds the sources-card row (display name +
+        // credentials badge); its full wiring form is the Whisper card.
+        services.AddSingleton<ISubtitleSourceManifest, WhisperPluginManifest>();
 
         services.AddScoped<SubtitleProviderRegistry>();
 
@@ -131,7 +147,9 @@ public static class SubtitleSearchModule
         services.AddScoped<SubtitleDownloadPipeline>();
     }
 
-    private static void AddSource<TProvider>(IServiceCollection services)
+    private static void AddSource<TProvider>(
+        IServiceCollection services,
+        TimeSpan? searchTimeout = null)
         where TProvider : SubtitleProviderBase, ISubtitleProvider
     {
         // The provider key is read from the attribute without instantiating
@@ -141,16 +159,17 @@ public static class SubtitleSearchModule
             .OfType<SubtitleProviderAttribute>()
             .FirstOrDefault();
         var name = attribute?.Name
-            ?? throw new InvalidOperationException(
-                $"{typeof(TProvider).Name} must declare SubtitleProviderAttribute.");
+                   ?? throw new InvalidOperationException(
+                       $"{typeof(TProvider).Name} must declare SubtitleProviderAttribute.");
 
-        // Search client: 10s timeout + the 2MB buffered-body ceiling (JSON
+        // Search client: the design-② 10s timeout (or the source's declared
+        // own budget, B04 whisper) + the 2MB buffered-body ceiling (JSON
         // search responses only — byte downloads never use this client).
         services.AddHttpClient<ISubtitleProvider, TProvider>(
             SubtitleProviderBase.HttpClientName(name),
             client =>
             {
-                client.Timeout = SourceTimeout;
+                client.Timeout = searchTimeout ?? SourceTimeout;
                 client.MaxResponseContentBufferSize = MaxJsonResponseBytes;
             })
             .ConfigurePrimaryHttpMessageHandler(sp => BuildSourceHandler(sp, name));

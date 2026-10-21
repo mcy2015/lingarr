@@ -102,6 +102,11 @@ export interface IMediaService {
         id: number,
         languages: string[] | null
     ): Promise<T>
+    /// B04: extract one embedded track as an external sidecar
+    /// ({videoBase}.{language}.srt next to the video). Idempotent — an
+    /// existing sidecar answers created=false without touching the file.
+    /// The response carries { path, fileName, created }.
+    extractEmbeddedTrack<T>(mediaType: MediaType, id: number, streamIndex: number): Promise<T>
 }
 
 /// One external subtitle file next to a media item; languages carries every

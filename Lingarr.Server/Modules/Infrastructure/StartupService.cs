@@ -85,6 +85,7 @@ public class StartupService : IHostedService
         await SeedSubtitlePostProcessingSettings(dbContext);
         await SeedPlexSettings(dbContext);
         await SeedSubtitleSearchPreferenceSettings(dbContext);
+        await SeedEmbeddedCoverageAndWhisperSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -349,6 +350,56 @@ public class StartupService : IHostedService
         });
         await dbContext.SaveChangesAsync();
         _logger.LogInformation("Seeded the subtitle-search preference row (hearing-impaired tiebreak off by default).");
+    }
+
+    /// <summary>
+    /// Seeds the B04 rows: the embedded-tracks-count-as-coverage switch
+    /// ("false" — a coverage-semantics change never happens implicitly; with
+    /// it off every computation stays byte-identical to the pre-B04 form)
+    /// and the whisper fallback's three placeholders, deliberately empty —
+    /// a paid-by-token outbound integration never runs implicitly, and the
+    /// registry omits the source until all three carry values (the key row
+    /// is encrypted at rest and only ever leaves through the reveal
+    /// endpoint). Existing rows are never overwritten; seeded here rather
+    /// than by a migration, like the Plex rows above.
+    /// </summary>
+    private async Task SeedEmbeddedCoverageAndWhisperSettings(LingarrDbContext dbContext)
+    {
+        (string Key, string Value)[] seeds =
+        [
+            (SettingKeys.SubtitleSearch.EmbeddedTrackCountsAsCoverage, "false"),
+            (SettingKeys.SubtitleSearch.Whisper.Endpoint, string.Empty),
+            (SettingKeys.SubtitleSearch.Whisper.Model, string.Empty),
+            (SettingKeys.SubtitleSearch.Whisper.ApiKey, string.Empty)
+        ];
+
+        var keys = seeds.Select(seed => seed.Key).ToArray();
+        var existingKeys = (await dbContext.Settings
+                .Where(setting => keys.Contains(setting.Key))
+                .Select(setting => setting.Key)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = seeds.Where(seed => !existingKeys.Contains(seed.Key)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in missing)
+        {
+            dbContext.Settings.Add(new Setting
+            {
+                Key = key,
+                Value = value,
+                Provider = null
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation(
+            "Seeded {Count} embedded-coverage/whisper setting rows (coverage switch and whisper fallback off by default).",
+            missing.Count);
     }
 
     /// Seeds empty Settings rows for every subtitle-source key that does not exist

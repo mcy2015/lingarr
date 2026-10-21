@@ -35,6 +35,7 @@ const searchMock = vi.hoisted(() => vi.fn())
 const downloadMock = vi.hoisted(() => vi.fn())
 const getSettingMock = vi.hoisted(() => vi.fn())
 const getLanguagesMock = vi.hoisted(() => vi.fn())
+const extractEmbeddedTrackMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/cells/app/api/subtitleSearchService', () => ({
     subtitleSearchService: {
@@ -50,6 +51,10 @@ vi.mock('@/cells/app/api/translateService', () => ({
 
 vi.mock('@/cells/app/api/settingService', () => ({
     settingService: () => ({ getSetting: getSettingMock })
+}))
+
+vi.mock('@/cells/app/api/mediaService', () => ({
+    mediaService: () => ({ extractEmbeddedTrack: extractEmbeddedTrackMock })
 }))
 
 const i18n = createI18n({
@@ -180,6 +185,15 @@ async function mountModal(
         episode?: string
         audioLanguages?: string[] | null
         existingLanguages?: string[]
+        embeddedTracks?: {
+            mediaId: number
+            streamIndex: number
+            language: string | null
+            rawLanguage: string | null
+            title: string | null
+            codec: string
+            isTextBased: boolean
+        }[]
         /// Seeds target_languages in the setting store before mount — the
         /// language toggles derive from it (omit for the missing-setting
         /// fallback path; pass [] for the empty-list fallback path).
@@ -1238,5 +1252,79 @@ describe('SubtitleSearchModal · 网站搜索外链', () => {
         expect(
             (document.querySelector('[data-test="source-web-assrt"]') as HTMLAnchorElement).getAttribute('href')
         ).toBe('https://assrt.net/sub/?searchword=Loki%20S01E01')
+    })
+})
+
+// ═══ B04:本地内封轨道 chips(结果区顶部)═══════════════════════
+describe('SubtitleSearchModal · 本地内封轨道', () => {
+    beforeEach(() => {
+        getProvidersMock.mockResolvedValue([subsource])
+        searchMock.mockResolvedValue(outcome('ck-sub', []))
+    })
+
+    const track = (overrides: Partial<{ streamIndex: number; language: string | null; isTextBased: boolean }> = {}) =>
+        ({
+            mediaId: 7,
+            streamIndex: 2,
+            language: 'zh',
+            rawLanguage: 'chi',
+            title: null,
+            codec: 'srt',
+            isTextBased: true,
+            ...overrides
+        }) as const
+
+    it('shows a chip per checked-language embedded track and extracts on click', async () => {
+        extractEmbeddedTrackMock.mockResolvedValue({
+            path: '/media/dune/dune.zh.srt',
+            fileName: 'dune.zh.srt',
+            created: true
+        })
+        const { wrapper, toast } = await mountModal({
+            embeddedTracks: [track(), track({ streamIndex: 5, language: 'ja' })]
+        })
+
+        // only the track whose language is checked (zh; ja is not among the
+        // fallback zh/en toggles... en IS checked too, so the ja track stays
+        // hidden while the zh chip renders with its stream index)
+        const chip = document.querySelector('[data-test="embedded-chip-2"]') as HTMLButtonElement
+        expect(chip).not.toBeNull()
+        expect(chip.textContent).toContain('ZH')
+        expect(chip.textContent).toContain(en.subSearch.embeddedExtract)
+        expect(document.querySelector('[data-test="embedded-chip-5"]')).toBeNull()
+
+        chip.click()
+        await flush()
+
+        expect(extractEmbeddedTrackMock).toHaveBeenCalledTimes(1)
+        expect(extractEmbeddedTrackMock).toHaveBeenCalledWith('Movie', 7, 2)
+        expect(toast.toasts[0].message).toBe(
+            en.subSearch.embeddedExtractDone.replace('{file}', 'dune.zh.srt')
+        )
+        // the page refresh contract rides the same downloaded event as a
+        // real download
+        expect(wrapper.emitted('downloaded')).toEqual([['dune.zh.srt']])
+    })
+
+    it('renders no row when no embedded track matches the checked languages', async () => {
+        await mountModal({ embeddedTracks: [track({ language: 'ko' }), track({ language: null })] })
+        expect(document.querySelector('[data-test="embedded-tracks-row"]')).toBeNull()
+    })
+
+    it('toasts the readable server error when extraction fails', async () => {
+        extractEmbeddedTrackMock.mockRejectedValue({
+            isAxiosError: true,
+            message: 'Network Error',
+            response: { data: { message: 'no such row' } }
+        })
+        const { toast } = await mountModal({ embeddedTracks: [track()] })
+
+        ;(document.querySelector('[data-test="embedded-chip-2"]') as HTMLButtonElement).click()
+        await flush()
+
+        expect(toast.toasts[0].type).toBe('error')
+        expect(toast.toasts[0].message).toBe(
+            en.subSearch.embeddedExtractFailed.replace('{message}', 'no such row')
+        )
     })
 })

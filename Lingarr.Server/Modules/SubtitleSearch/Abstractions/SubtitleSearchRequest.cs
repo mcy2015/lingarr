@@ -32,6 +32,17 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 /// query. Populated by the manual search endpoint's passthrough; sources
 /// that cannot search by free keyword ignore it.
 /// </param>
+/// <param name="MediaFilePath">
+/// B04: absolute path of the media's video file, filled only when the round
+/// queries a source that needs the container (whisper extracts its audio
+/// clip from it). Null for rounds without such a source — the hash-style
+/// lazy pattern (a round without the consumer does zero extra work).
+/// </param>
+/// <param name="AudioLanguages">
+/// B04: the media's normalized audio languages (null = unknown), the source
+/// of the transcription language. Filled under the same lazy gate as
+/// <paramref name="MediaFilePath"/>.
+/// </param>
 public sealed record SubtitleSearchRequest(
     string Title,
     int? Year,
@@ -43,4 +54,6 @@ public sealed record SubtitleSearchRequest(
     string? ImdbId,
     string? ShooterFileHash = null,
     string? XunleiFileHash = null,
-    string? Query = null);
+    string? Query = null,
+    string? MediaFilePath = null,
+    string[]? AudioLanguages = null);

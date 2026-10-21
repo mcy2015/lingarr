@@ -1,0 +1,8 @@
+{
+  "provider": "whisper",
+  "endpoint": "POST {whisper_endpoint}/audio/transcriptions (multipart file+model+language+response_format=srt)",
+  "recorded": "2026-10-21",
+  "recording": "Hand-shaped: the B04 provider asks the OpenAI-compatible transcription endpoint for response_format=srt, so the response body IS an SRT document. Values are synthetic; the multipart/Bearer request shape is asserted in WhisperProviderTests from the recorded request, not from this file.",
+  "license": "Synthetic content, no upstream material.",
+  "mirrored_by": "none (the provider tests stub the HTTP handler; the connection test hits GET {endpoint}/models)"
+}

@@ -104,7 +104,10 @@
             "none": "{lang}: no subtitles",
             "forcedTag": "forced",
             "forcedOnlyTitle": "{lang}: forced-only subtitles ({have}/{total}) — a full subtitle is still missing",
-            "forcedAlongsideTitle": "{count} forced-only subtitle(s) alongside the full track"
+            "forcedAlongsideTitle": "{count} forced-only subtitle(s) alongside the full track",
+            "embeddedTag": "embedded",
+            "embeddedOnlyTitle": "{lang}: embedded track in the container ({have}/{total}) — counted as coverage while “embedded tracks count as coverage” is on",
+            "embeddedAlongsideTitle": "{count} embedded track(s) alongside the external files"
         },
         "state": {
             "none": "· Not queued",
@@ -938,6 +941,19 @@
             "description": "Candidate ranking of the subtitle search",
             "preferHiLabel": "Prefer hearing-impaired",
             "preferHiHint": "At equal match scores, hearing-impaired (SDH) candidates rank first; scores and the auto-download threshold never change. Off by default"
+        },
+        "whisper": {
+            "title": "Whisper fallback",
+            "meta": "Transcription source · chain tail",
+            "endpoint": "Endpoint",
+            "endpointPlaceholder": "http://host:8000/v1",
+            "model": "Model",
+            "modelPlaceholder": "whisper-1",
+            "apiKey": "API key",
+            "keyPlaceholder": "Enter key",
+            "keySet": "Set — leave empty to keep",
+            "test": "Test connection",
+            "testDisabled": "Configure endpoint, model and key first"
         }
     },
     "translations": {
@@ -1151,7 +1167,11 @@
                 "graphic": "Image-based · not translatable",
                 "translate": "Translate",
                 "queuedToast": "Translation queued · request #{id}",
-                "queuedFailed": "Queueing translation failed: {message}"
+                "queuedFailed": "Queueing translation failed: {message}",
+                "extract": "Extract as sidecar",
+                "extractDone": "Extracted {file}",
+                "extractExists": "{file} already exists — left untouched",
+                "extractFailed": "Extraction failed: {message}"
             }
         },
         "mediaFile": {
@@ -1303,7 +1323,13 @@
         "languageNoOptions": "No languages available.",
         "languageNoResults": "No matching languages.",
         "translationSource": "translation source",
-        "openInSite": "Open in website"
+        "openInSite": "Open in website",
+        "embeddedTracksTitle": "Local embedded tracks:",
+        "embeddedExtract": "extract",
+        "embeddedExtractTitle": "Extract this embedded track as an external sidecar file",
+        "embeddedExtractDone": "Extracted {file}",
+        "embeddedExtractExists": "{file} already exists — left untouched",
+        "embeddedExtractFailed": "Extraction failed: {message}"
     },
     "dashboard": {
         "subtitles": {

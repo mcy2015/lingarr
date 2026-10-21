@@ -30,6 +30,7 @@ const getActiveTranslationsMock = vi.hoisted(() => vi.fn())
 const mediaSubtitlesMock = vi.hoisted(() => vi.fn())
 const subtitleNeedMock = vi.hoisted(() => vi.fn())
 const setTargetLanguagesMock = vi.hoisted(() => vi.fn())
+const extractEmbeddedTrackMock = vi.hoisted(() => vi.fn())
 
 /// mediaSubtitles payload shape (F2a + requirement card A/B): external
 /// files + embedded tracks + the container's audio languages (null=unknown).
@@ -53,7 +54,8 @@ vi.mock('@/cells/app/api/mediaService', () => ({
         library: libraryMock,
         mediaSubtitles: mediaSubtitlesMock,
         subtitleNeed: subtitleNeedMock,
-        setTargetLanguages: setTargetLanguagesMock
+        setTargetLanguages: setTargetLanguagesMock,
+        extractEmbeddedTrack: extractEmbeddedTrackMock
     })
 }))
 
@@ -2009,5 +2011,116 @@ describe('MediaDetailPage · 目标语言集合编辑器(B08 · 电影/剧集双
         // did not reload
         expect(wrapper.find('[data-test="target-editor"]').exists()).toBe(true)
         expect(libraryMock).toHaveBeenCalledTimes(1)
+    })
+})
+
+// ═══ B04:内嵌轨抽取为外挂(电影行级按钮)══════════════════════
+describe('MediaDetailPage · 内嵌轨抽取为外挂(B04)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        libraryMock.mockResolvedValue({
+            items: [movieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                embedded: [
+                    {
+                        mediaId: 7,
+                        streamIndex: 2,
+                        language: 'zh',
+                        rawLanguage: 'chi',
+                        title: '简体中文',
+                        codec: 'srt',
+                        isTextBased: true
+                    },
+                    {
+                        mediaId: 7,
+                        streamIndex: 4,
+                        language: 'zh',
+                        rawLanguage: 'chi',
+                        title: null,
+                        codec: 'pgs',
+                        isTextBased: false
+                    }
+                ],
+                embeddedScanned: true
+            })
+        )
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('renders the extract button on text tracks only', async () => {
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        const buttons = wrapper.findAll('[data-test="embedded-extract"]')
+        expect(buttons).toHaveLength(1) // the graphic row never gets one
+        expect(buttons[0].text()).toBe(en.mediaDetail.subtitleFiles.embedded.extract)
+    })
+
+    it('extracts through the endpoint and toasts the created sidecar', async () => {
+        extractEmbeddedTrackMock.mockResolvedValue({
+            path: '/media/movies/dune/dune.zh.srt',
+            fileName: 'dune.zh.srt',
+            created: true
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="embedded-extract"]').trigger('click')
+        await settle()
+
+        expect(extractEmbeddedTrackMock).toHaveBeenCalledTimes(1)
+        expect(extractEmbeddedTrackMock).toHaveBeenCalledWith('Movie', 7, 2)
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.subtitleFiles.embedded.extractDone.replace('{file}', 'dune.zh.srt')
+        )
+        expect(toastStore.toasts[0].type).toBe('success')
+        // the page reloaded its payload so the file card reflects the sidecar
+        expect(mediaSubtitlesMock.mock.calls.length).toBeGreaterThan(1)
+    })
+
+    it('toasts the idempotent answer when the sidecar already existed', async () => {
+        extractEmbeddedTrackMock.mockResolvedValue({
+            path: '/media/movies/dune/dune.zh.srt',
+            fileName: 'dune.zh.srt',
+            created: false
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="embedded-extract"]').trigger('click')
+        await settle()
+
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.subtitleFiles.embedded.extractExists.replace('{file}', 'dune.zh.srt')
+        )
+        expect(toastStore.toasts[0].type).toBe('success')
+    })
+
+    it('toasts the readable server error when extraction is rejected', async () => {
+        extractEmbeddedTrackMock.mockRejectedValue({
+            isAxiosError: true,
+            message: 'Network Error',
+            response: { data: { message: 'Embedded stream 2 (pgs) is image-based' } }
+        })
+        const { wrapper, toastStore } = await mountDetail('movie', '/library/movie/7')
+
+        await wrapper.find('[data-test="embedded-extract"]').trigger('click')
+        await settle()
+
+        expect(toastStore.toasts[0].type).toBe('error')
+        expect(toastStore.toasts[0].message).toBe(
+            en.mediaDetail.subtitleFiles.embedded.extractFailed.replace(
+                '{message}',
+                'Embedded stream 2 (pgs) is image-based'
+            )
+        )
     })
 })

@@ -938,6 +938,12 @@ public class MediaLibraryService : IMediaLibraryService
     /// <see cref="SubtitleTrackSummary.ForcedHave"/> carries the forced-only
     /// count while <see cref="SubtitleTrackSummary.Have"/>/State stay the
     /// FULL coverage verdict (a forced-only language reads "none").
+    /// B04: <see cref="SubtitleTrackSummary.EmbeddedHave"/> rides the same
+    /// chip the same way (9b0180f same-concept-badge-once ruling) — the
+    /// snapshot's embedded dimension surfaces as its own mark while Have/
+    /// State keep presenting the external-file verdict. Zero unless the
+    /// embedded_track_counts_as_coverage setting was on when the snapshot
+    /// was written.
     /// </summary>
     private static List<SubtitleTrackSummary> BuildTracks(
         Dictionary<string, MediaLanguageCoverage> coverage,
@@ -959,6 +965,7 @@ public class MediaLibraryService : IMediaLibraryService
                     Have = Math.Min(have, total),
                     Total = total,
                     ForcedHave = Math.Min(slot?.ForcedCount ?? 0, total),
+                    EmbeddedHave = Math.Min(slot?.EmbeddedCount ?? 0, total),
                     State = have == 0 ? "none" : have >= total ? "complete" : "partial"
                 };
             })

@@ -229,7 +229,7 @@ public sealed partial class SubtitleSearchOrchestrator
             // One linked CTS per source so a timeout cancels exactly that
             // source's call; the caller's token stays linked to all of them.
             var searches = targets.Select(entry => SearchOneAsync(
-                    entry.Provider, request, mediaType, mediaId, outcomes, sessions,
+                    entry, request, mediaType, mediaId, outcomes, sessions,
                     cancellationToken, preferHearingImpaired))
                 .ToArray();
             var perSource = await Task.WhenAll(searches);
@@ -412,7 +412,7 @@ public sealed partial class SubtitleSearchOrchestrator
         => _registry.All.Select(entry => entry.Provider.Provider).ToList();
 
     private async Task<List<SubtitleCandidate>> SearchOneAsync(
-        ISubtitleProvider provider,
+        RegisteredSubtitleProvider entry,
         SubtitleSearchRequest request,
         MediaType mediaType,
         int mediaId,
@@ -421,12 +421,19 @@ public sealed partial class SubtitleSearchOrchestrator
         CancellationToken callerToken,
         bool preferHearingImpaired)
     {
+        var provider = entry.Provider;
+        // B04: a source that declared its own budget (whisper's extraction +
+        // transcription legitimately outlasts the 10s default) runs on it;
+        // every other source keeps the round budget, which the testing
+        // constructor can shorten — the default path stays byte-identical.
+        var searchTimeout = entry.SearchBudget ?? _searchTimeout;
+
         // The budget must reach the HTTP calls themselves: providers forward
         // this token into SendAsync, and a hanging handler unwinds the moment
         // it fires. Relying on HttpClient.Timeout alone does NOT unwrap a
         // handler whose SendAsync task never completes (project lesson).
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
-        budget.CancelAfter(_searchTimeout);
+        budget.CancelAfter(searchTimeout);
 
         // L2 correlation: this source's slice of the round — every log line
         // from here down (provider internals, the HTTP gate, scoring, the
@@ -486,9 +493,9 @@ public sealed partial class SubtitleSearchOrchestrator
         }
         catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
         {
-            // The 10s budget fired; caller cancellation is distinguished by
+            // The search budget fired; caller cancellation is distinguished by
             // the filter and lands in the rethrow-only catch below.
-            var error = $"{provider.Provider} exceeded the {_searchTimeout.TotalSeconds:0.#}s search budget.";
+            var error = $"{provider.Provider} exceeded the {searchTimeout.TotalSeconds:0.#}s search budget.";
             outcomes.Add(new SubtitleSourceOutcome(provider.Provider, SubtitleProviderFailureReason.Timeout.ToString(), error));
             await RecordCooldownSafeAsync(provider.Provider,
                 SubtitleProviderException.ForTimeout(provider.Provider));

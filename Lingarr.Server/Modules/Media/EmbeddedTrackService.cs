@@ -714,6 +714,40 @@ public class EmbeddedTrackService : IEmbeddedTrackService
         return sourcePath;
     }
 
+    /// <inheritdoc />
+    public async Task<EmbeddedTrackExtractionResult> ExtractToSidecarAsync(
+        MediaType mediaType,
+        int mediaId,
+        int streamIndex,
+        CancellationToken cancellationToken = default)
+    {
+        // Validate first so an idempotent hit answers exactly like a fresh
+        // one would have answered a bad request — the reuse check must never
+        // mask "graphic track" or "no such row".
+        var track = await LoadTrack(mediaType, mediaId, streamIndex, cancellationToken);
+        ValidateExtractable(track);
+        var media = await ResolveMediaDirectory(mediaType, mediaId, cancellationToken);
+        var sidecar = Path.Combine(
+            media.Directory,
+            TranslationSourceFileName(media.FileName, track.Language ?? "unknown"));
+
+        // Idempotence short-circuit BEFORE any ffmpeg run: an existing
+        // non-empty sidecar (from an earlier extraction or a translation
+        // source) is the answer — its mtime stays untouched (B04 AC2).
+        if (File.Exists(sidecar) && new FileInfo(sidecar).Length > 0)
+        {
+            _logger.LogDebug(
+                "Embedded track sidecar of {MediaType} {MediaId} stream {StreamIndex} already exists: {Path}",
+                mediaType, mediaId, streamIndex, sidecar);
+            return new EmbeddedTrackExtractionResult(sidecar, Created: false);
+        }
+
+        // Reuse the translation-source machinery: it extracts through the
+        // deterministic cache and copies to the very same sidecar name.
+        var written = await PrepareTranslationSource(mediaType, mediaId, streamIndex, cancellationToken);
+        return new EmbeddedTrackExtractionResult(written, Created: true);
+    }
+
     /// <summary>
     /// Deterministic extraction cache path:
     /// <c>{contentRoot}/config/imports/embedded/embedded.{type}.{id}.s{index}.{scanKey}.srt</c>.

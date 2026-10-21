@@ -74,7 +74,9 @@ export const SETTINGS = {
     RADARR_DEFAULT_INCLUDE: 'radarr_default_include',
     SONARR_DEFAULT_INCLUDE: 'sonarr_default_include',
     PLEX_URL: 'plex_url',
-    PLEX_REFRESH_ENABLED: 'plex_refresh_enabled'
+    PLEX_REFRESH_ENABLED: 'plex_refresh_enabled',
+    WHISPER_ENDPOINT: 'whisper_endpoint',
+    WHISPER_MODEL: 'whisper_model'
 } as const
 
 export interface ISettings {
@@ -151,6 +153,8 @@ export interface ISettings {
     sonarr_default_include: string
     plex_url: string
     plex_refresh_enabled: string
+    whisper_endpoint: string
+    whisper_model: string
 }
 
 export const ENCRYPTED_SETTINGS = {
@@ -167,7 +171,8 @@ export const ENCRYPTED_SETTINGS = {
     LIBRETRANSLATE_API_KEY: 'libretranslate_api_key',
     LOCAL_AI_API_KEY: 'local_ai_api_key',
     AUDIO_ID_API_KEY: 'audio_id_api_key',
-    PLEX_TOKEN: 'plex_token'
+    PLEX_TOKEN: 'plex_token',
+    WHISPER_API_KEY: 'whisper_api_key'
 } as const
 
 export interface IEncryptedSettingStates {
@@ -185,6 +190,7 @@ export interface IEncryptedSettingStates {
     local_ai_api_key: boolean
     audio_id_api_key: boolean
     plex_token: boolean
+    whisper_api_key: boolean
 }
 
 export const SERVICE_TYPE = {

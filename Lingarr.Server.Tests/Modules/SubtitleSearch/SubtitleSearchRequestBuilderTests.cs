@@ -433,4 +433,40 @@ public class SubtitleSearchRequestBuilderTests : IDisposable
         Assert.Equal(videoFile, writeBack.FilePath);
         Assert.Equal("computed-hash", writeBack.Hash);
     }
+
+    [Fact]
+    public async Task Build_WhisperRoundCarriesTheMediaFileAndAudioLanguages()
+    {
+        // B04 lazy gate (hash-style): the whisper source consumes the
+        // container file itself and the media's audio languages — a round
+        // that queries whisper carries both, every other round carries
+        // neither (no whisper column reaches the request).
+        WithLanguages("zh", "en");
+        // tracked entities (seeded by the ctor) mutated in place — no
+        // detached-copy attach conflict
+        _dbContext.Movies.Single().AudioLanguages = ["en"];
+        _dbContext.Episodes.Single().AudioLanguages = ["ja"];
+        _dbContext.SaveChanges();
+
+        var movieId = MediaIdOf<Movie>();
+        var episodeId = MediaIdOf<Episode>();
+        var built = await Create(new LazyMediaHasher()).BuildAsync(
+            MediaType.Movie, movieId, ["subsource", "whisper"], null);
+        Assert.Equal(
+            Path.Combine(_root, "Film.2019.WEBDL-1080p.mkv"),
+            built!.Request.MediaFilePath);
+        Assert.Equal(new[] { "en" }, built.Request.AudioLanguages);
+
+        // episode form resolves through Season→Show the same way
+        var episodeBuilt = await Create(new LazyMediaHasher()).BuildAsync(
+            MediaType.Episode, episodeId, ["whisper"], null);
+        Assert.NotNull(episodeBuilt!.Request.MediaFilePath);
+        Assert.Equal(new[] { "ja" }, episodeBuilt.Request.AudioLanguages);
+
+        // a round without whisper pays nothing
+        var plain = await Create(new LazyMediaHasher()).BuildAsync(
+            MediaType.Movie, movieId, ["subsource"], null);
+        Assert.Null(plain!.Request.MediaFilePath);
+        Assert.Null(plain.Request.AudioLanguages);
+    }
 }

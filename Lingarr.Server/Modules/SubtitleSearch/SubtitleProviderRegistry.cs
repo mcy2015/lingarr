@@ -18,6 +18,15 @@ public sealed class RegisteredSubtitleProvider
     public required bool RequiresAuth { get; init; }
 
     /// <summary>
+    /// B04: the source's own search budget, from
+    /// <see cref="SubtitleProviderAttribute.SearchTimeoutSeconds"/>; null
+    /// (and zero seconds on the attribute) means the orchestrator's round
+    /// default (10s, or the testing constructor's override) applies — every
+    /// pre-B04 source keeps exactly its previous budget.
+    /// </summary>
+    public TimeSpan? SearchBudget { get; init; }
+
+    /// <summary>
     /// Settings-form manifest matched by provider key (IPluginManifest
     /// shape reuse, tech design ① — fed by the dedicated
     /// <see cref="ISubtitleSourceManifest"/> service type so the translation
@@ -76,11 +85,28 @@ public sealed class SubtitleProviderRegistry
                 continue;
             }
 
+            // B04 settings gate: a source that declares itself settings-gated
+            // joins the registry only while its settings are complete — the
+            // unconfigured whisper source neither lists nor queries. The
+            // registry is built per scope, so the gate re-evaluates on the
+            // next request after the missing setting is saved (no restart).
+            // A gate crash reads as "not configured" — never a dead registry.
+            if (provider is ISettingsGatedSubtitleProvider gated && !IsConfigured(gated))
+            {
+                logger.LogDebug(
+                    "Subtitle provider {Provider} is not fully configured; it stays out of the registry until its settings complete.",
+                    name);
+                continue;
+            }
+
             manifestByProvider.TryGetValue(name, out var manifest);
             var entry = new RegisteredSubtitleProvider
             {
                 Provider = provider,
                 RequiresAuth = attribute?.RequiresAuth ?? false,
+                SearchBudget = attribute is { SearchTimeoutSeconds: > 0 }
+                    ? TimeSpan.FromSeconds(attribute.SearchTimeoutSeconds)
+                    : null,
                 Manifest = manifest
             };
 
@@ -106,5 +132,23 @@ public sealed class SubtitleProviderRegistry
     public RegisteredSubtitleProvider? Find(string provider)
     {
         return _byProvider.TryGetValue(provider, out var entry) ? entry : null;
+    }
+
+    /// <summary>
+    /// B04 gate evaluation inside the synchronous constructor: one blocking
+    /// wait on the provider's own async check (the BuildSourceHandler
+    /// precedent of a one-time synchronous settings read). Exceptions read
+    /// as "not configured" — a settings hiccup must never break the registry.
+    /// </summary>
+    private static bool IsConfigured(ISettingsGatedSubtitleProvider gated)
+    {
+        try
+        {
+            return gated.IsConfiguredAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return false;
+        }
     }
 }

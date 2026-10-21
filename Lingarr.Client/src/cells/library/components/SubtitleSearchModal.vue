@@ -14,6 +14,9 @@ import type {
     SubtitleWebSearchUrlMap
 } from '@/types/services'
 import type { ILanguage } from '@/types'
+import { MEDIA_TYPE } from '@/types'
+import type { IMediaEmbeddedTrack } from '@/types/services'
+import { mediaService } from '@/cells/app/api/mediaService'
 
 /// The auto-download threshold setting key (SettingKeys.SubtitleSearch.AutoScore
 /// on the server); seeded "75" by M0008.
@@ -36,12 +39,64 @@ const props = defineProps<{
     /// languages render weakened with an「已存在」badge — manual re-download
     /// stays legal, so the buttons remain enabled.
     existingLanguages?: string[]
+    /// B04: extractable embedded tracks of the searched unit (text tracks
+    /// with a recognized language). Matching ones surface as「本地内封轨道」
+    /// chips at the top of the results — one click extracts them as
+    /// sidecars through the same endpoint as the media page's row action.
+    embeddedTracks?: IMediaEmbeddedTrack[]
 }>()
 
 const emit = defineEmits<{
     (e: 'close'): void
     (e: 'downloaded', file: string): void
 }>()
+
+// ── B04:本地内封轨道 chips(结果区顶部)════════════════════════
+const mediaApi = mediaService(axios)
+const embeddedBusyKey = ref<string | null>(null)
+
+/// Embedded tracks of the searched unit whose language is among the CHECKED
+/// languages — the population worth offering as a one-click local source.
+const matchingEmbeddedTracks = computed<IMediaEmbeddedTrack[]>(() =>
+    (props.embeddedTracks ?? []).filter(
+        (track) =>
+            track.language !== null &&
+            languages.value.some((checked) => checked.toLowerCase() === track.language!.toLowerCase())
+    )
+)
+
+/// One-click extraction: same idempotent endpoint as the media page's row
+/// action; the emitted `downloaded` makes the page refresh its subtitle
+/// payload (file card + coverage chips) exactly like a real download would.
+async function extractEmbeddedTrack(track: IMediaEmbeddedTrack): Promise<void> {
+    const key = `${track.mediaId}:${track.streamIndex}`
+    if (embeddedBusyKey.value) return
+    embeddedBusyKey.value = key
+    try {
+        const result = await mediaApi.extractEmbeddedTrack<{
+            fileName: string
+            created: boolean
+        }>(
+            props.mediaType === 'movie' ? MEDIA_TYPE.MOVIE : MEDIA_TYPE.EPISODE,
+            track.mediaId,
+            track.streamIndex
+        )
+        toast.push({
+            message: result.created
+                ? t('subSearch.embeddedExtractDone', { file: result.fileName })
+                : t('subSearch.embeddedExtractExists', { file: result.fileName }),
+            type: 'success'
+        })
+        emit('downloaded', result.fileName)
+    } catch (error) {
+        const detail = axios.isAxiosError(error)
+            ? ((error.response?.data as { message?: string } | undefined)?.message ?? error.message)
+            : String(error)
+        toast.push({ message: t('subSearch.embeddedExtractFailed', { message: detail }), type: 'error' })
+    } finally {
+        embeddedBusyKey.value = null
+    }
+}
 
 const { t } = useI18n()
 const toast = useToastStore()
@@ -868,6 +923,32 @@ onBeforeUnmount(teardown)
                             ↗
                         </a>
                     </span>
+                </div>
+
+                <!-- B04:本地内封轨道 chip 组——所搜语言有匹配内封文本轨时显示,
+                     点击走与详情页行级按钮同一抽取端点(幂等) -->
+                <div
+                    v-if="matchingEmbeddedTracks.length > 0"
+                    class="border-line bg-tertiary/40 flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs"
+                    data-test="embedded-tracks-row">
+                    <span class="text-secondary-content">
+                        {{ t('subSearch.embeddedTracksTitle') }}
+                    </span>
+                    <button
+                        v-for="track in matchingEmbeddedTracks"
+                        :key="`${track.mediaId}-${track.streamIndex}`"
+                        type="button"
+                        class="mono rounded border px-1.5 py-0.5 text-[10.5px] transition-colors"
+                        :class="embeddedBusyKey === `${track.mediaId}:${track.streamIndex}`
+                            ? 'border-line text-secondary-content/60'
+                            : 'border-info/40 text-info hover:border-info'"
+                        :disabled="embeddedBusyKey !== null"
+                        :title="t('subSearch.embeddedExtractTitle')"
+                        :data-test="`embedded-chip-${track.streamIndex}`"
+                        @click="extractEmbeddedTrack(track)">
+                        {{ (track.language ?? '').toUpperCase() }} ·
+                        {{ t('subSearch.embeddedExtract') }}
+                    </button>
                 </div>
 
                 <!-- results -->

@@ -162,6 +162,17 @@ public class SubtitleTrackSummary
     /// </summary>
     public int ForcedHave { get; init; }
 
+    /// <summary>
+    /// B04 embedded dimension: how many media units (episodes for shows,
+    /// 0/1 for movies) carry a recognized EMBEDDED subtitle track in this
+    /// language, written only while the embedded_track_counts_as_coverage
+    /// setting is on. Same badge shape as the forced dimension, opposite
+    /// need semantics: while the setting is on an embedded-covered target
+    /// language no longer enters the missing-subtitle gap queue (Have/State
+    /// keep presenting the external-file verdict).
+    /// </summary>
+    public int EmbeddedHave { get; init; }
+
     /// <summary>complete (Have == Total), partial (0 &lt; Have &lt; Total) or none.</summary>
     public required string State { get; init; }
 }

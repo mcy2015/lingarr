@@ -27,8 +27,15 @@ public sealed class SubtitleSearchRequestBuilder
     /// <summary>Source key whose query consumes the shooter segmented filehash.</summary>
     public const string ShooterProviderKey = "shooter";
 
-    /// <summary>Source key whose query consumes the xunlei sampled SHA1 filehash.</summary>
+    /// <summary>Source key whose query consumes the xunlei sampled filehash.</summary>
     public const string XunleiProviderKey = "xunlei";
+
+    /// <summary>
+    /// B04: source key whose query needs the media FILE and its audio
+    /// languages (whisper transcribes a clip of the container). Gated like
+    /// the file hashes — rounds without the source pay nothing.
+    /// </summary>
+    public const string WhisperProviderKey = "whisper";
 
     private readonly LingarrDbContext _dbContext;
     private readonly ISettingService _settingService;
@@ -73,6 +80,7 @@ public sealed class SubtitleSearchRequestBuilder
         string? releaseName;
         string? imdbId;
         string? mediaFilePath;
+        string[]? audioLanguages;
 
         if (mediaType == MediaType.Movie)
         {
@@ -80,7 +88,7 @@ public sealed class SubtitleSearchRequestBuilder
                 .Where(m => m.Id == mediaId)
                 .Select(m => new
                 {
-                    m.Title, m.Year, m.FileName, m.Path, m.ImdbId
+                    m.Title, m.Year, m.FileName, m.Path, m.ImdbId, m.AudioLanguages
                 })
                 .FirstOrDefaultAsync(cancellationToken);
             if (movie is null)
@@ -95,6 +103,7 @@ public sealed class SubtitleSearchRequestBuilder
             releaseName = movie.FileName;
             imdbId = movie.ImdbId;
             mediaFilePath = ResolveMediaFile(movie.Path, movie.FileName);
+            audioLanguages = movie.AudioLanguages;
         }
         else if (mediaType == MediaType.Episode)
         {
@@ -107,6 +116,7 @@ public sealed class SubtitleSearchRequestBuilder
                     e.EpisodeNumber,
                     e.FileName,
                     e.Path,
+                    e.AudioLanguages,
                     SeasonNumber = e.Season.SeasonNumber,
                     ShowTitle = e.Season.Show.Title,
                     ShowYear = e.Season.Show.Year,
@@ -125,6 +135,7 @@ public sealed class SubtitleSearchRequestBuilder
             releaseName = episodeEntity.FileName;
             imdbId = episodeEntity.ShowImdbId;
             mediaFilePath = ResolveMediaFile(episodeEntity.Path, episodeEntity.FileName);
+            audioLanguages = episodeEntity.AudioLanguages;
         }
         else
         {
@@ -149,6 +160,10 @@ public sealed class SubtitleSearchRequestBuilder
         var xunleiHash = ContainsKey(queryProviders, XunleiProviderKey)
             ? _hasher.XunleiHash(mediaFilePath)
             : null;
+        // B04: the whisper source consumes the container file itself and its
+        // audio languages — filled only when a whisper round asks for them
+        // (the hash-style lazy gate; the two columns were projected anyway).
+        var whisperRound = ContainsKey(queryProviders, WhisperProviderKey);
 
         // QA "RequestBuilder 接 query" + R3b refinement: an explicit keyword
         // replaces the derived title as the search keyword (providers keyword
@@ -192,7 +207,9 @@ public sealed class SubtitleSearchRequestBuilder
                 imdbId,
                 shooterHash,
                 xunleiHash,
-                Query: effectiveQuery),
+                Query: effectiveQuery,
+                MediaFilePath: whisperRound ? mediaFilePath : null,
+                AudioLanguages: whisperRound ? audioLanguages : null),
             mediaFilePath);
     }
 

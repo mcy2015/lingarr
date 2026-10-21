@@ -151,7 +151,10 @@ public class StatisticsJobTests : IDisposable
         new TargetLanguageResolver(settingService ?? new Mock<ISettingService>().Object),
         NullLogger<StatisticsJob>.Instance,
         finalizeChunkSize,
-        incrementalScanBatchSize);
+        incrementalScanBatchSize,
+        // B04: the job reads the embedded_track_counts_as_coverage flag
+        // through the same service the resolver saw.
+        settingService);
 
     /// <summary>
     /// Setting service whose target languages are exactly the given codes —
@@ -1052,4 +1055,90 @@ public class StatisticsJobTests : IDisposable
             .ToListAsync())
         .Select(row => (row.Date, row.MediaType, row.Language, row.Covered, row.Total))
         .ToList();
+
+    // ── B04: embedded tracks as coverage (setting-gated snapshot merge) ──
+
+    /// <summary>Settings double with zh targets and the B04 switch set.</summary>
+    private static ISettingService EmbeddedCoverageService(bool enabled)
+    {
+        var mock = new Mock<ISettingService>();
+        mock
+            .Setup(service => service.GetSettingAsJson<TargetLanguage>(It.IsAny<string>()))
+            .ReturnsAsync([new TargetLanguage { Name = "zh", Code = "zh" }]);
+        mock
+            .Setup(service => service.GetSetting(
+                Lingarr.Core.Configuration.SettingKeys.SubtitleSearch.EmbeddedTrackCountsAsCoverage))
+            .ReturnsAsync(enabled ? "true" : "false");
+        return mock.Object;
+    }
+
+    private async Task SeedMovieWithTrackAsync(int id)
+    {
+        var (movie, _) = await SeedMovieAsync(id, audioLanguages: ["en"]);
+        _dbContext.MediaSubtitleTracks.Add(new MediaSubtitleTrack
+        {
+            MediaType = MediaType.Movie,
+            MediaId = movie.Id,
+            StreamIndex = 2,
+            Language = "zh",
+            RawLanguage = "chi",
+            Title = null,
+            Codec = "srt",
+            IsTextBased = true,
+            FilePath = Path.Combine(movie.Path!, movie.FileName!)
+        });
+        await _dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Execute_EmbeddedSwitchOn_MergesTheDimensionAndFlipsTheFlag()
+    {
+        await SeedMovieWithTrackAsync(900);
+
+        await CreateJob(settingService: EmbeddedCoverageService(enabled: true)).Execute();
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(movie => movie.Id == 900);
+        Assert.NotNull(stored.SubtitleCoverage);
+        Assert.Equal(0, stored.SubtitleCoverage!["zh"].Count);
+        Assert.Equal(1, stored.SubtitleCoverage!["zh"].EmbeddedCount);
+        Assert.Contains("\"embeddedCount\":1", stored.SubtitleCoverageJson);
+        // the embedded dimension satisfies the need rule while the switch is on
+        Assert.False(stored.NeedsTranslation);
+    }
+
+    [Fact]
+    public async Task Execute_EmbeddedSwitchOff_KeepsTheSnapshotByteIdentical()
+    {
+        // regression gate: the same fixture through the flag-off job writes
+        // NO embedded dimension and keeps the media a coverage gap.
+        await SeedMovieWithTrackAsync(901);
+
+        await CreateJob(settingService: EmbeddedCoverageService(enabled: false)).Execute();
+
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(movie => movie.Id == 901);
+        Assert.NotNull(stored.SubtitleCoverage);
+        // no files, no merge: zh is not a key of the snapshot at all — the
+        // pre-B04 output, byte for byte.
+        Assert.False(stored.SubtitleCoverage!.ContainsKey("zh"));
+        Assert.DoesNotContain("embeddedCount", stored.SubtitleCoverageJson);
+        Assert.True(stored.NeedsTranslation);
+    }
+
+    [Fact]
+    public async Task Execute_EmbeddedSwitchOn_SnapshotOnlyMovieFlipsWithoutADiskScan()
+    {
+        // The unscanned path recomputes flags from the STORED snapshot — an
+        // embeddedCount written by an earlier run still exempts the media
+        // while the switch is on (no fresh scan needed).
+        await SeedMovieWithTrackAsync(902);
+        await CreateJob(settingService: EmbeddedCoverageService(enabled: true)).Execute();
+        var first = await _dbContext.Movies.AsNoTracking().SingleAsync(movie => movie.Id == 902);
+        Assert.False(first.NeedsTranslation);
+        // everything now carries a watermark: the second run takes the
+        // snapshot path and must reach the same verdict
+        await CreateJob(settingService: EmbeddedCoverageService(enabled: true)).Execute();
+        var second = await _dbContext.Movies.AsNoTracking().SingleAsync(movie => movie.Id == 902);
+        Assert.False(second.NeedsTranslation);
+        Assert.Equal(first.SubtitleCoverageJson, second.SubtitleCoverageJson);
+    }
 }

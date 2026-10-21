@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Extensions;
 using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Lingarr.Server.Modules.Translation;
@@ -55,6 +56,7 @@ public class StatisticsJob
     private readonly ILogger<StatisticsJob> _logger;
     private readonly int _finalizeChunkSize;
     private readonly int _incrementalScanBatchSize;
+    private readonly ISettingService? _settingService;
 
     public StatisticsJob(
         LingarrDbContext dbContext,
@@ -63,7 +65,8 @@ public class StatisticsJob
         TargetLanguageResolver targetLanguageResolver,
         ILogger<StatisticsJob> logger,
         int? finalizeChunkSize = null,
-        int? incrementalScanBatchSize = null)
+        int? incrementalScanBatchSize = null,
+        ISettingService? settingService = null)
     {
         _dbContext = dbContext;
         _subtitleService = subtitleService;
@@ -72,6 +75,10 @@ public class StatisticsJob
         _logger = logger;
         _finalizeChunkSize = finalizeChunkSize ?? FinalizeChunkSize;
         _incrementalScanBatchSize = incrementalScanBatchSize ?? IncrementalScanBatchSize;
+        // B04: optional so the pre-B04 test constructors keep compiling;
+        // production DI always resolves the settings service. Null (and any
+        // read failure) reads as "embedded tracks do not count as coverage".
+        _settingService = settingService;
     }
 
     /// <summary>Season columns the aggregation reads (audit P1-11 projection).</summary>
@@ -148,6 +155,12 @@ public class StatisticsJob
         // effective set (per-media override > global) through the shared
         // TargetLanguageResolver, exactly like the single-media refresher.
         var globalTargets = await _targetLanguageResolver.GetGlobalAsync();
+        // B04: one flag read for the whole round — with it on, the embedded
+        // tracks of scanned containers join the coverage as their own
+        // dimension and satisfy the need rule (see EmbeddedTrackCoverage).
+        // Off (the seeded default): nothing below deviates from the pre-B04
+        // computation by a byte.
+        var embeddedAsCoverage = await EmbeddedTrackCoverage.IsEnabledAsync(_settingService);
 
         // One clock for the whole round: every watermark stamped below
         // carries the same instant, and the staleness cutoff derives from it.
@@ -199,6 +212,24 @@ public class StatisticsJob
                     .Select(movie => movie.Id))
             .ToHashSet();
 
+        // B04: embedded track languages of every scanned movie, loaded in
+        // ONE batched query (never per movie — the scan batch is up to the
+        // incremental budget). Only read while the setting is on.
+        var movieTrackLanguages = embeddedAsCoverage && scanMovieIds.Count > 0
+            ? (await _dbContext.MediaSubtitleTracks
+                    .AsNoTracking()
+                    .Where(track => track.MediaType == MediaType.Movie
+                                    && scanMovieIds.Contains(track.MediaId)
+                                    && track.StreamIndex >= 0
+                                    && track.Language != null)
+                    .Select(track => new { track.MediaId, track.Language })
+                    .ToListAsync())
+                .GroupBy(row => row.MediaId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Select(row => row.Language!).ToList())
+            : [];
+
         foreach (var movie in movies)
         {
             // B08: this movie's effective target set — its own override
@@ -216,9 +247,12 @@ public class StatisticsJob
                 AddLanguageCounts(movieLanguageCounts, stored);
                 // B07: forced-only slots (Count 0) are not covered — the
                 // forced dimension never exempts the full search.
+                // B04: embedded slots ride the snapshot — with the setting
+                // on they satisfy the need rule even unscanned (the flag
+                // flips from the stored JSON, no disk access needed).
                 var needsFromSnapshot = SubtitleNeedRule.NeedsTranslation(
                     movie.AudioOverride, movie.AudioLanguages,
-                    stored is null ? null : SubtitleCoverageMath.FullyCoveredLanguages(stored), targets);
+                    stored is null ? null : SubtitleCoverageMath.FullyCoveredLanguages(stored, embeddedAsCoverage), targets);
                 var nativeFromSnapshot = SubtitleNeedRule.NoSubtitleNeeded(
                     movie.AudioOverride, movie.AudioLanguages, targets);
                 if (needsFromSnapshot != movie.NeedsTranslation
@@ -258,12 +292,20 @@ public class StatisticsJob
             // bubbles to the top-level handler and fails the job.
             var subtitles = await _subtitleService.GetAllSubtitles(movie.Path);
             var coverage = SubtitleCoverageMath.MovieCoverage(subtitles);
+            if (embeddedAsCoverage && movieTrackLanguages.TryGetValue(movie.Id, out var trackLanguages))
+            {
+                // B04: the container's own tracks join the fresh snapshot as
+                // the embedded dimension (movie shape: 0/1 per language).
+                EmbeddedTrackCoverage.MergeMovieTracks(coverage, trackLanguages);
+            }
+
             var json = SubtitleCoverageMath.SerializeCoverage(coverage);
             // B07: forced-only slots (Count 0) are not covered — the
             // forced dimension never exempts the full search.
+            // B04: with the switch on, an embedded-covered language is.
             var needs = SubtitleNeedRule.NeedsTranslation(
                 movie.AudioOverride, movie.AudioLanguages,
-                SubtitleCoverageMath.FullyCoveredLanguages(coverage), targets);
+                SubtitleCoverageMath.FullyCoveredLanguages(coverage, embeddedAsCoverage), targets);
             var native = SubtitleNeedRule.NoSubtitleNeeded(
                 movie.AudioOverride, movie.AudioLanguages, targets);
 
@@ -341,6 +383,27 @@ public class StatisticsJob
         var showsQuery = episodeBootstrap
             ? _dbContext.Shows
             : _dbContext.Shows.Where(show => scanShowIds.Contains(show.Id));
+
+        // B04: embedded track rows of every scanned show's episodes, loaded
+        // in ONE batched query — an inner join through episodes keeps the
+        // episode-id fan-out inside SQL, so a 5000-show round never expands
+        // into a parameter-per-episode statement. Only read while the
+        // setting is on.
+        var episodeTrackRows = embeddedAsCoverage && scanShowIds.Count > 0
+            ? await (from track in _dbContext.MediaSubtitleTracks
+                     join episode in _dbContext.Episodes on track.MediaId equals episode.Id
+                     where track.MediaType == MediaType.Episode
+                           && track.StreamIndex >= 0
+                           && track.Language != null
+                           && scanShowIds.Contains(episode.Season.ShowId)
+                     select new { track.MediaId, ShowId = episode.Season.ShowId, track.Language })
+                .ToListAsync()
+            : [];
+        var tracksByShowId = episodeTrackRows
+            .GroupBy(row => row.ShowId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => (row.MediaId, row.Language!)).ToList());
         var shows = await showsQuery
             .Select(show => new
             {
@@ -399,6 +462,15 @@ public class StatisticsJob
                         .ToList(),
                     subtitles,
                     episodeLanguages);
+            }
+
+            if (embeddedAsCoverage && tracksByShowId.TryGetValue(show.Id, out var showTracks))
+            {
+                // B04: the episodes' container tracks join the aggregate as
+                // the embedded dimension (one count per distinct episode and
+                // language) and each episode's covered set gains its track
+                // languages — the flag loop below re-derives from that set.
+                EmbeddedTrackCoverage.MergeEpisodeTracks(coverage, showTracks, episodeLanguages);
             }
 
             var json = scannedAnySeason ? SubtitleCoverageMath.SerializeCoverage(coverage) : show.SubtitleCoverageJson;

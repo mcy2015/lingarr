@@ -257,6 +257,13 @@ export interface ISubtitleTrackSummary {
     /// forced-only language reads state "none"). Optional so pre-B07 payloads
     /// keep typing as "no forced files".
     forcedHave?: number
+    /// B04 embedded dimension: how many media units carry a recognized
+    /// EMBEDDED track in this language — written only while the
+    /// embedded_track_counts_as_coverage setting is on. Same badge shape as
+    /// the forced mark, opposite semantics: an embedded-covered target
+    /// language no longer enters the gap queue while the setting is on.
+    /// Optional so pre-B04 payloads keep typing as "no embedded tracks".
+    embeddedHave?: number
 }
 
 export const MEDIA_TRANSLATION_STATE = {
