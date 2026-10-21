@@ -4,6 +4,7 @@ import type {
     ISubtitleDownloadResponse,
     ISubtitleBacklog,
     ISubtitleHistoryResponse,
+    ISubtitlePreviewResponse,
     ISubtitleProviderHealthState
 } from '@/types/services'
 
@@ -39,6 +40,17 @@ interface DownloadRequest {
     skipTranslation?: boolean
 }
 
+/// B09 preview request: addresses the picked candidate the same way the
+/// download endpoint does (search cacheKey + index + media ownership). The
+/// server fetches the bytes, parses them in memory and answers the first 30
+/// cues — nothing lands anywhere.
+interface PreviewRequest {
+    cacheKey: string
+    candidateIndex: number
+    mediaType: string
+    mediaId: number
+}
+
 /// Keyset filters of the history screen (screen 13). Every field is
 /// optional; undefined entries are omitted from the query string so the
 /// first page is a bare GET.
@@ -72,6 +84,17 @@ class SubtitleSearchService {
         signal?: AbortSignal
     ): Promise<T> {
         const response = await axios.post<T>('/api/subtitle-search/download', request, { signal })
+        return response.data
+    }
+
+    /// Zero-side-effect content peek at a cached candidate (B09): the first
+    /// 30 cues plus the file's total cue count. Errors carry the server's
+    /// readable message (400 content/whisper, 410 expired, 502 upstream).
+    async preview<T = ISubtitlePreviewResponse>(
+        request: PreviewRequest,
+        signal?: AbortSignal
+    ): Promise<T> {
+        const response = await axios.post<T>('/api/subtitle-search/preview', request, { signal })
         return response.data
     }
 

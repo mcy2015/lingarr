@@ -33,6 +33,7 @@ import type {
 const getProvidersMock = vi.hoisted(() => vi.fn())
 const searchMock = vi.hoisted(() => vi.fn())
 const downloadMock = vi.hoisted(() => vi.fn())
+const previewMock = vi.hoisted(() => vi.fn())
 const getSettingMock = vi.hoisted(() => vi.fn())
 const getLanguagesMock = vi.hoisted(() => vi.fn())
 const extractEmbeddedTrackMock = vi.hoisted(() => vi.fn())
@@ -41,7 +42,8 @@ vi.mock('@/cells/app/api/subtitleSearchService', () => ({
     subtitleSearchService: {
         getProviders: getProvidersMock,
         search: searchMock,
-        download: downloadMock
+        download: downloadMock,
+        preview: previewMock
     }
 }))
 
@@ -1326,5 +1328,235 @@ describe('SubtitleSearchModal · 本地内封轨道', () => {
         expect(toast.toasts[0].message).toBe(
             en.subSearch.embeddedExtractFailed.replace('{message}', 'no such row')
         )
+    })
+})
+
+// ═══ B09:候选明细抽屉 + 字幕预览 ══════════════════════════════════
+describe('SubtitleSearchModal · 候选明细抽屉', () => {
+    /// Expands the first candidate row and returns its detail block.
+    const expandFirst = async (): Promise<Element> => {
+        const toggle = document.querySelector('[data-test="candidate-toggle"]') as HTMLButtonElement
+        expect(toggle, 'expand toggle should render').not.toBeNull()
+        toggle.click()
+        await flush()
+        const detail = document.querySelector('[data-test="candidate-detail"]')
+        expect(detail, 'detail drawer should render after expanding').not.toBeNull()
+        return detail!
+    }
+
+    it('expands a row into the signal table whose points sum to matchScore', async () => {
+        getProvidersMock.mockResolvedValue([opensubtitles])
+        searchMock.mockResolvedValue(
+            outcome('ck-os', [
+                candidate({
+                    matchScore: 80,
+                    externalId: 'ext-signals',
+                    signals: [
+                        { name: 'title', points: 55, hit: true },
+                        { name: 'year', points: 15, hit: true },
+                        { name: 'releaseTokens', points: 10, hit: true }
+                    ]
+                })
+            ])
+        )
+        await mountModal()
+
+        // collapsed by default
+        expect(document.querySelector('[data-test="candidate-detail"]')).toBeNull()
+
+        const detail = await expandFirst()
+        const rows = [...detail.querySelectorAll('[data-test="signal-row"]')]
+        expect(rows).toHaveLength(3)
+        // localized labels (static map — the raw keys never reach the UI)
+        expect(rows[0].textContent).toContain(en.subSearch.signal.title)
+        expect(rows[1].textContent).toContain(en.subSearch.signal.year)
+        expect(rows[2].textContent).toContain(en.subSearch.signal.releaseTokens)
+        // every signal hit → the green dot vocabulary
+        for (const row of rows) {
+            expect(row.querySelector('[data-test="signal-dot"]')!.classList.contains('bg-success')).toBe(true)
+        }
+        // the total row is the candidate's score
+        expect(detail.querySelector('[data-test="signal-total"]')!.textContent?.trim()).toBe('80')
+    })
+
+    it('marks misses with the grey dot and renders the single hash row for hash matches', async () => {
+        getProvidersMock.mockResolvedValue([opensubtitles])
+        searchMock.mockResolvedValue(
+            outcome('ck-os', [
+                candidate({
+                    matchScore: 15,
+                    externalId: 'ext-mixed',
+                    signals: [
+                        { name: 'title', points: 0, hit: false },
+                        { name: 'year', points: 15, hit: true }
+                    ]
+                }),
+                candidate({
+                    matchScore: 100,
+                    externalId: 'ext-hash',
+                    hashMatch: true,
+                    signals: [{ name: 'hash', points: 100, hit: true }]
+                })
+            ])
+        )
+        await mountModal()
+
+        // score-descending merge: the hash row (100) renders FIRST — its
+        // drawer carries the single hash signal at 100
+        const hashDetail = await expandFirst()
+        const hashRows = [...hashDetail.querySelectorAll('[data-test="signal-row"]')]
+        expect(hashRows).toHaveLength(1)
+        expect(hashRows[0].textContent).toContain(en.subSearch.signal.hash)
+        expect(hashDetail.querySelector('[data-test="signal-total"]')!.textContent?.trim()).toBe('100')
+
+        // the mixed row's toggle is the second one
+        const toggles = [
+            ...document.querySelectorAll('[data-test="candidate-toggle"]')
+        ] as HTMLButtonElement[]
+        toggles[1].click()
+        await flush()
+
+        const details = document.querySelectorAll('[data-test="candidate-detail"]')
+        expect(details).toHaveLength(2)
+        const detail = details[1]
+        const signalRows = [...detail.querySelectorAll('[data-test="signal-row"]')]
+        expect(signalRows).toHaveLength(2)
+        const dots = signalRows.map((row) => row.querySelector('[data-test="signal-dot"]')!.classList)
+        expect(dots[0].contains('bg-success')).toBe(false)
+        expect(dots[0].contains('bg-secondary-content/40')).toBe(true)
+        expect(dots[1].contains('bg-success')).toBe(true)
+        expect(detail.querySelector('[data-test="signal-total"]')!.textContent?.trim()).toBe('15')
+    })
+
+    it('shows the honest unavailable note for candidates without signals', async () => {
+        getProvidersMock.mockResolvedValue([opensubtitles])
+        searchMock.mockResolvedValue(
+            outcome('ck-os', [candidate({ externalId: 'ext-legacy', signals: null })])
+        )
+        await mountModal()
+
+        const detail = await expandFirst()
+        expect(detail.textContent).toContain(en.subSearch.signalsUnavailable)
+        expect(detail.querySelectorAll('[data-test="signal-row"]')).toHaveLength(0)
+    })
+})
+
+describe('SubtitleSearchModal · 字幕预览', () => {
+    /// n numbered cues, SRT-style timing (1s per cue).
+    const cues = (n: number) =>
+        Array.from({ length: n }, (_, index) => ({
+            startMs: (index + 1) * 1000,
+            endMs: (index + 1) * 1000 + 900,
+            lines: [`Cue line ${index + 1}`]
+        }))
+
+    /// Mounts with one zh candidate and expands its drawer.
+    const mountExpandable = async (): Promise<VueWrapper> => {
+        const { wrapper } = await mountModal()
+        const toggle = document.querySelector('[data-test="candidate-toggle"]') as HTMLButtonElement
+        toggle.click()
+        await flush()
+        return wrapper
+    }
+
+    beforeEach(() => {
+        getProvidersMock.mockResolvedValue([opensubtitles])
+        searchMock.mockResolvedValue(
+            outcome('ck-os', [candidate({ externalId: 'ext-pv', language: 'zh' })])
+        )
+        previewMock.mockReset()
+    })
+
+    it('opens the preview overlay with the first cues, addressed by cacheKey+index', async () => {
+        previewMock.mockResolvedValue({ format: 'srt', cueCount: 45, cues: cues(30) })
+        await mountExpandable()
+
+        ;(
+            document.querySelector('[data-test="preview-open"]') as HTMLButtonElement
+        ).click()
+        await flush()
+
+        // the request addresses the candidate exactly like the download path
+        expect(previewMock).toHaveBeenCalledTimes(1)
+        expect(previewMock).toHaveBeenCalledWith({
+            cacheKey: 'ck-os',
+            candidateIndex: 0,
+            mediaType: 'movie',
+            mediaId: 7
+        })
+
+        // the overlay renders the 30 returned cues with times and text
+        expect(document.querySelector('[data-test="subtitle-preview-modal"]')).not.toBeNull()
+        const rendered = document.querySelectorAll('[data-test="preview-cue"]')
+        expect(rendered).toHaveLength(30)
+        expect(rendered[0].textContent).toContain('00:00:01.000')
+        expect(rendered[0].textContent).toContain('Cue line 1')
+        expect(rendered[29].textContent).toContain('Cue line 30')
+        // the meta line quotes the honest total vs the shown window
+        const meta = textOf('[data-test="preview-meta"]')
+        expect(meta).toContain('srt')
+        expect(meta).toContain('45')
+        expect(meta).toContain('30')
+    })
+
+    it('re-opens within 60s from the front-end cache without a second request', async () => {
+        previewMock.mockResolvedValue({ format: 'srt', cueCount: 3, cues: cues(3) })
+        await mountExpandable()
+
+        const open = async (): Promise<void> => {
+            ;(
+                document.querySelector('[data-test="preview-open"]') as HTMLButtonElement
+            ).click()
+            await flush()
+        }
+        await open()
+        ;(document.querySelector('[data-test="preview-close"]') as HTMLButtonElement).click()
+        await flush()
+        expect(document.querySelector('[data-test="subtitle-preview-modal"]')).toBeNull()
+
+        // second open inside the window: served from the local cache
+        await open()
+        expect(previewMock).toHaveBeenCalledTimes(1)
+        expect(document.querySelector('[data-test="subtitle-preview-modal"]')).not.toBeNull()
+        expect(document.querySelectorAll('[data-test="preview-cue"]')).toHaveLength(3)
+    })
+
+    it('shows the readable server error inside the overlay', async () => {
+        previewMock.mockRejectedValue({
+            isAxiosError: true,
+            message: 'Network Error',
+            response: { data: { message: 'the selected candidate has expired (10-minute window); run a new search.' } }
+        })
+        await mountExpandable()
+
+        ;(
+            document.querySelector('[data-test="preview-open"]') as HTMLButtonElement
+        ).click()
+        await flush()
+
+        const error = document.querySelector('[data-test="preview-error"]')
+        expect(error).not.toBeNull()
+        expect(error!.textContent).toContain('the selected candidate has expired')
+    })
+
+    it('closes only the preview on Escape, the search dialog on the second', async () => {
+        previewMock.mockResolvedValue({ format: 'srt', cueCount: 1, cues: cues(1) })
+        const wrapper = await mountExpandable()
+
+        ;(
+            document.querySelector('[data-test="preview-open"]') as HTMLButtonElement
+        ).click()
+        await flush()
+        expect(document.querySelector('[data-test="subtitle-preview-modal"]')).not.toBeNull()
+
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+        await flush()
+        // first Escape: overlay only — the search dialog survives
+        expect(document.querySelector('[data-test="subtitle-preview-modal"]')).toBeNull()
+        expect(wrapper.emitted('close')).toBeUndefined()
+
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+        await flush()
+        expect(wrapper.emitted('close')).toHaveLength(1)
     })
 })

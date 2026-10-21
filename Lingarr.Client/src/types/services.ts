@@ -605,10 +605,22 @@ export interface IGlossaryService {
 }
 
 // ── Subtitle search ────────────────────────────────────────────
+/// One scoring contribution of a candidate (B09 detail drawer): the stable
+/// dimension key ("title", "year", "releaseTokens"…), the points earned
+/// (0 on a miss; negative for the wrong-episode cap row) and whether the
+/// dimension hit. The points always sum to the candidate's matchScore.
+export interface ISubtitleSignal {
+    name: string
+    points: number
+    hit: boolean
+}
+
 /// Mirrors the backend SubtitleCandidateResponse record verbatim: the
 /// release line is `releaseInfo` (nullable — the UI falls back to
 /// provider+externalId) and the size is a raw byte count the UI formats
 /// itself. There is no `sizeLabel`/`release` field on the wire.
+/// `signals` is the B09 score breakdown — optional because the null-dropping
+/// response serializer omits it for pre-score shapes.
 export interface ISubtitleCandidate {
     provider: string
     externalId: string
@@ -621,6 +633,24 @@ export interface ISubtitleCandidate {
     releaseInfo: string | null
     uploader: string | null
     size: number | null
+    signals?: ISubtitleSignal[] | null
+}
+
+/// One cue of POST /api/subtitle-search/preview: millisecond bounds plus
+/// the plain-text lines (B09 — the preview is a zero-side-effect peek, the
+/// download endpoint stays the only writer).
+export interface ISubtitlePreviewCue {
+    startMs: number
+    endMs: number
+    lines: string[]
+}
+
+/// Preview answer of POST /api/subtitle-search/preview: the parsed entry's
+/// format, the TOTAL cue count of the file and the first 30 cues.
+export interface ISubtitlePreviewResponse {
+    format: string
+    cueCount: number
+    cues: ISubtitlePreviewCue[]
 }
 
 export interface ISubtitleSourceOutcome {

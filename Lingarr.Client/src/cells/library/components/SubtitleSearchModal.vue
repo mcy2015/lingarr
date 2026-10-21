@@ -10,6 +10,7 @@ import { subtitleSearchService } from '@/cells/app/api/subtitleSearchService'
 import ButtonComponent from '@/cells/kernel/components/ButtonComponent.vue'
 import type {
     ISubtitleCandidate,
+    ISubtitlePreviewResponse,
     ISubtitleProviderHealthState,
     SubtitleWebSearchUrlMap
 } from '@/types/services'
@@ -222,6 +223,109 @@ const downloadedKeys = ref<Set<string>>(new Set())
 /// session (component lifetime); a fresh open of the modal shows it again.
 const nativeAudioHintDismissed = ref(false)
 
+// ── B09:候选明细抽屉 + 字幕预览 ═══════════════════════════════
+/// Expanded candidate rows (detail drawer): keyed by provider:externalId —
+/// stable across the score-ordered merge, cleared with the next round.
+const expandedKeys = ref<Set<string>>(new Set())
+
+function rowKey(candidate: ISubtitleCandidate): string {
+    return candidate.provider + ':' + candidate.externalId
+}
+
+function isExpanded(row: { candidate: ISubtitleCandidate }): boolean {
+    return expandedKeys.value.has(rowKey(row.candidate))
+}
+
+function toggleExpand(row: { candidate: ISubtitleCandidate }): void {
+    const key = rowKey(row.candidate)
+    expandedKeys.value = expandedKeys.value.has(key)
+        ? new Set([...expandedKeys.value].filter((item) => item !== key))
+        : new Set([...expandedKeys.value, key])
+}
+
+/// Signal dimension → localized label. A static literal map (no dynamic
+/// t() keys) so the i18n key checker sees every key; unknown dimensions
+/// (a newer server) fall back to the raw name.
+const SIGNAL_LABELS: Record<string, string> = {
+    hash: t('subSearch.signal.hash'),
+    title: t('subSearch.signal.title'),
+    year: t('subSearch.signal.year'),
+    episode: t('subSearch.signal.episode'),
+    releaseTokens: t('subSearch.signal.releaseTokens'),
+    wrongEpisodeCap: t('subSearch.signal.wrongEpisodeCap')
+}
+
+function signalLabel(name: string): string {
+    return SIGNAL_LABELS[name] ?? name
+}
+
+/// Front-end half of the 60s anti-double-click window: the server caches a
+/// preview per ref for 60s, this map mirrors it so a re-click within the
+/// window does not even fire the request. Cleared with each search round.
+const PREVIEW_CACHE_TTL_MS = 60_000
+const previewCache = new Map<string, { at: number; data: ISubtitlePreviewResponse }>()
+
+/// The preview overlay state: which row is previewed (key + release title),
+/// its answer (or null while loading) and the readable error, if any.
+const previewing = ref<{ key: string; title: string } | null>(null)
+const previewData = ref<ISubtitlePreviewResponse | null>(null)
+const previewLoading = ref(false)
+const previewError = ref<string | null>(null)
+
+function closePreview(): void {
+    previewing.value = null
+    previewData.value = null
+    previewError.value = null
+    previewLoading.value = false
+}
+
+async function openPreview(row: CandidateRow): Promise<void> {
+    if (disposed) return
+    const key = rowKey(row.candidate)
+    const cached = previewCache.get(key)
+    if (cached && Date.now() - cached.at < PREVIEW_CACHE_TTL_MS) {
+        // within the window: show the remembered answer, no request
+        previewing.value = { key, title: releaseTitle(row.candidate) }
+        previewData.value = cached.data
+        previewError.value = null
+        return
+    }
+    if (previewLoading.value) return
+    previewing.value = { key, title: releaseTitle(row.candidate) }
+    previewData.value = null
+    previewError.value = null
+    previewLoading.value = true
+    try {
+        const data = await subtitleSearchService.preview({
+            cacheKey: row.cacheKey,
+            candidateIndex: row.index,
+            mediaType: props.mediaType,
+            mediaId: props.mediaId
+        })
+        if (disposed) return
+        previewData.value = data
+        previewCache.set(key, { at: Date.now(), data })
+    } catch (error) {
+        if (disposed) return
+        previewError.value = serverMessage(error) ?? t('subSearch.previewUnavailable')
+    } finally {
+        previewLoading.value = false
+    }
+}
+
+/// SRT-style HH:MM:SS.mmm of a cue bound.
+function formatCueTime(ms: number): string {
+    const total = Math.max(0, Math.floor(ms))
+    const hours = Math.floor(total / 3_600_000)
+    const minutes = Math.floor((total % 3_600_000) / 60_000)
+    const seconds = Math.floor((total % 60_000) / 1000)
+    const millis = total % 1000
+    return (
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}` +
+        `:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`
+    )
+}
+
 /// One merged list across sources. Each row keeps the cacheKey of the
 /// search round's response it came from and its index within THAT
 /// response — the download endpoint resolves cacheKey to one source's
@@ -369,6 +473,12 @@ async function runSearch(): Promise<void> {
     sourceStatuses.value = new Map()
     providerByKey.clear()
     downloadedKeys.value = new Set()
+    // B09: the round's refs die with it — collapse the drawers, close the
+    // preview overlay and forget the preview window (a stale cacheKey would
+    // only ever answer 410).
+    expandedKeys.value = new Set()
+    closePreview()
+    previewCache.clear()
     settledCount.value = 0
     sourcesTotal.value = 0
     searchElapsed.value = 0
@@ -633,6 +743,7 @@ const dialogRef = ref<HTMLElement | null>(null)
 function teardown(): void {
     if (disposed) return
     disposed = true
+    closePreview()
     searchController?.abort()
     searchController = null
     for (const controller of downloadControllers.values()) controller.abort()
@@ -647,15 +758,23 @@ function close(): void {
 
 /// Escape closes from anywhere; Tab cycles inside the dialog (a simple
 /// trap: shift-Tab on the first focusable wraps to the last, Tab on the
-/// last wraps to the first, focus outside is pulled back in).
+/// last wraps to the first, focus outside is pulled back in). B09: while
+/// the preview overlay is open, Escape closes ONLY the overlay — the
+/// search dialog stays — and the Tab trap steps aside so focus moves
+/// naturally inside the overlay.
 function onWindowKeydown(event: KeyboardEvent): void {
     if (disposed) return
     if (event.key === 'Escape') {
         event.preventDefault()
+        if (previewing.value) {
+            closePreview()
+            return
+        }
         close()
         return
     }
     if (event.key !== 'Tab') return
+    if (previewing.value) return
     const dialog = dialogRef.value
     if (!dialog) return
     const focusables = [
@@ -956,94 +1075,158 @@ onBeforeUnmount(teardown)
                     <div
                         v-for="row in sortedCandidates"
                         :key="row.candidate.provider + ':' + row.candidate.externalId"
-                        class="border-line hover:bg-tertiary/50 flex items-center gap-3 border-b px-4 py-2.5 transition-colors"
-                        :class="isExistingLanguage(row.candidate) ? 'opacity-60' : ''"
-                        data-test="candidate-row">
-                        <span
-                            class="w-0.5 shrink-0 self-stretch rounded"
-                            :class="isTargetLang(row.candidate) ? 'bg-success' : 'bg-info'"
-                            data-test="candidate-track" />
-                        <div class="min-w-0 flex-1">
-                            <div
-                                class="text-primary-content mono truncate text-xs font-medium"
-                                :title="releaseTitle(row.candidate)">
-                                {{ releaseTitle(row.candidate) }}
-                            </div>
-                            <div class="text-secondary-content text-[11px]">
-                                {{ row.candidate.uploader ?? '—' }} · {{ row.candidate.format }} · {{ formatBytes(row.candidate.size) }}
-                            </div>
-                        </div>
-                        <span class="flex flex-wrap gap-1">
+                        class="border-line border-b">
+                        <div
+                            class="hover:bg-tertiary/50 flex items-center gap-3 px-4 py-2.5 transition-colors"
+                            :class="isExistingLanguage(row.candidate) ? 'opacity-60' : ''"
+                            data-test="candidate-row">
+                            <!-- B09:行首明细抽屉开关——展开后该行下方渲染打分信号表 -->
+                            <button
+                                type="button"
+                                class="text-secondary-content hover:text-primary-content h-5 w-5 flex-none cursor-pointer rounded text-[11px] leading-none transition-transform"
+                                :class="isExpanded(row) ? 'rotate-90' : ''"
+                                :aria-expanded="isExpanded(row)"
+                                :aria-label="t('subSearch.matchDetails')"
+                                data-test="candidate-toggle"
+                                @click="toggleExpand(row)">
+                                ▸
+                            </button>
                             <span
-                                class="mono rounded px-1.5 py-px text-[10px]"
-                                :class="isTargetLang(row.candidate)
-                                    ? 'border-success/40 text-success border'
-                                    : 'border-line text-secondary-content border'">
-                                {{ isTargetLang(row.candidate) ? row.candidate.language.toUpperCase() + ' · ' + t('subSearch.noTranslate') : row.candidate.language.toUpperCase() }}
+                                class="w-0.5 shrink-0 self-stretch rounded"
+                                :class="isTargetLang(row.candidate) ? 'bg-success' : 'bg-info'"
+                                data-test="candidate-track" />
+                            <div class="min-w-0 flex-1">
+                                <div
+                                    class="text-primary-content mono truncate text-xs font-medium"
+                                    :title="releaseTitle(row.candidate)">
+                                    {{ releaseTitle(row.candidate) }}
+                                </div>
+                                <div class="text-secondary-content text-[11px]">
+                                    {{ row.candidate.uploader ?? '—' }} · {{ row.candidate.format }} · {{ formatBytes(row.candidate.size) }}
+                                </div>
+                            </div>
+                            <span class="flex flex-wrap gap-1">
+                                <span
+                                    class="mono rounded px-1.5 py-px text-[10px]"
+                                    :class="isTargetLang(row.candidate)
+                                        ? 'border-success/40 text-success border'
+                                        : 'border-line text-secondary-content border'">
+                                    {{ isTargetLang(row.candidate) ? row.candidate.language.toUpperCase() + ' · ' + t('subSearch.noTranslate') : row.candidate.language.toUpperCase() }}
+                                </span>
+                                <span v-if="row.candidate.hashMatch" class="mono border-success/40 text-success rounded border px-1.5 py-px text-[10px]">
+                                    {{ t('subSearch.hashMatch') }}
+                                </span>
+                                <!-- the media already carries this language — weak
+                                     row + badge; manual re-download stays legal -->
+                                <span
+                                    v-if="isExistingLanguage(row.candidate)"
+                                    class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]"
+                                    data-test="existing-badge">
+                                    {{ t('subSearch.existing') }}
+                                </span>
+                                <span v-if="row.candidate.forced" class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]">
+                                    {{ t('subSearch.forced') }}
+                                </span>
+                                <span v-if="row.candidate.hearingImpaired" class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]">
+                                    {{ t('subSearch.hearingImpaired') }}
+                                </span>
                             </span>
-                            <span v-if="row.candidate.hashMatch" class="mono border-success/40 text-success rounded border px-1.5 py-px text-[10px]">
-                                {{ t('subSearch.hashMatch') }}
-                            </span>
-                            <!-- the media already carries this language — weak
-                                 row + badge; manual re-download stays legal -->
                             <span
-                                v-if="isExistingLanguage(row.candidate)"
-                                class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]"
-                                data-test="existing-badge">
-                                {{ t('subSearch.existing') }}
+                                class="mono w-8 text-right text-xs"
+                                :class="row.candidate.matchScore < autoScore ? 'text-warning' : row.candidate.hashMatch ? 'text-success' : ''"
+                                :title="row.candidate.matchScore < autoScore
+                                    ? t('subSearch.lowConfidence', { score: autoScore })
+                                    : ''">
+                                {{ row.candidate.matchScore }}
                             </span>
-                            <span v-if="row.candidate.forced" class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]">
-                                {{ t('subSearch.forced') }}
+                            <span class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[11px]">
+                                {{ row.candidate.provider }}
                             </span>
-                            <span v-if="row.candidate.hearingImpaired" class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[10px]">
-                                {{ t('subSearch.hearingImpaired') }}
-                            </span>
-                        </span>
-                        <span
-                            class="mono w-8 text-right text-xs"
-                            :class="row.candidate.matchScore < autoScore ? 'text-warning' : row.candidate.hashMatch ? 'text-success' : ''"
-                            :title="row.candidate.matchScore < autoScore
-                                ? t('subSearch.lowConfidence', { score: autoScore })
-                                : ''">
-                            {{ row.candidate.matchScore }}
-                        </span>
-                        <span class="mono border-line text-secondary-content rounded border px-1.5 py-px text-[11px]">
-                            {{ row.candidate.provider }}
-                        </span>
-                        <span class="flex justify-end gap-1.5">
-                            <ButtonComponent
-                                v-if="isTargetLang(row.candidate)"
-                                variant="primary"
-                                size="sm"
-                                :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
-                                @click="download(row, true)">
-                                {{ isBusy(row.candidate)
-                                    ? '…'
-                                    : isDownloaded(row.candidate)
-                                      ? '✓ ' + t('subSearch.downloadedMark')
-                                      : t('subSearch.download') }}
-                            </ButtonComponent>
-                            <template v-else>
+                            <span class="flex justify-end gap-1.5">
                                 <ButtonComponent
-                                    variant="secondary"
-                                    size="sm"
-                                    :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
-                                    @click="download(row, true)">
-                                    {{ isDownloaded(row.candidate)
-                                        ? '✓ ' + t('subSearch.downloadedMark')
-                                        : t('subSearch.downloadOnly') }}
-                                </ButtonComponent>
-                                <ButtonComponent
+                                    v-if="isTargetLang(row.candidate)"
                                     variant="primary"
                                     size="sm"
                                     :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
-                                    @click="download(row, false)">
-                                    {{ isDownloaded(row.candidate)
-                                        ? '✓ ' + t('subSearch.downloadedMark')
-                                        : t('subSearch.downloadAndTranslate') }}
+                                    @click="download(row, true)">
+                                    {{ isBusy(row.candidate)
+                                        ? '…'
+                                        : isDownloaded(row.candidate)
+                                          ? '✓ ' + t('subSearch.downloadedMark')
+                                          : t('subSearch.download') }}
                                 </ButtonComponent>
-                            </template>
-                        </span>
+                                <template v-else>
+                                    <ButtonComponent
+                                        variant="secondary"
+                                        size="sm"
+                                        :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
+                                        @click="download(row, true)">
+                                        {{ isDownloaded(row.candidate)
+                                            ? '✓ ' + t('subSearch.downloadedMark')
+                                            : t('subSearch.downloadOnly') }}
+                                    </ButtonComponent>
+                                    <ButtonComponent
+                                        variant="primary"
+                                        size="sm"
+                                        :disabled="isBusy(row.candidate) || isDownloaded(row.candidate)"
+                                        @click="download(row, false)">
+                                        {{ isDownloaded(row.candidate)
+                                            ? '✓ ' + t('subSearch.downloadedMark')
+                                            : t('subSearch.downloadAndTranslate') }}
+                                    </ButtonComponent>
+                                </template>
+                            </span>
+                        </div>
+                        <!-- B09:明细抽屉——信号表(命中绿点/未中灰点,点数,总和=matchScore)+ 预览入口 -->
+                        <div
+                            v-if="isExpanded(row)"
+                            class="bg-tertiary/30 flex flex-wrap items-start gap-4 px-4 py-3"
+                            data-test="candidate-detail">
+                            <div v-if="(row.candidate.signals ?? []).length > 0" class="min-w-[260px] flex-1">
+                                <div class="text-secondary-content mb-1 text-[11px] font-semibold">
+                                    {{ t('subSearch.signalsTitle') }}
+                                </div>
+                                <div
+                                    v-for="signal in row.candidate.signals ?? []"
+                                    :key="signal.name"
+                                    class="flex items-center gap-2 py-0.5 text-[11px]"
+                                    data-test="signal-row">
+                                    <span
+                                        class="h-1.5 w-1.5 flex-none rounded-full"
+                                        :class="signal.hit ? 'bg-success' : 'bg-secondary-content/40'"
+                                        data-test="signal-dot" />
+                                    <span class="text-primary-content w-36 flex-none">
+                                        {{ signalLabel(signal.name) }}
+                                    </span>
+                                    <span
+                                        class="text-secondary-content mono ml-auto"
+                                        :data-test="'signal-points-' + signal.name">
+                                        {{ signal.points > 0 ? '+' + signal.points : signal.points }}
+                                    </span>
+                                </div>
+                                <div
+                                    class="border-line mt-1 flex items-center gap-2 border-t pt-1 text-[11px] font-semibold"
+                                    data-test="signal-total-row">
+                                    <span class="text-primary-content">{{ t('subSearch.signalTotal') }}</span>
+                                    <span class="text-primary-content mono ml-auto" data-test="signal-total">
+                                        {{ row.candidate.matchScore }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div v-else class="text-secondary-content min-w-[260px] flex-1 py-1 text-[11px]">
+                                {{ t('subSearch.signalsUnavailable') }}
+                            </div>
+                            <div class="flex flex-none flex-col items-end">
+                                <ButtonComponent
+                                    variant="secondary"
+                                    size="sm"
+                                    :disabled="previewLoading"
+                                    data-test="preview-open"
+                                    @click="openPreview(row)">
+                                    {{ t('subSearch.preview') }}
+                                </ButtonComponent>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- states -->
@@ -1059,6 +1242,74 @@ onBeforeUnmount(teardown)
                     <div v-else-if="!searching && sortedCandidates.length === 0" class="text-secondary-content px-4 py-6 text-center text-sm">
                         {{ t('subSearch.noResults') }}
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- B09:字幕预览浮层(Teleport 模式照 MediaSourcesCard 判例;z 高于
+             搜索主弹层,Escape 只关本层)——零副作用的内容预览,前 30 cue -->
+        <div
+            v-if="previewing"
+            class="fixed inset-0 z-[60] flex items-center justify-center bg-primary/72 p-4"
+            data-test="subtitle-preview-modal"
+            @click.self="closePreview()">
+            <div
+                class="border-line bg-secondary flex max-h-[80vh] w-[min(680px,94vw)] flex-col overflow-hidden rounded-lg shadow-2xl"
+                role="dialog"
+                aria-modal="true"
+                tabindex="-1"
+                :aria-label="t('subSearch.previewTitle')">
+                <div class="border-line flex items-center gap-3 border-b px-4 py-3">
+                    <span class="text-sm font-semibold">{{ t('subSearch.previewTitle') }}</span>
+                    <span class="text-secondary-content mono truncate text-[11px]" :title="previewing.title">
+                        {{ previewing.title }}
+                    </span>
+                    <span
+                        v-if="previewData"
+                        class="text-secondary-content mono ml-auto flex-none text-[11px]"
+                        data-test="preview-meta">
+                        {{ t('subSearch.previewMeta', {
+                            format: previewData.format,
+                            count: previewData.cueCount,
+                            shown: previewData.cues.length
+                        }) }}
+                    </span>
+                    <button
+                        type="button"
+                        class="border-line text-primary-content hover:bg-tertiary ml-auto flex-none cursor-pointer rounded border px-2 py-0.5 text-xs"
+                        :aria-label="t('common.close')"
+                        data-test="preview-close"
+                        @click="closePreview()">
+                        {{ t('common.close') }}
+                    </button>
+                </div>
+                <div class="shell-scroll flex-1 overflow-y-auto px-4 py-3">
+                    <div v-if="previewLoading" class="text-secondary-content flex items-center gap-2 text-sm" data-test="preview-loading">
+                        <span class="animate-pulse">●</span> {{ t('subSearch.previewLoading') }}
+                    </div>
+                    <div v-else-if="previewError" class="text-danger text-sm" data-test="preview-error">
+                        {{ previewError }}
+                    </div>
+                    <template v-else-if="previewData">
+                        <div
+                            v-for="(cue, cueIndex) in previewData.cues"
+                            :key="cueIndex"
+                            class="border-line border-b py-1.5 last:border-b-0"
+                            data-test="preview-cue">
+                            <div class="text-secondary-content mono text-[10px]">
+                                {{ formatCueTime(cue.startMs) }} → {{ formatCueTime(cue.endMs) }}
+                            </div>
+                            <div
+                                v-for="(line, lineIndex) in cue.lines"
+                                :key="lineIndex"
+                                class="text-primary-content text-xs leading-snug">
+                                {{ line }}
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <div class="border-line text-secondary-content border-t px-4 py-2 text-[11px]">
+                    {{ t('common.escape') }}
                 </div>
             </div>
         </div>

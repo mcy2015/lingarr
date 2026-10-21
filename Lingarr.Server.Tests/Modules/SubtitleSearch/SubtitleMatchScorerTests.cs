@@ -303,6 +303,111 @@ public class SubtitleMatchScorerTests
         Assert.NotSame(candidate, scored);
     }
 
+    // --- B09 signal breakdown: every scored candidate carries the per-
+    // dimension signals whose points sum to matchScore by construction.
+
+    [Fact]
+    public void Signals_HashShortCircuit_IsTheSingle100PointSignal()
+    {
+        var scored = _scorer.Score(MovieRequest(), Candidate("total garbage", hashMatch: true));
+
+        Assert.NotNull(scored.Signals);
+        var signal = Assert.Single(scored.Signals!);
+        Assert.Equal("hash", signal.Name);
+        Assert.Equal(100, signal.Points);
+        Assert.True(signal.Hit);
+        Assert.Equal(scored.MatchScore, scored.Signals!.Sum(item => item.Points));
+    }
+
+    [Fact]
+    public void Signals_FullMovieMatch_ListsEveryDimensionWithItsPoints()
+    {
+        var scored = _scorer.Score(MovieRequest(), Candidate("Movie.2019.WEBDL-1080p"));
+
+        Assert.NotNull(scored.Signals);
+        Assert.Equal(80, scored.MatchScore);
+        Assert.Equal(scored.MatchScore, scored.Signals!.Sum(item => item.Points));
+
+        var byName = scored.Signals!.ToDictionary(signal => signal.Name);
+        Assert.Equal(new[] { "releaseTokens", "title", "year" }, byName.Keys.Order());
+        Assert.True(byName["title"].Hit);
+        Assert.Equal(55, byName["title"].Points);
+        Assert.True(byName["year"].Hit);
+        Assert.Equal(15, byName["year"].Points);
+        Assert.True(byName["releaseTokens"].Hit);
+        Assert.Equal(10, byName["releaseTokens"].Points);
+        // A movie request has no episode dimension — no episode row.
+        Assert.False(byName.ContainsKey("episode"));
+    }
+
+    [Fact]
+    public void Signals_AllMisses_CarryZeroPointsAndStillSumToTheScore()
+    {
+        var scored = _scorer.Score(
+            MovieRequest(title: "Elsewhere", year: 2024, releaseName: null),
+            Candidate("Movie.2019.WEBDL-1080p"));
+
+        Assert.Equal(0, scored.MatchScore);
+        Assert.Equal(0, scored.Signals!.Sum(item => item.Points));
+        Assert.All(scored.Signals!, signal =>
+        {
+            Assert.False(signal.Hit);
+            Assert.Equal(0, signal.Points);
+        });
+    }
+
+    [Fact]
+    public void Signals_EpisodeRequest_AddsTheEpisodeDimensionOnBothSides()
+    {
+        var hit = _scorer.Score(EpisodeRequest(), Candidate("Show.S01E02.WEBDL-1080p"));
+        Assert.Equal(85, hit.MatchScore);
+        var hitEpisode = hit.Signals!.Single(signal => signal.Name == "episode");
+        Assert.True(hitEpisode.Hit);
+        Assert.Equal(20, hitEpisode.Points);
+        Assert.Equal(hit.MatchScore, hit.Signals!.Sum(signal => signal.Points));
+    }
+
+    [Fact]
+    public void Signals_WrongEpisodeCap_BecomesANegativeRowThatKeepsTheSum()
+    {
+        // raw = 55 + 15 + 8 = 78 → capped to 70; the cap row carries the
+        // -8 difference so the drawer's sum equals the capped score.
+        var request = EpisodeRequest(year: 2019);
+        var wrongEpisode = _scorer.Score(request, Candidate("Show.S01E03.2019.WEBDL-1080p"));
+
+        Assert.Equal(70, wrongEpisode.MatchScore);
+        Assert.Equal(wrongEpisode.MatchScore, wrongEpisode.Signals!.Sum(signal => signal.Points));
+
+        var cap = wrongEpisode.Signals!.Single(signal => signal.Name == "wrongEpisodeCap");
+        Assert.True(cap.Hit);
+        Assert.Equal(-8, cap.Points);
+        var episode = wrongEpisode.Signals!.Single(signal => signal.Name == "episode");
+        Assert.False(episode.Hit);
+        Assert.Equal(0, episode.Points);
+    }
+
+    [Fact]
+    public void Signals_CapThatDoesNotBite_AddsNoRow()
+    {
+        // raw stays under the cap line — no wrongEpisodeCap row may appear
+        // (a no-op cap must not show as a dimension).
+        var request = EpisodeRequest(year: null, releaseName: null);
+        var weak = _scorer.Score(request, Candidate("Unrelated"));
+
+        Assert.DoesNotContain(weak.Signals!, signal => signal.Name == "wrongEpisodeCap");
+        Assert.Equal(weak.MatchScore, weak.Signals!.Sum(signal => signal.Points));
+    }
+
+    [Fact]
+    public void Signals_PreScoreCandidate_CarriesNullSignalsUntilScored()
+    {
+        // The additive-tail contract: an un-scored construction keeps the
+        // legacy shape (null), existing construction sites stay untouched.
+        var candidate = Candidate("Movie.2019.WEBDL-1080p");
+        Assert.Null(candidate.Signals);
+        Assert.NotNull(_scorer.Score(MovieRequest(), candidate).Signals);
+    }
+
     [Fact]
     public void SplitTrailingSeasonEpisode_StripsTheTrailingTag()
     {

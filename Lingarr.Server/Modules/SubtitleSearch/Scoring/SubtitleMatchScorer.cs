@@ -39,13 +39,36 @@ public sealed partial class SubtitleMatchScorer
     /// </summary>
     public const int WrongEpisodeScoreCap = 70;
 
-    /// <summary>Releases the score of one candidate against its request (records are immutable — a scored copy returns).</summary>
+    /// <summary>
+    /// Stable signal keys of <see cref="ScoreSignal"/> (B09): the front end
+    /// maps these to localized labels; unknown keys fall back to the raw
+    /// name, so renaming here is a coordinated front-end change.
+    /// </summary>
+    public const string HashSignalName = "hash";
+    public const string TitleSignalName = "title";
+    public const string YearSignalName = "year";
+    public const string EpisodeSignalName = "episode";
+    public const string ReleaseTokensSignalName = "releaseTokens";
+    public const string WrongEpisodeCapSignalName = "wrongEpisodeCap";
+
+    /// <summary>
+    /// Releases the score of one candidate against its request (records are immutable — a scored copy returns).
+    /// B09: the scored copy also carries the per-dimension signal breakdown
+    /// whose points sum to <see cref="SubtitleCandidate.MatchScore"/> by
+    /// construction (the score IS the sum — the invariant the candidate
+    /// drawer renders cannot drift).
+    /// </summary>
     public SubtitleCandidate Score(SubtitleSearchRequest request, SubtitleCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(candidate);
 
-        return candidate with { MatchScore = ComputeScore(request, candidate) };
+        var signals = ComputeSignals(request, candidate);
+        return candidate with
+        {
+            MatchScore = signals.Sum(signal => signal.Points),
+            Signals = signals
+        };
     }
 
     /// <summary>
@@ -208,50 +231,63 @@ public sealed partial class SubtitleMatchScorer
         return (head, (int.Parse(trailing.Groups["s"].Value), int.Parse(trailing.Groups["e"].Value)));
     }
 
-    private static int ComputeScore(SubtitleSearchRequest request, SubtitleCandidate candidate)
+    /// <summary>
+    /// The per-dimension breakdown behind <see cref="Score"/> (B09). Every
+    /// signal contributes exactly the points it earned (0 on a miss) and the
+    /// score is the sum, so the drawer's「总和 = matchScore」holds by
+    /// construction:
+    /// <list type="bullet">
+    /// <item>hash hit — the single signal "hash" at 100 (③ short-circuit;
+    /// release facts are irrelevant for an exact-file match).</item>
+    /// <item>title / year / episode / releaseTokens — one row each, the
+    /// episode row only on episode requests (a movie has no episode
+    /// dimension to miss).</item>
+    /// <item>wrong-episode cap — when the QA1 P1-2 cap actually bites (raw
+    /// sum above the cap), one negative row closes the gap between the raw
+    /// sum and the capped score; a cap that changes nothing adds no row.</item>
+    /// </list>
+    /// </summary>
+    private static IReadOnlyList<ScoreSignal> ComputeSignals(SubtitleSearchRequest request, SubtitleCandidate candidate)
     {
         // ③: hash hit short-circuits at 100 — no other fact can (or needs
         // to) move an exact-file match.
         if (candidate.HashMatch)
         {
-            return HashMatchScore;
+            return [new ScoreSignal(HashSignalName, HashMatchScore, Hit: true)];
         }
 
         var release = Normalize(candidate.ReleaseInfo ?? string.Empty);
-        var score = 0;
+        var signals = new List<ScoreSignal>();
 
         // Title 55: exact normalized equality or release-name prefix. A
         // title inside the name but not leading is worth nothing — that is
         // the observed false-positive shape (sequels, "Movie, The" style).
         var title = Normalize(request.Title);
-        if (release.Length > 0 && title.Length > 0
+        var titleHit = release.Length > 0 && title.Length > 0
             && (release.Equals(title, StringComparison.OrdinalIgnoreCase)
-                || release.StartsWith(title + " ", StringComparison.OrdinalIgnoreCase)))
-        {
-            score += 55;
-        }
+                || release.StartsWith(title + " ", StringComparison.OrdinalIgnoreCase));
+        signals.Add(new ScoreSignal(TitleSignalName, titleHit ? 55 : 0, titleHit));
 
         // Year 15: any 4-digit token within ±1 tolerates off-by-one release
         // years between providers.
-        if (request.Year is int year && ContainsYearWithin(release, year, tolerance: 1))
-        {
-            score += 15;
-        }
+        var yearHit = request.Year is int year && ContainsYearWithin(release, year, tolerance: 1);
+        signals.Add(new ScoreSignal(YearSignalName, yearHit ? 15 : 0, yearHit));
 
         // Season/episode 20: episode requests only, and only on an exact
         // SxxEyy (or NxMM) match — a wrong episode never scores here.
         var isEpisodeRequest = request.Season.HasValue && request.Episode.HasValue;
         var episodeTagMatches = isEpisodeRequest
             && SeasonEpisodeMatches(release, request.Season!.Value, request.Episode!.Value);
-        if (episodeTagMatches)
+        if (isEpisodeRequest)
         {
-            score += 20;
+            signals.Add(new ScoreSignal(EpisodeSignalName, episodeTagMatches ? 20 : 0, episodeTagMatches));
         }
 
         // Release tokens up to 10: proportion of the request's scene tokens
         // present in the candidate release (resolution/source/group). No
-        // request release name → no points.
-        score += ReleaseTokenScore(request.ReleaseName, release);
+        // request release name → no points (miss row).
+        var tokenPoints = ReleaseTokenScore(request.ReleaseName, release);
+        signals.Add(new ScoreSignal(ReleaseTokensSignalName, tokenPoints, tokenPoints > 0));
 
         // Wrong-episode cap (QA1 P1-2): episode requests resolve the year
         // through Season→Show, so a wrong-episode candidate of the same show
@@ -259,12 +295,18 @@ public sealed partial class SubtitleMatchScorer
         // round downloaded the wrong episode. Any candidate that does not
         // carry the requested SxxEyy tag — wrong tag or no tag at all — is
         // capped below the default auto line. Hash matches returned above.
+        // The cap row exists only when it actually lowers the total — its
+        // points are the (negative) difference, keeping the sum invariant.
         if (isEpisodeRequest && !episodeTagMatches)
         {
-            score = Math.Min(score, WrongEpisodeScoreCap);
+            var raw = signals.Sum(signal => signal.Points);
+            if (raw > WrongEpisodeScoreCap)
+            {
+                signals.Add(new ScoreSignal(WrongEpisodeCapSignalName, WrongEpisodeScoreCap - raw, Hit: true));
+            }
         }
 
-        return score;
+        return signals;
     }
 
     /// <summary>

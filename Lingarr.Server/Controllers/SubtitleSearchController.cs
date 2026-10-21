@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -6,7 +7,9 @@ using Lingarr.Contracts.Settings;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
@@ -52,7 +55,18 @@ public sealed record SubtitleSearchRequestBody(
     string Provider,
     string? Query = null);
 
-/// <summary>One scored candidate as the front end renders it (cache-opaque external id kept).</summary>
+/// <summary>
+/// One scoring contribution of a candidate (B09 detail drawer): the stable
+/// dimension key the front end maps to a localized label, the points earned
+/// (0 on a miss, negative for the wrong-episode cap row) and the hit flag.
+/// </summary>
+public sealed record SubtitleSignalResponse(string Name, int Points, bool Hit);
+
+/// <summary>
+/// One scored candidate as the front end renders it (cache-opaque external id kept).
+/// <see cref="Signals"/> is the B09 score breakdown — additive tail
+/// parameter, null-dropped when absent so legacy shapes stay byte-identical.
+/// </summary>
 public sealed record SubtitleCandidateResponse(
     string Provider,
     string ExternalId,
@@ -64,7 +78,8 @@ public sealed record SubtitleCandidateResponse(
     string Format,
     string? ReleaseInfo,
     string? Uploader,
-    long? Size);
+    long? Size,
+    IReadOnlyList<SubtitleSignalResponse>? Signals = null);
 
 /// <summary>
 /// Search response: candidates plus the cache key the download endpoint
@@ -126,6 +141,36 @@ public sealed record SubtitleDownloadResponse(
     bool TranslationDuplicate,
     int FilesLanded,
     DateTimeOffset? CooldownUntilUtc = null);
+
+/// <summary>
+/// Manual preview request (B09): addresses the picked candidate exactly the
+/// way the download endpoint does — the search's cache key plus its index —
+/// no candidate payload round-trips through the client. The preview fetches
+/// the bytes but never lands them.
+/// </summary>
+/// <param name="CacheKey">CacheKey of the preceding search.</param>
+/// <param name="CandidateIndex">Index into that search's candidate list.</param>
+/// <param name="MediaId">Library id of the movie/episode; must match the search's media (QA3 P3-2).</param>
+/// <param name="MediaType">"Movie" or "Episode"; must match the search's media (QA3 P3-2).</param>
+public sealed record SubtitlePreviewRequestBody(
+    string CacheKey,
+    int CandidateIndex,
+    int MediaId,
+    string MediaType);
+
+/// <summary>One cue of a preview: millisecond bounds plus the text lines.</summary>
+public sealed record SubtitlePreviewCue(long StartMs, long EndMs, IReadOnlyList<string> Lines);
+
+/// <summary>
+/// Preview answer (B09): the parsed entry's format, the TOTAL cue count of
+/// the file and the first <see cref="PreviewCueLimit"/> cues (start/end in
+/// milliseconds plus text lines) — enough to judge a candidate before
+/// downloading, small enough to stay a cheap click.
+/// </summary>
+public sealed record SubtitlePreviewResponse(
+    string Format,
+    int CueCount,
+    IReadOnlyList<SubtitlePreviewCue> Cues);
 
 /// <summary>Pin/unpin request (⑥).</summary>
 /// <param name="MediaId">Library id of the movie/episode.</param>
@@ -246,6 +291,8 @@ public class SubtitleSearchController : ControllerBase
     private readonly SubtitleDownloadPipeline _pipeline;
     private readonly SubtitleSearchRequestBuilder _requestBuilder;
     private readonly LingarrDbContext _dbContext;
+    private readonly SubtitleArchiveExtractor _extractor;
+    private readonly ISubtitleEncodingService _encodingService;
     private readonly ILogger<SubtitleSearchController> _logger;
 
     public SubtitleSearchController(
@@ -258,6 +305,8 @@ public class SubtitleSearchController : ControllerBase
         SubtitleDownloadPipeline pipeline,
         SubtitleSearchRequestBuilder requestBuilder,
         LingarrDbContext dbContext,
+        SubtitleArchiveExtractor extractor,
+        ISubtitleEncodingService encodingService,
         ILogger<SubtitleSearchController> logger)
     {
         _providerRegistry = providerRegistry;
@@ -269,6 +318,8 @@ public class SubtitleSearchController : ControllerBase
         _pipeline = pipeline;
         _requestBuilder = requestBuilder;
         _dbContext = dbContext;
+        _extractor = extractor;
+        _encodingService = encodingService;
         _logger = logger;
     }
 
@@ -391,12 +442,250 @@ public class SubtitleSearchController : ControllerBase
                 candidate.Format,
                 candidate.ReleaseInfo,
                 candidate.Uploader,
-                candidate.Size)).ToList(),
+                candidate.Size,
+                // B09 score breakdown: null (pre-score shapes) drops the key,
+                // so the additive tail never changes the legacy wire bytes.
+                candidate.Signals is null
+                    ? null
+                    : candidate.Signals.Select(signal => new SubtitleSignalResponse(
+                            signal.Name, signal.Points, signal.Hit)).ToList())).ToList(),
             outcome.SourceOutcomes,
             // Web-search escape hatch: the full per-source deep-link map of
             // the public sites, derived from the one media-level request —
             // independent of how THIS source's round went.
             SubtitleWebSearchUrls.BuildSearchUrls(built.Request)));
+    }
+
+    /// <summary>How many cues a preview answer carries (B09): the first 30.</summary>
+    public const int PreviewCueLimit = 30;
+
+    /// <summary>
+    /// The whisper source's registry key (B04): transcription candidates have
+    /// no subtitle bytes to preview — the「download」 is an ffmpeg extraction
+    /// plus an API transcription, so preview answers 400 instead.
+    /// </summary>
+    private const string WhisperProviderKey = "whisper";
+
+    /// <summary>
+    /// Per-ref preview answers (B09): 60-second window, one entry per
+    /// cacheKey+index. Pure anti-double-click storage — a dictionary with
+    /// timestamps plus opportunistic eviction of expired entries (and of the
+    /// oldest entries once the capacity cap is hit) keeps it bounded.
+    /// </summary>
+    private static readonly ConcurrentDictionary<
+        string, (DateTimeOffset ExpiresAt, SubtitlePreviewResponse Response)> PreviewCache = new();
+
+    private static readonly TimeSpan PreviewCacheTtl = TimeSpan.FromSeconds(60);
+    private const int PreviewCacheCapacity = 128;
+
+    /// <summary>
+    /// Content preview of one candidate (B09): fetches the payload through
+    /// the provider's ordinary download path, extracts/parses it ENTIRELY in
+    /// memory and answers the first <see cref="PreviewCueLimit"/> cues —
+    /// nothing is written to disk, no subtitle_downloads row, no coverage
+    /// change, no cooldown/telemetry write (the zero-side-effect contract;
+    /// contrast <see cref="Download"/>, which runs the full pipeline ⑦).
+    /// Cache/expiry codes follow the download endpoint: expired search 410,
+    /// media ownership mismatch or out-of-range index 400. A whisper
+    /// candidate answers 400 (transcription has no previewable bytes).
+    /// Provider-side failures never 500: content problems (InvalidResponse,
+    /// unparseable text) answer 400, transport/auth/rate-limit problems 502.
+    /// </summary>
+    [HttpPost("preview")]
+    public async Task<IActionResult> Preview(
+        [FromBody] SubtitlePreviewRequestBody body,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseMediaType(body.MediaType, out var mediaType))
+        {
+            return BadRequest(new { message = "mediaType must be 'Movie' or 'Episode'." });
+        }
+
+        var resolution = _orchestrator.TryResolveCache(body.CacheKey, mediaType, body.MediaId, out var candidates);
+        if (resolution == SubtitleSearchOrchestrator.SubtitleCacheResolution.MediaMismatch)
+        {
+            return BadRequest(new
+            {
+                message = "The search result belongs to a different media item; run a new search for this one.",
+                cacheKey = body.CacheKey
+            });
+        }
+
+        if (resolution != SubtitleSearchOrchestrator.SubtitleCacheResolution.Resolved || candidates is null)
+        {
+            return StatusCode(StatusCodes.Status410Gone, new
+            {
+                message = "The search result expired (10-minute window); run a new search.",
+                cacheKey = body.CacheKey
+            });
+        }
+
+        if (body.CandidateIndex < 0 || body.CandidateIndex >= candidates.Count)
+        {
+            return BadRequest(new
+            {
+                message = $"candidateIndex {body.CandidateIndex} is out of range (0..{candidates.Count - 1})."
+            });
+        }
+
+        var candidate = candidates[body.CandidateIndex];
+        if (string.Equals(candidate.Provider, WhisperProviderKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                message = "Whisper candidates are transcriptions — there is no subtitle file to preview."
+            });
+        }
+
+        // Anti-double-click window: a fresh answer for this ref replays
+        // without re-fetching from the source (only successes are cached —
+        // a failed preview retries on the next click).
+        var previewKey = body.CacheKey + ":" + body.CandidateIndex;
+        var now = DateTimeOffset.UtcNow;
+        if (PreviewCache.TryGetValue(previewKey, out var cached) && cached.ExpiresAt > now)
+        {
+            return Ok(cached.Response);
+        }
+
+        var registered = _providerRegistry.Find(candidate.Provider);
+        if (registered is null)
+        {
+            return NotFound(new { message = $"Unknown subtitle provider '{candidate.Provider}'.", provider = candidate.Provider });
+        }
+
+        Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload payload;
+        try
+        {
+            payload = await registered.Provider.DownloadAsync(
+                new SubtitleCandidateRef(candidate.ExternalId), cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SubtitleProviderException ex)
+        {
+            // Upstream source problem (auth/rate-limit/transport) — the
+            // candidate is fine, the fetch failed.
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+        }
+
+        // Memory extraction (the same extractor/parsers the pipeline uses,
+        // ⑦ step ①/②) — plain payloads pass through, archives open from the
+        // in-memory bytes; nothing is ever written to disk.
+        ExtractedSubtitle entry;
+        byte[] utf8;
+        try
+        {
+            entry = _extractor.Extract(
+                payload.Content, payload.FileName, payload.Format, candidate.Language, candidate.Provider);
+            utf8 = _encodingService.ConvertToUtf8(entry.Content);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SubtitleProviderException ex)
+        {
+            // Unparseable payload/fake archive — a permanent property of this
+            // candidate, not a transport failure.
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = $"could not decode the payload: {ex.Message}" });
+        }
+
+        List<SubtitleItem> items;
+        var format = PreviewFormatOf(entry.FileName);
+        try
+        {
+            ISubtitleParser parser = format switch
+            {
+                "ass" or "ssa" => new SsaParser(),
+                "vtt" => new VttParser(),
+                _ => new SrtParser()
+            };
+            using var input = new MemoryStream(utf8);
+            items = parser.ParseStream(input, Encoding.UTF8);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new
+            {
+                message = $"could not parse '{entry.FileName}' as a subtitle: {ex.Message}"
+            });
+        }
+
+        var response = new SubtitlePreviewResponse(
+            format,
+            items.Count,
+            items.Take(PreviewCueLimit)
+                .Select(item => new SubtitlePreviewCue(
+                    item.StartTime,
+                    item.EndTime,
+                    (item.PlaintextLines.Count > 0 ? item.PlaintextLines : item.Lines).ToList()))
+                .ToList());
+
+        StorePreview(previewKey, response, now);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Parses-format-of of a preview entry: the known subtitle extension of
+    /// the entry name, lowercased without the dot; anything unrecognized
+    /// parses as srt (the pipeline's own ConvertToSrt default — the SrtParser
+    /// is the most tolerant of the three).
+    /// </summary>
+    private static string PreviewFormatOf(string fileName)
+    {
+        foreach (var extension in new[] { ".srt", ".ass", ".ssa", ".vtt" })
+        {
+            if (fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                return extension[1..].ToLowerInvariant();
+            }
+        }
+
+        return "srt";
+    }
+
+    /// <summary>
+    /// Stores one preview answer, keeping the dictionary bounded: expired
+    /// entries go first, then the oldest survivors once the capacity cap is
+    /// still exceeded. Best effort — a racing duplicate store is harmless
+    /// (same key, equivalent answer).
+    /// </summary>
+    private static void StorePreview(string key, SubtitlePreviewResponse response, DateTimeOffset now)
+    {
+        if (PreviewCache.Count >= PreviewCacheCapacity)
+        {
+            foreach (var victim in PreviewCache
+                         .Where(pair => pair.Value.ExpiresAt <= now)
+                         .Select(pair => pair.Key)
+                         .ToList())
+            {
+                PreviewCache.TryRemove(victim, out _);
+            }
+
+            if (PreviewCache.Count >= PreviewCacheCapacity)
+            {
+                foreach (var victim in PreviewCache
+                             .OrderBy(pair => pair.Value.ExpiresAt)
+                             .Take(PreviewCacheCapacity / 4)
+                             .Select(pair => pair.Key)
+                             .ToList())
+                {
+                    PreviewCache.TryRemove(victim, out _);
+                }
+            }
+        }
+
+        PreviewCache[key] = (now + PreviewCacheTtl, response);
     }
 
     /// <summary>

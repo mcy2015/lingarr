@@ -1342,7 +1342,24 @@
         "embeddedExtractTitle": "Extract this embedded track as an external sidecar file",
         "embeddedExtractDone": "Extracted {file}",
         "embeddedExtractExists": "{file} already exists — left untouched",
-        "embeddedExtractFailed": "Extraction failed: {message}"
+        "embeddedExtractFailed": "Extraction failed: {message}",
+        "matchDetails": "Match details",
+        "signalsTitle": "Match signals",
+        "signalsUnavailable": "No score breakdown available for this candidate.",
+        "signalTotal": "Total",
+        "signal": {
+            "hash": "File hash",
+            "title": "Title",
+            "year": "Year",
+            "episode": "Season/episode",
+            "releaseTokens": "Release tokens",
+            "wrongEpisodeCap": "Wrong-episode cap"
+        },
+        "preview": "Preview",
+        "previewTitle": "Subtitle preview",
+        "previewMeta": "{format} · {count} cues · first {shown}",
+        "previewLoading": "Fetching the subtitle…",
+        "previewUnavailable": "Preview failed — the candidate expired or the source is unavailable."
     },
     "dashboard": {
         "subtitles": {

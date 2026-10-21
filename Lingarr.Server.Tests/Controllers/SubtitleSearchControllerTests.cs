@@ -117,6 +117,88 @@ public class SubtitleSearchControllerTests
             => throw SubtitleProviderException.ForMissingCredentials("failing", "API key");
     }
 
+    /// <summary>
+    /// B09 preview double: answers a candidate whose download payload is a
+    /// freshly built SRT with <c>cues</c> numbered cues, and counts every
+    /// DownloadAsync call so the 60s anti-double-click window asserts on the
+    /// real provider-call count.
+    /// </summary>
+    [SubtitleProvider("counting")]
+    private sealed class CountingPreviewProvider(int cues = 45) : FakeProvider
+    {
+        public int DownloadCalls { get; private set; }
+
+        public override string Provider => "counting";
+
+        public override Task<SubtitleSearchResult> SearchAsync(
+            SubtitleSearchRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(new SubtitleSearchResult(
+            [
+                new SubtitleCandidate(
+                    "counting",
+                    ExternalId: $"preview-{Guid.NewGuid():N}",
+                    "zh",
+                    MatchScore: 0,
+                    Forced: false,
+                    HearingImpaired: false,
+                    ReleaseInfo: "Movie.2019.WEBDL-1080p",
+                    Uploader: null,
+                    Format: "srt",
+                    Size: 1234,
+                    HashMatch: false)
+            ]));
+
+        public override Task<Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload> DownloadAsync(
+            SubtitleCandidateRef candidateRef, CancellationToken cancellationToken)
+        {
+            DownloadCalls++;
+            var builder = new StringBuilder();
+            for (var i = 1; i <= cues; i++)
+            {
+                var start = TimeSpan.FromSeconds(i);
+                builder.Append(i).Append("\r\n")
+                    .Append($"{start:hh\\:mm\\:ss},000 --> {start:hh\\:mm\\:ss},900")
+                    .Append("\r\n")
+                    .Append($"Cue line {i}\r\n");
+            }
+
+            return Task.FromResult(new Lingarr.Server.Modules.SubtitleSearch.Abstractions.SubtitleDownload(
+                "counting",
+                "Movie.2019.WEBDL-1080p.srt",
+                "srt",
+                Encoding.UTF8.GetBytes(builder.ToString())));
+        }
+    }
+
+    /// <summary>
+    /// B04/B09: a whisper-shaped source — its candidates carry
+    /// Provider="whisper" and have no previewable bytes; preview must answer
+    /// 400 before any provider call.
+    /// </summary>
+    [SubtitleProvider("whisper")]
+    private sealed class WhisperCandidateProvider : FakeProvider
+    {
+        public override string Provider => "whisper";
+
+        public override Task<SubtitleSearchResult> SearchAsync(
+            SubtitleSearchRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(new SubtitleSearchResult(
+            [
+                new SubtitleCandidate(
+                    "whisper",
+                    ExternalId: $"whisper-{Guid.NewGuid():N}",
+                    "zh",
+                    MatchScore: 0,
+                    Forced: false,
+                    HearingImpaired: false,
+                    ReleaseInfo: "whisper transcription",
+                    Uploader: null,
+                    Format: "srt",
+                    Size: null,
+                    HashMatch: false)
+            ]));
+    }
+
     // The seven v1 source keys as test doubles — attribute name and
     // Provider property match the production providers so the registry
     // keys and the endpoint answer line up; the real manifest classes
@@ -206,6 +288,8 @@ public class SubtitleSearchControllerTests
             pipeline: null!,
             requestBuilder: null!,
             dbContext: null!,
+            extractor: new Lingarr.Server.Modules.SubtitleSearch.Pipeline.SubtitleArchiveExtractor(),
+            encodingService: new Lingarr.Server.Modules.Subtitle.SubtitleEncodingService(),
             NullLogger<SubtitleSearchController>.Instance);
     }
 
@@ -246,6 +330,8 @@ public class SubtitleSearchControllerTests
             fixture.Pipeline,
             fixture.RequestBuilder,
             fixture.DbContext,
+            extractor: new Lingarr.Server.Modules.SubtitleSearch.Pipeline.SubtitleArchiveExtractor(),
+            encodingService: new Lingarr.Server.Modules.Subtitle.SubtitleEncodingService(),
             NullLogger<SubtitleSearchController>.Instance);
 
     // Mirrors the production MVC options (InfrastructureModule): camelCase,
@@ -512,6 +598,43 @@ public class SubtitleSearchControllerTests
     }
 
     [Fact]
+    public async Task Search_CandidatesCarryTheSignalBreakdownWhoseSumEqualsTheScore()
+    {
+        // B09 wire contract: every scored candidate carries signals[] with
+        // {name, points, hit} and the points sum to matchScore exactly —
+        // the drawer's「总和 = matchScore」must hold on the wire, not just
+        // in the scorer.
+        var provider = new ScriptedSearchProvider();
+        using var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["zh"], "scripted"),
+            CancellationToken.None));
+        using var body = Body(result);
+
+        var candidate = body.RootElement.GetProperty("candidates")[0];
+        var signals = candidate.GetProperty("signals");
+        Assert.Equal(JsonValueKind.Array, signals.ValueKind);
+        var sum = 0;
+        foreach (var signal in signals.EnumerateArray())
+        {
+            Assert.False(string.IsNullOrEmpty(signal.GetProperty("name").GetString()));
+            sum += signal.GetProperty("points").GetInt32();
+            Assert.Contains(signal.GetProperty("hit").ValueKind, new[] { JsonValueKind.True, JsonValueKind.False });
+        }
+
+        Assert.Equal(candidate.GetProperty("matchScore").GetInt32(), sum);
+
+        // The scripted release "Movie.2019.WEBDL-1080p" against the library
+        // movie (title Movie, year 2019) earns title 55 + year 15 + tokens.
+        var names = signals.EnumerateArray().Select(signal => signal.GetProperty("name").GetString()).ToList();
+        Assert.Contains("title", names);
+        Assert.Contains("year", names);
+        Assert.Contains("releaseTokens", names);
+    }
+
+    [Fact]
     public async Task Search_KeywordOverride_ReachesTheOrchestratorRequest()
     {
         // Locked API contract: Query replaces the derived search term; the
@@ -642,6 +765,165 @@ public class SubtitleSearchControllerTests
         using var body = Body(result);
 
         Assert.Equal(41, body.RootElement.GetProperty("translationRequestId").GetInt32());
+    }
+
+    // --- preview (B09): zero-side-effect content peek at a cached candidate
+    // — 30-cue cap, 60s anti-double-click window, whisper 400, the download
+    // endpoint's cache/ownership codes.
+
+    /// <summary>Search → preview against a fresh ref (each test builds its own cacheKey; the orchestrator cache is per-fixture).</summary>
+    private static async Task<(SubtitleSearchResponse Search, SubtitleSearchController Controller, SubtitleEndpointFixture Fixture)>
+        SearchForPreviewAsync(ISubtitleProvider provider)
+    {
+        var fixture = new SubtitleEndpointFixture(provider);
+        var controller = CreateFullController(fixture);
+        var search = Assert.IsType<OkObjectResult>(await controller.Search(
+            new SubtitleSearchRequestBody(fixture.MovieId, "Movie", ["zh"], provider.Provider),
+            CancellationToken.None));
+        return ((SubtitleSearchResponse)search.Value!, controller, fixture);
+    }
+
+    [Fact]
+    public async Task Preview_AnswersTheFirst30CuesWithZeroSideEffects()
+    {
+        // 45 cues in the payload → 30 on the wire, cueCount keeps the honest
+        // total; NOTHING lands anywhere (the contrast to Download ⑦).
+        var provider = new CountingPreviewProvider(cues: 45);
+        var (searchResponse, controller, fixture) = await SearchForPreviewAsync(provider);
+        try
+        {
+            var historyBefore = fixture.DbContext.SubtitleDownloads.Count();
+            var filesBefore = Directory.GetFiles(fixture.MediaDirectory, "*", SearchOption.AllDirectories);
+
+            var result = Assert.IsType<OkObjectResult>(await controller.Preview(
+                new SubtitlePreviewRequestBody(searchResponse.CacheKey, 0, fixture.MovieId, "Movie"),
+                CancellationToken.None));
+            using var body = Body(result);
+
+            Assert.Equal("srt", body.RootElement.GetProperty("format").GetString());
+            Assert.Equal(45, body.RootElement.GetProperty("cueCount").GetInt32());
+            var cues = body.RootElement.GetProperty("cues");
+            Assert.Equal(30, cues.GetArrayLength());
+            Assert.Equal(1000, cues[0].GetProperty("startMs").GetInt64());
+            Assert.Equal(1900, cues[0].GetProperty("endMs").GetInt64());
+            Assert.Equal("Cue line 1", cues[0].GetProperty("lines")[0].GetString());
+            Assert.Equal("Cue line 30", cues[29].GetProperty("lines")[0].GetString());
+
+            // Zero side effects: no disk file, no history row, no translation
+            // request — the preview is a read, not a download.
+            Assert.Equal(historyBefore, fixture.DbContext.SubtitleDownloads.Count());
+            Assert.Equal(filesBefore, Directory.GetFiles(fixture.MediaDirectory, "*", SearchOption.AllDirectories));
+            fixture.TranslationQueue.Verify(
+                queue => queue.CreateImportRequest(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                    It.IsAny<int?>(), It.IsAny<MediaType>(), It.IsAny<string?>(), It.IsAny<bool>()),
+                Times.Never);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Preview_RepeatedRefWithin60s_AnswersFromCacheWithoutRefetching()
+    {
+        // The anti-double-click window: the same ref previewed twice inside
+        // 60s hits the provider exactly once.
+        var provider = new CountingPreviewProvider(cues: 5);
+        var (searchResponse, controller, fixture) = await SearchForPreviewAsync(provider);
+        try
+        {
+            var first = await controller.Preview(
+                new SubtitlePreviewRequestBody(searchResponse.CacheKey, 0, fixture.MovieId, "Movie"),
+                CancellationToken.None);
+            var second = await controller.Preview(
+                new SubtitlePreviewRequestBody(searchResponse.CacheKey, 0, fixture.MovieId, "Movie"),
+                CancellationToken.None);
+
+            Assert.IsType<OkObjectResult>(first);
+            Assert.IsType<OkObjectResult>(second);
+            Assert.Equal(1, provider.DownloadCalls);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Preview_WhisperCandidate_Answers400BeforeAnyProviderCall()
+    {
+        // B04 source in the registry: a transcription candidate has no
+        // subtitle bytes to preview — refused without touching the provider.
+        var provider = new WhisperCandidateProvider();
+        var (searchResponse, controller, fixture) = await SearchForPreviewAsync(provider);
+        try
+        {
+            var result = Assert.IsType<BadRequestObjectResult>(await controller.Preview(
+                new SubtitlePreviewRequestBody(searchResponse.CacheKey, 0, fixture.MovieId, "Movie"),
+                CancellationToken.None));
+
+            Assert.Equal(400, result.StatusCode);
+            using var body = Body(result);
+            Assert.NotNull(body.RootElement.GetProperty("message").GetString());
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Preview_UnknownOrExpiredCacheKey_Answers410()
+    {
+        using var fixture = new SubtitleEndpointFixture(new CountingPreviewProvider());
+        var controller = CreateFullController(fixture);
+
+        var result = Assert.IsType<ObjectResult>(await controller.Preview(
+            new SubtitlePreviewRequestBody("no-such-key", 0, fixture.MovieId, "Movie"),
+            CancellationToken.None));
+
+        Assert.Equal(410, result.StatusCode);
+        using var body = Body(result);
+        Assert.NotNull(body.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Preview_OutOfRangeIndex_Answers400()
+    {
+        var (searchResponse, controller, fixture) = await SearchForPreviewAsync(new CountingPreviewProvider());
+        try
+        {
+            var result = Assert.IsType<BadRequestObjectResult>(await controller.Preview(
+                new SubtitlePreviewRequestBody(searchResponse.CacheKey, 7, fixture.MovieId, "Movie"),
+                CancellationToken.None));
+
+            Assert.Equal(400, result.StatusCode);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Preview_ForAnotherMediaItem_Answers400()
+    {
+        // QA3 P3-2 ownership binding, same contract as the download endpoint.
+        var (searchResponse, controller, fixture) = await SearchForPreviewAsync(new CountingPreviewProvider());
+        try
+        {
+            var result = Assert.IsType<BadRequestObjectResult>(await controller.Preview(
+                new SubtitlePreviewRequestBody(searchResponse.CacheKey, 0, fixture.MovieId + 1, "Movie"),
+                CancellationToken.None));
+
+            Assert.Equal(400, result.StatusCode);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
     }
 
     // --- pin (⑤/⑥): response shape of the effective row.
