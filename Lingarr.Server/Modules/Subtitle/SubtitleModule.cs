@@ -38,6 +38,11 @@ public static class SubtitleModule
         services.AddScoped<CompositePostProcessor>();
         services.AddScoped<ISubtitleVariantBatchService, SubtitleVariantBatchService>();
 
+        // B10: the manual single-file variant conversion resolves the stage's
+        // concrete type — the ISubtitlePostProcessor registration above is
+        // shared with the composite and cannot be resolved by class.
+        services.AddScoped<ChineseVariantStage>();
+
         // Two-file bilingual merge (B06): reuses the scoped SubtitleService
         // above for reading/writing/naming — stateless itself, scoped wiring
         // is exact.

@@ -761,6 +761,15 @@
                     <span class="mono text-secondary-content flex-none text-[10.5px]">
                         {{ formatBytes(file.bytes) }}
                     </span>
+                    <!-- B10:行级「工具」入口——五个手动动作的聚合面板 -->
+                    <button
+                        type="button"
+                        class="border-line text-secondary-content hover:text-primary-content flex-none cursor-pointer rounded border px-1.5 py-px text-[10.5px] font-semibold transition-colors"
+                        :title="t('mediaDetail.b10tools.openTitle')"
+                        data-test="subtitle-file-tools"
+                        @click="openTools(file)">
+                        {{ t('mediaDetail.b10tools.open') }}
+                    </button>
                 </div>
 
                 <!-- ═══ 内嵌轨道分区:每轨一行(语言 chip · 标题 · codec);
@@ -915,6 +924,17 @@
         :embedded-tracks="searchEmbeddedTracks"
         @close="searchTarget = null"
         @downloaded="load" />
+
+    <!-- B10:字幕工具面板 —— 一次只针对一个字幕文件行;done 后整页刷新
+         (文件字节/历史/覆盖芯片都可能变化) -->
+    <SubtitleToolsModal
+        v-if="toolsTarget"
+        :file="toolsTarget.file"
+        :owner="toolsTarget.owner"
+        :target-languages="effectiveTargetLanguages"
+        :request="toolsTarget.request"
+        @close="toolsTarget = null"
+        @done="load" />
 </template>
 
 <script setup lang="ts">
@@ -931,6 +951,7 @@ import { translationRequestService } from '@/cells/app/api/translationRequestSer
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
 import SubtitleSearchModal from '@/cells/library/components/SubtitleSearchModal.vue'
+import SubtitleToolsModal from '@/cells/library/components/SubtitleToolsModal.vue'
 import VirtualEpisodeList from '@/cells/library/components/VirtualEpisodeList.vue'
 import { useTranslateStore } from '@/cells/app/stores/translate'
 import { useUiStore } from '@/cells/app/stores/ui'
@@ -1792,6 +1813,54 @@ watch(subtitleFiles, (files) => {
         keys.has(mergeFileKey(file))
     )
 })
+
+// ── 字幕工具面板(B10:行级动作聚合)══════════════════════════════
+// 五个动作全部复用既有/本批端点:重译(translate store → api/translate/file)、
+// 双语重渲染(translation-request/convert)、时间轴校正+还原(B05)、繁简
+// 转换与手动偏移(api/subtitle/tools,本批);面板本体在 SubtitleToolsModal。
+
+/// 面板目标:文件行 + 其可寻址归属(Movie/Episode,B06 的归属解析复用)+
+/// 写出该文件的最新翻译请求(双语重渲染的输入;无匹配为 null)。
+interface ToolsTarget {
+    file: IMediaSubtitleFile
+    owner: { mediaType: 'Movie' | 'Episode'; mediaId: number } | null
+    request: ITranslationRequest | null
+}
+const toolsTarget = ref<ToolsTarget | null>(null)
+
+/// 写出该文件的最新翻译请求:translatedSubtitle 与文件全路径一致(分隔符
+/// 归一后比较),多条时取 updatedAt 最新——convert 端点以请求 id 寻址。
+function toolsRequestFor(file: IMediaSubtitleFile): ITranslationRequest | null {
+    const target = (file.directory + '/' + file.fileName).toLowerCase()
+    let best: ITranslationRequest | null = null
+    for (const request of history.value) {
+        if (!request.translatedSubtitle) continue
+        if (request.translatedSubtitle.replace(/\\/g, '/').toLowerCase() !== target) continue
+        if (!best || (request.updatedAt ?? '') > (best.updatedAt ?? '')) {
+            best = request
+        }
+    }
+    return best
+}
+
+function openTools(file: IMediaSubtitleFile): void {
+    toolsTarget.value = {
+        file,
+        owner: mergeOwnerOf(file),
+        request: toolsRequestFor(file)
+    }
+}
+
+/// 重译的目标语言集合:该媒体的有效目标(覆盖优先),显示名沿用已配置
+/// 条目,覆盖里全局表外的码合成大写回退(与页头同一规则)。
+const effectiveTargetLanguages = computed<ILanguage[]>(() =>
+    effectiveTargetCodes.value.map((code) => {
+        const configured = (
+            (settingStore.getSetting(SETTINGS.TARGET_LANGUAGES) ?? []) as ILanguage[]
+        ).find((language) => language.code.toLowerCase() === code)
+        return configured ?? { name: code.toUpperCase(), code: code.toUpperCase() }
+    })
+)
 
 /// Extractable embedded tracks of the CURRENT search unit (movie: all rows;
 /// episode: that episode's rows), handed to the search modal for its

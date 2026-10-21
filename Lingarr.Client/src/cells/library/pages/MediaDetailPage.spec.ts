@@ -7,6 +7,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { mount, VueWrapper } from '@vue/test-utils'
 import MediaDetailPage from '@/cells/library/pages/MediaDetailPage.vue'
 import SubtitleSearchModal from '@/cells/library/components/SubtitleSearchModal.vue'
+import SubtitleToolsModal from '@/cells/library/components/SubtitleToolsModal.vue'
 import DrillDownPage from '@/cells/app/components/DrillDownPage.vue'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useToastStore } from '@/cells/app/stores/toast'
@@ -2315,5 +2316,111 @@ describe('MediaDetailPage · 双语合并(B06)', () => {
         )
         // the picks survive a failure so the user can retry or adjust
         expect(card.find('[data-test="bilingual-merge-bar"]').exists()).toBe(true)
+    })
+})
+
+describe('MediaDetailPage · 字幕工具面板入口(B10 · 电影)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.clearAllMocks()
+        libraryMock.mockResolvedValue({
+            items: [movieItem],
+            totalCount: 1,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        requestsMock.mockResolvedValue(emptyPage<ITranslationRequest>())
+        getActiveTranslationsMock.mockResolvedValue([])
+        mediaSubtitlesMock.mockResolvedValue(
+            subtitlesPayload({
+                files: [
+                    {
+                        fileName: 'dune.zh.srt',
+                        directory: '/media/movies',
+                        languages: ['zh'],
+                        format: 'srt',
+                        bytes: 2048
+                    }
+                ],
+                embeddedScanned: true
+            })
+        )
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('the row tools button opens the panel with owner/targets/matched request', async () => {
+        // the bilingual re-render input: the latest request whose written
+        // output IS the row's file (translatedSubtitle path match)
+        requestsMock.mockResolvedValue({
+            items: [
+                {
+                    id: 4,
+                    jobId: 'job-4',
+                    title: 'Dune: Part Two',
+                    sourceLanguage: 'en',
+                    targetLanguage: 'zh',
+                    translatedSubtitle: '/media/movies/dune.en.srt',
+                    isBilingual: true,
+                    mediaId: 7,
+                    mediaType: 'Movie',
+                    status: 'Completed',
+                    source: 'Library',
+                    progress: 100,
+                    updatedAt: '2026-10-01T00:00:00Z',
+                    createdAt: '2026-10-01T00:00:00Z'
+                },
+                {
+                    id: 5,
+                    jobId: 'job-5',
+                    title: 'Dune: Part Two',
+                    sourceLanguage: 'en',
+                    targetLanguage: 'zh',
+                    translatedSubtitle: '/media/movies/dune.zh.srt',
+                    isBilingual: false,
+                    mediaId: 7,
+                    mediaType: 'Movie',
+                    status: 'Completed',
+                    source: 'Library',
+                    progress: 100,
+                    updatedAt: '2026-10-02T00:00:00Z',
+                    createdAt: '2026-10-02T00:00:00Z'
+                }
+            ],
+            totalCount: 2,
+            pageNumber: 1,
+            pageSize: 20
+        })
+        const { wrapper } = await mountDetail('movie', '/library/movie/7')
+
+        // the row-level entry exists and opens the teleported panel
+        const button = wrapper.find('[data-test="subtitle-file-tools"]')
+        expect(button.exists()).toBe(true)
+        await button.trigger('click')
+        await settle()
+
+        const modal = wrapper.findComponent(SubtitleToolsModal)
+        expect(modal.exists()).toBe(true)
+        expect(document.querySelector('[data-test="subtitle-tools-modal"]')).toBeTruthy()
+
+        // the panel addresses the clicked row with the movie owner, the
+        // effective targets, and the request that wrote this file (id 5 —
+        // the path match wins over the newer-but-other-file request id 4)
+        const props = modal.props() as {
+            file: { fileName: string }
+            owner: { mediaType: string; mediaId: number } | null
+            targetLanguages: { code: string }[]
+            request: { id: number } | null
+        }
+        expect(props.file.fileName).toBe('dune.zh.srt')
+        expect(props.owner).toEqual({ mediaType: 'Movie', mediaId: 7 })
+        expect(props.targetLanguages.map((language) => language.code)).toContain('ZH')
+        expect(props.request?.id).toBe(5)
+
+        // teleported DOM does not leak into later tests
+        wrapper.unmount()
+        expect(document.querySelector('[data-test="subtitle-tools-modal"]')).toBeNull()
     })
 })

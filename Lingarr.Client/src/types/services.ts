@@ -198,12 +198,82 @@ export interface IBilingualMergeResponse {
     secondaryOnlyCues: number
 }
 
+/// POST api/timeline-sync/sync request (B05 endpoint; the B10 subtitle
+/// tools panel is its second consumer). The subtitle path must provably
+/// belong to the named media — the server rejects foreign paths.
+export interface ITimelineSyncRequest {
+    mediaType: 'Movie' | 'Episode'
+    mediaId: number
+    subtitlePath: string
+}
+
+/// POST api/timeline-sync/sync response: the sync verdict as data, never an
+/// HTTP error — status is one of corrected | no-correction-needed |
+/// already-corrected | failed, with the reason when it is not "corrected".
+export interface ITimelineSyncResponse {
+    status: string
+    reason: string | null
+    ratio: number
+    offsetSeconds: number
+    score: number
+    cues: number
+}
+
+/// POST api/subtitle/tools/shift request (B10): move every cue of one owned
+/// subtitle file by ±offsetMs — the R=1 case of the B05 timeline transform,
+/// so a .lingarr-tl-bk backup gates it exactly like an automated correction.
+export interface ISubtitleShiftRequest {
+    mediaType: 'Movie' | 'Episode'
+    mediaId: number
+    subtitlePath: string
+    offsetMs: number
+}
+
+/// POST api/subtitle/tools/shift response: the applied offset plus the
+/// rewriter's real counts (clampedCues = cues lifted to zero / repaired).
+export interface ISubtitleShiftResponse {
+    subtitlePath: string
+    offsetMs: number
+    cues: number
+    clampedCues: number
+    lastEndSeconds: number
+}
+
+/// POST api/subtitle/tools/variant request (B10): convert one owned
+/// subtitle file's Chinese variant — the manual counterpart of the B01
+/// library batch (same conversion core, same idempotence).
+export interface ISubtitleVariantRequest {
+    mediaType: 'Movie' | 'Episode'
+    mediaId: number
+    subtitlePath: string
+    mode: 'simplified' | 'traditional'
+}
+
+/// POST api/subtitle/tools/variant response: changed=false is a no-change
+/// verdict (already in the target variant / nothing Chinese) delivered as
+/// 200 — the batch's skip semantics, never an error.
+export interface ISubtitleVariantResponse {
+    changed: boolean
+    reason: string | null
+}
+
 export interface ISubtitleService {
     collect<T>(path: string): Promise<T>
     /// B06: two-file bilingual merge (server-side pairing by cue overlap;
     /// unpaired cues pass through monolingual). The output lands next to
     /// the media as {base}.{primary}.{secondary}.srt|ass.
     mergeBilingual<T>(request: IBilingualMergeRequest): Promise<T>
+    /// B05: sync one owned subtitle file against its media's audio. The
+    /// response carries the verdict as data (see ITimelineSyncResponse).
+    timelineSync<T>(request: ITimelineSyncRequest): Promise<T>
+    /// B05: restore a synchronized/shifted subtitle file from its
+    /// .lingarr-tl-bk backup (the backup moves back over the file).
+    timelineRestore<T>(request: ITimelineSyncRequest): Promise<T>
+    /// B10: shift one owned subtitle file's cues by ±offsetMs (the R=1 case
+    /// of the B05 rewriter's transform; backup-gated like a correction).
+    shiftSubtitle<T>(request: ISubtitleShiftRequest): Promise<T>
+    /// B10: single-file Chinese variant conversion (the B01 batch's core).
+    convertVariant<T>(request: ISubtitleVariantRequest): Promise<T>
 }
 
 export interface IParsedSubtitleFilename {

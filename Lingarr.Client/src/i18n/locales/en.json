@@ -1249,6 +1249,68 @@
             "noOwnerTitle": "The two files must belong to the same movie or episode",
             "doneToast": "Merged {paired}/{count} paired cues → {file}",
             "failedToast": "Bilingual merge failed: {message}"
+        },
+        "b10tools": {
+            "open": "Tools",
+            "openTitle": "Open the subtitle tools panel for this file",
+            "title": "Subtitle tools",
+            "noOwnerTitle": "The file cannot be attributed to a single movie or episode",
+            "formatUnsupportedTitle": "Only .srt/.ass/.ssa/.vtt files support this action",
+            "retranslate": {
+                "title": "Re-translate",
+                "hint": "Creates a new translation request with this file as the source",
+                "noTarget": "No target language configured",
+                "notTranslatable": "Dual-language or unknown-language files cannot start a re-translation",
+                "action": "Re-translate",
+                "queuedToast": "Re-translation queued · request #{id}",
+                "failedToast": "Queueing the re-translation failed: {message}"
+            },
+            "rerender": {
+                "title": "Bilingual re-render",
+                "currentMono": "current form: monolingual",
+                "currentBi": "current form: bilingual",
+                "formMonolingual": "monolingual",
+                "formBilingual": "bilingual",
+                "toBilingual": "Render bilingual",
+                "toMono": "Render monolingual",
+                "noRequestTitle": "No completed translation request wrote this file",
+                "doneToast": "Re-rendered as {form}",
+                "noChangeToast": "Already in the requested form — nothing written",
+                "failedToast": "Re-render failed: {message}"
+            },
+            "timeline": {
+                "title": "Timeline sync",
+                "hint": "Correlates the cues against the media audio",
+                "action": "Sync timeline",
+                "restore": "Restore backup",
+                "doneToast": "Timeline corrected · {cues} cues · {offsetMs} ms",
+                "noopToast": "Already aligned — nothing written",
+                "alreadyToast": "A previous correction's backup exists — restore it first",
+                "failedToast": "Timeline sync failed: {reason}",
+                "restoreDone": "Backup restored — the file is back to its pre-correction bytes",
+                "restoreFailed": "Restore failed: {message}"
+            },
+            "variant": {
+                "title": "Chinese variant",
+                "simplified": "→ Simplified",
+                "traditional": "→ Traditional",
+                "simplifiedLabel": "simplified",
+                "traditionalLabel": "traditional",
+                "action": "Convert",
+                "doneToast": "Converted to {mode}",
+                "noChangeToast": "Nothing to convert — {reason}",
+                "failedToast": "Variant conversion failed: {message}"
+            },
+            "shift": {
+                "title": "Manual shift",
+                "hint": "Moves every cue by the given milliseconds (one shift per backup cycle — restore to shift again)",
+                "label": "Offset (ms)",
+                "negativeHint": "Negative values move cues earlier, positive later",
+                "action": "Shift",
+                "invalidToast": "Enter a non-zero millisecond offset",
+                "doneToast": "Shifted {ms} ms · {cues} cues · {clamped} clamped",
+                "failedToast": "Shift failed: {message}"
+            }
         }
     },
     "cmdk": {

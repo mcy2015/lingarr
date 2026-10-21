@@ -1249,6 +1249,68 @@
             "noOwnerTitle": "两个文件须属于同一电影或剧集单集",
             "doneToast": "已合并：{paired}/{count} 条配对 → {file}",
             "failedToast": "双语合并失败：{message}"
+        },
+        "b10tools": {
+            "open": "工具",
+            "openTitle": "打开此文件的字幕工具面板",
+            "title": "字幕工具",
+            "noOwnerTitle": "该文件无法归属到单一电影或剧集单集",
+            "formatUnsupportedTitle": "仅 .srt/.ass/.ssa/.vtt 文件支持此操作",
+            "retranslate": {
+                "title": "重新翻译",
+                "hint": "以此文件为源创建新的翻译请求",
+                "noTarget": "未配置目标语言",
+                "notTranslatable": "双语言或未知语言的文件无法发起重译",
+                "action": "重新翻译",
+                "queuedToast": "重译已入队 · 请求 #{id}",
+                "failedToast": "重译入队失败：{message}"
+            },
+            "rerender": {
+                "title": "双语重渲染",
+                "currentMono": "当前形态：单语",
+                "currentBi": "当前形态：双语",
+                "formMonolingual": "单语",
+                "formBilingual": "双语",
+                "toBilingual": "渲染为双语",
+                "toMono": "渲染为单语",
+                "noRequestTitle": "没有写出此文件的翻译请求",
+                "doneToast": "已重渲染为{form}",
+                "noChangeToast": "已处于目标形态——未写入",
+                "failedToast": "重渲染失败：{message}"
+            },
+            "timeline": {
+                "title": "时间轴校正",
+                "hint": "与媒体音频做包络相关校正",
+                "action": "校正时间轴",
+                "restore": "还原备份",
+                "doneToast": "时间轴已校正 · {cues} 条 · {offsetMs} 毫秒",
+                "noopToast": "已对齐——未写入",
+                "alreadyToast": "存在上次校正的备份——请先还原",
+                "failedToast": "时间轴校正未通过：{reason}",
+                "restoreDone": "备份已还原——文件回到校正前的字节",
+                "restoreFailed": "还原失败：{message}"
+            },
+            "variant": {
+                "title": "繁简转换",
+                "simplified": "→ 简体",
+                "traditional": "→ 繁體",
+                "simplifiedLabel": "简体",
+                "traditionalLabel": "繁体",
+                "action": "转换",
+                "doneToast": "已转换为{mode}",
+                "noChangeToast": "无需转换——{reason}",
+                "failedToast": "繁简转换失败：{message}"
+            },
+            "shift": {
+                "title": "手动偏移",
+                "hint": "将全部 cue 平移指定毫秒（一个备份周期仅可偏移一次——再次偏移需先还原）",
+                "label": "偏移（毫秒）",
+                "negativeHint": "负值提前，正值延后",
+                "action": "偏移",
+                "invalidToast": "请输入非零的毫秒偏移量",
+                "doneToast": "已偏移 {ms} 毫秒 · {cues} 条 · 钳制 {clamped} 条",
+                "failedToast": "偏移失败：{message}"
+            }
         }
     },
     "cmdk": {
