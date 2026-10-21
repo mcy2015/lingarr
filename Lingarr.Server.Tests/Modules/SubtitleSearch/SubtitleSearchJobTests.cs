@@ -25,6 +25,7 @@ using Lingarr.Server.Modules.SubtitleSearch.Requests;
 using Lingarr.Server.Modules.SubtitleSearch.Scoring;
 using Lingarr.Server.Modules.SubtitleSearch.Telemetry;
 using Lingarr.Server.Modules.Translation;
+using Hangfire;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -598,11 +599,19 @@ public class SubtitleSearchJobTests
             services.AddScoped<SubtitleSearchRequestBuilder>();
             services.AddScoped<SubtitleSearchQueueService>();
             services.AddScoped<SubtitleSearchOrchestrator>();
+            // B08: the coverage refresher's target-language resolver — same
+            // scoped lifetime as the production module (SubtitleSearchModule).
+            services.AddScoped<TargetLanguageResolver>();
             services.AddScoped<SubtitleCoverageRefresher>();
             // B01: the pipeline's post-processing dependency, with NO stage
             // registered — the empty composite keeps these job tests at the
             // pre-B01 download behaviour.
             services.AddScoped<CompositePostProcessor>();
+            // B03: the download pipeline's Plex-refresh enqueue dependency.
+            // Production resolves IBackgroundJobClient from the global
+            // Hangfire registration; here a loose mock double stands in (the
+            // tests assert the round's own behaviour, never the enqueue).
+            services.AddSingleton<IBackgroundJobClient>(new Mock<IBackgroundJobClient>().Object);
             services.AddScoped<SubtitleDownloadPipeline>();
             RootProvider = services.BuildServiceProvider();
 

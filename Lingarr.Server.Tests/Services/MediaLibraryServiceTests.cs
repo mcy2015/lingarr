@@ -8,7 +8,9 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 using Lingarr.Server.Modules.Infrastructure;
@@ -46,7 +48,9 @@ public class MediaLibraryServiceTests : IDisposable
     public void Dispose() => _dbContext.Database.EnsureDeleted();
 
     private MediaLibraryService CreateService() =>
-        new(_dbContext, _settingService.Object, _costService.Object, null!);
+        new(_dbContext, _settingService.Object, _costService.Object,
+            new TargetLanguageResolver(_settingService.Object),
+            NullLogger<MediaLibraryService>.Instance);
 
     private async Task<Show> SeedShowAsync(
         string title,

@@ -11,6 +11,7 @@ using Lingarr.Core.Enum;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
 using Lingarr.Server.Modules.Media;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Translation;
 using Microsoft.Data.Sqlite;
@@ -89,6 +90,7 @@ public class MediaLibraryServiceSqliteTests : IDisposable
 
     private MediaLibraryService CreateService() =>
         new(_dbContext, _settingService.Object, _costService.Object,
+            new TargetLanguageResolver(_settingService.Object),
             NullLogger<MediaLibraryService>.Instance);
 
     private async Task<Show> SeedShowAsync(
@@ -516,6 +518,7 @@ public class MediaLibraryServiceSqliteTests : IDisposable
 
         var service = new MediaLibraryService(
             dbContext, _settingService.Object, _costService.Object,
+            new TargetLanguageResolver(_settingService.Object),
             NullLogger<MediaLibraryService>.Instance);
         var result = await service.GetLibrary(null, "fall", null, null, "Title", true, 1, 20);
 

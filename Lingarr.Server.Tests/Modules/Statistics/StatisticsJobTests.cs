@@ -14,6 +14,7 @@ using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Lingarr.Server.Modules.Translation;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -145,7 +146,9 @@ public class StatisticsJobTests : IDisposable
             new LanguageCodeService(),
             new Mock<ISettingService>().Object),
         _scheduleService.Object,
-        settingService ?? new Mock<ISettingService>().Object,
+        // B08: the job resolves each media's effective target set through
+        // the shared resolver; the double stays the resolver's setting input.
+        new TargetLanguageResolver(settingService ?? new Mock<ISettingService>().Object),
         NullLogger<StatisticsJob>.Instance,
         finalizeChunkSize,
         incrementalScanBatchSize);
@@ -540,6 +543,69 @@ public class StatisticsJobTests : IDisposable
             .ToDictionaryAsync(e => e.EpisodeNumber, e => e.NeedsTranslation);
         Assert.False(flags[1]); // zh audio exempts even without subtitles
         Assert.True(flags[2]);  // unknown audio never exempts (conservative)
+    }
+
+    // ── B08: per-media target-language overrides in the daily scan ───
+    //
+    // The daily scan resolves each row's effective set through the same
+    // TargetLanguageResolver the single-media refresher uses — an override
+    // survives the nightly recompute instead of being clobbered back to the
+    // global verdict.
+
+    [Fact]
+    public async Task Execute_MovieTargetOverride_ReplacesTheGlobalVerdict()
+    {
+        // Global [zh,en], audio en: with the override [zh] the en audio no
+        // longer exempts and zh is missing → needs. NULL (no override) keeps
+        // the global verdict (en exempts), "" judges "nothing missing".
+        var (overridden, _) = await SeedMovieAsync(40, audioLanguages: ["en"]);
+        overridden.TargetLanguagesOverride = "zh";
+        await SeedMovieAsync(41, audioLanguages: ["en"]);
+        var (explicitNone, _) = await SeedMovieAsync(42, audioLanguages: ["en"]);
+        explicitNone.TargetLanguagesOverride = string.Empty;
+        await _dbContext.SaveChangesAsync();
+
+        await CreateJob(settingService: TargetsService("zh", "en")).Execute();
+
+        var rows = await _dbContext.Movies.AsNoTracking()
+            .ToDictionaryAsync(m => m.Id, m => new { m.NeedsTranslation, m.NoSubtitleNeeded });
+        Assert.True(rows[40].NeedsTranslation);  // en dropped from the targets
+        Assert.False(rows[40].NoSubtitleNeeded);
+        Assert.False(rows[41].NeedsTranslation); // regression gate: global list
+        Assert.True(rows[41].NoSubtitleNeeded);  // en audio exempts under [zh,en]
+        Assert.False(rows[42].NeedsTranslation); // explicit「无目标」
+        Assert.False(rows[42].NoSubtitleNeeded); // …not the audio exemption
+    }
+
+    [Fact]
+    public async Task Execute_ShowTargetOverride_AppliesToEveryEpisode()
+    {
+        // Global [zh,en]; the show's override [zh] must govern BOTH episodes
+        // (en audio stops exempting), while an un-overridden sibling show
+        // keeps the global verdict.
+        var overriddenShow = await SeedShowAsync(31, "show31/s01");
+        overriddenShow.TargetLanguagesOverride = "zh";
+        var followerShow = await SeedShowAsync(32, "show32/s01");
+        await _dbContext.SaveChangesAsync();
+        foreach (var show in new[] { overriddenShow, followerShow })
+        {
+            foreach (var episode in _dbContext.Episodes.Where(e => e.Season.ShowId == show.Id))
+            {
+                episode.AudioLanguages = ["en"];
+            }
+        }
+        await _dbContext.SaveChangesAsync();
+
+        await CreateJob(settingService: TargetsService("zh", "en")).Execute();
+
+        var flags = await _dbContext.Episodes.AsNoTracking()
+            .Where(e => e.Season.ShowId == overriddenShow.Id || e.Season.ShowId == followerShow.Id)
+            .Select(e => new { ShowId = e.Season.ShowId, e.NeedsTranslation })
+            .ToListAsync();
+        Assert.All(flags.Where(row => row.ShowId == overriddenShow.Id),
+            row => Assert.True(row.NeedsTranslation)); // en no longer a target → zh missing
+        Assert.All(flags.Where(row => row.ShowId == followerShow.Id),
+            row => Assert.False(row.NeedsTranslation)); // global list → en audio exempts
     }
 
     [Fact]

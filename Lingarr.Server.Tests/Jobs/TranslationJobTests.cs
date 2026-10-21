@@ -121,7 +121,8 @@ public class TranslationJobTests
             // below carry no MediaId, so the post-writeback refresh is a
             // no-op and never reaches the relational ExecuteUpdate path.
             new SubtitleCoverageRefresher(
-                _context, _subtitleService.Object, _settings, NullLogger<SubtitleCoverageRefresher>.Instance),
+                _context, _subtitleService.Object, new TargetLanguageResolver(_settings),
+                NullLogger<SubtitleCoverageRefresher>.Instance),
             HubContext(),
             new Mock<IBackgroundJobClient>().Object);
     }

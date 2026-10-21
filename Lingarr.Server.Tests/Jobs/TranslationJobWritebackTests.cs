@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
@@ -118,7 +121,8 @@ public class TranslationJobWritebackTests : IDisposable
             _eventService.Object,
             new Mock<IGlossaryService>().Object,
             new SubtitleCoverageRefresher(
-                _dbContext, _subtitleService, _settings, NullLogger<SubtitleCoverageRefresher>.Instance),
+                _dbContext, _subtitleService, new TargetLanguageResolver(_settings),
+                NullLogger<SubtitleCoverageRefresher>.Instance),
             _hub.Object,
             _backgroundJobs.Object);
     }
@@ -154,13 +158,16 @@ public class TranslationJobWritebackTests : IDisposable
         new Mock<IMediaService>().Object,
         new Mock<IMediaLibraryService>().Object,
         _subtitleService,
-        new Mock<ISettingService>().Object,
         new AudioLanguageService(
             _dbContext,
             new Mock<ISettingService>().Object,
             NullHttpClientFactory.Instance,
             NullLogger<AudioLanguageService>.Instance),
-        _dbContext);
+        _dbContext,
+        new TargetLanguageResolver(new Mock<ISettingService>().Object),
+        new SubtitleCoverageRefresher(
+            _dbContext, _subtitleService, new TargetLanguageResolver(new Mock<ISettingService>().Object),
+            NullLogger<SubtitleCoverageRefresher>.Instance));
 
     private static MediaSubtitlesResponse FilesOf(ActionResult<MediaSubtitlesResponse> action) =>
         Assert.IsType<MediaSubtitlesResponse>(Assert.IsType<OkObjectResult>(action.Result).Value!);
@@ -348,6 +355,20 @@ public class TranslationJobWritebackTests : IDisposable
     // ── Plex refresh enqueue (B03) ─────────────────────────────────────
 
     /// <summary>
+    /// Verify expression for the Plex refresh fire-and-forget enqueue.
+    /// Hangfire's <c>Enqueue&lt;T&gt;</c> is an extension method over
+    /// <c>IBackgroundJobClient.Create</c> (unverifiable by Moq), so the
+    /// assertion targets the underlying Create call and matches the job the
+    /// extension builds from the lambda: the PlexRefreshJob type and its
+    /// parameterless Execute entry point, in the fire-and-forget state.
+    /// </summary>
+    private static Expression<Func<IBackgroundJobClient, string>> PlexRefreshCreate() =>
+        client => client.Create(
+            It.Is<Job>(job => job.Type == typeof(PlexRefreshJob)
+                && job.Method.Name == nameof(PlexRefreshJob.Execute)),
+            It.IsAny<EnqueuedState>());
+
+    /// <summary>
     /// Minimal movie writeback: one request, one zh landing — the shape the
     /// Plex refresh tests below reuse.
     /// </summary>
@@ -395,9 +416,7 @@ public class TranslationJobWritebackTests : IDisposable
         await _job.Execute(request, CancellationToken.None);
 
         Assert.Equal(TranslationStatus.Completed, request.Status);
-        _backgroundJobs.Verify(
-            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
-            Times.Once);
+        _backgroundJobs.Verify(PlexRefreshCreate(), Times.Once);
     }
 
     [Fact]
@@ -409,9 +428,7 @@ public class TranslationJobWritebackTests : IDisposable
         await _job.Execute(request, CancellationToken.None);
 
         Assert.Equal(TranslationStatus.Completed, request.Status);
-        _backgroundJobs.Verify(
-            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
-            Times.Never);
+        _backgroundJobs.Verify(PlexRefreshCreate(), Times.Never);
     }
 
     // ── doubles ────────────────────────────────────────────────────────

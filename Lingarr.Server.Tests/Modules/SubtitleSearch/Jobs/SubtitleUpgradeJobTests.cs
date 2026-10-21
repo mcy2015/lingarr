@@ -71,10 +71,12 @@ public class SubtitleUpgradeJobTests
     public async Task Execute_BetterCandidate_LandsWithUpgradeSourceAndDeletesTheOldFile()
     {
         // Acceptance shape: old score 70, margin 3 (default), auto score 75
-        // (default) → the line is max(75, 73) = 75; the candidate scores 80
-        // (title 55 + year 15 + full release tokens 10) → upgrade. The new
-        // file lands, the OLD path (different from the landing path) is
-        // deleted, and the history row records Source=Upgrade.
+        // (default) → the line is max(75, 73) = 75; the candidate scores 78
+        // (title 55 + year 15 + release tokens 8 — the request release name
+        // carries the video's ".mkv" token, which no candidate release ever
+        // matches) → upgrade. The new file lands, the OLD path (different
+        // from the landing path) is deleted, and the history row records
+        // Source=Upgrade.
         using var fixture = new UpgradeJobFixture(request => [Candidate()]);
         await fixture.Settings.SetSetting(SettingKeys.SubtitleSearch.UpgradeEnabled, "true");
         var oldPath = fixture.SeedSucceededDownload(
@@ -89,7 +91,7 @@ public class SubtitleUpgradeJobTests
 
         var upgrade = await fixture.HistoryRowAsync(SubtitleDownloadSource.Upgrade);
         Assert.Equal(SubtitleDownloadResult.Succeeded, upgrade.Result);
-        Assert.Equal(80, upgrade.MatchScore);
+        Assert.Equal(78, upgrade.MatchScore);
         Assert.Equal(landed, upgrade.FilePath);
         Assert.Equal("zh", upgrade.Language);
 
@@ -127,7 +129,7 @@ public class SubtitleUpgradeJobTests
     public async Task Execute_BelowTheUpgradedLine_KeepsEverythingAndRecordsLowConfidence()
     {
         // Old score 79, margin 3 → the line is max(75, 82) = 82; the best
-        // candidate scores 80 → nothing lands, nothing is deleted, and the
+        // candidate scores 78 → nothing lands, nothing is deleted, and the
         // LowConfidence row answers "why did nothing change" with both
         // scores (the honest skip, never a silent one).
         using var fixture = new UpgradeJobFixture(request => [Candidate()]);
@@ -143,10 +145,10 @@ public class SubtitleUpgradeJobTests
 
         var skip = await fixture.HistoryRowAsync(SubtitleDownloadSource.Upgrade);
         Assert.Equal(SubtitleDownloadResult.LowConfidenceSkipped, skip.Result);
-        Assert.Equal(80, skip.MatchScore);
+        Assert.Equal(78, skip.MatchScore);
         Assert.Equal(string.Empty, skip.FilePath);
         Assert.NotNull(skip.Error);
-        Assert.Contains("80 (< 82", skip.Error!);
+        Assert.Contains("78 (< 82", skip.Error!);
         Assert.Contains("old score 79", skip.Error!);
 
         Assert.Equal(1, fixture.Source.SearchCalls);
@@ -156,13 +158,14 @@ public class SubtitleUpgradeJobTests
     [Fact]
     public async Task Execute_SameScore_NeverReplaces()
     {
-        // Anti-loop core: old score 80, candidate 80 → the line is 83, the
-        // same score is below it — identical content would otherwise be
-        // re-landed every round.
+        // Anti-loop core: old score 78, candidate 78 (the same scripted
+        // candidate the landing tests score) → the line is 81, the same
+        // score is below it — identical content would otherwise be re-landed
+        // every round.
         using var fixture = new UpgradeJobFixture(request => [Candidate()]);
         await fixture.Settings.SetSetting(SettingKeys.SubtitleSearch.UpgradeEnabled, "true");
         var oldPath = fixture.SeedSucceededDownload(
-            score: 80, fileName: "Movie.2019.WEBDL-1080p.zh.v1.srt", content: "OLD-BYTES");
+            score: 78, fileName: "Movie.2019.WEBDL-1080p.zh.v1.srt", content: "OLD-BYTES");
 
         await fixture.Job.Execute();
 
@@ -170,7 +173,7 @@ public class SubtitleUpgradeJobTests
         Assert.Equal(0, fixture.Source.DownloadCalls);
         var skip = await fixture.HistoryRowAsync(SubtitleDownloadSource.Upgrade);
         Assert.Equal(SubtitleDownloadResult.LowConfidenceSkipped, skip.Result);
-        Assert.Contains("80 (< 83", skip.Error!);
+        Assert.Contains("78 (< 81", skip.Error!);
     }
 
     [Fact]

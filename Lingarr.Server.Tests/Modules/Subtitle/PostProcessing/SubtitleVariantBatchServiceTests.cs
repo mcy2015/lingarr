@@ -195,7 +195,10 @@ public sealed class SubtitleVariantBatchServiceTests : IDisposable
         {
             SonarrId = 91,
             Title = "Pathless Show",
-            Path = null,
+            // shows.path is NOT NULL (M0001 baseline, entity required) — the
+            // "no folder" state is the empty string, exactly what the scan's
+            // root filter excludes.
+            Path = string.Empty,
             DateAdded = DateTimeOffset.UtcNow
         };
         var season = new Season { SeasonNumber = 1, Path = null, Show = show };

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -11,6 +12,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
@@ -59,6 +62,20 @@ public class SubtitleDownloadPipelineTests
     private const string SrtText = "1\r\n00:00:01,000 --> 00:00:02,000\r\nHello world\r\n";
 
     private static byte[] SrtPayload => Encoding.UTF8.GetBytes(SrtText);
+
+    /// <summary>
+    /// Verify expression for the Plex refresh fire-and-forget enqueue.
+    /// Hangfire's <c>Enqueue&lt;T&gt;</c> is an extension method over
+    /// <c>IBackgroundJobClient.Create</c> (unverifiable by Moq), so the
+    /// assertion targets the underlying Create call and matches the job the
+    /// extension builds from the lambda: the PlexRefreshJob type and its
+    /// parameterless Execute entry point, in the fire-and-forget state.
+    /// </summary>
+    private static Expression<Func<IBackgroundJobClient, string>> PlexRefreshCreate() =>
+        client => client.Create(
+            It.Is<Job>(job => job.Type == typeof(PlexRefreshJob)
+                && job.Method.Name == nameof(PlexRefreshJob.Execute)),
+            It.IsAny<EnqueuedState>());
 
     private static SubtitleCandidate Candidate(string language = "en", string provider = "fake") => new(
         provider,
@@ -487,9 +504,7 @@ public class SubtitleDownloadPipelineTests
 
         Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
         Assert.True(File.Exists(outcome.FilePath));
-        fixture.BackgroundJobs.Verify(
-            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
-            Times.Once);
+        fixture.BackgroundJobs.Verify(PlexRefreshCreate(), Times.Once);
     }
 
     [Fact]
@@ -504,9 +519,7 @@ public class SubtitleDownloadPipelineTests
             searchSessionId: null, CancellationToken.None);
 
         Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
-        fixture.BackgroundJobs.Verify(
-            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
-            Times.Never);
+        fixture.BackgroundJobs.Verify(PlexRefreshCreate(), Times.Never);
     }
 
     [Fact]
@@ -608,9 +621,9 @@ public class SubtitleDownloadPipelineTests
         Assert.Equal(2, outcome.FilesLanded);
         Assert.EndsWith(".zh.forced.srt", Path.GetFileName(outcome.FilePath));
         Assert.True(File.Exists(Path.Combine(
-            episode1.Directory, Path.GetFileNameWithoutExtension(episode1.FileName) + ".zh.forced.srt")));
+            episode1.Directory, Path.GetFileNameWithoutExtension(episode1.VideoFileName) + ".zh.forced.srt")));
         Assert.True(File.Exists(Path.Combine(
-            episode2.Directory, Path.GetFileNameWithoutExtension(episode2.FileName) + ".zh.forced.srt")));
+            episode2.Directory, Path.GetFileNameWithoutExtension(episode2.VideoFileName) + ".zh.forced.srt")));
     }
 
     // ── B07 auto-round dedupe: forced-only files are their own dimension —
@@ -694,7 +707,7 @@ public class SubtitleDownloadPipelineTests
         // Only _dbContext + _subtitleService are touched on the movie path
         // of the endpoint, so the unused collaborators stay null.
         var controller = new MediaController(
-            null!, null!, fixture.SubtitleService.Object, null!, null!, fixture.DbContext);
+            null!, null!, fixture.SubtitleService.Object, null!, fixture.DbContext, null!, null!);
         await controller.GetMediaSubtitles(MediaType.Movie, fixture.MovieId);
         Assert.Equal(1, scans); // the first view scans and primes the cache
 
@@ -1010,7 +1023,7 @@ public class SubtitleDownloadPipelineTests
             .Callback(() => scans++);
 
         var controller = new MediaController(
-            null!, null!, fixture.SubtitleService.Object, null!, null!, fixture.DbContext);
+            null!, null!, fixture.SubtitleService.Object, null!, fixture.DbContext, null!, null!);
         await controller.GetMediaSubtitles(MediaType.Show, showId);
         Assert.Equal(1, scans); // the first view scans and primes the cache
 
@@ -1323,7 +1336,8 @@ public class SubtitleDownloadPipelineTests
             Cooldowns,
             new SubtitleTelemetryService(DbContext),
             new SubtitleCoverageRefresher(
-                DbContext, SubtitleService.Object, Settings, NullLogger<SubtitleCoverageRefresher>.Instance),
+                DbContext, SubtitleService.Object, new TargetLanguageResolver(Settings),
+                NullLogger<SubtitleCoverageRefresher>.Instance),
             HubContext(),
             NullLogger<SubtitleDownloadPipeline>.Instance,
             BackgroundJobs.Object);
@@ -1368,7 +1382,8 @@ public class SubtitleDownloadPipelineTests
                 Cooldowns,
                 new SubtitleTelemetryService(DbContext),
                 new SubtitleCoverageRefresher(
-                    DbContext, subtitleService, Settings, NullLogger<SubtitleCoverageRefresher>.Instance),
+                    DbContext, subtitleService, new TargetLanguageResolver(Settings),
+                    NullLogger<SubtitleCoverageRefresher>.Instance),
                 HubContext(),
                 NullLogger<SubtitleDownloadPipeline>.Instance,
                 BackgroundJobs.Object);

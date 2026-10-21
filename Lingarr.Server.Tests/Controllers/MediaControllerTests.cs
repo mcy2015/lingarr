@@ -13,7 +13,9 @@ using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
+using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -50,13 +52,16 @@ public class MediaControllerTests
         new Mock<IMediaService>().Object,
         (library ?? new Mock<IMediaLibraryService>()).Object,
         _subtitleService.Object,
-        _settingService.Object,
         new AudioLanguageService(
             _dbContext,
             _settingService.Object,
             NullHttpClientFactory.Instance,
             NullLogger<AudioLanguageService>.Instance),
-        _dbContext);
+        _dbContext,
+        new TargetLanguageResolver(_settingService.Object),
+        new SubtitleCoverageRefresher(
+            _dbContext, _subtitleService.Object, new TargetLanguageResolver(_settingService.Object),
+            NullLogger<SubtitleCoverageRefresher>.Instance));
 
     private static Movie NewMovie(int id, string path, string fileName, string[]? audioLanguages = null) => new()
     {
@@ -426,13 +431,16 @@ public class MediaControllerTests
             media.Object,
             new Mock<IMediaLibraryService>().Object,
             _subtitleService.Object,
-            _settingService.Object,
             new AudioLanguageService(
                 _dbContext,
                 _settingService.Object,
                 NullHttpClientFactory.Instance,
                 NullLogger<AudioLanguageService>.Instance),
-            _dbContext);
+            _dbContext,
+            new TargetLanguageResolver(_settingService.Object),
+            new SubtitleCoverageRefresher(
+                _dbContext, _subtitleService.Object, new TargetLanguageResolver(_settingService.Object),
+                NullLogger<SubtitleCoverageRefresher>.Instance));
 
         await controller.GetMovies(null, null, ascending: true, pageSize: 5000, pageNumber: 0);
         await controller.GetShows(null, null, ascending: true, pageSize: 5000, pageNumber: -2);
@@ -702,4 +710,207 @@ public class MediaControllerTests
         Assert.IsType<NotFoundResult>(
             (await CreateController().SetSubtitleNeed(MediaType.Season, 1, new SubtitleNeedRequest { Needed = true })).Result);
     }
+}
+
+/// <summary>
+/// PUT api/media/{mediaType}/{id}/target-languages (B08): the per-media
+/// target-language override endpoint. Real SQLite because the endpoint
+/// refreshes the coverage-derived flags through the production
+/// SubtitleCoverageRefresher (ExecuteUpdate), and the subtitle scan is
+/// mocked empty so the need rule decides on audio alone — with global
+/// targets [zh,en] and en audio, the three stored states are fully
+/// discriminating: override [zh] → needs (en no longer exempts), NULL →
+/// exempt (global list), "" → not needing and NOT exempt (explicit
+/// 「无目标」, not the audio exemption).
+/// </summary>
+public class MediaTargetLanguagesEndpointTests : IDisposable
+{
+    private readonly SqliteConnection _connection;
+    private readonly LingarrDbContext _dbContext;
+    private readonly Mock<ISubtitleService> _subtitleService = new();
+    private readonly TargetLanguageResolver _resolver;
+    private readonly MediaController _controller;
+
+    public MediaTargetLanguagesEndpointTests()
+    {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+        _dbContext = new TargetDbContext(new DbContextOptionsBuilder<LingarrDbContext>()
+            .UseSqlite(_connection)
+            .UseSnakeCaseNamingConvention()
+            .Options);
+        _dbContext.Database.EnsureCreated();
+
+        var settings = new Mock<ISettingService>();
+        settings
+            .Setup(service => service.GetSettingAsJson<TargetLanguage>(It.IsAny<string>()))
+            .ReturnsAsync(new List<TargetLanguage>
+            {
+                new() { Name = "zh", Code = "zh" },
+                new() { Name = "en", Code = "en" }
+            });
+        _subtitleService
+            .Setup(service => service.GetAllSubtitles(It.IsAny<string>()))
+            .ReturnsAsync(new List<Subtitles>());
+
+        _resolver = new TargetLanguageResolver(settings.Object);
+        var refresher = new SubtitleCoverageRefresher(
+            _dbContext, _subtitleService.Object, _resolver,
+            NullLogger<SubtitleCoverageRefresher>.Instance);
+        _controller = new MediaController(
+            null!, null!, _subtitleService.Object, null!, _dbContext, _resolver, refresher);
+    }
+
+    public void Dispose()
+    {
+        _dbContext.Dispose();
+        _connection.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    private sealed class TargetDbContext(DbContextOptions options) : LingarrDbContext(options);
+
+    [Fact]
+    public async Task SetTargetLanguages_Movie_RoundTripsAllThreeStates()
+    {
+        var movie = new Movie
+        {
+            Id = 1,
+            RadarrId = 1,
+            Title = "Dune",
+            Path = "/movies/dune",
+            FileName = "dune.mkv",
+            DateAdded = DateTimeOffset.UtcNow,
+            AudioLanguages = ["en"]
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+
+        // override [zh]: en audio stops exempting, zh is missing → needs
+        var set = await _controller.SetTargetLanguages(
+            MediaType.Movie, 1, new TargetLanguagesRequest { Languages = ["zh"] });
+        var payload = PayloadOf(set);
+        var codes = LanguagesOf(payload);
+        Assert.NotNull(codes);
+        Assert.Equal(new[] { "zh" }, codes);
+        Assert.Equal("override", SourceOf(payload));
+        var stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 1);
+        Assert.Equal("zh", stored.TargetLanguagesOverride);
+        Assert.True(stored.NeedsTranslation);
+        Assert.False(stored.NoSubtitleNeeded);
+
+        // explicit「无目标」: nothing can be missing — and the exemption
+        // flag stays FALSE (the state is reversible, not an audio exemption)
+        var setNone = await _controller.SetTargetLanguages(
+            MediaType.Movie, 1, new TargetLanguagesRequest { Languages = [] });
+        var nonePayload = LanguagesOf(PayloadOf(setNone));
+        Assert.NotNull(nonePayload);
+        Assert.Empty(nonePayload);
+        stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 1);
+        Assert.Equal(string.Empty, stored.TargetLanguagesOverride);
+        Assert.False(stored.NeedsTranslation);
+        Assert.False(stored.NoSubtitleNeeded);
+
+        // clear (null): back to following the global list — en audio exempts
+        var cleared = await _controller.SetTargetLanguages(
+            MediaType.Movie, 1, new TargetLanguagesRequest { Languages = null });
+        var clearPayload = PayloadOf(cleared);
+        Assert.Null(LanguagesOf(clearPayload));
+        Assert.Equal("global", SourceOf(clearPayload));
+        stored = await _dbContext.Movies.AsNoTracking().SingleAsync(m => m.Id == 1);
+        Assert.Null(stored.TargetLanguagesOverride);
+        Assert.False(stored.NeedsTranslation);
+        Assert.True(stored.NoSubtitleNeeded); // the global audio exemption
+    }
+
+    [Fact]
+    public async Task SetTargetLanguages_Show_StoresOnceAndRefreshesEveryEpisode()
+    {
+        var show = new Show
+        {
+            Id = 2,
+            SonarrId = 2,
+            Title = "Shōgun",
+            Path = "/tv/shogun",
+            DateAdded = DateTimeOffset.UtcNow
+        };
+        var season = new Season
+        {
+            Id = 20,
+            SeasonNumber = 1,
+            Path = "/tv/shogun/s01",
+            ShowId = show.Id,
+            Show = show
+        };
+        season.Episodes.Add(new Episode
+        {
+            Id = 201,
+            SonarrId = 1,
+            EpisodeNumber = 1,
+            Title = "ep1",
+            Path = season.Path,
+            FileName = "shogun.s01e01.mkv",
+            SeasonId = season.Id,
+            Season = season,
+            AudioLanguages = ["en"]
+        });
+        season.Episodes.Add(new Episode
+        {
+            Id = 202,
+            SonarrId = 2,
+            EpisodeNumber = 2,
+            Title = "ep2",
+            Path = season.Path,
+            FileName = "shogun.s01e02.mkv",
+            SeasonId = season.Id,
+            Season = season,
+            AudioLanguages = ["en"]
+        });
+        show.Seasons.Add(season);
+        _dbContext.Shows.Add(show);
+        await _dbContext.SaveChangesAsync();
+
+        var set = await _controller.SetTargetLanguages(
+            MediaType.Show, 2, new TargetLanguagesRequest { Languages = ["zh"] });
+        var payload = PayloadOf(set);
+        Assert.Equal("show", (string?)payload.GetType().GetProperty("target")!.GetValue(payload));
+
+        // the SHOW carries the column; every episode's flags were refreshed
+        // under the effective [zh] set (en audio no longer exempts)
+        var storedShow = await _dbContext.Shows.AsNoTracking().SingleAsync(s => s.Id == 2);
+        Assert.Equal("zh", storedShow.TargetLanguagesOverride);
+        var episodes = await _dbContext.Episodes.AsNoTracking()
+            .Where(e => e.Season.ShowId == 2)
+            .ToListAsync();
+        Assert.Equal(2, episodes.Count);
+        Assert.All(episodes, episode =>
+        {
+            Assert.True(episode.NeedsTranslation);
+            Assert.False(episode.NoSubtitleNeeded);
+        });
+    }
+
+    [Fact]
+    public async Task SetTargetLanguages_EpisodeOrSeason_IsUnsupportedAndUnknownIds404()
+    {
+        // episodes inherit their show's override — there is no per-episode
+        // column to write, so the episode/season forms are rejected
+        Assert.IsType<NotFoundResult>(
+            await _controller.SetTargetLanguages(MediaType.Episode, 1, new TargetLanguagesRequest()));
+        Assert.IsType<NotFoundResult>(
+            await _controller.SetTargetLanguages(MediaType.Season, 1, new TargetLanguagesRequest()));
+        Assert.IsType<NotFoundResult>(
+            await _controller.SetTargetLanguages(MediaType.Movie, 999, new TargetLanguagesRequest()));
+        Assert.IsType<NotFoundResult>(
+            await _controller.SetTargetLanguages(MediaType.Show, 999, new TargetLanguagesRequest()));
+    }
+
+    private static object PayloadOf(IActionResult action) =>
+        Assert.IsType<OkObjectResult>(action).Value!;
+
+    private static string[]? LanguagesOf(object payload) =>
+        (string[]?)payload.GetType().GetProperty("languages")!.GetValue(payload);
+
+    private static string? SourceOf(object payload) =>
+        (string?)payload.GetType().GetProperty("source")!.GetValue(payload);
 }
