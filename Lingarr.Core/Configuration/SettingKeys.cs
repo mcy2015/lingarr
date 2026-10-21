@@ -35,6 +35,39 @@ public static class SettingKeys
         public const string PlexRefreshEnabled = "plex_refresh_enabled";
     }
 
+    /// <summary>
+    /// Outbound notifications (B11, the bazarr Apprise necessary subset):
+    /// one master switch, a generic webhook and a Telegram channel, plus the
+    /// comma-separated event allow-list. Every row is seeded by
+    /// <c>StartupService</c> (the batch ships no schema change — the B03/B05
+    /// precedent); the bot token is encrypted at rest and only ever leaves
+    /// through the reveal endpoint.
+    /// </summary>
+    public static class Notifications
+    {
+        /// <summary>Master switch of every outbound notification; seeded "false".</summary>
+        public const string Enabled = "notifications_enabled";
+
+        /// <summary>Generic webhook receiver — POSTs the JSON event contract.</summary>
+        public const string WebhookUrl = "notify_webhook_url";
+
+        /// <summary>Telegram bot token; encrypted at rest, seeded empty.</summary>
+        public const string TelegramBotToken = "notify_telegram_bot_token";
+
+        /// <summary>Telegram chat id the sendMessage call targets.</summary>
+        public const string TelegramChatId = "notify_telegram_chat_id";
+
+        /// <summary>
+        /// Comma-separated event allow-list. Missing or blank rows fall back
+        /// to <see cref="DefaultEvents"/>; an event not on the list never
+        /// leaves the process.
+        /// </summary>
+        public const string Events = "notify_events";
+
+        /// <summary>Seeded/missing-row default: the two success events.</summary>
+        public const string DefaultEvents = "downloaded,upgraded";
+    }
+
     public static class Cost
     {
         /// <summary>

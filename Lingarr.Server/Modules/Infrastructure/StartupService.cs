@@ -87,6 +87,7 @@ public class StartupService : IHostedService
         await SeedSubtitleSearchPreferenceSettings(dbContext);
         await SeedEmbeddedCoverageAndWhisperSettings(dbContext);
         await SeedTimelineSyncSettings(dbContext);
+        await SeedNotificationSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -444,6 +445,54 @@ public class StartupService : IHostedService
         _logger.LogInformation(
             "Seeded {Count} embedded-coverage/whisper setting rows (coverage switch and whisper fallback off by default).",
             missing.Count);
+    }
+
+    /// <summary>
+    /// Seeds the notification wiring rows (B11): the master switch
+    /// ("false" — outbound notifications never run implicitly), the two
+    /// channel placeholders (the bot token encrypted at rest, seeded empty
+    /// — its value only ever leaves through the reveal endpoint) and the
+    /// event allow-list default ("downloaded,upgraded"). Existing rows are
+    /// never overwritten; seeded here rather than by a migration for the
+    /// same reason as the Plex rows (no schema change in the batch).
+    /// </summary>
+    private async Task SeedNotificationSettings(LingarrDbContext dbContext)
+    {
+        (string Key, string Value)[] seeds =
+        [
+            (SettingKeys.Notifications.Enabled, "false"),
+            (SettingKeys.Notifications.WebhookUrl, string.Empty),
+            (SettingKeys.Notifications.TelegramBotToken, string.Empty),
+            (SettingKeys.Notifications.TelegramChatId, string.Empty),
+            (SettingKeys.Notifications.Events, SettingKeys.Notifications.DefaultEvents)
+        ];
+
+        var keys = seeds.Select(seed => seed.Key).ToArray();
+        var existingKeys = (await dbContext.Settings
+                .Where(setting => keys.Contains(setting.Key))
+                .Select(setting => setting.Key)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = seeds.Where(seed => !existingKeys.Contains(seed.Key)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in missing)
+        {
+            dbContext.Settings.Add(new Setting
+            {
+                Key = key,
+                Value = value,
+                Provider = null
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation(
+            "Seeded {Count} notification setting rows (notifications off by default).", missing.Count);
     }
 
     /// Seeds empty Settings rows for every subtitle-source key that does not exist

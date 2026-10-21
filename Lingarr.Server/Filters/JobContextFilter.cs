@@ -2,6 +2,7 @@
 using Hangfire.Server;
 using Hangfire.States;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Microsoft.Extensions.Logging;
 
 namespace Lingarr.Server.Filters;
@@ -12,9 +13,19 @@ public class JobContextFilter : IClientFilter, IServerFilter, IElectStateFilter,
 
     private readonly ILogger<JobContextFilter>? _logger;
 
-    public JobContextFilter(ILogger<JobContextFilter>? logger = null)
+    /// <summary>
+    /// App service provider for the job_failed notification hook (B11).
+    /// Null in tests and any host that wires the filter without DI — the
+    /// hook is best-effort and silently absent then. The filter never
+    /// resolves scoped services from the root: each dispatch opens its own
+    /// scope inside the fire-and-forget task.
+    /// </summary>
+    private readonly IServiceProvider? _serviceProvider;
+
+    public JobContextFilter(ILogger<JobContextFilter>? logger = null, IServiceProvider? serviceProvider = null)
     {
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     // L2: the job id now lives in CorrelationContext (the single source the
@@ -80,6 +91,54 @@ public class JobContextFilter : IClientFilter, IServerFilter, IElectStateFilter,
             "Background job {JobId} ({JobType}) failed.",
             context.BackgroundJob?.Id ?? "unknown",
             jobType);
+        NotifyJobFailed(jobType, context.Exception);
+    }
+
+    /// <summary>
+    /// job_failed notification hook (B11): fire-and-forget so the sync
+    /// safety net above stays synchronous. The whole chain — Task.Run, the
+    /// scope, the dispatch — is wrapped so a notification problem can never
+    /// disturb the failure Hangfire is about to record. The event carries
+    /// the job type as its subject (a job failure has no media row to
+    /// resolve a title from).
+    /// </summary>
+    private void NotifyJobFailed(string jobType, Exception exception)
+    {
+        if (_serviceProvider is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = _serviceProvider.CreateScope();
+                    var notifications = scope.ServiceProvider.GetService<NotificationService>();
+                    if (notifications is null)
+                    {
+                        return;
+                    }
+
+                    await notifications.NotifyAsync(new NotificationEvent(
+                        NotificationService.EventJobFailed,
+                        Title: jobType,
+                        Result: "failed",
+                        Detail: exception.Message), CancellationToken.None);
+                }
+                catch
+                {
+                    // best-effort by contract — the log entry above is the
+                    // failure's permanent trace
+                }
+            });
+        }
+        catch
+        {
+            // Task.Run itself can throw during shutdown — same contract.
+        }
     }
 
     public static string GetCurrentJobTypeName()

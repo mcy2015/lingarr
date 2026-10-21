@@ -58,6 +58,9 @@
                 </button>
             </div>
         </div>
+
+        <!-- 通知卡(B11):webhook + Telegram 关键事件外发 -->
+        <NotificationsCard />
     </div>
 </template>
 
@@ -68,6 +71,7 @@ import { useRouter } from 'vue-router'
 import { ENCRYPTED_SETTINGS, SETTINGS } from '@/types'
 import { useSettingStore } from '@/cells/app/stores/setting'
 import { useInstanceStore } from '@/cells/app/stores/instance'
+import NotificationsCard from '@/cells/settings/components/NotificationsCard.vue'
 
 const { t } = useI18n()
 const router = useRouter()

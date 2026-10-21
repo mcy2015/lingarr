@@ -23,6 +23,7 @@ using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Integration;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Subtitle.PostProcessing;
 using Lingarr.Server.Modules.SubtitleSearch;
@@ -1270,6 +1271,16 @@ public class SubtitleDownloadPipelineTests
         /// </summary>
         internal readonly SubtitleSourceCooldownStore Cooldowns;
 
+        /// <summary>
+        /// B11 notification sink: the REAL fan-out service over the stub
+        /// HTTP handler, sharing the fixture's in-memory settings. Tests
+        /// that never touch notifications leave notifications_enabled unset,
+        /// so every NotifyAsync call early-outs; embed tests flip the switch
+        /// and assert on <see cref="NotificationHandler"/>.Requests.
+        /// </summary>
+        internal readonly StubHttpMessageHandler NotificationHandler = new();
+        internal readonly NotificationService Notifications;
+
     internal SubtitleEndpointFixture(params ISubtitleProvider[] providers)
     {
         Connection = new SqliteConnection("DataSource=:memory:");
@@ -1323,6 +1334,12 @@ public class SubtitleDownloadPipelineTests
             providers, Array.Empty<ISubtitleSourceManifest>(), NullLogger<SubtitleProviderRegistry>.Instance);
         Cooldowns = new SubtitleSourceCooldownStore(
             Settings, NullLogger<SubtitleSourceCooldownStore>.Instance);
+        Notifications = new NotificationService(
+            Settings,
+            DbContext,
+            new WebhookChannel(NotificationHandler.ToClient()),
+            new TelegramChannel(NotificationHandler.ToClient()),
+            NullLogger<NotificationService>.Instance);
         Pipeline = new SubtitleDownloadPipeline(
             DbContext,
             Registry,
@@ -1340,7 +1357,8 @@ public class SubtitleDownloadPipelineTests
                 NullLogger<SubtitleCoverageRefresher>.Instance),
             HubContext(),
             NullLogger<SubtitleDownloadPipeline>.Instance,
-            BackgroundJobs.Object);
+            BackgroundJobs.Object,
+            Notifications);
         Orchestrator = new SubtitleSearchOrchestrator(
             Registry,
             new SubtitleMatchScorer(),
@@ -1384,10 +1402,11 @@ public class SubtitleDownloadPipelineTests
                 new SubtitleCoverageRefresher(
                     DbContext, subtitleService, new TargetLanguageResolver(Settings),
                     NullLogger<SubtitleCoverageRefresher>.Instance),
-                HubContext(),
-                NullLogger<SubtitleDownloadPipeline>.Instance,
-                BackgroundJobs.Object);
-        }
+            HubContext(),
+            NullLogger<SubtitleDownloadPipeline>.Instance,
+            BackgroundJobs.Object,
+            Notifications);
+    }
 
     // ── Season-pack fan-out seeding: one lazily-created show/season, each
     // episode in its own directory under the fixture's media root — the

@@ -5,6 +5,7 @@ using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
 using Lingarr.Server.Filters;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
 using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
@@ -73,6 +74,7 @@ public class SubtitleUpgradeJob
     private readonly SubtitleSearchOrchestrator _orchestrator;
     private readonly SubtitleDownloadPipeline _pipeline;
     private readonly SubtitleMatchScorer _scorer;
+    private readonly NotificationService _notifications;
     private readonly ILogger<SubtitleUpgradeJob> _logger;
 
     public SubtitleUpgradeJob(
@@ -83,6 +85,7 @@ public class SubtitleUpgradeJob
         SubtitleSearchOrchestrator orchestrator,
         SubtitleDownloadPipeline pipeline,
         SubtitleMatchScorer scorer,
+        NotificationService notifications,
         ILogger<SubtitleUpgradeJob> logger)
     {
         _settingService = settingService;
@@ -92,6 +95,7 @@ public class SubtitleUpgradeJob
         _orchestrator = orchestrator;
         _pipeline = pipeline;
         _scorer = scorer;
+        _notifications = notifications;
         _logger = logger;
     }
 
@@ -253,6 +257,19 @@ public class SubtitleUpgradeJob
         var download = await _pipeline.DownloadAsync(
             best, target.MediaType, target.MediaId, SubtitleDownloadSource.Upgrade, sessionId,
             cancellationToken, skipTranslation: false, replaceFilePath: target.FilePath);
+
+        // B11 upgrade deal point: the replacement landed and the superseded
+        // file is gone — exactly one "upgraded" event (the pipeline itself
+        // stays quiet on upgrade-source successes, so no double notify).
+        // NotifyAsync never throws; the round continues either way.
+        if (download.Result == SubtitleDownloadResult.Succeeded)
+        {
+            await _notifications.NotifyAsync(new NotificationEvent(
+                NotificationService.EventUpgraded, target.MediaType, target.MediaId,
+                Title: null, Language: target.Language, Provider: best.Provider,
+                Result: "succeeded"), CancellationToken.None);
+        }
+
         return download.Result;
     }
 

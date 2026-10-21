@@ -10,6 +10,7 @@ using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
@@ -98,6 +99,7 @@ public sealed class SubtitleDownloadPipeline
     private readonly IHubContext<JobProgressHub> _hubContext;
     private readonly ILogger<SubtitleDownloadPipeline> _logger;
     private readonly IBackgroundJobClient _backgroundJobClient;
+    private readonly NotificationService _notifications;
 
     public SubtitleDownloadPipeline(
         LingarrDbContext dbContext,
@@ -113,7 +115,8 @@ public sealed class SubtitleDownloadPipeline
         SubtitleCoverageRefresher coverageRefresher,
         IHubContext<JobProgressHub> hubContext,
         ILogger<SubtitleDownloadPipeline> logger,
-        IBackgroundJobClient backgroundJobClient)
+        IBackgroundJobClient backgroundJobClient,
+        NotificationService notifications)
     {
         _dbContext = dbContext;
         _registry = registry;
@@ -129,6 +132,7 @@ public sealed class SubtitleDownloadPipeline
         _hubContext = hubContext;
         _logger = logger;
         _backgroundJobClient = backgroundJobClient;
+        _notifications = notifications;
     }
 
     /// <summary>
@@ -564,6 +568,29 @@ public sealed class SubtitleDownloadPipeline
                     candidate.Language, mediaType, mediaId, candidate.Provider,
                     result, error);
                 break;
+        }
+
+        // B11 notification fan-out (the batch's single exit-point embed):
+        // every outcome passes through here, so two rules cover the whole
+        // download surface — a success notifies "downloaded" EXCEPT upgrade
+        // landings (their "upgraded" event fires at the upgrade job's deal
+        // point, so a replacement never double-notifies), a failure notifies
+        // "download_failed" with the readable reason. Skips (already-exists,
+        // cooldown, low-confidence) are quiet. NotifyAsync never throws; the
+        // history row above stays the source of truth either way.
+        if (result == SubtitleDownloadResult.Succeeded && source != SubtitleDownloadSource.Upgrade)
+        {
+            await _notifications.NotifyAsync(new NotificationEvent(
+                NotificationService.EventDownloaded, mediaType, mediaId,
+                Title: null, Language: candidate.Language, Provider: candidate.Provider,
+                Result: "succeeded"), CancellationToken.None);
+        }
+        else if (result == SubtitleDownloadResult.Failed)
+        {
+            await _notifications.NotifyAsync(new NotificationEvent(
+                NotificationService.EventDownloadFailed, mediaType, mediaId,
+                Title: null, Language: candidate.Language, Provider: candidate.Provider,
+                Result: "failed", Detail: error), CancellationToken.None);
         }
 
         return new SubtitleDownloadOutcome(

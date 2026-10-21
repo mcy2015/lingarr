@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Hangfire;
@@ -20,10 +21,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
+using Lingarr.Server.Tests.Modules.SubtitleSearch;
 
 namespace Lingarr.Server.Tests.Jobs;
 
@@ -124,7 +127,15 @@ public class TranslationJobTests
                 _context, _subtitleService.Object, new TargetLanguageResolver(_settings),
                 NullLogger<SubtitleCoverageRefresher>.Instance),
             HubContext(),
-            new Mock<IBackgroundJobClient>().Object);
+            new Mock<IBackgroundJobClient>().Object,
+            // B11: the real fan-out service over stub HTTP — notifications
+            // stay off in this fixture, so every call early-outs.
+            new NotificationService(
+                _settings,
+                _context,
+                new WebhookChannel(new HttpClient(new StubHttpMessageHandler())),
+                new TelegramChannel(new HttpClient(new StubHttpMessageHandler())),
+                NullLogger<NotificationService>.Instance));
     }
 
     /// <summary>No-op hub double — the writeback broadcast never reaches a client here.</summary>

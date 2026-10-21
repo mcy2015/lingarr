@@ -76,7 +76,11 @@ export const SETTINGS = {
     PLEX_URL: 'plex_url',
     PLEX_REFRESH_ENABLED: 'plex_refresh_enabled',
     WHISPER_ENDPOINT: 'whisper_endpoint',
-    WHISPER_MODEL: 'whisper_model'
+    WHISPER_MODEL: 'whisper_model',
+    NOTIFICATIONS_ENABLED: 'notifications_enabled',
+    NOTIFY_WEBHOOK_URL: 'notify_webhook_url',
+    NOTIFY_TELEGRAM_CHAT_ID: 'notify_telegram_chat_id',
+    NOTIFY_EVENTS: 'notify_events'
 } as const
 
 export interface ISettings {
@@ -155,6 +159,10 @@ export interface ISettings {
     plex_refresh_enabled: string
     whisper_endpoint: string
     whisper_model: string
+    notifications_enabled: string
+    notify_webhook_url: string
+    notify_telegram_chat_id: string
+    notify_events: string
 }
 
 export const ENCRYPTED_SETTINGS = {
@@ -172,7 +180,8 @@ export const ENCRYPTED_SETTINGS = {
     LOCAL_AI_API_KEY: 'local_ai_api_key',
     AUDIO_ID_API_KEY: 'audio_id_api_key',
     PLEX_TOKEN: 'plex_token',
-    WHISPER_API_KEY: 'whisper_api_key'
+    WHISPER_API_KEY: 'whisper_api_key',
+    NOTIFY_TELEGRAM_BOT_TOKEN: 'notify_telegram_bot_token'
 } as const
 
 export interface IEncryptedSettingStates {
@@ -191,7 +200,20 @@ export interface IEncryptedSettingStates {
     audio_id_api_key: boolean
     plex_token: boolean
     whisper_api_key: boolean
+    notify_telegram_bot_token: boolean
 }
+
+/**
+ * Value domain of notify_events (B11): the comma-separated server-side
+ * allow-list may only ever hold these keys — the settings card renders one
+ * checkbox per entry and persists the selection joined with ",". Blank or
+ * missing rows fall back to "downloaded,upgraded" server-side, and the
+ * card keeps the last checked box checked so the UI never saves an empty
+ * selection the runtime would silently re-expand into the default.
+ */
+export const NOTIFY_EVENTS = ['downloaded', 'upgraded', 'translation_failed', 'job_failed'] as const
+
+export type NotifyEvent = (typeof NOTIFY_EVENTS)[number]
 
 export const SERVICE_TYPE = {
     LIBRETRANSLATE: 'libretranslate',

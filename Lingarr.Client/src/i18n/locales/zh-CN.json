@@ -954,6 +954,27 @@
             "keySet": "已设置——留空保持不变",
             "test": "测试连接",
             "testDisabled": "请先配置服务地址、模型与密钥"
+        },
+        "notifications": {
+            "title": "通知",
+            "meta": "关键事件外发 webhook 与 Telegram",
+            "enabled": "开启通知",
+            "enabledHint": "发送失败只记一条警告,绝不影响触发事件的本职流程",
+            "webhookUrl": "Webhook 地址",
+            "webhookPlaceholder": "https://hooks.example.com/lingarr",
+            "telegramToken": "Telegram 机器人令牌",
+            "telegramTokenPlaceholder": "粘贴机器人令牌",
+            "telegramTokenConfigured": "已设置——留空保持不变",
+            "telegramChatId": "Telegram 会话 ID",
+            "chatIdPlaceholder": "-1001234567890",
+            "events": "事件",
+            "eventsHint": "只有勾选的事件会外发;最后一项保持勾选,不允许全不选",
+            "event": {
+                "downloaded": "字幕已下载",
+                "upgraded": "字幕已升级",
+                "translation_failed": "翻译失败",
+                "job_failed": "后台任务失败"
+            }
         }
     },
     "translations": {

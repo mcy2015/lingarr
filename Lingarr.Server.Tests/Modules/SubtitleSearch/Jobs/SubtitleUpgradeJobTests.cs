@@ -104,6 +104,34 @@ public class SubtitleUpgradeJobTests
     }
 
     [Fact]
+    public async Task Execute_UpgradeDeal_FiresUpgradedAndNeverDownloaded()
+    {
+        // B11 embed: the round's deal point (the replacement landed) fires
+        // exactly one "upgraded" — the pipeline itself stays quiet on
+        // upgrade-source landings, so a replacement never double-notifies.
+        // The title resolves through the notification service's library
+        // read (the fixture's real SQLite movie row — production shape).
+        using var fixture = new UpgradeJobFixture(request => [Candidate()]);
+        await fixture.Settings.SetSetting(SettingKeys.SubtitleSearch.UpgradeEnabled, "true");
+        await fixture.Settings.SetSetting(SettingKeys.Notifications.Enabled, "true");
+        await fixture.Settings.SetSetting(SettingKeys.Notifications.Events, "downloaded,upgraded");
+        await fixture.Settings.SetSetting(SettingKeys.Notifications.WebhookUrl, "http://hooks.test/lingarr");
+        fixture.Endpoint.NotificationHandler.EnqueueStatus(System.Net.HttpStatusCode.OK);
+        fixture.SeedSucceededDownload(
+            score: 70, fileName: "Movie.2019.WEBDL-1080p.zh.v1.srt");
+
+        await fixture.Job.Execute();
+
+        var webhook = Assert.Single(fixture.Endpoint.NotificationHandler.Requests);
+        using var json = System.Text.Json.JsonDocument.Parse(
+            await webhook.Content!.ReadAsStringAsync());
+        Assert.Equal("upgraded", json.RootElement.GetProperty("event").GetString());
+        Assert.Equal("Movie", json.RootElement.GetProperty("title").GetString());
+        Assert.Equal("zh", json.RootElement.GetProperty("language").GetString());
+        Assert.Equal("succeeded", json.RootElement.GetProperty("result").GetString());
+    }
+
+    [Fact]
     public async Task Execute_SameLandingPath_OverwritesAtomicallyAndDeletesNothing()
     {
         // The other half of the replacement contract: when the naming
@@ -302,6 +330,7 @@ public class SubtitleUpgradeJobTests
                 Endpoint.Orchestrator,
                 Endpoint.Pipeline,
                 new SubtitleMatchScorer(),
+                Endpoint.Notifications,
                 NullLogger<SubtitleUpgradeJob>.Instance);
         }
 

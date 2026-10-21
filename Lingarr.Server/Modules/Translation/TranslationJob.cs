@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Extensions;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
@@ -38,6 +39,7 @@ public class TranslationJob
     private readonly SubtitleCoverageRefresher _coverageRefresher;
     private readonly IHubContext<JobProgressHub> _hubContext;
     private readonly IBackgroundJobClient _backgroundJobClient;
+    private readonly NotificationService _notifications;
 
     public TranslationJob(
         ILogger<TranslationJob> logger,
@@ -53,7 +55,8 @@ public class TranslationJob
         IGlossaryService glossaryService,
         SubtitleCoverageRefresher coverageRefresher,
         IHubContext<JobProgressHub> hubContext,
-        IBackgroundJobClient backgroundJobClient)
+        IBackgroundJobClient backgroundJobClient,
+        NotificationService notifications)
     {
         _logger = logger;
         _settings = settings;
@@ -69,6 +72,7 @@ public class TranslationJob
         _coverageRefresher = coverageRefresher;
         _hubContext = hubContext;
         _backgroundJobClient = backgroundJobClient;
+        _notifications = notifications;
     }
 
     [AutomaticRetry(Attempts = 0)]
@@ -321,6 +325,16 @@ public class TranslationJob
             await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
             await _translationRequestService.UpdateActiveCount();
             await _progressService.Emit(translationRequest, 0);
+
+            // B11 failure notification (best-effort — NotifyAsync never
+            // throws, so the rethrow below stays the failure's contract).
+            await _notifications.NotifyAsync(new NotificationEvent(
+                NotificationService.EventTranslationFailed,
+                translationRequest.MediaType, translationRequest.MediaId,
+                Title: translationRequest.Title,
+                Language: translationRequest.TargetLanguage,
+                Provider: translationRequest.ServiceType,
+                Result: "failed", Detail: ex.Message), CancellationToken.None);
             throw;
         }
     }

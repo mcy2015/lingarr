@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ using Lingarr.Core.Enum;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Subtitle.PostProcessing;
@@ -612,6 +614,13 @@ public class SubtitleSearchJobTests
             // Hangfire registration; here a loose mock double stands in (the
             // tests assert the round's own behaviour, never the enqueue).
             services.AddSingleton<IBackgroundJobClient>(new Mock<IBackgroundJobClient>().Object);
+            // B11: the pipeline's notification fan-out dependency — the real
+            // service over never-called stub channels: these tests never
+            // enable notifications, so every NotifyAsync early-outs and no
+            // request can leave the container.
+            services.AddScoped(_ => new WebhookChannel(new HttpClient(new StubHttpMessageHandler())));
+            services.AddScoped(_ => new TelegramChannel(new HttpClient(new StubHttpMessageHandler())));
+            services.AddScoped<NotificationService>();
             services.AddScoped<SubtitleDownloadPipeline>();
             RootProvider = services.BuildServiceProvider();
 

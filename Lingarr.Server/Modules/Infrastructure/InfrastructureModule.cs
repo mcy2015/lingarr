@@ -43,6 +43,7 @@ public static class InfrastructureModule
         AddLogging(builder);
         AddDatabase(builder.Services);
         AddSignalR(builder.Services);
+        AddNotifications(builder.Services);
         AddHangfire(builder);
 
         // Cross-domain recurring-job scheduler: the jobs it registers span the
@@ -125,6 +126,27 @@ public static class InfrastructureModule
             });
     }
 
+    /// <summary>
+    /// Outbound notifications (B11): one JSON fan-out service over two
+    /// quick-fire HTTP channels — a webhook POST and a Telegram sendMessage,
+    /// both well inside the default-ish 15s budget (nothing like the *arr
+    /// library pulls). The service also resolves the
+    /// <see cref="Filters.JobContextFilter"/> safety net's job_failed hook,
+    /// which reaches it through a fresh scope per dispatch.
+    /// </summary>
+    private static void AddNotifications(IServiceCollection services)
+    {
+        services.AddHttpClient<Notifications.WebhookChannel>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddHttpClient<Notifications.TelegramChannel>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddScoped<Notifications.NotificationService>();
+    }
+
     private static void AddHangfire(WebApplicationBuilder builder)
     {
         builder.Services.AddHangfireServer(options =>
@@ -146,8 +168,12 @@ public static class InfrastructureModule
 
             // The server-exception safety net needs the logger pipeline
             // (file + in-memory), so the filter takes it from the provider.
+            // The app provider also feeds the job_failed notification hook
+            // (B11) — the filter resolves a scope per dispatch, never a
+            // scoped service from the root.
             configuration.UseFilter(new JobContextFilter(
-                serviceProvider.GetRequiredService<ILogger<JobContextFilter>>()));
+                serviceProvider.GetRequiredService<ILogger<JobContextFilter>>(),
+                serviceProvider));
         });
     }
 

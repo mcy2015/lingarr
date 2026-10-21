@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Hangfire;
@@ -17,12 +18,14 @@ using Lingarr.Core.Interfaces;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Infrastructure.Notifications;
 using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.SubtitleSearch.Pipeline;
+using Lingarr.Server.Tests.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.Translation;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
@@ -124,7 +127,15 @@ public class TranslationJobWritebackTests : IDisposable
                 _dbContext, _subtitleService, new TargetLanguageResolver(_settings),
                 NullLogger<SubtitleCoverageRefresher>.Instance),
             _hub.Object,
-            _backgroundJobs.Object);
+            _backgroundJobs.Object,
+            // B11: the real fan-out service over stub HTTP — notifications
+            // stay off in this fixture, so every call early-outs.
+            new NotificationService(
+                _settings,
+                _dbContext,
+                new WebhookChannel(new HttpClient(new StubHttpMessageHandler())),
+                new TelegramChannel(new HttpClient(new StubHttpMessageHandler())),
+                NullLogger<NotificationService>.Instance));
     }
 
     public void Dispose()

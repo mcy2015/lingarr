@@ -954,6 +954,27 @@
             "keySet": "Set — leave empty to keep",
             "test": "Test connection",
             "testDisabled": "Configure endpoint, model and key first"
+        },
+        "notifications": {
+            "title": "Notifications",
+            "meta": "Webhook + Telegram on key events",
+            "enabled": "Enable notifications",
+            "enabledHint": "A failed send logs a warning and never disturbs the flow that fired the event",
+            "webhookUrl": "Webhook URL",
+            "webhookPlaceholder": "https://hooks.example.com/lingarr",
+            "telegramToken": "Telegram bot token",
+            "telegramTokenPlaceholder": "Paste the bot token",
+            "telegramTokenConfigured": "Set — leave empty to keep",
+            "telegramChatId": "Telegram chat ID",
+            "chatIdPlaceholder": "-1001234567890",
+            "events": "Events",
+            "eventsHint": "Only checked events leave the server; the last checked box stays on",
+            "event": {
+                "downloaded": "Subtitle downloaded",
+                "upgraded": "Subtitle upgraded",
+                "translation_failed": "Translation failed",
+                "job_failed": "Background job failed"
+            }
         }
     },
     "translations": {
