@@ -99,7 +99,9 @@ public class EmbeddedTrackScanJobTests
             .ThrowsAsync(new InvalidOperationException("probe blew up"))
             .ReturnsAsync(new EmbeddedTrackScanSummary(0, 0, 0, 0, 0));
 
-        await CreateJob().Execute(); // fails, must still release the guard
+        // L3: the failed run rethrows after recording (AutomaticRetry(0) —
+        // no retry storm); the finally still releases the in-progress flag.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateJob().Execute());
 
         _scheduleService.Verify(service => service.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
 

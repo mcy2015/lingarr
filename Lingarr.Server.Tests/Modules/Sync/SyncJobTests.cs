@@ -79,7 +79,7 @@ public class SyncJobTests
     }
 
     [Fact]
-    public async Task SyncMovieJob_MidRunFailure_MarksJobFailedWithoutThrowing()
+    public async Task SyncMovieJob_MidRunFailure_MarksFailedAndRethrows()
     {
         var radarr = new Mock<IRadarrService>();
         radarr.Setup(r => r.GetMovies()).Returns(MovieStream(1, 2, 3));
@@ -97,9 +97,13 @@ public class SyncJobTests
             movieSync.Object,
             SettingsMockReturning(false).Object);
 
-        // The job swallows the exception (Hangfire AutomaticRetry(0)); committed
-        // batches inside the service remain in the database.
-        await job.Execute();
+        // L3: the catch records the failure state and rethrows (Automatic-
+        // Retry(0) means no retry storm) so the failure persists in Hangfire
+        // storage for the schedule screen and the server exception filter
+        // captures the stack in the file log. Committed batches inside the
+        // service remain in the database.
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => job.Execute());
+        Assert.Equal("partial sync aborted mid-run", thrown.Message);
 
         schedule.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
         movieSync.Verify(s => s.RemoveNonExistentMovies(It.IsAny<IEnumerable<int>>()), Times.Never);
@@ -149,7 +153,7 @@ public class SyncJobTests
     }
 
     [Fact]
-    public async Task SyncShowJob_MidRunFailure_MarksJobFailedWithoutThrowing()
+    public async Task SyncShowJob_MidRunFailure_MarksFailedAndRethrows()
     {
         var sonarr = new Mock<ISonarrService>();
         sonarr.Setup(s => s.GetShows()).ReturnsAsync(new List<SonarrShow>());
@@ -167,7 +171,9 @@ public class SyncJobTests
             showSync.Object,
             SettingsMockReturning(false).Object);
 
-        await job.Execute();
+        // L3: recorded then rethrown — see the movie-job twin above.
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => job.Execute());
+        Assert.Equal("partial sync aborted mid-run", thrown.Message);
 
         schedule.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
         showSync.Verify(s => s.RemoveNonExistentShows(It.IsAny<HashSet<int>>()), Times.Never);

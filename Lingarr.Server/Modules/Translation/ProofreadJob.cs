@@ -91,7 +91,7 @@ public class ProofreadJob
                     $"No configured translation service supports proofreading: [{string.Join(", ", serviceNames)}]");
             }
 
-            _logger.LogInformation("ProofreadJob started for subtitle: |Green|{filePath}|/Green|",
+            _logger.LogInformation("ProofreadJob started for subtitle: {filePath}",
                 request.TranslatedSubtitle);
 
             var sourceSubtitles = await _subtitleService.ReadSubtitles(request.SubtitleToTranslate);
@@ -156,7 +156,7 @@ public class ProofreadJob
                 stripSubtitleFormatting,
                 request.IsBilingual);
 
-            _logger.LogInformation("ProofreadJob completed and rewrote subtitle: |Green|{filePath}|/Green|",
+            _logger.LogInformation("ProofreadJob completed and rewrote subtitle: {filePath}",
                 request.TranslatedSubtitle);
 
             await HandleCompletion(jobName, request, revised, total, cancellationToken);
@@ -207,7 +207,7 @@ public class ProofreadJob
 
     private async Task HandleCancellation(string jobName, TranslationRequest request)
     {
-        _logger.LogInformation("Proofread cancelled for subtitle: |Orange|{subtitlePath}|/Orange|",
+        _logger.LogInformation("Proofread cancelled for subtitle: {subtitlePath}",
             request.TranslatedSubtitle);
         var translationRequest =
             await _dbContext.TranslationRequests.FirstOrDefaultAsync(candidate => candidate.Id == request.Id);

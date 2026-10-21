@@ -8,6 +8,7 @@ using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
+using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
@@ -147,6 +148,18 @@ public sealed class SubtitleDownloadPipeline
         bool skipTranslation = false)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+
+        // L2 correlation: both values the download decision runs on are in
+        // hand here — the media identity (the "{mediaType}/{mediaId}" shape
+        // of the subtitle_downloads columns) and the deciding search session.
+        // One scope spans the whole pipeline body (single-entry path, season-
+        // pack fan-out and every failure recording), so every history/
+        // telemetry/translation-enqueue log of the attempt greps by media.
+        // The source key arrives separately: SubtitleHttp stamps it around
+        // each upstream request.
+        using var correlation = CorrelationContext.Push(
+            mediaKey: $"{mediaType}/{mediaId}",
+            searchSessionId: searchSessionId);
 
         var media = await LoadMediaAsync(mediaType, mediaId, cancellationToken);
         if (media is null)
@@ -461,6 +474,36 @@ public sealed class SubtitleDownloadPipeline
         };
         _dbContext.SubtitleDownloads.Add(row);
         await _dbContext.SaveChangesAsync();
+
+        // L4b decision visibility: every outcome exits through here, so one
+        // switch covers all decision logging. User-visible refusals
+        // (cooldown) are Information — they answer "why did nothing land"
+        // on the log page without touching the DB. High-volume per-media
+        // events (success, coverage skips, failures) stay Debug: the 10w
+        // library would bury Warning/Error under them otherwise; the
+        // orchestrator aggregates them per source per round instead.
+        switch (result)
+        {
+            case SubtitleDownloadResult.CooldownSkipped:
+                _logger.LogInformation(
+                    "Download of {Language} subtitle for {MediaType} {MediaId} refused: {Provider} is cooling down until {CooldownUntilUtc} ({Error}).",
+                    candidate.Language, mediaType, mediaId, candidate.Provider,
+                    cooldownUntilUtc, error);
+                break;
+            case SubtitleDownloadResult.Succeeded:
+                _logger.LogDebug(
+                    "Subtitle {Language} for {MediaType} {MediaId} landed from {Provider} ({FilesLanded} file(s)): {FilePath}",
+                    candidate.Language, mediaType, mediaId, candidate.Provider,
+                    filesLanded, filePath);
+                break;
+            default:
+                _logger.LogDebug(
+                    "Download attempt for {Language} subtitle for {MediaType} {MediaId} on {Provider} ended as {Result}: {Error}",
+                    candidate.Language, mediaType, mediaId, candidate.Provider,
+                    result, error);
+                break;
+        }
+
         return new SubtitleDownloadOutcome(
             row.Id, filePath, result, error, FilesLanded: filesLanded, CooldownUntilUtc: cooldownUntilUtc);
     }
@@ -914,6 +957,12 @@ public sealed class SubtitleDownloadPipeline
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
+            // L4b: the blacklist write is a decision the log page must show
+            // without a DB query — low frequency by nature (content-invalid
+            // candidates only).
+            _logger.LogInformation(
+                "Blacklisted {Provider}/{ExternalId} for {BlacklistWindowDays} days: {Reason}",
+                candidate.Provider, candidate.ExternalId, BlacklistWindowDays, summary);
         }
         catch (Exception ex)
         {

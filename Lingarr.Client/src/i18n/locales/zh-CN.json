@@ -697,6 +697,8 @@
             "exportCta": "⇩ 导出",
             "open": "打开日志",
             "levelFilter": "级别过滤",
+            "searchPlaceholder": "搜索消息或关联键（req/job/media/src）…",
+            "stackTraceToggle": "堆栈",
             "chipAll": "全部",
             "autoScrollLabel": "自动滚动",
             "export": "导出",

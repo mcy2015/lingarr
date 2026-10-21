@@ -74,7 +74,7 @@ public class AutomatedTranslationJob
         _defaultShowAgeThreshold = TimeSpan.FromHours(showAgeThreshold);
 
         var translationCycle = settings[SettingKeys.Automation.TranslationCycle] == "true" ? "movies" : "shows";
-        _logger.LogInformation($"Starting translation cycle for |Green|{translationCycle}|/Green|");
+        _logger.LogInformation($"Starting translation cycle for {translationCycle}");
 
         var translationsPerformed = 0;
         switch (translationCycle)
@@ -199,20 +199,30 @@ public class AutomatedTranslationJob
                     continue;
                 }
 
-                var isProcessed = await _mediaSubtitleProcessor.ProcessMedia(movie, MediaType.Movie);
-                if (isProcessed)
+                // L2 correlation: the request id belongs to the
+                // TranslationJob run this rotation eventually enqueues (it is
+                // not knowable here — MediaSubtitleProcessor creates the
+                // requests). What this loop DOES hold is the media identity:
+                // stamping the "{mediaType}/{mediaId}" key makes every
+                // per-movie log line of the automation greppable by the same
+                // key the download pipeline and queue screens use.
+                using (CorrelationContext.Push(mediaKey: $"{MediaType.Movie}/{movie.Id}"))
                 {
-                    translationsInitiated++;
+                    var isProcessed = await _mediaSubtitleProcessor.ProcessMedia(movie, MediaType.Movie);
+                    if (isProcessed)
+                    {
+                        translationsInitiated++;
+                    }
                 }
             }
             catch (DirectoryNotFoundException)
             {
-                _logger.LogWarning("Directory not found at path: |Red|{Path}|/Red|, skipping subtitle", movie.Path);
+                _logger.LogWarning("Directory not found at path: {Path}, skipping subtitle", movie.Path);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "Error processing subtitles for movie at path: |Red|{Path}|/Red|, skipping subtitle",
+                    "Error processing subtitles for movie at path: {Path}, skipping subtitle",
                     movie.Path);
             }
             finally
@@ -314,21 +324,27 @@ public class AutomatedTranslationJob
                     continue;
                 }
 
-                var isProcessed = await _mediaSubtitleProcessor.ProcessMedia(episode, MediaType.Episode);
-                if (isProcessed)
+                // Same L2 media-key stamping as the movie rotation above —
+                // episode rows use the episode id, matching the download
+                // pipeline's "{mediaType}/{mediaId}" convention.
+                using (CorrelationContext.Push(mediaKey: $"{MediaType.Episode}/{episode.Id}"))
                 {
-                    translationsInitiated++;
+                    var isProcessed = await _mediaSubtitleProcessor.ProcessMedia(episode, MediaType.Episode);
+                    if (isProcessed)
+                    {
+                        translationsInitiated++;
+                    }
                 }
             }
             catch (DirectoryNotFoundException)
             {
-                _logger.LogWarning("Directory not found for show at path: |Red|{Path}|/Red|, skipping episode",
+                _logger.LogWarning("Directory not found for show at path: {Path}, skipping episode",
                     episode.Path);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "Error processing subtitles for episode at path: |Red|{Path}|/Red|, skipping episode",
+                    "Error processing subtitles for episode at path: {Path}, skipping episode",
                     episode.Path);
             }
             finally

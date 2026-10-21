@@ -210,4 +210,12 @@ export interface ILogEntry {
     formattedSource: string
     category: string
     stackTrace?: string
+    /** Monotonic sequence from the SSE stream (L1b) — reconnect dedupe key. */
+    seq?: number
+    /** L2 correlation keys, stamped server-side at write time. */
+    jobId?: string
+    requestId?: string
+    searchSessionId?: number
+    mediaKey?: string
+    provider?: string
 }

@@ -76,6 +76,16 @@ public class TranslationJob
         var jobName = JobContextFilter.GetCurrentJobTypeName();
         var jobId = JobContextFilter.GetCurrentJobId();
 
+        // L2 correlation: every log line of this run — the start message, the
+        // resume accounting, the writeback completion and every failure-path
+        // entry below — carries the translation request id (the
+        // translation_requests.Id the queue and detail screens key on). The
+        // scope restores on completion, cancellation and thrown exceptions
+        // alike. jobId arrives through the same ambient context from
+        // JobContextFilter.OnPerforming.
+        using var correlation = CorrelationContext.Push(
+            requestId: translationRequest.Id.ToString());
+
         try
         {
             await _scheduleService.UpdateJobState(jobName, JobStatus.Processing.GetDisplayName());
@@ -102,7 +112,7 @@ public class TranslationJob
                 eventType: TranslationEventType.Started);
             await _translationRequestService.UpdateActiveCount();
 
-            _logger.LogInformation("TranslateJob started for subtitle: |Green|{filePath}|/Green|",
+            _logger.LogInformation("TranslateJob started for subtitle: {filePath}",
                 translationRequest.SubtitleToTranslate);
             var settings = await _settings.GetSettings([
                 SettingKeys.Translation.FixOverlappingSubtitles,
@@ -343,12 +353,15 @@ public class TranslationJob
             // reflect it immediately, not on the next daily statistics run.
             await RefreshMediaAfterWritebackAsync(translationRequest, outputPath, cancellationToken);
 
-            _logger.LogInformation("TranslateJob completed and created subtitle: |Green|{filePath}|/Green|",
+            _logger.LogInformation("TranslateJob completed and created subtitle: {filePath}",
                 outputPath);
         }
         catch (Exception e)
         {
-            _logger.LogError(e, e.Message);
+            // The subtitle write-back failed — the full stack (on the
+            // exception object below) plus the request id from the
+            // correlation context identify the exact request.
+            _logger.LogError(e, "Writing the translated subtitle to disk failed.");
             throw;
         }
     }
@@ -443,7 +456,7 @@ public class TranslationJob
 
     private async Task HandleCancellation(string jobName, TranslationRequest request)
     {
-        _logger.LogInformation("Translation cancelled for subtitle: |Orange|{subtitlePath}|/Orange|",
+        _logger.LogInformation("Translation cancelled for subtitle: {subtitlePath}",
             request.SubtitleToTranslate);
         var translationRequest =
             await _dbContext.TranslationRequests.FirstOrDefaultAsync(translationRequest =>

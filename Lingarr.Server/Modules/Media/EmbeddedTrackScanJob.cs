@@ -79,15 +79,20 @@ public class EmbeddedTrackScanJob
             // actionable message instead of recording "no tracks" everywhere.
             await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
             _logger.LogError(
-                "Embedded track scan aborted: {Message} — the Docker image ships ffmpeg; for other setups install ffmpeg or set LINGARR_FFPROBE_PATH.",
-                ex.Message);
+                ex,
+                "Embedded track scan aborted — the Docker image ships ffmpeg; for other setups install ffmpeg or set LINGARR_FFPROBE_PATH.");
+            // Attempts=0: the rethrow marks the job Failed in Hangfire
+            // storage (persisted on the schedule screen) instead of letting
+            // the failure evaporate with the process.
+            throw;
         }
         catch (Exception ex)
         {
             await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
-            _logger.LogError(ex,
-                "An error occurred during the embedded track scan. Exception details: {ExceptionMessage}, Stack Trace: {StackTrace}",
-                ex.Message, ex.StackTrace);
+            _logger.LogError(ex, "An error occurred during the embedded track scan.");
+            // Attempts=0: same rationale — persist the Failed state and let
+            // the server exception filter capture the stack in the file log.
+            throw;
         }
         finally
         {

@@ -122,7 +122,7 @@ public class SettingChangedListener
             {
                 case "Radarr":
                     _logger.LogInformation(
-                        $"Settings changed for |Green|{jobName}|/Green|. All settings are complete, |Orange|indexing media...|/Orange|");
+                        $"Settings changed for {jobName}. All settings are complete, indexing media...");
 
                     await _hubContext.Clients.Group("SettingUpdates").SendAsync("SettingUpdate", new
                     {
@@ -136,7 +136,7 @@ public class SettingChangedListener
                     break;
                 case "Sonarr":
                     _logger.LogInformation(
-                        $"Settings changed for |Green|{jobName}|/Green|. All settings are complete, |Orange|indexing media...|/Orange|");
+                        $"Settings changed for {jobName}. All settings are complete, indexing media...");
 
                     await _hubContext.Clients.Group("SettingUpdates").SendAsync("SettingUpdate", new
                     {

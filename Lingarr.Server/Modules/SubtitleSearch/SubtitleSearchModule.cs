@@ -206,15 +206,22 @@ public static class SubtitleSearchModule
 /// single meeting point — so the factory is injected here, at host start,
 /// and lives for the process lifetime. Byte downloads then resolve
 /// "subtitle-{source}-download" (120s) while every JSON call keeps the 10s
-/// search client.
+/// search client. L4a reuses the same host-start hook to install the gate's
+/// static logger (<see cref="SubtitleHttp.Initialize"/>) — one ILogger per
+/// process, the provider name rides in each message.
 /// </summary>
-internal sealed class SubtitleDownloadClientWiring(IHttpClientFactory httpClientFactory)
+internal sealed class SubtitleDownloadClientWiring(
+    IHttpClientFactory httpClientFactory,
+    ILoggerFactory loggerFactory)
     : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {
         SubtitleHttp.DownloadClientFactory = providerKey =>
             httpClientFactory.CreateClient(SubtitleHttp.DownloadHttpClientName(providerKey));
+        // SubtitleHttp is a static class and cannot be a generic type argument
+        // (CS0718), so the gate logger is created by category name instead.
+        SubtitleHttp.Initialize(loggerFactory.CreateLogger(typeof(SubtitleHttp).FullName));
         return Task.CompletedTask;
     }
 

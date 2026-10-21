@@ -6,11 +6,12 @@ using Hangfire.Storage.SQLite;
 using Lingarr.Core;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
-using Lingarr.Core.Logging;
 using Lingarr.Migrations;
 using Lingarr.Server.Filters;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
+using Serilog;
 
 namespace Lingarr.Server.Modules.Infrastructure;
 
@@ -78,20 +79,30 @@ public static class InfrastructureModule
     private static void AddLogging(WebApplicationBuilder builder)
     {
         builder.Logging.ClearProviders();
-        AddLogProviders(builder.Logging);
+        AddLogProviders(builder.Logging, builder.Configuration);
     }
 
     /// <summary>
     /// Shared with <see cref="Lingarr.Server.Modules.Translation.TranslationModule"/>, which builds a
     /// standalone logger factory for the plugin loader before the container
-    /// is ready.
+    /// is ready (it passes no configuration — the shared file logger is
+    /// already initialized by then). Public static is the established test
+    /// seam ruling (no InternalsVisibleTo).
     /// </summary>
-    internal static void AddLogProviders(ILoggingBuilder logging)
+    public static void AddLogProviders(ILoggingBuilder logging, IConfiguration? configuration = null)
     {
-        logging.AddProvider(new CustomLogFormatter(Options.Create(new CustomLogFormatterOptions())));
         // Backs the /api/logs viewer. Bounded ring buffer (1000 entries) — safe to
         // enable in Debug too, so the dev log page isn't silently empty.
         logging.AddProvider(new InMemoryLoggerProvider());
+        // Console + persistent daily-rolling file log, both from the one
+        // shared Serilog logger (the console sink colors by level — the
+        // retired pipe-marker color scheme lives on only in pre-L5 log
+        // entries). GetOrCreate is process-wide: the plugin-loader factory
+        // above reuses the instance the main factory already initialized,
+        // so both append to the same file. dispose:false —
+        // SerilogFileLogger.Shutdown (ApplicationStopping in Program.cs) is
+        // the single flush point.
+        logging.AddSerilog(SerilogFileLogger.GetOrCreate(configuration), dispose: false);
     }
 
     private static void AddDatabase(IServiceCollection services)
@@ -125,7 +136,7 @@ public static class InfrastructureModule
                     : 1;
         });
 
-        builder.Services.AddHangfire(configuration =>
+        builder.Services.AddHangfire((serviceProvider, configuration) =>
         {
             configuration
                 .UseSimpleAssemblyNameTypeSerializer()
@@ -133,7 +144,10 @@ public static class InfrastructureModule
 
             ConfigureSqLiteStorage(configuration, builder.Environment.ContentRootPath);
 
-            configuration.UseFilter(new JobContextFilter());
+            // The server-exception safety net needs the logger pipeline
+            // (file + in-memory), so the filter takes it from the provider.
+            configuration.UseFilter(new JobContextFilter(
+                serviceProvider.GetRequiredService<ILogger<JobContextFilter>>()));
         });
     }
 

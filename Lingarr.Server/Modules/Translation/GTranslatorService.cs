@@ -109,7 +109,9 @@ public class GTranslatorService<T> : BaseLanguageService where T : ITranslator
             {
                 if (attempt > _maxRetries)
                 {
-                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}) for text: {Text}", ex.StatusCode, text);
+                    // Same ruling as Libre/DeepL: rate-limit exhaustion is
+                    // server-side; the subtitle text stays out of the logs.
+                    _logger.LogError(ex, "Max retries exhausted ({StatusCode}).", ex.StatusCode);
                     throw new TranslationException($"Retry limit reached after {ex.StatusCode}.", ex);
                 }
 

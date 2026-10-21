@@ -1,5 +1,6 @@
 using Lingarr.Core.Data;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Scoring;
@@ -200,7 +201,10 @@ public sealed partial class SubtitleSearchOrchestrator
                 skipped.Provider.Provider,
                 "SkippedCooldown",
                 $"cooling down until {cooldown.Until:u} ({cooldown.Reason})."));
-            _logger.LogInformation(
+            // L4b: per-media repetition of a round-level fact — Debug. The
+            // auto round announces the cooling set once per round at
+            // Information; manual single-source searches are unaffected.
+            _logger.LogDebug(
                 "Skipping subtitle source {Provider}: cooldown until {Until}.",
                 skipped.Provider.Provider, cooldown.Until);
         }
@@ -237,6 +241,17 @@ public sealed partial class SubtitleSearchOrchestrator
             CacheKeyPrefix + cacheKey,
             new CachedOutcome(ordered, sessions, mediaType, mediaId),
             CacheTtl);
+
+        // L4b: one Debug line per media search; the auto round aggregates
+        // outcomes into its round-end Information summary instead.
+        _logger.LogDebug(
+            "Searched {MediaType} {MediaId} across {Sources} source(s): {Candidates} candidate(s). Source outcomes: {Outcomes}",
+            mediaType, mediaId, targets.Count, ordered.Count,
+            outcomes.Count == 0
+                ? "none"
+                : string.Join(", ", outcomes
+                    .GroupBy(outcome => outcome.Reason)
+                    .Select(group => $"{group.Key}×{group.Count()}")));
 
         return new SubtitleSearchOutcome(cacheKey, ordered, outcomes);
     }
@@ -405,6 +420,17 @@ public sealed partial class SubtitleSearchOrchestrator
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
         budget.CancelAfter(_searchTimeout);
 
+        // L2 correlation: this source's slice of the round — every log line
+        // from here down (provider internals, the HTTP gate, scoring, the
+        // failure outcomes) carries the source key. The scope is per source
+        // iteration and restores on every exit path; because CorrelationContext
+        // writes copy-on-write, the parallel sibling tasks of the round's
+        // Task.WhenAll each keep their own source key without stomping each
+        // other, and the round flow that joins them stays unattributed (a
+        // round spans one session per queried source — there is no single
+        // round-level session id to stamp).
+        using var correlation = CorrelationContext.Push(provider: provider.Provider);
+
         try
         {
             var result = await provider.SearchAsync(request, budget.Token);
@@ -424,6 +450,11 @@ public sealed partial class SubtitleSearchOrchestrator
                     string.Join(",", request.Languages),
                     result.Candidates.Count,
                     hitTarget: result.Candidates.Count > 0);
+                // L2: the session row exists with a real id — stamp it so the
+                // remaining logs of this source's flow (scoring, outcome
+                // recording below, cooldown writes) grep together with the
+                // subtitle_search_sessions row the history screen links to.
+                CorrelationContext.SetSearchSessionId(sessionId);
             }
             catch (Exception telemetryError)
             {

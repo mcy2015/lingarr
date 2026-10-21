@@ -195,10 +195,10 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
         if (selected == null || !targetLanguages.Any())
         {
             _logger.LogWarning(
-                "No valid source language or target languages found for media |Green|{FileName}|/Green|. " +
-                "Existing languages: |Red|{ExistingLanguages}|/Red|, " +
-                "Source languages: |Red|{SourceLanguages}|/Red|, " +
-                "Target languages: |Red|{TargetLanguages}|/Red|",
+                "No valid source language or target languages found for media {FileName}. " +
+                "Existing languages: {ExistingLanguages}, " +
+                "Source languages: {SourceLanguages}, " +
+                "Target languages: {TargetLanguages}",
                 string.Join(", ", _media?.FileName),
                 string.Join(", ", subtitles.Select(s => s.Language.ToLowerInvariant())),
                 string.Join(", ", sourceLanguages),
@@ -220,7 +220,7 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
             if (targetLanguagesWithCaptions.Any())
             {
                 _logger.LogInformation(
-                    "Translation skipped because captions exist for target languages: |Green|{CaptionLanguages}|/Green| and ignoreCaptions is disabled",
+                    "Translation skipped because captions exist for target languages: {CaptionLanguages} and ignoreCaptions is disabled",
                     string.Join(", ", targetLanguagesWithCaptions));
                 await UpdateHash();
                 return false;
@@ -286,7 +286,7 @@ public class MediaSubtitleProcessor : IMediaSubtitleProcessor
                 SubtitleFormat = subtitleFormat
             });
             _logger.LogInformation(
-                "Initiating translation from |Orange|{sourceLanguage}|/Orange| to |Orange|{targetLanguage}|/Orange| for |Green|{subtitleFile}|/Green|",
+                "Initiating translation from {sourceLanguage} to {targetLanguage} for {subtitleFile}",
                 selected.SourceLanguage,
                 targetLanguage,
                 subtitlePath);

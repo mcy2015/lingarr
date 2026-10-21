@@ -114,9 +114,13 @@ public class StatisticsJob
             // the coverage values nor their watermarks land — the items it
             // had selected stay eligible and are retried next round.
             await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
-            _logger.LogError(ex,
-                "An error occurred while computing statistics. Exception details: {ExceptionMessage}, Stack Trace: {StackTrace}",
-                ex.Message, ex.StackTrace);
+            _logger.LogError(ex, "An error occurred while computing statistics.");
+            // Attempts=0 means no retry storm: rethrowing only marks the
+            // job Failed in Hangfire storage (persisted on the schedule
+            // screen) and feeds the server exception filter's file log.
+            // The R13 semantics above are unaffected — items selected by a
+            // failed round stay eligible for the next one either way.
+            throw;
         }
     }
 

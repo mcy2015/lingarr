@@ -565,18 +565,21 @@ public class StatisticsJobTests : IDisposable
     // ── QA4 P1-2: top-level exception handling ─────────────────────
 
     [Fact]
-    public async Task Execute_UnhandledScanException_MarksJobFailedWithoutThrowing()
+    public async Task Execute_UnhandledScanException_MarksFailedAndRethrows()
     {
         // The classic failure shape: a mid-scan IO exception surfacing out of
         // the subtitle collection. Before the guard this escaped Execute,
         // lost the whole run and left the job state stuck in Processing.
+        // L3: the catch records the failure state and rethrows (Automatic-
+        // Retry(0) — no retry storm) so Hangfire persists the Failed state
+        // and the server exception filter logs the stack.
         var subtitleService = new Mock<ISubtitleService>();
         subtitleService
             .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
             .ThrowsAsync(new IOException("NAS dropped the share mid-enumeration"));
         await SeedMovieAsync(50);
 
-        await CreateJob(subtitleService.Object).Execute();
+        await Assert.ThrowsAsync<IOException>(() => CreateJob(subtitleService.Object).Execute());
 
         _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Processing"), Times.Once);
         _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
@@ -585,7 +588,7 @@ public class StatisticsJobTests : IDisposable
     }
 
     [Fact]
-    public async Task Execute_SeasonScanFailure_MarksJobFailedWithoutThrowing()
+    public async Task Execute_SeasonScanFailure_MarksFailedAndRethrows()
     {
         var subtitleService = new Mock<ISubtitleService>();
         subtitleService
@@ -593,7 +596,7 @@ public class StatisticsJobTests : IDisposable
             .ThrowsAsync(new IOException("season directory vanished mid-scan"));
         await SeedShowAsync(51, "show51/s01");
 
-        await CreateJob(subtitleService.Object).Execute();
+        await Assert.ThrowsAsync<IOException>(() => CreateJob(subtitleService.Object).Execute());
 
         _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
         _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Succeeded"), Times.Never);
@@ -805,7 +808,9 @@ public class StatisticsJobTests : IDisposable
         subtitleService
             .Setup(s => s.GetAllSubtitles(It.IsAny<string>()))
             .ThrowsAsync(new IOException("share dropped mid-scan"));
-        await CreateJob(subtitleService.Object).Execute();
+        // L3: failed rounds rethrow after recording (the R13 semantics —
+        // items stay eligible — hold either way; see the comment below).
+        await Assert.ThrowsAsync<IOException>(() => CreateJob(subtitleService.Object).Execute());
 
         _scheduleService.Verify(s => s.UpdateJobState(It.IsAny<string>(), "Failed"), Times.Once);
         // the failed round never reaches its closing statements: neither the

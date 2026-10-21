@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 
@@ -28,6 +31,13 @@ namespace Lingarr.Server.Modules.SubtitleSearch.Providers;
 /// Public (not internal) because the throttle table is process-wide static
 /// state that tests must reset between cases — the same "public hook, no
 /// InternalsVisibleTo" ruling as the orchestrator's testing constructor.
+/// </para>
+/// <para>
+/// L4a: every verdict the gate maps is logged through a process-wide logger
+/// (<see cref="Initialize"/>) — quota/rate-limit verdicts, timeouts and
+/// network failures as Warning (the "assrt 493 shipped unlogged" closure),
+/// other non-success statuses and long throttle waits as Debug, success
+/// never.
 /// </para>
 /// </summary>
 public static class SubtitleHttp
@@ -160,16 +170,29 @@ public static class SubtitleHttp
     /// wait is interruptible through <paramref name="cancellationToken"/>
     /// (the orchestrator's per-source budget token).
     /// </summary>
-    public static Task ThrottleAsync(string provider, CancellationToken cancellationToken)
+    public static async Task ThrottleAsync(string provider, CancellationToken cancellationToken)
     {
         var interval = GetMinimumRequestInterval(provider);
         if (interval <= TimeSpan.Zero)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var throttle = Throttles.GetOrAdd(provider, _ => new SourceThrottle());
-        return throttle.WaitForTurnAsync(interval, cancellationToken);
+        var stopwatch = Stopwatch.StartNew();
+        await throttle.WaitForTurnAsync(interval, cancellationToken);
+        stopwatch.Stop();
+
+        // L4a: a wait of a second or more is the visible face of the assrt
+        // 3s / OpenSubtitles 1s pacing — Debug, because a busy automated
+        // round would otherwise flood the log with routine waits.
+        if (stopwatch.Elapsed >= ThrottleWaitLogThreshold)
+        {
+            _logger?.LogDebug(
+                "Subtitle source {Provider} waited {WaitMs:0} ms for its rate-limit slot before sending.",
+                provider,
+                stopwatch.Elapsed.TotalMilliseconds);
+        }
     }
 
     /// <summary>
@@ -224,6 +247,48 @@ public static class SubtitleHttp
     /// </summary>
     public static Func<string, HttpClient>? DownloadClientFactory { get; set; }
 
+    // ── Gate logging (L4a) ────────────────────────────────────────────────
+    //
+    // Every verdict this gate maps used to be silent — the direct root cause
+    // of the "assrt 493 download throttle shipped unlogged" incident. The
+    // logger is static like the rest of the gate's process-wide state,
+    // assigned once at host start by SubtitleSearchModule's hosted wiring
+    // (same pattern as DownloadClientFactory above); tests hand in a
+    // capturing logger, null (uninitialized) keeps the gate silent.
+
+    private static volatile ILogger? _logger;
+
+    /// <summary>
+    /// Installs (or, with null, removes) the gate's process-wide logger.
+    /// Public for the module wiring and for tests — the same "public hook,
+    /// no InternalsVisibleTo" ruling as <see cref="ClearRequestThrottling"/>.
+    /// The wiring passes the logger of this static class as the category, so
+    /// every entry filters as the shared gate regardless of which source
+    /// produced it (the provider rides in the {Provider} placeholder).
+    /// </summary>
+    public static void Initialize(ILogger? logger) => _logger = logger;
+
+    /// <summary>
+    /// Single throttle waits at or above this span earn a Debug entry (L4a):
+    /// below it the pacing is routine and would only flood the log — the
+    /// waits that matter (assrt's 3s, OpenSubtitles' 1s slots) all clear it.
+    /// </summary>
+    private static readonly TimeSpan ThrottleWaitLogThreshold = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Log-safe request identifier of one gate call: scheme://host/path of
+    /// the request URI — never the query string (the subtitle sources carry
+    /// their keys and tokens there) and never the headers. Masked with
+    /// <see cref="LogSanitizer.Mask"/> as defense in depth; "(no request
+    /// URI)" for hand-built responses that did not carry their request.
+    /// </summary>
+    private static string DescribeRequest(Uri? requestUri)
+        => requestUri is null
+            ? "(no request URI)"
+            : LogSanitizer.Mask(requestUri.GetComponents(
+                UriComponents.SchemeAndServer | UriComponents.Path,
+                UriFormat.UriEscaped));
+
     /// <summary>
     /// Sends one request and turns every failure into a
     /// <see cref="SubtitleProviderException"/>: 429/401/403/5xx per the ⑧
@@ -244,6 +309,13 @@ public static class SubtitleHttp
         CancellationToken cancellationToken,
         HttpCompletionOption completionOption = HttpCompletionOption.ResponseContentRead)
     {
+        // L2 correlation: every verdict this gate logs (the L4a entries
+        // below) carries the source key — pushed once at the common entry of
+        // every provider HTTP call, before the throttle wait so pacing logs
+        // are stamped too. Idempotent over an ambient push of the same key
+        // (the orchestrator already stamps its per-source iterations).
+        using var correlation = CorrelationContext.Push(provider: provider);
+
         // Design ⑧ per-source pacing: rate-limited sources (OpenSubtitles
         // 1 req/s, assrt 20/min) WAIT here for their slot before the
         // request leaves. The
@@ -263,14 +335,24 @@ public static class SubtitleHttp
         catch (TaskCanceledException ex)
         {
             // No caller cancellation pending: the HttpClient timeout fired.
+            _logger?.LogWarning(
+                ex,
+                "Subtitle source {Provider} timed out while sending the request ({Request}) — Timeout verdict.",
+                provider,
+                DescribeRequest(request.RequestUri));
             throw SubtitleProviderException.ForTimeout(provider, ex);
         }
         catch (HttpRequestException ex)
         {
+            _logger?.LogWarning(
+                ex,
+                "Subtitle source {Provider} failed while sending the request ({Request}) — NetworkError verdict.",
+                provider,
+                DescribeRequest(request.RequestUri));
             throw SubtitleProviderException.ForNetworkError(provider, ex);
         }
 
-        EnsureSuccess(response, provider);
+        EnsureSuccess(response, provider, request.RequestUri);
         return response;
     }
 
@@ -281,26 +363,65 @@ public static class SubtitleHttp
     /// (same-day cooldown) instead of the generic 429 handling — see
     /// <see cref="TryReadDailyLimit"/>.
     /// </summary>
-    public static void EnsureSuccess(HttpResponseMessage response, string provider)
+    public static void EnsureSuccess(HttpResponseMessage response, string provider, Uri? requestUri = null)
     {
         if (response.IsSuccessStatusCode)
         {
-            return;
+            return; // success path stays log-free — aggregation is L4b's business
         }
 
         var retryAfterSeconds = ParseRetryAfter(response.Headers.RetryAfter);
         var statusCode = response.StatusCode;
+        // Prefer the response's own request stamp; HttpClient does not
+        // populate it for handler-built responses, so the caller's URI is
+        // the reliable fallback.
+        var request = DescribeRequest(response.RequestMessage?.RequestUri ?? requestUri);
 
         if (statusCode is System.Net.HttpStatusCode.TooManyRequests
             or System.Net.HttpStatusCode.NotAcceptable
             && TryReadDailyLimit(response, provider, out var dailyLimit))
         {
+            // L4a: the quota verdict is the historic silent killer (the
+            // rate-limit family once shipped entirely unlogged) — Warning,
+            // low-frequency by nature and always visible in the ring/file.
+            _logger?.LogWarning(
+                "Subtitle source {Provider} answered {StatusCode} on {Request} with zero remaining quota — DailyLimit verdict.",
+                provider,
+                (int)statusCode,
+                request);
             response.Dispose(); // nobody else will read the failed response
             throw dailyLimit;
         }
 
         response.Dispose(); // nobody else will read the failed response
-        throw SubtitleProviderException.ForHttpStatus(provider, statusCode, retryAfterSeconds);
+        var failure = SubtitleProviderException.ForHttpStatus(provider, statusCode, retryAfterSeconds);
+        if ((int)statusCode is 429 or 406 or 493 or 509)
+        {
+            // The rest of the rate-limit family: a bare 429/406 without
+            // quota headers and assrt's non-standard 493/509 download
+            // throttle — same Warning treatment, verdict stated honestly as
+            // the cooldown mapping it actually is.
+            _logger?.LogWarning(
+                "Subtitle source {Provider} answered {StatusCode} on {Request} — rate-limit cooldown verdict{RetryAfterNote}.",
+                provider,
+                (int)statusCode,
+                request,
+                retryAfterSeconds is > 0 ? $" (Retry-After: {retryAfterSeconds}s)" : string.Empty);
+        }
+        else
+        {
+            // Every other non-success status can repeat heavily (5xx during
+            // a source outage, per-candidate 404s) — Debug keeps the ring
+            // and the default file clean while staying greppable.
+            _logger?.LogDebug(
+                "Subtitle source {Provider} answered {StatusCode} on {Request} — mapped to {Reason}.",
+                provider,
+                (int)statusCode,
+                request,
+                failure.Reason);
+        }
+
+        throw failure;
     }
 
     /// <summary>
@@ -403,6 +524,13 @@ public static class SubtitleHttp
         string provider,
         CancellationToken cancellationToken)
     {
+        // L2 correlation: the byte download's body-read phase streams AFTER
+        // SendCheckedAsync returned and disposed its own push — this outer
+        // scope keeps the source key on the read-failure warnings below (and
+        // covers download flows that enter here without an ambient stamp,
+        // e.g. the download pipeline, which only stamps mediaKey/session).
+        using var correlation = CorrelationContext.Push(provider: provider);
+
         var downloadClient = DownloadClientFactory?.Invoke(provider) ?? httpClient;
         using var response = await SendCheckedAsync(
             downloadClient, request, provider, cancellationToken,
@@ -416,27 +544,47 @@ public static class SubtitleHttp
                 $"the download declares {declaredBytes} bytes, over the {MaxDownloadBytes / (1024 * 1024)}MB payload budget.");
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var buffered = new MemoryStream((int)Math.Min(declaredBytes ?? 0L, MaxDownloadBytes));
-        var chunk = new byte[81920];
-        long total = 0;
-        int read;
-        while ((read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken)) > 0)
+        try
         {
-            total += read;
-            if (total > MaxDownloadBytes)
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var buffered = new MemoryStream((int)Math.Min(declaredBytes ?? 0L, MaxDownloadBytes));
+            var chunk = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken)) > 0)
             {
-                throw SubtitleProviderException.ForInvalidResponse(
-                    provider,
-                    $"the download streamed past the {MaxDownloadBytes / (1024 * 1024)}MB payload budget.");
+                total += read;
+                if (total > MaxDownloadBytes)
+                {
+                    throw SubtitleProviderException.ForInvalidResponse(
+                        provider,
+                        $"the download streamed past the {MaxDownloadBytes / (1024 * 1024)}MB payload budget.");
+                }
+
+                buffered.Write(chunk, 0, read);
             }
 
-            buffered.Write(chunk, 0, read);
+            var fileName = response.Content.Headers.ContentDisposition?.FileNameStar
+                ?? response.Content.Headers.ContentDisposition?.FileName;
+            return (buffered.ToArray(), fileName?.Trim('"'));
         }
-
-        var fileName = response.Content.Headers.ContentDisposition?.FileNameStar
-            ?? response.Content.Headers.ContentDisposition?.FileName;
-        return (buffered.ToArray(), fileName?.Trim('"'));
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw; // caller gave up — not a source failure
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or HttpRequestException or IOException)
+        {
+            // L4a: with ResponseHeadersRead the body streams AFTER SendAsync
+            // returned, so the send-side catches above never see these —
+            // log with the full exception and rethrow unchanged (the
+            // mapping of read-phase failures stays the caller's business).
+            _logger?.LogWarning(
+                ex,
+                "Subtitle source {Provider} failed while reading the download body ({Request}).",
+                provider,
+                DescribeRequest(request.RequestUri));
+            throw;
+        }
     }
 
     /// <summary>JSON body helper with the app-wide serializer options.</summary>

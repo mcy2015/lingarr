@@ -158,7 +158,7 @@ public partial class SubtitleConversionService : ISubtitleConversionService
         result.IsBilingual = bilingual;
         result.Message = bilingual ? "Converted to bilingual" : "Converted to monolingual";
         _logger.LogInformation(
-            "Subtitle for request {Id} converted to {Form}: |Green|{filePath}|/Green|",
+            "Subtitle for request {Id} converted to {Form}: {filePath}",
             translationRequestId, bilingual ? "bilingual" : "monolingual", request.TranslatedSubtitle);
         return result;
     }

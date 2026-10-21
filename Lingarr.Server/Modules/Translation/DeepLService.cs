@@ -94,7 +94,7 @@ public class DeepLService : BaseTranslationService
     /// <inheritdoc />
     public override async Task<List<SourceLanguage>> GetLanguages()
     {
-        _logger.LogInformation($"Retrieving |Green|DeepL|/Green| languages");
+        _logger.LogInformation($"Retrieving DeepL languages");
         await InitializeAsync();
         
         if (_translator == null)
@@ -163,7 +163,10 @@ public class DeepLService : BaseTranslationService
                 // If this was the last attempt, throw
                 if (attempt > _maxRetries)
                 {
-                    _logger.LogError(tmrEx, "Too many requests. Max retries exhausted for text: {Text}", text);
+                    // Rate-limit exhaustion has nothing to do with the text
+                    // content — the full exception (with the inner chain)
+                    // carries everything worth logging.
+                    _logger.LogError(tmrEx, "Too many requests. Max retries exhausted.");
                     throw new TranslationException("Too many requests. Retry limit reached.", tmrEx);
                 }
 

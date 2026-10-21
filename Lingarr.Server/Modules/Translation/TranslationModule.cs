@@ -54,9 +54,13 @@ public static class TranslationModule
         services.AddSingleton<IPluginRegistry, PluginRegistry>();
         services.AddScoped<ISettingsAccess, SettingsAccess>();
 
-        // Scan for external plugins before the container is ready
+        // Scan for external plugins before the container is ready. The lambda
+        // (not a method group) passes no configuration on purpose:
+        // SerilogFileLogger.GetOrCreate then reuses the file logger the main
+        // factory already initialized, so plugin logs land in the same file
+        // as application logs instead of forking a second sink.
         var pluginLoaderLogger = LoggerFactory
-            .Create(InfrastructureModule.AddLogProviders)
+            .Create(logging => InfrastructureModule.AddLogProviders(logging))
             .CreateLogger<PluginLoader>();
         var pluginLoader = new PluginLoader(pluginLoaderLogger);
         pluginLoader.LoadPlugins(services);

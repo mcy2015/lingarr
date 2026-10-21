@@ -1,7 +1,8 @@
 ﻿<template>
-    <!-- ═══ 日志下钻屏(原型 screen-11):pb-head(级别过滤 chips + 自动滚动
-         switch + 清空次级动作)+ 日志卡(滚动收进卡内)。全部逻辑(SSE 流、
-         级别过滤、导出、清空、自动滚动)沿用原有实现,仅模板层重排。 -->
+    <!-- ═══ 日志下钻屏(原型 screen-11):pb-head(级别过滤 chips + 文本搜索 +
+         自动滚动 switch + 清空次级动作)+ 日志卡(滚动收进卡内)。L5:搜索
+         覆盖消息/类别/关联键;条目按 seq 去重、上限 5000;堆栈默认折叠;
+         纯文本渲染(v-html 与彩色标记一并退役)。 -->
     <DrillDownPage
         :back-to="{ name: 'settings-system' }"
         :back-label="t('settings.menu.groups.system')"
@@ -28,6 +29,13 @@
                     {{ chip.label }} {{ chip.count }}
                 </button>
             </div>
+            <input
+                v-model="searchQuery"
+                type="search"
+                data-test="log-search"
+                class="border-line bg-secondary text-primary-content placeholder:text-secondary-content/50 focus-visible:ring-accent h-[26px] w-52 rounded-md border px-2 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                :placeholder="t('settings.logs.searchPlaceholder')"
+                :aria-label="t('settings.logs.searchPlaceholder')" />
             <label
                 class="text-secondary-content ml-1 flex cursor-pointer items-center gap-2 text-[12.5px]">
                 {{ t('settings.logs.autoScrollLabel') }}
@@ -80,19 +88,31 @@
                             :class="rowClass(log.logLevel)"
                             :title="log.message">
                             <span
+                                v-if="correlationOf(log)"
+                                class="text-secondary-content/60 mr-1.5"
+                                data-test="log-correlation">
+                                {{ correlationOf(log) }}
+                            </span>
+                            <span
                                 v-if="log.formattedSource"
                                 class="text-secondary-content/70 mr-1.5">
                                 {{ log.formattedSource }}
                             </span>
-                            <span v-html="formatLogMessage(log.message)"></span>
+                            <span>{{ log.message }}</span>
                         </span>
                     </div>
 
-                    <div
+                    <!-- L5: the stack rides its own field (L1b) collapsed by
+                         default — one click to expand, no page-level state. -->
+                    <details
                         v-if="log.stackTrace"
-                        class="border-line/60 bg-danger/5 border-b py-1 pr-3 pl-2 text-xs text-danger/90">
-                        <pre class="whitespace-pre-wrap">{{ log.stackTrace }}</pre>
-                    </div>
+                        class="border-line/60 bg-danger/5 border-b py-1 pr-3 pl-2 text-xs text-danger/90"
+                        data-test="log-stack">
+                        <summary class="cursor-pointer select-none opacity-80">
+                            {{ t('settings.logs.stackTraceToggle') }}
+                        </summary>
+                        <pre class="mt-1 whitespace-pre-wrap">{{ log.stackTrace }}</pre>
+                    </details>
                 </div>
             </div>
         </div>
@@ -119,10 +139,20 @@ const toastStore = useToastStore()
 const logs = ref<ILogEntry[]>([])
 const autoScroll = ref(true)
 const logContainer = ref<HTMLElement | null>(null)
+const searchQuery = ref('')
 const filterOptions = ref<IFilterOptions>({
     logLevel: 'all'
 })
 let eventSource: EventSource | null = null
+
+/// L5 hard cap: the live stream is unbounded server-side; without a cap a
+/// tab left open through a 10w-media round grows the array (and the DOM)
+/// without end. Oldest entries drop off.
+const MaxEntries = 5000
+
+/// L1b sequence high-water mark — the server replays the last 100 entries
+/// on reconnect, anything at or below this is a duplicate.
+let lastSeq = 0
 
 const levelKey = (level: string): string => {
     const lower = level.toLowerCase()
@@ -149,15 +179,35 @@ const levelChips = computed(() => [
 ])
 
 const filteredLogs = computed(() => {
+    const query = searchQuery.value.trim().toLowerCase()
     return logs.value.filter((log) => {
         if (filterOptions.value.logLevel !== 'all') {
             if (levelKey(log.logLevel) !== filterOptions.value.logLevel) {
                 return false
             }
         }
+        if (query) {
+            const haystack =
+                `${log.message} ${log.category} ${log.formattedSource} ${correlationOf(log)}`.toLowerCase()
+            if (!haystack.includes(query)) {
+                return false
+            }
+        }
         return true
     })
 })
+
+/// L2 correlation keys as one compact muted prefix — visible and
+/// searchable (paste a requestId/jobId to pull the whole chain).
+const correlationOf = (log: ILogEntry): string => {
+    const parts: string[] = []
+    if (log.jobId) parts.push(`job:${log.jobId}`)
+    if (log.requestId) parts.push(`req:${log.requestId}`)
+    if (log.searchSessionId != null) parts.push(`sess:${log.searchSessionId}`)
+    if (log.mediaKey) parts.push(`media:${log.mediaKey}`)
+    if (log.provider) parts.push(`src:${log.provider}`)
+    return parts.join(' ')
+}
 
 /// 行内级别与筛选徽章同一套写法(批E E5):INFO/WARN/ERROR,等宽网格
 /// 的 46px 级别列足够容纳最长形态,不换行。
@@ -182,22 +232,6 @@ const rowClass = (level: string): string => {
     if (key === 'error') return 'text-danger'
     if (key === 'warning') return 'text-warning'
     return 'text-primary-content'
-}
-
-const formatLogMessage = (message: string): string => {
-    // Replace color tags
-    let formattedMessage = message
-        .replace(/\|Green\|([^|]+)\|\/Green\|/g, '<span class="text-success">$1</span>')
-        .replace(/\|Red\|([^|]+)\|\/Red\|/g, '<span class="text-danger">$1</span>')
-        .replace(/\|Orange\|([^|]+)\|\/Orange\|/g, '<span class="text-warning">$1</span>')
-
-    // Highlight environment variables
-    formattedMessage = formattedMessage.replace(
-        /'([A-Z_]+)'/g,
-        '<span class="text-accent">\'$1\'</span>'
-    )
-
-    return formattedMessage
 }
 
 const scrollToBottom = async () => {
@@ -278,23 +312,40 @@ watch(
     { deep: true }
 )
 
-onMounted(() => {
-    // topbar CTA (prototype act table): ⇩ export of the filtered view
-    uiStore.registerCta({ key: 'settings.logs.exportCta' }, exportLogs)
-    uiStore.setSubOverride({ key: 'settings.logs.topbarSub' })
+/// Single append path: the MaxEntries hard cap applies on every entry.
+const appendLog = (entry: ILogEntry) => {
+    logs.value.push(entry)
+    if (logs.value.length > MaxEntries) {
+        logs.value.splice(0, logs.value.length - MaxEntries)
+    }
+}
 
+/// Creates the SSE connection with its handlers attached — the one entry
+/// point the first mount and every manual reconnect both go through (the
+/// old inline reconnect never re-attached handlers, so the page went
+/// silent after one dropped connection).
+const connectStream = () => {
     eventSource = logsApi.getStream()
 
     eventSource.onmessage = (event) => {
         try {
-            const logData = JSON.parse(event.data)
-            logs.value = [...logs.value, logData]
+            const logData = JSON.parse(event.data) as ILogEntry
+            // L1b: seq is the reconnect dedupe key — the server replays the
+            // last 100 entries after a drop; anything at or below the last
+            // seen seq is a duplicate.
+            if (typeof logData.seq === 'number') {
+                if (logData.seq <= lastSeq) {
+                    return
+                }
+                lastSeq = logData.seq
+            }
+            appendLog(logData)
             scrollToBottom()
         } catch (error) {
             console.error('Error processing log entry:', error)
             console.error('Problematic data:', event.data)
 
-            const fallbackEntry: ILogEntry = {
+            appendLog({
                 logLevel: 'Error',
                 message: t('settings.logs.failedToProcessData', {
                     data:
@@ -306,29 +357,34 @@ onMounted(() => {
                 formattedSource: 'System',
                 category: 'System',
                 stackTrace: error instanceof Error ? error.stack : undefined
-            }
-
-            logs.value = [...logs.value, fallbackEntry]
+            })
         }
     }
 
-    eventSource.onerror = (error) => {
-        console.error('EventSource error:', error)
-        logs.value.push({
+    eventSource.onerror = () => {
+        appendLog({
             logLevel: 'error',
             message: t('settings.logs.connectionError'),
             timestamp: new Date().toISOString(),
             formattedSource: 'System',
             category: 'System'
         })
-        // reconnect
-        if (eventSource) {
+        // Native EventSource retries transient drops itself (the server
+        // resumes from Last-Event-ID; overlap is deduped via lastSeq
+        // above). Only a terminally closed source needs the manual rebuild.
+        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
             eventSource.close()
-            setTimeout(() => {
-                eventSource = logsApi.getStream()
-            }, 5000)
+            setTimeout(connectStream, 5000)
         }
     }
+}
+
+onMounted(() => {
+    // topbar CTA (prototype act table): ⇩ export of the filtered view
+    uiStore.registerCta({ key: 'settings.logs.exportCta' }, exportLogs)
+    uiStore.setSubOverride({ key: 'settings.logs.topbarSub' })
+
+    connectStream()
 })
 
 onUnmounted(() => {

@@ -63,9 +63,12 @@ public class SyncShowJob
         catch (Exception ex)
         {
             await _scheduleService.UpdateJobState(jobName, JobStatus.Failed.GetDisplayName());
-            _logger.LogError(ex,
-                "An error occurred when syncing shows. Exception details: {ExceptionMessage}, Stack Trace: {StackTrace}",
-                ex.Message, ex.StackTrace);
+            _logger.LogError(ex, "An error occurred when syncing shows.");
+            // Attempts=0 means no retry storm: rethrowing only marks the
+            // job Failed in Hangfire storage, so the failure survives
+            // restarts on the schedule screen and feeds the server
+            // exception filter's file log.
+            throw;
         }
     }
 }

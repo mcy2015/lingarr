@@ -24,6 +24,11 @@ services:
       # - LINGARR_ADMIN_PASSWORD=set-your-own
       # 反代需要子路径时再开(默认根路径直出)。
       # - BASE_PATH=/lingarr
+      # 临时排障时提升文件日志级别(Serilog 文件日志落在 ./data/logs):
+      # - Serilog__MinimumLevel__Default=Debug
+      # Hangfire 任务面板(/hangfire,任务失败+堆栈的第一观测面):
+      # 走与 API 相同的 LingarrAccess 认证,这里显式保持默认开启。
+      - HANGFIRE_DASHBOARD_ENABLED=true
     volumes:
       # 应用数据:SQLite(lingarr.db)与 Hangfire.db 都在这里
       - ./data:/app/config
@@ -34,6 +39,13 @@ services:
       - ../media/data/series/anime:/anime
     ports:
       - "9878:9876"
+    # stdout 由 docker json-file 驱动落盘并轮转,防止 NAS 长跑日志无限增长;
+    # 与应用自身的 Serilog 文件日志(./data/logs,按天+50MB 滚动)是两个独立通道。
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     # Linux Docker(各类 NAS)默认不解析 host.docker.internal,加这条后
     # 同机服务可统一填 http://host.docker.internal:端口(如 Radarr :7878、
     # Sonarr :8989、LibreTranslate :5001);Docker Desktop 不受影响。

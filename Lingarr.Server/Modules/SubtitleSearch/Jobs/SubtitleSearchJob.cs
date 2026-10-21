@@ -13,6 +13,8 @@ using Lingarr.Server.Modules.SubtitleSearch.Requests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Extensions;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace Lingarr.Server.Modules.SubtitleSearch.Jobs;
 
@@ -144,6 +146,17 @@ public class SubtitleSearchJob
         var activeProviders = _orchestrator.RegisteredProviderKeys()
             .Except(cooldowns.Keys, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        if (cooldowns.Count > 0)
+        {
+            // L4b: the cooling set is a per-round fact — one Information
+            // line here; the orchestrator's per-media repetition of the
+            // same fact is Debug. The all-cooling warning below still marks
+            // the "round could do nothing" case distinctly.
+            _logger.LogInformation(
+                "Cooling down this round: {Sources}.",
+                string.Join(", ", cooldowns.Select(pair =>
+                    $"{pair.Key} until {pair.Value.Until:u} ({pair.Value.Reason})")));
+        }
         if (activeProviders.Count == 0)
         {
             // ⑧: every source cooling down is a normal end of round — warn
@@ -155,6 +168,13 @@ public class SubtitleSearchJob
 
         var batch = await _queueService.DequeueBatchAsync(batchLimit, DateTimeOffset.UtcNow, cancellationToken);
         var processed = 0;
+        var roundStarted = Stopwatch.GetTimestamp();
+        // L4b round aggregation: per-item outcomes tally into these and the
+        // round-end Information line reports them — per-media detail stays
+        // Debug in the pipeline/orchestrator, so a 10w library produces
+        // O(1) Information lines per round.
+        var downloadTally = new ConcurrentDictionary<SubtitleDownloadResult, int>();
+        var sourceOutcomes = new ConcurrentQueue<SubtitleSourceOutcome>();
 
         // R14: media-level bounded fan-out. SemaphoreSlim(8) + Task.WhenAll
         // (chosen over Parallel.ForEachAsync) because the round's contract
@@ -180,7 +200,9 @@ public class SubtitleSearchJob
                 var scopedQueue = scope.ServiceProvider.GetRequiredService<SubtitleSearchQueueService>();
                 try
                 {
-                    await ProcessItemAsync(scope.ServiceProvider, item, autoScore, activeProviders, cancellationToken);
+                    await ProcessItemAsync(
+                        scope.ServiceProvider, item, autoScore, activeProviders,
+                        downloadTally, sourceOutcomes, cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -205,8 +227,19 @@ public class SubtitleSearchJob
         var workers = batch.Select(item => ProcessBoundedAsync(item)).ToArray();
         await Task.WhenAll(workers);
 
+        var sourceFailures = sourceOutcomes
+            .GroupBy(outcome => (outcome.Provider, outcome.Reason))
+            .Select(group => $"{group.Key.Provider} {group.Key.Reason}×{group.Count()}")
+            .ToList();
         _logger.LogInformation(
-            "Subtitle search round finished: {Processed} items of a {Limit} limit.", processed, batchLimit);
+            "Subtitle search round finished: {Processed} items of a {Limit} limit in {ElapsedMs:0}ms. Downloads: {Tally}.{Failures}",
+            processed, batchLimit, Stopwatch.GetElapsedTime(roundStarted).TotalMilliseconds,
+            downloadTally.Count == 0
+                ? "none"
+                : string.Join(", ", downloadTally.Select(pair => $"{pair.Key}×{pair.Value}")),
+            sourceFailures.Count == 0
+                ? " No source failures."
+                : " Source failures: " + string.Join("; ", sourceFailures) + ".");
         await _scheduleService.UpdateJobState(jobName, JobStatus.Succeeded.GetDisplayName());
     }
 
@@ -225,6 +258,8 @@ public class SubtitleSearchJob
         SubtitleSearchState item,
         int autoScore,
         IReadOnlyCollection<string> activeProviders,
+        ConcurrentDictionary<SubtitleDownloadResult, int> downloadTally,
+        ConcurrentQueue<SubtitleSourceOutcome> sourceOutcomes,
         CancellationToken cancellationToken)
     {
         var dbContext = scopedServices.GetRequiredService<LingarrDbContext>();
@@ -252,6 +287,10 @@ public class SubtitleSearchJob
 
         var outcome = await orchestrator.SearchAsync(
             built.Request, item.MediaType, item.MediaId, singleProvider: null, cancellationToken);
+        foreach (var sourceOutcome in outcome.SourceOutcomes)
+        {
+            sourceOutcomes.Enqueue(sourceOutcome);
+        }
         var best = outcome.Candidates.FirstOrDefault();
 
         if (best is null || best.MatchScore < autoScore)
@@ -264,12 +303,15 @@ public class SubtitleSearchJob
                 : $"best candidate scored {best.MatchScore} (< {autoScore})";
             await RecordLowConfidenceAsync(dbContext, item, built.Request, best, note, cancellationToken);
             await queueService.MarkFailedAsync(item.Id, note, cancellationToken);
+            downloadTally.AddOrUpdate(
+                SubtitleDownloadResult.LowConfidenceSkipped, 1, (_, count) => count + 1);
             return;
         }
 
         var sessionId = orchestrator.SessionIdOf(outcome.CacheKey, best);
         var download = await pipeline.DownloadAsync(
             best, item.MediaType, item.MediaId, SubtitleDownloadSource.Auto, sessionId, cancellationToken);
+        downloadTally.AddOrUpdate(download.Result, 1, (_, count) => count + 1);
         switch (download.Result)
         {
             case SubtitleDownloadResult.Succeeded:

@@ -33,6 +33,11 @@
         <!-- Translation -->
         <PackageVersion Include="DeepL.net" Version="1.22.1" />
         <PackageVersion Include="GTranslate" Version="2.4.0" />
+        <!-- Serilog (persistent daily-rolling file log + colored console) -->
+        <PackageVersion Include="Serilog" Version="4.3.0" />
+        <PackageVersion Include="Serilog.Extensions.Logging" Version="9.0.2" />
+        <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+        <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
         <!-- Testing -->
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
         <PackageVersion Include="xunit.v3" Version="3.2.2" />

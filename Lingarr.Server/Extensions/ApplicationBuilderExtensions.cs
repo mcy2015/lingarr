@@ -5,6 +5,7 @@ using Lingarr.Migrations;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Modules.Auth;
 using Lingarr.Server.Modules.Settings;
+using Microsoft.Extensions.Configuration;
 
 namespace Lingarr.Server.Extensions;
 
@@ -40,12 +41,12 @@ public static class ApplicationBuilderExtensions
         {
             // P1-4: the dev panels sit behind the same LingarrAccess policy as
             // the API. They must be registered AFTER UseAuthentication so
-            // cookie principals are populated — Hangfire's dashboard filters
-            // and the Swagger guard middleware evaluate the policy themselves
-            // (registered before, they would only ever see anonymous users).
-            // While authentication is disabled the policy still lets everyone
-            // through, preserving plain-http LAN dev convenience; new installs
-            // ship with auth_enabled=true, so their panels are protected too.
+            // cookie principals are populated — the Swagger guard middleware
+            // evaluates the policy itself (registered before, it would only
+            // ever see anonymous users). While authentication is disabled the
+            // policy still lets everyone through, preserving plain-http LAN
+            // dev convenience; new installs ship with auth_enabled=true, so
+            // their panels are protected too.
             app.UseLingarrAccessGuard("/swagger");
             app.UseSwagger();
             app.UseSwaggerUI(options =>
@@ -54,6 +55,18 @@ public static class ApplicationBuilderExtensions
                     $"Lingarr HTTP API {LingarrVersion.Number}");
                 options.EnableTryItOutByDefault();
             });
+        }
+
+        // The Hangfire dashboard is the primary job observability surface for
+        // the no-SSH NAS reality (failed jobs with their stacks). It runs
+        // behind the same LingarrAccess policy as the API via
+        // LingarrDashboardAuthorizationFilter (P1-4 — the old empty filter
+        // array let anyone in). Config-gated so a deployment can hide it:
+        // HANGFIRE_DASHBOARD_ENABLED maps to Hangfire:DashboardEnabled and
+        // defaults to true (2026-10-20 ruling: full access, compose pins it
+        // explicitly).
+        if (app.Configuration.GetValue("Hangfire:DashboardEnabled", true))
+        {
             app.UseHangfireDashboard("/hangfire", new DashboardOptions
             {
                 Authorization = [new LingarrDashboardAuthorizationFilter()]

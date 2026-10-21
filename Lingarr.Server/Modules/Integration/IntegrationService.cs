@@ -1,4 +1,4 @@
-using Lingarr.Server.Modules.Integration;
+using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Models;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -24,7 +24,8 @@ public class IntegrationService : IIntegrationService
         var separator = apiUrl.Contains("?") ? "&" : "?";
         var url = $"{settings.Url}{apiUrl}{separator}apikey={settings.ApiKey}";
 
-        var response = await _httpClient.GetAsync(url);
+        var response = await SendGuardedAsync(
+            _httpClient, url, HttpCompletionOption.ResponseContentRead, CancellationToken.None);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -61,8 +62,8 @@ public class IntegrationService : IIntegrationService
 
         // ResponseHeadersRead: the body is consumed while it is being deserialized,
         // instead of being buffered into memory first.
-        using var response = await _httpClient.GetAsync(
-            url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await SendGuardedAsync(
+            _httpClient, url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -82,6 +83,38 @@ public class IntegrationService : IIntegrationService
                            responseStream, cancellationToken: cancellationToken))
         {
             yield return item;
+        }
+    }
+
+    /// <summary>
+    /// Sends a *arr request and guarantees that whatever escapes to callers —
+    /// and from there into the now-persistent log files — never carries the
+    /// plaintext <c>apikey=</c> query string: HttpClient folds the request
+    /// URI into connection-failure exception messages. A sensitive exception
+    /// is rethrown masked (type and status code preserved, so catch guards
+    /// like <c>ex.StatusCode == NotFound</c> keep firing); a clean one is
+    /// rethrown untouched. The request itself is constructed identically —
+    /// this batch changes observability, not behavior.
+    /// </summary>
+    private static async Task<HttpResponseMessage> SendGuardedAsync(
+        HttpClient httpClient,
+        string url,
+        HttpCompletionOption completionOption,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await httpClient.GetAsync(url, completionOption, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            var masked = LogSanitizer.MaskHttpRequestException(ex);
+            if (masked is not null)
+            {
+                throw masked;
+            }
+
+            throw;
         }
     }
 }

@@ -7,6 +7,7 @@ using Lingarr.Contracts.Models;
 using Lingarr.Core.Configuration;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.Api;
+using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.Translation.Base;
 using Lingarr.Server.Modules.Settings;
 
@@ -19,6 +20,12 @@ public class LibreService : BaseLanguageService
     private string? _apiKey;
     private bool _initialized;
     private readonly SemaphoreSlim _initLock = new(1, 1);
+
+    /// <summary>
+    /// Cap for error-response bodies written to the (now persistent) log
+    /// file; the original length is logged alongside the excerpt.
+    /// </summary>
+    private const int MaxLoggedResponseChars = 200;
 
     // retry settings
     /// <inheritdoc />
@@ -82,7 +89,7 @@ public class LibreService : BaseLanguageService
     /// <inheritdoc />
     protected override async Task<List<SourceLanguage>> GetServiceLanguages()
     {
-        _logger.LogInformation($"Retrieving |Green|LibreTranslate|/Green| languages");
+        _logger.LogInformation($"Retrieving LibreTranslate languages");
         await InitializeAsync();
 
         if (string.IsNullOrEmpty(_apiUrl))
@@ -159,7 +166,9 @@ public class LibreService : BaseLanguageService
             {
                 if (attempt > _maxRetries)
                 {
-                    _logger.LogError("Max retries exhausted ({StatusCode}) for text: {Text}", response.StatusCode, text);
+                    // Rate limiting exhausted, not a content problem: the
+                    // subtitle text must not reach the persistent log file.
+                    _logger.LogError("Max retries exhausted ({StatusCode})", response.StatusCode);
                     throw new TranslationException(
                         $"LibreTranslate translation failed with status {response.StatusCode} ({response.ReasonPhrase}): retry limit reached.");
                 }
@@ -177,7 +186,12 @@ public class LibreService : BaseLanguageService
             {
                 var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogError("Response Status Code: {StatusCode}", response.StatusCode);
-                _logger.LogError("Response Content: {ResponseContent}", responseBody);
+                // Error pages from LibreTranslate can be large; with the file
+                // sink they would persist verbatim, so only an excerpt with an
+                // honest logged/original count goes to the log.
+                var (loggedBody, originalLength) = LogSanitizer.Truncate(responseBody, MaxLoggedResponseChars);
+                _logger.LogError("Response Content ({LoggedLength}/{OriginalLength} chars): {ResponseContent}",
+                    loggedBody.Length, originalLength, loggedBody);
                 throw new TranslationException(
                     $"LibreTranslate translation failed with status {response.StatusCode} ({response.ReasonPhrase}): {responseBody}");
             }

@@ -697,6 +697,8 @@
             "exportCta": "⇩ Export",
             "open": "Open logs",
             "levelFilter": "Level filter",
+            "searchPlaceholder": "Search messages, ids (req/job/media/src)…",
+            "stackTraceToggle": "Stack trace",
             "chipAll": "All",
             "autoScrollLabel": "Auto-scroll",
             "export": "Export",

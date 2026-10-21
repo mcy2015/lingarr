@@ -113,7 +113,7 @@ public class SubtitleService : ISubtitleService
         if (!Directory.Exists(path))
         {
             _logger.LogInformation(
-                "Failed to collect subtitles in path |Red|{Path}|/Red|. Try reindexing or verify that the media is correctly set up in the source system.",
+                "Failed to collect subtitles in path {Path}. Try reindexing or verify that the media is correctly set up in the source system.",
                 path);
             return new List<Subtitles>();
         }

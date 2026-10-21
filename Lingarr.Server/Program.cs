@@ -25,4 +25,9 @@ builder.Services.AddStatisticsModule();
 
 var app = builder.Build();
 await app.Configure();
+
+// Every logger factory holds the shared Serilog file logger with
+// dispose:false — this stop hook is its single flush-and-close point.
+app.Lifetime.ApplicationStopping.Register(SerilogFileLogger.Shutdown);
+
 app.Run();

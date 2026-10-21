@@ -13,12 +13,15 @@ jobs:
     
     steps:
     - uses: actions/checkout@v6
-    
+
+    - name: Check logging baseline
+      run: bash scripts/check-logging.sh --gate
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
-    
+
     - name: Restore dependencies
       run: dotnet restore Lingarr.slnx
     

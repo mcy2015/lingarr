@@ -152,7 +152,7 @@ public abstract class BaseLanguageService : BaseTranslationService
             return [];
         }
 
-        _logger.LogInformation($"Retrieving |Green|{_languageFilePath}|/Green| languages");
+        _logger.LogInformation($"Retrieving {_languageFilePath} languages");
         var sourceLanguages = await GetJson(_languageFilePath);
 
         var languageCodes = sourceLanguages.Select(l => l.Code).ToHashSet();

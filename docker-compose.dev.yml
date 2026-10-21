@@ -54,6 +54,11 @@ services:
       - "9877:9876"
     networks:
       - lingarr
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=lingarr"

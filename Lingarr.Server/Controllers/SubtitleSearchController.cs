@@ -6,6 +6,7 @@ using Lingarr.Contracts.Settings;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Modules.Infrastructure;
 using Lingarr.Server.Modules.SubtitleSearch;
 using Lingarr.Server.Modules.SubtitleSearch.Abstractions;
 using Lingarr.Server.Modules.SubtitleSearch.Orchestration;
@@ -422,6 +423,13 @@ public class SubtitleSearchController : ControllerBase
         var candidate = candidates[body.CandidateIndex];
         var source = ParseSource(body.Source);
         var sessionId = _orchestrator.SessionIdOf(body.CacheKey, candidate);
+        // L2 correlation: re-establish the deciding search session around the
+        // manual download — this request scope is not the one the search ran
+        // in, but the session linkage lives in the orchestrator cache, so the
+        // download's history/telemetry logs grep together with the search
+        // round that surfaced the file. The pipeline re-stamps mediaKey and
+        // this same session id around its own body.
+        using var correlation = CorrelationContext.Push(searchSessionId: sessionId);
         var outcome = await _pipeline.DownloadAsync(
             candidate, mediaType, body.MediaId, source, sessionId, cancellationToken,
             body.SkipTranslation);
