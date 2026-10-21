@@ -99,7 +99,7 @@ public class WebhookJobTests : IDisposable
             .ReturnsAsync(true);
 
         var queue = new SubtitleSearchQueueService(
-            _dbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+            _dbContext, _settingService.Object, NullLogger<SubtitleSearchQueueService>.Instance);
         _job = new WebhookJob(
             _dbContext,
             _mediaService.Object,

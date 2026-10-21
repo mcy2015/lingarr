@@ -1442,7 +1442,11 @@
         "previewTitle": "Subtitle preview",
         "previewMeta": "{format} · {count} cues · first {shown}",
         "previewLoading": "Fetching the subtitle…",
-        "previewUnavailable": "Preview failed — the candidate expired or the source is unavailable."
+        "previewUnavailable": "Preview failed — the candidate expired or the source is unavailable.",
+        "queue": {
+            "skippedAfterBudget": "Skipped after {attempts} failed attempts — pin it or wait for a new upload webhook to search again",
+            "skippedAfterWindow": "Skipped — no match inside the {days}-day long-tail window; pin it or wait for a new upload webhook to search again"
+        }
     },
     "dashboard": {
         "subtitles": {

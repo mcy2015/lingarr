@@ -473,6 +473,64 @@ public class StartupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SeedSubtitleSearchBackoffSettings_FreshDatabase_SeedsBudgetAndWindow()
+    {
+        // Arrange/Act: B12 — the give-up budget (12 attempts: 8 dense on
+        // the doubling curve + a 14d-spaced tail) and the 90-day catch-up
+        // window must exist as rows so the queue reads the seeded defaults
+        // instead of inventing them per call.
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var maxAttempts = await dbContext.Settings.FindAsync(
+            SettingKeys.SubtitleSearch.MaxAttempts);
+        Assert.NotNull(maxAttempts);
+        Assert.Equal("12", maxAttempts.Value);
+        Assert.Null(maxAttempts.Provider);
+
+        var longTailDays = await dbContext.Settings.FindAsync(
+            SettingKeys.SubtitleSearch.LongTailDays);
+        Assert.NotNull(longTailDays);
+        Assert.Equal("90", longTailDays.Value);
+        Assert.Null(longTailDays.Provider);
+    }
+
+    [Fact]
+    public async Task SeedSubtitleSearchBackoffSettings_ExistingRows_AreNeverOverwritten()
+    {
+        // Arrange: an install that tuned the give-up line back to the
+        // pre-B12 rule — the seed must keep the stored budget.
+        var serviceProvider = BuildProvider();
+        await using (var seedScope = serviceProvider.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+            seedDb.Settings.Add(new Setting
+            {
+                Key = SettingKeys.SubtitleSearch.MaxAttempts,
+                Value = "8",
+                Provider = null
+            });
+            await seedDb.SaveChangesAsync();
+        }
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert: the stored "8" survives; the missing window row is added.
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        Assert.Equal("8", (await dbContext.Settings.FindAsync(
+            SettingKeys.SubtitleSearch.MaxAttempts))!.Value);
+        Assert.Equal("90", (await dbContext.Settings.FindAsync(
+            SettingKeys.SubtitleSearch.LongTailDays))!.Value);
+    }
+
+    [Fact]
     public async Task StartAsync_AfterSubtitleSeed_SetEncryptedSettingSucceeds()
     {
         // Arrange: the bug's acceptance core — SetSetting only updates rows

@@ -294,6 +294,29 @@ public static class SettingKeys
         public const string AutoTranslate = "subtitle_search_auto_translate";
 
         /// <summary>
+        /// Give-up attempt budget of the failure backoff (B12); seeded "12"
+        /// by StartupService. Attempts 1-8 ride the doubling curve
+        /// (6h×2^(n-1) capped 7d), attempts 9..max wait a fixed 14 days, and
+        /// the first attempt past max transitions the row to Skipped. A
+        /// value ≤ 8 restores the pre-B12 semantics byte-identically (give
+        /// up ON the max-th attempt, no long tail). Only this budget and
+        /// <see cref="LongTailDays"/> are configurable — the curve itself
+        /// is deliberately fixed (B12 decision: no full parameterization).
+        /// </summary>
+        public const string MaxAttempts = "subtitle_search_max_attempts";
+
+        /// <summary>
+        /// Long-tail catch-up window in days (B12); seeded "90" by
+        /// StartupService. A long-tail row whose previous attempt (the
+        /// stored last_searched_at) is older than this window gives up on
+        /// its next failure even when the attempt budget is not exhausted —
+        /// the starved-queue backstop of the CSF 90-day window semantics.
+        /// Values ≤ 8 for <see cref="MaxAttempts"/> (legacy mode) ignore
+        /// this window entirely.
+        /// </summary>
+        public const string LongTailDays = "subtitle_search_long_tail_days";
+
+        /// <summary>
         /// JSON map of active per-source cooldowns (design ⑧):
         /// <c>{ "opensubtitles": { "until": "...", "reason": "RateLimited", "error": "..." } }</c>.
         /// Read at round start to skip cooled-down sources; written whenever a

@@ -38,7 +38,9 @@ public class SubtitleSearchState
     /// <summary>Earliest next dequeue (failure backoff: 6h × 2^attempt_count, capped 7d).</summary>
     public required DateTimeOffset NextAttemptAt { get; set; }
 
-    /// <summary>Consecutive failures; ≥8 transitions Status to Skipped.</summary>
+    /// <summary>Consecutive failures; past the dense zone (attempts 1-8,
+    /// exponential backoff) the row decays on a 14-day long-tail cadence
+    /// until subtitle_search_max_attempts, then transitions to Skipped.</summary>
     public int AttemptCount { get; set; }
 
     /// <summary>Last failure reason for the backlog card.</summary>

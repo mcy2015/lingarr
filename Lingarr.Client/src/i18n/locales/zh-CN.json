@@ -1442,7 +1442,11 @@
         "previewTitle": "字幕预览",
         "previewMeta": "{format} · 共 {count} 条 · 前 {shown} 条",
         "previewLoading": "正在获取字幕内容…",
-        "previewUnavailable": "预览失败——候选已过期或字幕源不可用。"
+        "previewUnavailable": "预览失败——候选已过期或字幕源不可用。",
+        "queue": {
+            "skippedAfterBudget": "连续 {attempts} 次未命中，已跳过——可置顶或等待新文件 webhook 再触发搜索",
+            "skippedAfterWindow": "已跳过——{days} 天长尾补搜窗口内未命中；可置顶或等待新文件 webhook 再触发搜索"
+        }
     },
     "dashboard": {
         "subtitles": {

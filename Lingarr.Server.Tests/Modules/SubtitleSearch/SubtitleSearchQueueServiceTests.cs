@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
@@ -20,15 +21,18 @@ namespace Lingarr.Server.Tests.Modules.SubtitleSearch;
 /// Priority-queue contracts of the subtitle-search automation (tech design
 /// ⑤, M3 acceptance): dequeue ordering (Pinned &gt; webhook boost &gt; due
 /// normal), in-batch boost expiry downgrade, upserts that preserve the
-/// attempt history, the 6h×2^n/7d-cap backoff with the ≥8 give-up rule,
-/// the gap fill, the backlog aggregate — and the dequeue query plan walking
-/// ix_subtitle_search_state_dequeue over a seeded table. Real SQLite schema
-/// because the upserts/ExecuteUpdate paths need a relational provider.
+/// attempt history, the B12 backoff curve (attempts 1-8 on 6h×2^n capped
+/// 7d, 9-12 at a fixed 14d, give-up past the budget or past the 90-day
+/// long-tail window), the gap fill, the backlog aggregate — and the dequeue
+/// query plan walking ix_subtitle_search_state_dequeue over a seeded table.
+/// Real SQLite schema because the upserts/ExecuteUpdate paths need a
+/// relational provider.
 /// </summary>
 public class SubtitleSearchQueueServiceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly QueueDbContext _dbContext;
+    private readonly InMemorySettingService _settings;
     private readonly SubtitleSearchQueueService _service;
 
     public SubtitleSearchQueueServiceTests()
@@ -43,7 +47,11 @@ public class SubtitleSearchQueueServiceTests : IDisposable
             .UseSnakeCaseNamingConvention()
             .Options);
         _dbContext.Database.EnsureCreated();
-        _service = new SubtitleSearchQueueService(_dbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+        // Empty by default → MarkFailedAsync falls back to the seeded B12
+        // defaults (max attempts 12, long-tail window 90d).
+        _settings = new InMemorySettingService();
+        _service = new SubtitleSearchQueueService(
+            _dbContext, _settings, NullLogger<SubtitleSearchQueueService>.Instance);
     }
 
     public void Dispose()
@@ -63,7 +71,8 @@ public class SubtitleSearchQueueServiceTests : IDisposable
         int attemptCount = 0,
         DateTimeOffset? nextAttemptAt = null,
         bool pinned = false,
-        DateTimeOffset? boostUntil = null) => new()
+        DateTimeOffset? boostUntil = null,
+        DateTimeOffset? lastSearchedAt = null) => new()
     {
         MediaType = mediaType,
         MediaId = mediaId,
@@ -73,6 +82,7 @@ public class SubtitleSearchQueueServiceTests : IDisposable
         WebhookBoostUntil = boostUntil,
         NextAttemptAt = nextAttemptAt ?? DateTimeOffset.UtcNow.AddHours(-1),
         AttemptCount = attemptCount,
+        LastSearchedAt = lastSearchedAt,
         UpdatedAt = DateTimeOffset.UtcNow
     };
 
@@ -184,8 +194,10 @@ public class SubtitleSearchQueueServiceTests : IDisposable
 
         var row = await _service.FindByMediaAsync(MediaType.Movie, 21, CancellationToken.None);
         Assert.Equal(SubtitleSearchStatus.Pending, row!.Status);
-        // The give-up threshold stays crossed for the future — but the boost
-        // puts the row back into the dequeued set immediately.
+        // The attempt history survives the revive — the boost puts the row
+        // back into the dequeued set immediately (B12 acceptance 3: the
+        // boost stays a revive path; the backoff curve change never
+        // touches it).
         Assert.Equal(8, row.AttemptCount);
     }
 
@@ -567,18 +579,169 @@ public class SubtitleSearchQueueServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task MarkFailed_AttemptEightTransitionsToSkipped()
+    public async Task MarkFailed_AttemptEight_StaysRetryableOnTheSevenDayCap()
     {
+        // B12 acceptance 1, the behavior-change point: the default budget
+        // (12) keeps the 8th failure INSIDE the dense zone — status stays
+        // retryable (Failed, never Skipped) and next_attempt rides the
+        // capped doubling curve (+7d). The pre-B12 rule skipped here.
         var state = Row(MediaType.Movie, 40, attemptCount: 7);
         _dbContext.SubtitleSearchStates.Add(state);
         await _dbContext.SaveChangesAsync();
 
+        var before = DateTimeOffset.UtcNow;
         await _service.MarkFailedAsync(state.Id, "still nothing");
+        var after = DateTimeOffset.UtcNow;
+
+        var row = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == state.Id);
+        Assert.Equal(8, row.AttemptCount);
+        Assert.Equal(SubtitleSearchStatus.Failed, row.Status);
+        Assert.Equal("still nothing", row.LastError);
+        // BackoffFor(8) = 192h capped at 7d.
+        Assert.True(row.NextAttemptAt - before >= TimeSpan.FromDays(7) - TimeSpan.FromSeconds(1),
+            $"attempt 8: backoff {row.NextAttemptAt - before} below the 7d cap");
+        Assert.True(row.NextAttemptAt - after <= TimeSpan.FromDays(7) + TimeSpan.FromSeconds(1),
+            $"attempt 8: backoff {row.NextAttemptAt - after} above the 7d cap");
+    }
+
+    [Fact]
+    public async Task MarkFailed_LongTailAttemptsNineToTwelve_WaitFourteenDays()
+    {
+        // B12: the tail zone (attempts 9-12 under the default budget)
+        // spaces retries at a fixed 14 days instead of the capped curve.
+        foreach (var attemptCount in new[] { 8, 9, 10, 11 })
+        {
+            var state = Row(MediaType.Movie, 45 + attemptCount,
+                status: SubtitleSearchStatus.Failed,
+                attemptCount: attemptCount,
+                lastSearchedAt: DateTimeOffset.UtcNow.AddDays(-14));
+            _dbContext.SubtitleSearchStates.Add(state);
+            await _dbContext.SaveChangesAsync();
+
+            var before = DateTimeOffset.UtcNow;
+            await _service.MarkFailedAsync(state.Id, "tail miss");
+            var after = DateTimeOffset.UtcNow;
+
+            var row = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == state.Id);
+            Assert.Equal(attemptCount + 1, row.AttemptCount);
+            Assert.Equal(SubtitleSearchStatus.Failed, row.Status); // 12 still retryable
+            Assert.True(row.NextAttemptAt - before >= TimeSpan.FromDays(14) - TimeSpan.FromSeconds(1),
+                $"attemptCount {attemptCount}: backoff {row.NextAttemptAt - before} below 14d");
+            Assert.True(row.NextAttemptAt - after <= TimeSpan.FromDays(14) + TimeSpan.FromSeconds(1),
+                $"attemptCount {attemptCount}: backoff {row.NextAttemptAt - after} above 14d");
+        }
+    }
+
+    [Fact]
+    public async Task MarkFailed_AttemptThirteen_TransitionsToSkipped()
+    {
+        // B12 acceptance 1: the first attempt past the default budget (12)
+        // gives up — Skipped stays terminal for the dequeue; only a pin or
+        // a new webhook boost revives the row.
+        var state = Row(MediaType.Movie, 60, status: SubtitleSearchStatus.Failed,
+            attemptCount: 12, lastSearchedAt: DateTimeOffset.UtcNow.AddDays(-14));
+        _dbContext.SubtitleSearchStates.Add(state);
+        await _dbContext.SaveChangesAsync();
+
+        await _service.MarkFailedAsync(state.Id, "budget exhausted");
+
+        var row = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == state.Id);
+        Assert.Equal(13, row.AttemptCount);
+        Assert.Equal(SubtitleSearchStatus.Skipped, row.Status);
+        Assert.Equal("budget exhausted", row.LastError);
+        Assert.NotNull(row.LastSearchedAt);
+    }
+
+    [Fact]
+    public async Task MarkFailed_MaxAttemptsEight_RestoresThePreB12RuleFieldByField()
+    {
+        // B12 acceptance 2 (regression gate): subtitle_search_max_attempts=8
+        // must behave exactly like the pre-B12 compile-time constant — the
+        // 8th failure transitions to Skipped (with the capped 7d backoff
+        // written, as the old code did) and the doubling curve covers every
+        // retryable attempt. The long-tail window must not fire here.
+        _settings.SetSetting(SettingKeys.SubtitleSearch.MaxAttempts, "8").GetAwaiter().GetResult();
+
+        var state = Row(MediaType.Movie, 61, attemptCount: 7,
+            lastSearchedAt: DateTimeOffset.UtcNow.AddDays(-400)); // window long exceeded — ignored in legacy mode
+        _dbContext.SubtitleSearchStates.Add(state);
+        await _dbContext.SaveChangesAsync();
+
+        var before = DateTimeOffset.UtcNow;
+        await _service.MarkFailedAsync(state.Id, "legacy give-up");
+        var after = DateTimeOffset.UtcNow;
 
         var row = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == state.Id);
         Assert.Equal(8, row.AttemptCount);
         Assert.Equal(SubtitleSearchStatus.Skipped, row.Status);
-        Assert.Equal("still nothing", row.LastError);
+        Assert.Equal("legacy give-up", row.LastError);
+        // The old code wrote next_attempt = now + BackoffFor(8) even on the
+        // skipped row; the legacy mode keeps that shape.
+        Assert.True(row.NextAttemptAt - before >= TimeSpan.FromDays(7) - TimeSpan.FromSeconds(1));
+        Assert.True(row.NextAttemptAt - after <= TimeSpan.FromDays(7) + TimeSpan.FromSeconds(1));
+
+        // Post-boost retries past the line keep skipping (old >= rule).
+        var boosted = Row(MediaType.Movie, 62, status: SubtitleSearchStatus.Skipped,
+            attemptCount: 9, lastSearchedAt: DateTimeOffset.UtcNow.AddDays(-1));
+        _dbContext.SubtitleSearchStates.Add(boosted);
+        await _dbContext.SaveChangesAsync();
+        await _service.MarkFailedAsync(boosted.Id, "boost retry");
+        var boostedRow = await _dbContext.SubtitleSearchStates.AsNoTracking()
+            .SingleAsync(s => s.Id == boosted.Id);
+        Assert.Equal(10, boostedRow.AttemptCount);
+        Assert.Equal(SubtitleSearchStatus.Skipped, boostedRow.Status);
+    }
+
+    [Fact]
+    public async Task MarkFailed_LongTailWindowExhausted_GivesUpBeforeTheBudget()
+    {
+        // B12's 90-day backstop: a tail-zone row whose previous attempt
+        // (the stored last_searched_at) is older than the long-tail window
+        // gives up on the next failure even though the attempt budget is
+        // not exhausted — the starved-queue shape (job downtime, batch
+        // limits) must not stretch the catch-up window indefinitely.
+        var starved = Row(MediaType.Movie, 63, status: SubtitleSearchStatus.Failed,
+            attemptCount: 10, lastSearchedAt: DateTimeOffset.UtcNow.AddDays(-91));
+        _dbContext.SubtitleSearchStates.Add(starved);
+        await _dbContext.SaveChangesAsync();
+
+        await _service.MarkFailedAsync(starved.Id, "window exhausted");
+
+        var row = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == starved.Id);
+        Assert.Equal(11, row.AttemptCount);
+        Assert.Equal(SubtitleSearchStatus.Skipped, row.Status);
+        Assert.Equal("window exhausted", row.LastError);
+
+        // Control: one day short of the window the tail retry continues.
+        var fresh = Row(MediaType.Movie, 64, status: SubtitleSearchStatus.Failed,
+            attemptCount: 10, lastSearchedAt: DateTimeOffset.UtcNow.AddDays(-89));
+        _dbContext.SubtitleSearchStates.Add(fresh);
+        await _dbContext.SaveChangesAsync();
+
+        await _service.MarkFailedAsync(fresh.Id, "window still open");
+
+        var freshRow = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == fresh.Id);
+        Assert.Equal(11, freshRow.AttemptCount);
+        Assert.Equal(SubtitleSearchStatus.Failed, freshRow.Status);
+    }
+
+    [Fact]
+    public async Task MarkFailed_LongTailWindow_DoesNotArmInsideTheDenseZone()
+    {
+        // The backstop bounds the LONG TAIL only: a dense-zone row (here a
+        // first failure after months of queue starvation) still gets its
+        // full budget — new uploads appear over time, and the window is
+        // not a global age limit on the queue row.
+        var stale = Row(MediaType.Movie, 65, attemptCount: 0,
+            lastSearchedAt: DateTimeOffset.UtcNow.AddDays(-365));
+        _dbContext.SubtitleSearchStates.Add(stale);
+        await _dbContext.SaveChangesAsync();
+
+        await _service.MarkFailedAsync(stale.Id, "first try after downtime");
+
+        var row = await _dbContext.SubtitleSearchStates.AsNoTracking().SingleAsync(s => s.Id == stale.Id);
+        Assert.Equal(1, row.AttemptCount);
+        Assert.Equal(SubtitleSearchStatus.Failed, row.Status);
     }
 
     [Fact]

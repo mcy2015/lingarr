@@ -633,7 +633,7 @@ public class SubtitleSearchJobTests
                 Array.Empty<ISubtitleSourceManifest>(),
                 NullLogger<SubtitleProviderRegistry>.Instance);
             var queueService = new SubtitleSearchQueueService(
-                DbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+                DbContext, Settings, NullLogger<SubtitleSearchQueueService>.Instance);
             var orchestrator = new SubtitleSearchOrchestrator(
                 registry,
                 new SubtitleMatchScorer(),

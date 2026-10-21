@@ -1,6 +1,8 @@
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
+using Lingarr.Server.Modules.Settings;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,8 +35,12 @@ public sealed record SubtitleSearchBacklogSnapshot(
 /// backed by <c>ix_subtitle_search_state_dequeue</c>. Enqueue dedup rides
 /// the UNIQUE(media_type, media_id) index with SQLite upserts that preserve
 /// the attempt history (webhook re-boost never resets the backoff clock,
-/// ⑤). Failure backoff: 6h × 2^(attempt-1) capped at 7d, attempt ≥ 8 →
-/// status Skipped.
+/// ⑤). Failure backoff (B12, "early dense, long tail sparse, give up after
+/// 90 days"): attempts 1-8 double from 6h capped at 7d, attempts 9..max
+/// (subtitle_search_max_attempts, default 12) wait a fixed 14 days, the
+/// first attempt past max → status Skipped; a long-tail row whose previous
+/// attempt is older than subtitle_search_long_tail_days (default 90) gives
+/// up early. Max attempts ≤ 8 restores the pre-B12 give-up rule exactly.
 /// </summary>
 public sealed class SubtitleSearchQueueService
 {
@@ -44,8 +50,35 @@ public sealed class SubtitleSearchQueueService
     /// <summary>Backoff cap (⑤): never wait more than 7 days.</summary>
     public static readonly TimeSpan MaxBackoff = TimeSpan.FromDays(7);
 
-    /// <summary>Give-up threshold (⑤): attempt_count ≥ 8 → status Skipped.</summary>
-    public const int MaxAttempts = 8;
+    /// <summary>
+    /// Dense-zone boundary (B12): attempts 1-8 ride the doubling curve of
+    /// <see cref="BackoffFor"/>. The same 8 is the pre-B12 give-up line —
+    /// a subtitle_search_max_attempts ≤ 8 keeps the legacy "give up ON the
+    /// max-th attempt" semantics byte-identical (B12 acceptance 2, the
+    /// users who want the old behavior set exactly this).
+    /// </summary>
+    public const int DenseZoneAttempts = 8;
+
+    /// <summary>
+    /// Default of subtitle_search_max_attempts (B12): twelve attempts —
+    /// the eight dense ones plus a four-attempt long tail — before the
+    /// give-up. Used when the setting row is missing, blank or unparsable.
+    /// </summary>
+    public const int DefaultMaxAttempts = 12;
+
+    /// <summary>
+    /// Default of subtitle_search_long_tail_days (B12): the CSF 90-day
+    /// catch-up window. Used when the setting row is missing, blank or
+    /// unparsable.
+    /// </summary>
+    public const int DefaultLongTailDays = 90;
+
+    /// <summary>
+    /// Fixed spacing between the long-tail attempts 9..max (B12): two
+    /// weeks — sparse enough to catch late uploads, dense enough to fit
+    /// four tail attempts inside the 90-day window.
+    /// </summary>
+    public static readonly TimeSpan LongTailBackoff = TimeSpan.FromDays(14);
 
     /// <summary>Webhook boost window on enqueue (⑤: now + 48h).</summary>
     public static readonly TimeSpan WebhookBoostWindow = TimeSpan.FromHours(48);
@@ -67,13 +100,16 @@ public sealed class SubtitleSearchQueueService
     ];
 
     private readonly LingarrDbContext _dbContext;
+    private readonly ISettingService _settingService;
     private readonly ILogger<SubtitleSearchQueueService> _logger;
 
     public SubtitleSearchQueueService(
         LingarrDbContext dbContext,
+        ISettingService settingService,
         ILogger<SubtitleSearchQueueService> logger)
     {
         _dbContext = dbContext;
+        _settingService = settingService;
         _logger = logger;
     }
 
@@ -297,9 +333,27 @@ public sealed class SubtitleSearchQueueService
                 cancellationToken);
 
     /// <summary>
-    /// Round failed: attempt_count+1, backoff = min(6h × 2^(attempt-1), 7d);
-    /// attempt ≥ 8 transitions to Skipped (gave up — only a pin or a new
-    /// webhook boost revives the row).
+    /// Round failed: attempt_count+1 and the B12 backoff curve —
+    /// <para>
+    /// Long-tail mode (subtitle_search_max_attempts &gt; 8, the default 12):
+    /// attempts 1-8 keep the pre-B12 doubling curve (6h × 2^(n-1) capped at
+    /// 7d), attempts 9..max wait a fixed <see cref="LongTailBackoff"/>
+    /// (14d), and the first attempt past max transitions the row to
+    /// Skipped. On top of the budget, the long-tail backstop gives up a
+    /// tail-zone row whose previous attempt (the stored last_searched_at)
+    /// is older than subtitle_search_long_tail_days — a starved queue
+    /// (batch limits, job downtime) must not stretch the 90-day catch-up
+    /// window indefinitely.
+    /// </para>
+    /// <para>
+    /// Legacy mode (max ≤ 8, B12 acceptance 2): give up ON the max-th
+    /// attempt with the doubling curve throughout — byte-identical to the
+    /// pre-B12 rule, and the long-tail window is ignored entirely.
+    /// </para>
+    /// <para>
+    /// Skipped is terminal for the dequeue; only a pin or a new webhook
+    /// boost revives the row.
+    /// </para>
     /// </summary>
     public async Task MarkFailedAsync(
         int stateId,
@@ -308,16 +362,45 @@ public sealed class SubtitleSearchQueueService
     {
         var state = await _dbContext.SubtitleSearchStates
             .Where(s => s.Id == stateId)
-            .Select(s => new { s.Id, s.AttemptCount })
+            .Select(s => new { s.Id, s.AttemptCount, s.LastSearchedAt })
             .FirstOrDefaultAsync(cancellationToken);
         if (state is null)
         {
             return;
         }
 
+        var (maxAttempts, longTailDays) = await GetBackoffSettingsAsync();
         var attempt = state.AttemptCount + 1;
-        var backoff = BackoffFor(attempt);
-        var skipped = attempt >= MaxAttempts;
+        var longTailActive = maxAttempts > DenseZoneAttempts;
+
+        // Curve: the dense zone always rides BackoffFor; with a long-tail
+        // budget configured, attempts past the dense zone wait a fixed
+        // 14 days. Legacy mode keeps the doubling curve for every attempt
+        // (its post-boost retries past the line included — BackoffFor
+        // caps at 7d, so the span stays bounded either way).
+        var backoff = longTailActive && attempt > DenseZoneAttempts
+            ? LongTailBackoff
+            : BackoffFor(attempt);
+
+        // Give-up boundary: long-tail mode schedules every attempt up to
+        // max and gives up on the first one past it; legacy mode gives up
+        // on the max-th attempt itself (the pre-B12 rule).
+        var skipped = longTailActive
+            ? attempt > maxAttempts
+            : attempt >= maxAttempts;
+
+        // Long-tail backstop: the row is in the tail zone and its previous
+        // attempt is older than the catch-up window — give up even though
+        // the attempt budget is not exhausted. Armed in long-tail mode
+        // only, so legacy configurations stay byte-identical.
+        if (!skipped && longTailActive
+            && attempt > DenseZoneAttempts
+            && state.LastSearchedAt is { } previousAttempt
+            && DateTimeOffset.UtcNow - previousAttempt > TimeSpan.FromDays(longTailDays))
+        {
+            skipped = true;
+        }
+
         var now = DateTimeOffset.UtcNow;
 
         await _dbContext.SubtitleSearchStates
@@ -333,6 +416,27 @@ public sealed class SubtitleSearchQueueService
                     .SetProperty(s => s.UpdatedAt, now),
                 cancellationToken);
     }
+
+    /// <summary>
+    /// Reads the two B12 backoff settings, falling back to the seeded
+    /// defaults for missing, blank or unparsable rows (fresh databases
+    /// before the first startup seed, hand-edited values).
+    /// </summary>
+    private async Task<(int MaxAttempts, int LongTailDays)> GetBackoffSettingsAsync()
+    {
+        var settings = await _settingService.GetSettings(
+        [
+            SettingKeys.SubtitleSearch.MaxAttempts,
+            SettingKeys.SubtitleSearch.LongTailDays
+        ]);
+
+        return (
+            ParsePositive(settings.GetValueOrDefault(SettingKeys.SubtitleSearch.MaxAttempts), DefaultMaxAttempts),
+            ParsePositive(settings.GetValueOrDefault(SettingKeys.SubtitleSearch.LongTailDays), DefaultLongTailDays));
+    }
+
+    private static int ParsePositive(string? value, int fallback)
+        => int.TryParse(value, out var parsed) && parsed > 0 ? parsed : fallback;
 
     /// <summary>Backoff span after the n-th consecutive failure: 6h, 12h, 24h… capped at 7d.</summary>
     public static TimeSpan BackoffFor(int attemptCount)

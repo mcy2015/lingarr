@@ -550,7 +550,7 @@ public class SubtitleCoverageRefresherTests : IDisposable
         await _refresher.RefreshAsync(MediaType.Movie, follower.Id, CancellationToken.None);
 
         var queue = new SubtitleSearchQueueService(
-            _dbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+            _dbContext, new InMemorySettingService(), NullLogger<SubtitleSearchQueueService>.Instance);
         var enqueued = await queue.EnqueueGapMediaAsync(CancellationToken.None);
         Assert.Equal(1, enqueued); // the follower only
 
@@ -654,7 +654,7 @@ public class SubtitleCoverageRefresherTests : IDisposable
         Assert.False(stored.NeedsTranslation);
 
         var queue = new SubtitleSearchQueueService(
-            _dbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+            _dbContext, new InMemorySettingService(), NullLogger<SubtitleSearchQueueService>.Instance);
         var enqueued = await queue.EnqueueGapMediaAsync(CancellationToken.None);
         Assert.Equal(0, enqueued);
         var queuedIds = await _dbContext.SubtitleSearchStates.AsNoTracking()
@@ -684,7 +684,7 @@ public class SubtitleCoverageRefresherTests : IDisposable
         Assert.True(stored.NeedsTranslation);
 
         var queue = new SubtitleSearchQueueService(
-            _dbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+            _dbContext, new InMemorySettingService(), NullLogger<SubtitleSearchQueueService>.Instance);
         await queue.EnqueueGapMediaAsync(CancellationToken.None);
         var queuedIds = await _dbContext.SubtitleSearchStates.AsNoTracking()
             .Where(state => state.MediaType == MediaType.Movie)

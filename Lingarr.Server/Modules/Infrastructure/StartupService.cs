@@ -88,6 +88,7 @@ public class StartupService : IHostedService
         await SeedEmbeddedCoverageAndWhisperSettings(dbContext);
         await SeedTimelineSyncSettings(dbContext);
         await SeedNotificationSettings(dbContext);
+        await SeedSubtitleSearchBackoffSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -493,6 +494,54 @@ public class StartupService : IHostedService
         await dbContext.SaveChangesAsync();
         _logger.LogInformation(
             "Seeded {Count} notification setting rows (notifications off by default).", missing.Count);
+    }
+
+    /// <summary>
+    /// Seeds the failure-backoff rows (B12): the give-up attempt budget
+    /// ("12" — attempts 1-8 dense on the doubling curve, 9-12 sparse at
+    /// 14d, first attempt past 12 → Skipped) and the long-tail catch-up
+    /// window in days ("90"). The two rows parameterize only the ends of
+    /// the fixed curve — full backoff parameterization was deliberately
+    /// rejected (B12 decision). A stored subtitle_search_max_attempts ≤ 8
+    /// restores the pre-B12 give-up rule byte-identically. Existing rows
+    /// are never overwritten; seeded here rather than by a migration for
+    /// the same reason as the Plex rows (no schema change in the batch).
+    /// </summary>
+    private async Task SeedSubtitleSearchBackoffSettings(LingarrDbContext dbContext)
+    {
+        (string Key, string Value)[] seeds =
+        [
+            (SettingKeys.SubtitleSearch.MaxAttempts, "12"),
+            (SettingKeys.SubtitleSearch.LongTailDays, "90")
+        ];
+
+        var keys = seeds.Select(seed => seed.Key).ToArray();
+        var existingKeys = (await dbContext.Settings
+                .Where(setting => keys.Contains(setting.Key))
+                .Select(setting => setting.Key)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = seeds.Where(seed => !existingKeys.Contains(seed.Key)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in missing)
+        {
+            dbContext.Settings.Add(new Setting
+            {
+                Key = key,
+                Value = value,
+                Provider = null
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation(
+            "Seeded {Count} subtitle-search backoff setting rows (max attempts 12, long-tail window 90d).",
+            missing.Count);
     }
 
     /// Seeds empty Settings rows for every subtitle-source key that does not exist

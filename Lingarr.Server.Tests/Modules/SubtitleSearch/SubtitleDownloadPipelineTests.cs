@@ -1366,7 +1366,7 @@ public class SubtitleDownloadPipelineTests
             new SubtitleTelemetryService(DbContext),
             Cache,
             NullLogger<SubtitleSearchOrchestrator>.Instance);
-        QueueService = new SubtitleSearchQueueService(DbContext, NullLogger<SubtitleSearchQueueService>.Instance);
+        QueueService = new SubtitleSearchQueueService(DbContext, Settings, NullLogger<SubtitleSearchQueueService>.Instance);
         PinService = new SubtitlePinService(DbContext, NullLogger<SubtitlePinService>.Instance);
         RequestBuilder = new SubtitleSearchRequestBuilder(
             DbContext, Settings, new LazyMediaHasher());
