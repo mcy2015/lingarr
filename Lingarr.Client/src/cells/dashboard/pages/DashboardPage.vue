@@ -1,7 +1,11 @@
 <template>
     <!-- Viewport-fit layout: pipeline/KPI rows keep fixed height, the two
-         content rows split the remaining space and scroll inside their cards. -->
-    <div class="flex h-full min-h-0 w-full flex-col gap-5 overflow-hidden p-4 lg:p-6">
+         content rows split the remaining space and scroll inside their cards.
+         overflow-y-auto (not hidden): when the cards' minimum heights sum
+         past the viewport (1080p with a full events list), the page itself
+         must scroll — hidden clipped ~200px of content behind an
+         unreachable edge. -->
+    <div class="flex h-full min-h-0 w-full flex-col gap-5 overflow-y-auto p-4 lg:p-6">
         <!-- ═══ 管线条带：媒体库 → 缺字幕 → 队列(hot) → 服务 → 写回 ═══ -->
         <div class="flex shrink-0 flex-wrap items-stretch gap-2">
             <template v-for="(node, index) in pipelineNodes" :key="node.key">
