@@ -86,6 +86,7 @@ public class StartupService : IHostedService
         await SeedPlexSettings(dbContext);
         await SeedSubtitleSearchPreferenceSettings(dbContext);
         await SeedEmbeddedCoverageAndWhisperSettings(dbContext);
+        await SeedTimelineSyncSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -324,6 +325,49 @@ public class StartupService : IHostedService
 
         await dbContext.SaveChangesAsync();
         _logger.LogInformation("Seeded {Count} Plex setting rows (library refresh off by default).", missing.Count);
+    }
+
+    /// <summary>
+    /// Seeds the timeline-sync rows (B05): the on-download master switch
+    /// ("false" — cue-time rewriting of a landed file waits out the NAS
+    /// soak period) and the minimum correlation score ("0.10", the
+    /// calibrated default from the B05 implementation notes). Existing rows
+    /// are never overwritten; seeded here rather than by a migration for
+    /// the same reason as the Plex rows (no schema change in the batch).
+    /// </summary>
+    private async Task SeedTimelineSyncSettings(LingarrDbContext dbContext)
+    {
+        (string Key, string Value)[] seeds =
+        [
+            (SettingKeys.SubtitleSearch.TimelineSyncOnDownload, "false"),
+            (SettingKeys.SubtitleSearch.TimelineSyncMinScore, "0.10")
+        ];
+
+        var keys = seeds.Select(seed => seed.Key).ToArray();
+        var existingKeys = (await dbContext.Settings
+                .Where(setting => keys.Contains(setting.Key))
+                .Select(setting => setting.Key)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = seeds.Where(seed => !existingKeys.Contains(seed.Key)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in missing)
+        {
+            dbContext.Settings.Add(new Setting
+            {
+                Key = key,
+                Value = value,
+                Provider = null
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation("Seeded {Count} timeline-sync setting rows (on-download off by default).", missing.Count);
     }
 
     /// <summary>

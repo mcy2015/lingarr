@@ -43,9 +43,16 @@ public interface ISubtitlePostProcessor
 /// True when the caller only wants to know whether the file WOULD change —
 /// stages must not write anything in that mode.
 /// </param>
+/// <param name="MediaVideoPath">
+/// Absolute path of the media's video file the subtitle belongs to (B05,
+/// pipeline call sites). The timeline-sync stage syncs against this file's
+/// audio; stages without a media reference (the variant batch) leave it
+/// null and the sync stage skips.
+/// </param>
 public sealed record PostProcessContext(
     string? ChineseVariantMode = null,
-    bool PreviewOnly = false);
+    bool PreviewOnly = false,
+    string? MediaVideoPath = null);
 
 /// <summary>
 /// Outcome of one stage over one file.

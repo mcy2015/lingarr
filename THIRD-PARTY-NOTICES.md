@@ -31,6 +31,7 @@ or from the respective upstream source repositories.
 | Hangfire | 1.8.25 | **LGPL-3.0** | Background job framework. Copyright Sergey Odinokov and Hangfire contributors. Distributed under the GNU Lesser General Public License v3.0 — not MIT. |
 | Hangfire.MemoryStorage | 1.8.1.2 | MIT | In-memory storage for Hangfire, referenced by the server host. |
 | Hangfire.Storage.SQLite | 0.4.3 | MIT | SQLite-backed storage for Hangfire. Copyright 2019 RaisedApp. |
+| MathNet.Numerics | 5.0.0 | MIT | Numerical computation library (FFT cross-correlation for the timeline sync, B05). Copyright Math.NET Project contributors. |
 | Microsoft.AspNetCore.SpaServices.Extensions | 10.0.12 | MIT | Copyright .NET Foundation and Contributors. |
 | Microsoft.Data.Sqlite | 10.0.12 | MIT | Copyright .NET Foundation and Contributors. Ships a native SQLite bundle via SQLitePCLRaw; **SQLite itself is Public Domain** (see section 5). |
 | Microsoft.EntityFrameworkCore | 10.0.12 | MIT | Copyright .NET Foundation and Contributors. |

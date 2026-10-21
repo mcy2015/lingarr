@@ -447,6 +447,32 @@ public class StartupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SeedTimelineSyncSettings_FreshDatabase_SeedsOffSwitchAndCalibratedScore()
+    {
+        // Arrange/Act: B05 — the on-download switch must default to "false"
+        // (cue-time rewriting waits out the NAS soak period) and the score
+        // gate to the calibrated 0.10 default.
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        var enabled = await dbContext.Settings.FindAsync(
+            SettingKeys.SubtitleSearch.TimelineSyncOnDownload);
+        Assert.NotNull(enabled);
+        Assert.Equal("false", enabled.Value);
+        Assert.Null(enabled.Provider);
+
+        var minScore = await dbContext.Settings.FindAsync(
+            SettingKeys.SubtitleSearch.TimelineSyncMinScore);
+        Assert.NotNull(minScore);
+        Assert.Equal("0.10", minScore.Value);
+        Assert.Null(minScore.Provider);
+    }
+
+    [Fact]
     public async Task StartAsync_AfterSubtitleSeed_SetEncryptedSettingSucceeds()
     {
         // Arrange: the bug's acceptance core — SetSetting only updates rows

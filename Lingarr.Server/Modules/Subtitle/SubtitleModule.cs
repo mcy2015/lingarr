@@ -1,5 +1,6 @@
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Subtitle.PostProcessing;
+using Lingarr.Server.Modules.Subtitle.TimelineSync;
 
 namespace Lingarr.Server.Modules.Subtitle;
 
@@ -22,6 +23,18 @@ public static class SubtitleModule
         // GBK/Big5 files on disk must parse) and stays stateless itself, so
         // scoped is safe.
         services.AddScoped<ISubtitlePostProcessor, ChineseVariantStage>();
+
+        // Timeline sync (B05): the stage runs after the variant stage — a
+        // variant conversion must not shift cue times under the correlator.
+        // The correlator/rewriter are stateless singletons; the extractor
+        // caches its resolved ffmpeg path, the service reads settings per
+        // call, so scoped wiring is exact.
+        services.AddSingleton<IAudioEnvelopeExtractor, AudioEnvelopeExtractor>();
+        services.AddSingleton<EnvelopeCorrelator>();
+        services.AddSingleton<SubtitleTimelineRewriter>();
+        services.AddScoped<ITimelineSyncService, TimelineSyncService>();
+        services.AddScoped<ISubtitlePostProcessor, TimelineSyncStage>();
+
         services.AddScoped<CompositePostProcessor>();
         services.AddScoped<ISubtitleVariantBatchService, SubtitleVariantBatchService>();
 

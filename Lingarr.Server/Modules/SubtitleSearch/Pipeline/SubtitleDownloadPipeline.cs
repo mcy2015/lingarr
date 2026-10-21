@@ -415,10 +415,14 @@ public sealed class SubtitleDownloadPipeline
         // ④b post-processing (B01): the file is on disk — stages run over it
         // before the history row so a degraded stage treatment (variant
         // conversion included) lands as an annotation on the Succeeded row,
-        // never as a failed download.
+        // never as a failed download. B05: the media's video path rides the
+        // context so the timeline-sync stage can decode its audio.
         var postProcessError = await RunPostProcessingAsync(
             finalPath,
             settings.GetValueOrDefault(SettingKeys.SubtitleSearch.PostProcessChineseVariant),
+            media.DirectoryPath is null || media.VideoFileName is null
+                ? null
+                : Path.Combine(media.DirectoryPath, media.VideoFileName),
             cancellationToken);
 
         var outcome = await RecordAsync(
@@ -1000,7 +1004,13 @@ public sealed class SubtitleDownloadPipeline
             var finalPath = await ComputeOutputPathAsync(
                 target.Path, target.FileName, language, outputExtension, captionSuffix);
             await WriteAtomicAsync(finalPath, outputBytes, cancellationToken);
-            var postProcessError = await RunPostProcessingAsync(finalPath, variantMode, cancellationToken);
+            var postProcessError = await RunPostProcessingAsync(
+                finalPath,
+                variantMode,
+                string.IsNullOrEmpty(target.Path) || string.IsNullOrEmpty(target.FileName)
+                    ? null
+                    : Path.Combine(target.Path, target.FileName),
+                cancellationToken);
             return new LandingAttempt(finalPath, utf8, null, false, postProcessError);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException)
@@ -1015,17 +1025,19 @@ public sealed class SubtitleDownloadPipeline
     /// last-resort guard so no post-processing problem can ever sink a file
     /// that is already on disk — the error text (stage name included) comes
     /// back for the history row instead. Caller cancellation is the only
-    /// propagation.
+    /// propagation. B05 adds the media's video path (null when the media
+    /// row carries none) so the timeline-sync stage can decode its audio.
     /// </summary>
     private async Task<string?> RunPostProcessingAsync(
         string filePath,
         string? variantMode,
+        string? mediaVideoPath,
         CancellationToken cancellationToken)
     {
         try
         {
             var result = await _postProcessor.ProcessAsync(
-                filePath, new PostProcessContext(variantMode), cancellationToken);
+                filePath, new PostProcessContext(variantMode, MediaVideoPath: mediaVideoPath), cancellationToken);
             return result.Error;
         }
         catch (OperationCanceledException)

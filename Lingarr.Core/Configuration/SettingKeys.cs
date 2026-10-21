@@ -337,6 +337,23 @@ public static class SettingKeys
             /// <summary>Bearer credential of the transcription service; encrypted at rest.</summary>
             public const string ApiKey = "whisper_api_key";
         }
+
+        /// <summary>
+        /// Master switch of the automatic timeline sync on download (B05);
+        /// seeded "false" — rewriting a landed file's cue times never runs
+        /// implicitly until the NAS soak period says otherwise. The manual
+        /// endpoints work regardless of this switch.
+        /// </summary>
+        public const string TimelineSyncOnDownload = "timeline_sync_on_download";
+
+        /// <summary>
+        /// Minimum normalized cross-correlation score a timeline-sync
+        /// candidate must reach (B05); seeded "0.10" — below every
+        /// legitimately drifted alignment, above random coincidence (see
+        /// the B05 implementation notes for the calibration). Missing or
+        /// unparsable values fall back to 0.10.
+        /// </summary>
+        public const string TimelineSyncMinScore = "timeline_sync_min_score";
     }
 
     public static class SubtitleValidation
