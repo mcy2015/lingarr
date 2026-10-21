@@ -404,6 +404,29 @@ public class StartupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SeedPlexSettings_FreshDatabase_SeedsPlaceholdersAndDisabledSwitch()
+    {
+        // Arrange/Act: B03 — the Plex rows must exist for the settings card
+        // to save, and the refresh switch must default to "false" (an
+        // outbound integration never runs implicitly).
+        var serviceProvider = BuildProvider();
+        var startupService = new StartupService(serviceProvider, NullLogger<StartupService>.Instance);
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LingarrDbContext>();
+        Assert.Equal(string.Empty,
+            (await dbContext.Settings.FindAsync(SettingKeys.Integration.PlexUrl))!.Value);
+        Assert.Equal(string.Empty,
+            (await dbContext.Settings.FindAsync(SettingKeys.Integration.PlexToken))!.Value);
+        var enabled = await dbContext.Settings.FindAsync(SettingKeys.Integration.PlexRefreshEnabled);
+        Assert.NotNull(enabled);
+        Assert.Equal("false", enabled.Value);
+        Assert.Null(enabled.Provider);
+    }
+
+    [Fact]
     public async Task StartAsync_AfterSubtitleSeed_SetEncryptedSettingSucceeds()
     {
         // Arrange: the bug's acceptance core — SetSetting only updates rows

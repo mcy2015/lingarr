@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Hangfire;
 using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
@@ -13,6 +14,7 @@ using Lingarr.Core.Interfaces;
 using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Media;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
@@ -56,6 +58,7 @@ public class TranslationJobWritebackTests : IDisposable
     private readonly Mock<IStatisticsService> _statisticsService = new();
     private readonly Mock<ITranslationRequestEventService> _eventService = new();
     private readonly Mock<ITranslationRequestService> _translationRequestService = new();
+    private readonly Mock<IBackgroundJobClient> _backgroundJobs = new();
     private readonly FakeTranslationServiceFactory _factory = new();
     private readonly StubTranslationService _provider = new();
     private readonly CapturingHubContext _hub = new();
@@ -116,7 +119,8 @@ public class TranslationJobWritebackTests : IDisposable
             new Mock<IGlossaryService>().Object,
             new SubtitleCoverageRefresher(
                 _dbContext, _subtitleService, _settings, NullLogger<SubtitleCoverageRefresher>.Instance),
-            _hub.Object);
+            _hub.Object,
+            _backgroundJobs.Object);
     }
 
     public void Dispose()
@@ -339,6 +343,75 @@ public class TranslationJobWritebackTests : IDisposable
 
         Assert.Equal(TranslationStatus.Completed, request.Status);
         Assert.DoesNotContain(_hub.Sends, s => s.Event == "SubtitleDownloaded");
+    }
+
+    // ── Plex refresh enqueue (B03) ─────────────────────────────────────
+
+    /// <summary>
+    /// Minimal movie writeback: one request, one zh landing — the shape the
+    /// Plex refresh tests below reuse.
+    /// </summary>
+    private async Task<TranslationRequest> SeedMovieRequestAsync(string name, bool plexEnabled)
+    {
+        var directory = MediaDirectory(name);
+        WriteSourceSubtitle(directory, $"{name}.en.srt");
+        var movie = new Movie
+        {
+            RadarrId = 1,
+            Title = name,
+            Path = directory,
+            FileName = $"{name}.mkv",
+            DateAdded = DateTimeOffset.UtcNow
+        };
+        _dbContext.Movies.Add(movie);
+        await _dbContext.SaveChangesAsync();
+        if (plexEnabled)
+        {
+            _settings.Values[SettingKeys.Integration.PlexRefreshEnabled] = "true";
+        }
+
+        var request = new TranslationRequest
+        {
+            Title = name,
+            SubtitleToTranslate = Path.Combine(directory, $"{name}.en.srt"),
+            SourceLanguage = "en",
+            TargetLanguage = "zh",
+            MediaType = MediaType.Movie,
+            MediaId = movie.Id,
+            Status = TranslationStatus.Pending
+        };
+        _dbContext.TranslationRequests.Add(request);
+        await _dbContext.SaveChangesAsync();
+        return request;
+    }
+
+    [Fact]
+    public async Task Writeback_PlexRefreshEnabled_EnqueuesOneLibraryRefresh()
+    {
+        // B03 acceptance 1 (writeback path): the translated file landing
+        // fires exactly one Plex refresh job when the switch is on.
+        var request = await SeedMovieRequestAsync("plexon", plexEnabled: true);
+
+        await _job.Execute(request, CancellationToken.None);
+
+        Assert.Equal(TranslationStatus.Completed, request.Status);
+        _backgroundJobs.Verify(
+            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Writeback_PlexRefreshUnset_EnqueuesNothing()
+    {
+        // B03 acceptance 3: unset (the seeded default) means zero enqueues.
+        var request = await SeedMovieRequestAsync("plexoff", plexEnabled: false);
+
+        await _job.Execute(request, CancellationToken.None);
+
+        Assert.Equal(TranslationStatus.Completed, request.Status);
+        _backgroundJobs.Verify(
+            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
+            Times.Never);
     }
 
     // ── doubles ────────────────────────────────────────────────────────

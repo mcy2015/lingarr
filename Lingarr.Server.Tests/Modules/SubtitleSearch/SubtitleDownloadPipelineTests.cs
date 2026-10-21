@@ -10,6 +10,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Hangfire;
+using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
 using Lingarr.Core.Enum;
@@ -17,6 +19,7 @@ using Lingarr.Server.Controllers;
 using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
+using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Subtitle.PostProcessing;
 using Lingarr.Server.Modules.SubtitleSearch;
@@ -464,6 +467,45 @@ public class SubtitleDownloadPipelineTests
             queue => queue.CreateImportRequest(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<int?>(), It.IsAny<MediaType>(), It.IsAny<string?>(), It.IsAny<bool>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Download_PlexRefreshEnabled_EnqueuesOneLibraryRefresh()
+    {
+        // B03 acceptance 1 (download path): a landed subtitle on the
+        // single-entry success path fires exactly one Plex refresh job when
+        // the switch is on — one enqueue per landing, the job's own guard
+        // merges any burst.
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+        fixture.Settings.SetSetting(
+            Lingarr.Core.Configuration.SettingKeys.Integration.PlexRefreshEnabled, "true");
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        Assert.True(File.Exists(outcome.FilePath));
+        fixture.BackgroundJobs.Verify(
+            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Download_PlexRefreshUnset_EnqueuesNothing()
+    {
+        // B03 acceptance 3: unset (the seeded default) means zero enqueues —
+        // the feature must stay inert until it is configured.
+        using var fixture = new SubtitleEndpointFixture(new DownloadingProvider());
+
+        var outcome = await fixture.Pipeline.DownloadAsync(
+            Candidate("zh"), MediaType.Movie, fixture.MovieId, SubtitleDownloadSource.Manual,
+            searchSessionId: null, CancellationToken.None);
+
+        Assert.Equal(SubtitleDownloadResult.Succeeded, outcome.Result);
+        fixture.BackgroundJobs.Verify(
+            client => client.Enqueue<PlexRefreshJob>(job => job.Execute()),
             Times.Never);
     }
 
@@ -1049,6 +1091,7 @@ public class SubtitleDownloadPipelineTests
         internal readonly MemoryCache Cache = new(new MemoryCacheOptions());
         internal readonly Mock<ISubtitleService> SubtitleService = new();
         internal readonly Mock<ITranslationRequestQueueService> TranslationQueue = new();
+        internal readonly Mock<IBackgroundJobClient> BackgroundJobs = new();
 
         /// <summary>
         /// Post-processing stages the fixture's composite runs (B01): empty by
@@ -1141,7 +1184,8 @@ public class SubtitleDownloadPipelineTests
             new SubtitleCoverageRefresher(
                 DbContext, SubtitleService.Object, Settings, NullLogger<SubtitleCoverageRefresher>.Instance),
             HubContext(),
-            NullLogger<SubtitleDownloadPipeline>.Instance);
+            NullLogger<SubtitleDownloadPipeline>.Instance,
+            BackgroundJobs.Object);
         Orchestrator = new SubtitleSearchOrchestrator(
             Registry,
             new SubtitleMatchScorer(),

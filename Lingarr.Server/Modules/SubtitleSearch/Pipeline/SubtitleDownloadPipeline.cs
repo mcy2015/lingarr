@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Hangfire;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
 using Lingarr.Core.Entities;
@@ -9,6 +10,7 @@ using Lingarr.Server.Hubs;
 using Lingarr.Server.Models;
 using Lingarr.Server.Models.FileSystem;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Subtitle;
 using Lingarr.Server.Modules.Subtitle.PostProcessing;
@@ -95,6 +97,7 @@ public sealed class SubtitleDownloadPipeline
     private readonly SubtitleCoverageRefresher _coverageRefresher;
     private readonly IHubContext<JobProgressHub> _hubContext;
     private readonly ILogger<SubtitleDownloadPipeline> _logger;
+    private readonly IBackgroundJobClient _backgroundJobClient;
 
     public SubtitleDownloadPipeline(
         LingarrDbContext dbContext,
@@ -109,7 +112,8 @@ public sealed class SubtitleDownloadPipeline
         SubtitleTelemetryService telemetry,
         SubtitleCoverageRefresher coverageRefresher,
         IHubContext<JobProgressHub> hubContext,
-        ILogger<SubtitleDownloadPipeline> logger)
+        ILogger<SubtitleDownloadPipeline> logger,
+        IBackgroundJobClient backgroundJobClient)
     {
         _dbContext = dbContext;
         _registry = registry;
@@ -124,6 +128,7 @@ public sealed class SubtitleDownloadPipeline
         _coverageRefresher = coverageRefresher;
         _hubContext = hubContext;
         _logger = logger;
+        _backgroundJobClient = backgroundJobClient;
     }
 
     /// <summary>
@@ -339,7 +344,10 @@ public sealed class SubtitleDownloadPipeline
         var settings = await _settingService.GetSettings([
             SettingKeys.SubtitleSearch.ConvertToSrt,
             SettingKeys.SubtitleSearch.AutoTranslate,
-            SettingKeys.SubtitleSearch.PostProcessChineseVariant
+            SettingKeys.SubtitleSearch.PostProcessChineseVariant,
+            // B03: the Plex refresh switch rides the same batch read — the
+            // enqueue below is the only consumer here.
+            SettingKeys.Integration.PlexRefreshEnabled
         ]);
         var convertToSrt = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.ConvertToSrt) != "false";
         var autoTranslate = settings.GetValueOrDefault(SettingKeys.SubtitleSearch.AutoTranslate) != "false";
@@ -462,6 +470,25 @@ public sealed class SubtitleDownloadPipeline
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Subtitle download broadcast failed for {MediaType} {MediaId}.", mediaType, mediaId);
+        }
+
+        // ⑨ Plex library refresh (B03): fire-and-forget on the system queue
+        // when the integration switch is on. The enqueue side gates on the
+        // switch only — the job re-reads settings (change races) and its own
+        // concurrency guard merges the burst a landing storm creates. A
+        // failed enqueue must never sink the landed download.
+        try
+        {
+            if (settings.GetValueOrDefault(SettingKeys.Integration.PlexRefreshEnabled) == "true")
+            {
+                _backgroundJobClient.Enqueue<PlexRefreshJob>(job => job.Execute());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Plex refresh enqueue failed for {MediaType} {MediaId}; the landed subtitle is unaffected.",
+                mediaType, mediaId);
         }
 
         return outcome with
@@ -837,6 +864,23 @@ public sealed class SubtitleDownloadPipeline
         {
             // The files are on disk; the daily scan re-syncs the flags anyway.
             _logger.LogWarning(ex, "Coverage refresh failed for Episode {MediaId}.", mediaId);
+        }
+
+        // ⑨ Plex library refresh (B03): same fire-and-forget as the single
+        // landing path — a whole-season pack landing is an even stronger
+        // reason to refresh. Same guard shape: a failed enqueue never sinks
+        // the landed pack.
+        try
+        {
+            if (await _settingService.GetSetting(SettingKeys.Integration.PlexRefreshEnabled) == "true")
+            {
+                _backgroundJobClient.Enqueue<PlexRefreshJob>(job => job.Execute());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Plex refresh enqueue failed after the season pack landing; the landed files are unaffected.");
         }
 
         // The Files card caches directory scans for a short TTL — drop

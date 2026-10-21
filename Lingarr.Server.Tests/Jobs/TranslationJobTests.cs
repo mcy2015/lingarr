@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Hangfire;
 using Lingarr.Contracts.Translation;
 using Lingarr.Core.Configuration;
 using Lingarr.Core.Data;
@@ -121,7 +122,8 @@ public class TranslationJobTests
             // no-op and never reaches the relational ExecuteUpdate path.
             new SubtitleCoverageRefresher(
                 _context, _subtitleService.Object, _settings, NullLogger<SubtitleCoverageRefresher>.Instance),
-            HubContext());
+            HubContext(),
+            new Mock<IBackgroundJobClient>().Object);
     }
 
     /// <summary>No-op hub double — the writeback broadcast never reaches a client here.</summary>

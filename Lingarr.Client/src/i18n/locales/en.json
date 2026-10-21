@@ -913,6 +913,22 @@
             "executed": "{converted} converted · {skipped} already matched · {failed} failed",
             "confirmHint": "Preview first, then confirm the conversion",
             "batchFailed": "The batch run failed."
+        },
+        "plex": {
+            "title": "Plex library refresh",
+            "meta": "Notifies Plex when subtitles land",
+            "edit": "Edit",
+            "notConfigured": "Not configured",
+            "refreshOn": "Refresh on",
+            "refreshOff": "Refresh off",
+            "url": "Server URL",
+            "urlPlaceholder": "http://plex:32400",
+            "urlError": "Enter a valid http(s) URL",
+            "token": "X-Plex-Token",
+            "tokenPlaceholder": "Paste the Plex token",
+            "tokenConfigured": "Configured (leave empty to keep)",
+            "refresh": "Refresh libraries after subtitles land",
+            "refreshHint": "Enqueued on every subtitle landing and translation writeback; overlapping refreshes merge into one"
         }
     },
     "translations": {

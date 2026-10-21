@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Extensions;
 using Lingarr.Server.Modules.Infrastructure;
+using Lingarr.Server.Modules.Integration;
 using Lingarr.Server.Modules.Settings;
 using Lingarr.Server.Modules.Statistics;
 using Lingarr.Server.Modules.Subtitle;
@@ -36,6 +37,7 @@ public class TranslationJob
     private readonly IGlossaryService _glossaryService;
     private readonly SubtitleCoverageRefresher _coverageRefresher;
     private readonly IHubContext<JobProgressHub> _hubContext;
+    private readonly IBackgroundJobClient _backgroundJobClient;
 
     public TranslationJob(
         ILogger<TranslationJob> logger,
@@ -50,7 +52,8 @@ public class TranslationJob
         ITranslationRequestEventService eventService,
         IGlossaryService glossaryService,
         SubtitleCoverageRefresher coverageRefresher,
-        IHubContext<JobProgressHub> hubContext)
+        IHubContext<JobProgressHub> hubContext,
+        IBackgroundJobClient backgroundJobClient)
     {
         _logger = logger;
         _settings = settings;
@@ -65,6 +68,7 @@ public class TranslationJob
         _eventService = eventService;
         _coverageRefresher = coverageRefresher;
         _hubContext = hubContext;
+        _backgroundJobClient = backgroundJobClient;
     }
 
     [AutomaticRetry(Attempts = 0)]
@@ -435,6 +439,24 @@ public class TranslationJob
         {
             _logger.LogWarning(ex,
                 "Subtitle writeback broadcast failed for request {RequestId}.",
+                translationRequest.Id);
+        }
+
+        // Plex library refresh (B03), same shape as the download pipeline's
+        // post-broadcast enqueue: the switch is read here (the writeback
+        // runs long after the caller's batch read), the job re-checks
+        // everything, and a failed enqueue must never fail the writeback.
+        try
+        {
+            if (await _settings.GetSetting(SettingKeys.Integration.PlexRefreshEnabled) == "true")
+            {
+                _backgroundJobClient.Enqueue<PlexRefreshJob>(job => job.Execute());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Plex refresh enqueue failed after the writeback of request {RequestId}; the landed subtitle is unaffected.",
                 translationRequest.Id);
         }
     }

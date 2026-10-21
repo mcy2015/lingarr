@@ -12,6 +12,27 @@ public static class SettingKeys
         public const string SonarrDefaultInclude = "sonarr_default_include";
         public const string RadarrSettingsCompleted = "radarr_settings_completed";
         public const string SonarrSettingsCompleted = "sonarr_settings_completed";
+
+        /// <summary>
+        /// Plex server base URL (B03), plain text — the same shape as the
+        /// *arr URLs (host:port, no path). Seeded empty by StartupService.
+        /// </summary>
+        public const string PlexUrl = "plex_url";
+
+        /// <summary>
+        /// Plex authentication token (B03), sent as the X-Plex-Token header —
+        /// never folded into a URL query string. Encrypted at rest, seeded
+        /// empty; only the reveal endpoint ever returns it.
+        /// </summary>
+        public const string PlexToken = "plex_token";
+
+        /// <summary>
+        /// Master switch of the post-landing Plex library refresh (B03);
+        /// seeded "false" — an outbound integration never runs implicitly.
+        /// Gates the enqueue side (download pipeline / translation writeback)
+        /// and is re-read by the job itself against settings-change races.
+        /// </summary>
+        public const string PlexRefreshEnabled = "plex_refresh_enabled";
     }
 
     public static class Cost

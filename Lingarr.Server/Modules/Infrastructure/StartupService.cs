@@ -83,6 +83,7 @@ public class StartupService : IHostedService
         await SeedSubtitleSourceSettings(dbContext);
         await SeedAudioIdentificationSettings(dbContext);
         await SeedSubtitlePostProcessingSettings(dbContext);
+        await SeedPlexSettings(dbContext);
 
         await CheckAndUpdateIntegrationSettings(dbContext, "radarr", [
             SettingKeys.Integration.RadarrUrl,
@@ -276,6 +277,51 @@ public class StartupService : IHostedService
         });
         await dbContext.SaveChangesAsync();
         _logger.LogInformation("Seeded the subtitle post-processing variant row (none).");
+    }
+
+    /// <summary>
+    /// Seeds the Plex refresh wiring rows (B03): the URL/token placeholders
+    /// plus the master switch, deliberately "false" — an outbound
+    /// integration never runs implicitly. The URL/token rows are seeded
+    /// empty (encrypted values only ever leave through the reveal
+    /// endpoint). Existing rows are never overwritten. Seeded here rather
+    /// than by a migration: the batch ships no schema change, so the next
+    /// migration number stays reserved.
+    /// </summary>
+    private async Task SeedPlexSettings(LingarrDbContext dbContext)
+    {
+        (string Key, string Value)[] seeds =
+        [
+            (SettingKeys.Integration.PlexUrl, string.Empty),
+            (SettingKeys.Integration.PlexToken, string.Empty),
+            (SettingKeys.Integration.PlexRefreshEnabled, "false")
+        ];
+
+        var keys = seeds.Select(seed => seed.Key).ToArray();
+        var existingKeys = (await dbContext.Settings
+                .Where(setting => keys.Contains(setting.Key))
+                .Select(setting => setting.Key)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = seeds.Where(seed => !existingKeys.Contains(seed.Key)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in missing)
+        {
+            dbContext.Settings.Add(new Setting
+            {
+                Key = key,
+                Value = value,
+                Provider = null
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        _logger.LogInformation("Seeded {Count} Plex setting rows (library refresh off by default).", missing.Count);
     }
 
     /// Seeds empty Settings rows for every subtitle-source key that does not exist

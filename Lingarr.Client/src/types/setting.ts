@@ -72,7 +72,9 @@ export const SETTINGS = {
     XAI_REQUEST_TEMPLATE: 'xai_request_template',
     LANGUAGE_CODE_FORMAT: 'language_code_format',
     RADARR_DEFAULT_INCLUDE: 'radarr_default_include',
-    SONARR_DEFAULT_INCLUDE: 'sonarr_default_include'
+    SONARR_DEFAULT_INCLUDE: 'sonarr_default_include',
+    PLEX_URL: 'plex_url',
+    PLEX_REFRESH_ENABLED: 'plex_refresh_enabled'
 } as const
 
 export interface ISettings {
@@ -147,6 +149,8 @@ export interface ISettings {
     language_code_format: string
     radarr_default_include: string
     sonarr_default_include: string
+    plex_url: string
+    plex_refresh_enabled: string
 }
 
 export const ENCRYPTED_SETTINGS = {
@@ -162,7 +166,8 @@ export const ENCRYPTED_SETTINGS = {
     DEEPL_API_KEY: 'deepl_api_key',
     LIBRETRANSLATE_API_KEY: 'libretranslate_api_key',
     LOCAL_AI_API_KEY: 'local_ai_api_key',
-    AUDIO_ID_API_KEY: 'audio_id_api_key'
+    AUDIO_ID_API_KEY: 'audio_id_api_key',
+    PLEX_TOKEN: 'plex_token'
 } as const
 
 export interface IEncryptedSettingStates {
@@ -179,6 +184,7 @@ export interface IEncryptedSettingStates {
     libretranslate_api_key: boolean
     local_ai_api_key: boolean
     audio_id_api_key: boolean
+    plex_token: boolean
 }
 
 export const SERVICE_TYPE = {

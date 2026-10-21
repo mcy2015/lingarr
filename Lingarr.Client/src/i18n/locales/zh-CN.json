@@ -913,6 +913,22 @@
             "executed": "已转换 {converted} · 已符合 {skipped} · 失败 {failed}",
             "confirmHint": "先预览计数，再确认执行",
             "batchFailed": "批处理执行失败。"
+        },
+        "plex": {
+            "title": "Plex 媒体库刷新",
+            "meta": "字幕落盘后通知 Plex",
+            "edit": "编辑",
+            "notConfigured": "未配置",
+            "refreshOn": "刷新已开启",
+            "refreshOff": "刷新已关闭",
+            "url": "服务器地址",
+            "urlPlaceholder": "http://plex:32400",
+            "urlError": "请输入有效的 http(s) 地址",
+            "token": "X-Plex-Token",
+            "tokenPlaceholder": "粘贴 Plex 令牌",
+            "tokenConfigured": "已配置（留空保持不变）",
+            "refresh": "字幕落盘后刷新媒体库",
+            "refreshHint": "每次字幕下载落盘与翻译写回都会入队刷新；重叠的刷新会自动合并"
         }
     },
     "translations": {
